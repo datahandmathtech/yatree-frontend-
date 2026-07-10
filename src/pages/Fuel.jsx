@@ -274,7 +274,7 @@ const FuelPage = () => {
             const isToday = targetDate === new Date().toLocaleDateString('en-CA');
             const exactDateParam = !isToday ? '&exactDate=true' : '';
             const vehicleParam = vehicleId ? `&exactVehicleId=${vehicleId}` : '';
-            const { data } = await axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&toDate=${targetDate}${exactDateParam}${vehicleParam}`, {
+            const { data } = await axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&driverType=All&toDate=${targetDate}${exactDateParam}${vehicleParam}`, {
                 headers: { Authorization: `Bearer ${userInfo.token}` }
             });
             setDrivers(data.drivers || []);
@@ -1003,7 +1003,12 @@ const FuelPage = () => {
                                                 className="input-field"
                                                 value={formData.vehicleId}
                                                 required
-                                                onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
+                                                onChange={(e) => {
+                                                    const vid = e.target.value;
+                                                    const selectedVehicle = vehicles.find(v => v._id === vid);
+                                                    const autoDriver = selectedVehicle?.currentDriver?.name || '';
+                                                    setFormData({ ...formData, vehicleId: vid, driver: autoDriver });
+                                                }}
                                                 style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
                                             >
                                                 <option value="" style={{ background: '#0f172a' }}>-- Select Car --</option>

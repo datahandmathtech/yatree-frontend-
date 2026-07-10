@@ -206,7 +206,7 @@ const CarUtility = () => {
                 axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false&type=fleet`, { headers }),
                 axios.get(`/api/admin/border-tax/${selectedCompany._id}`, { headers }),
                 axios.get(`/api/admin/maintenance/${selectedCompany._id}?type=driver_services`, { headers }),
-                axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false`, { headers })
+                axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&driverType=All`, { headers })
             ]);
 
             const targetCompanyId = String(selectedCompany._id);

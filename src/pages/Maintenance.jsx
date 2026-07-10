@@ -325,7 +325,7 @@ const Maintenance = () => {
             const defaultDate = new Date(selectedYear, selectedMonth, 0).toISOString().split('T')[0];
             const targetDate = overrideDate || defaultDate;
 
-            const { data } = await axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&toDate=${targetDate}`, {
+            const { data } = await axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&driverType=All&toDate=${targetDate}`, {
                 headers: { Authorization: `Bearer ${userInfo.token}` }
             });
             setDrivers(data.drivers || []);
@@ -1654,7 +1654,12 @@ const Maintenance = () => {
                                             <select
                                                 className="input-field"
                                                 value={formData.vehicleId}
-                                                onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
+                                                onChange={(e) => {
+                                                    const vid = e.target.value;
+                                                    const selectedVehicle = (vehicles || []).find(v => v._id === vid);
+                                                    const autoDriverId = selectedVehicle?.currentDriver?._id || '';
+                                                    setFormData({ ...formData, vehicleId: vid, driverId: autoDriverId });
+                                                }}
                                                 required
                                                 style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
                                             >

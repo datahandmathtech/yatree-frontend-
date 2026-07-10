@@ -120,7 +120,7 @@ const Staff = () => {
     const [filterStaff, setFilterStaff] = useState('all');
 
     const [formData, setFormData] = useState({
-        name: '', mobile: '', username: '', password: '', confirmPassword: '', oldPassword: '', salary: 0, monthlyLeaveAllowance: 0,
+        name: '', mobile: '', username: '', password: '', confirmPassword: '', oldPassword: '', salary: 0, monthlyLeaveAllowance: 0, leaveDeductionRate: 0,
         email: '', designation: '', shiftTiming: { start: '09:00', end: '18:00' },
         officeLocation: { latitude: '', longitude: '', address: '', radius: 200 },
         joiningDate: '',
@@ -399,7 +399,7 @@ const Staff = () => {
             setToDate(todayIST());
             setBackdateForm({ staffId: '', date: todayIST(), status: 'present', punchInTime: '', punchOutTime: '' });
             setFormData({
-                name: '', mobile: '', username: '', password: '', oldPassword: '', salary: 0, monthlyLeaveAllowance: 0,
+                name: '', mobile: '', username: '', password: '', oldPassword: '', salary: 0, monthlyLeaveAllowance: 0, leaveDeductionRate: 0,
                 email: '', designation: '', shiftTiming: { start: '09:00', end: '18:00' },
                 officeLocation: { latitude: '', longitude: '', address: '', radius: 200 },
                 joiningDate: todayIST(),
@@ -817,7 +817,7 @@ const Staff = () => {
             fetchStaff();
             const defaultOffice = staffList.find(s => s.officeLocation?.latitude)?.officeLocation || { latitude: '', longitude: '', address: '', radius: 200 };
             setFormData({
-                name: '', mobile: '', username: '', password: '', oldPassword: '', salary: 0, monthlyLeaveAllowance: 0,
+                name: '', mobile: '', username: '', password: '', oldPassword: '', salary: 0, monthlyLeaveAllowance: 0, leaveDeductionRate: 0,
                 email: '', designation: '', shiftTiming: { start: '09:00', end: '18:00' },
                 officeLocation: defaultOffice,
                 joiningDate: todayIST(),
@@ -836,6 +836,7 @@ const Staff = () => {
             password: '',
             salary: staff.salary || 0,
             monthlyLeaveAllowance: (staff.monthlyLeaveAllowance !== undefined && staff.monthlyLeaveAllowance !== null && staff.monthlyLeaveAllowance !== '') ? staff.monthlyLeaveAllowance : 4,
+            leaveDeductionRate: staff.leaveDeductionRate || 0,
             email: staff.email || '',
             designation: staff.designation || '',
             shiftTiming: staff.shiftTiming || { start: '09:00', end: '18:00' },
@@ -1150,7 +1151,7 @@ const Staff = () => {
                                 setIsEditing(false);
                                 const defaultOffice = staffList.find(s => s.officeLocation?.latitude)?.officeLocation || { latitude: '', longitude: '', address: '', radius: 200 };
                                 setFormData({
-                                    name: '', mobile: '', username: '', password: '', salary: 0, monthlyLeaveAllowance: 0,
+                                    name: '', mobile: '', username: '', password: '', salary: 0, monthlyLeaveAllowance: 0, leaveDeductionRate: 0,
                                     email: '', designation: '', shiftTiming: { start: '09:00', end: '18:00' },
                                     officeLocation: defaultOffice,
                                     joiningDate: todayIST(),
@@ -2411,6 +2412,15 @@ const Staff = () => {
                                                         <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                                             <Calendar size={18} color="rgba(255,255,255,0.4)" style={{ position: 'absolute', left: '18px', pointerEvents: 'none' }} />
                                                             <input required type="number" className="premium-compact-input" placeholder="e.g. 4" style={{ width: '100%', height: '56px', padding: '0 20px 0 50px', fontSize: '14px', fontWeight: '700', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--primary)', outline: 'none' }} onFocus={(e) => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 15px rgba(251,191,36,0.15)'; e.target.style.background = 'rgba(255,255,255,0.06)' }} onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; e.target.style.background = 'rgba(255,255,255,0.03)' }} value={formData.monthlyLeaveAllowance} onChange={(e) => setFormData({ ...formData, monthlyLeaveAllowance: e.target.value })} />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {formData.staffType !== 'Fixed' && formData.staffType !== 'Daily' && (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: 'span 2' }}>
+                                                        <label style={{ fontSize: '10px', fontWeight: '800', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase' }}>Deduction Per Extra Leave (₹)</label>
+                                                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                                            <IndianRupee size={18} color="rgba(255,255,255,0.4)" style={{ position: 'absolute', left: '18px', pointerEvents: 'none' }} />
+                                                            <input type="number" className="premium-compact-input" placeholder="e.g. 500 (Optional)" style={{ width: '100%', height: '56px', padding: '0 20px 0 50px', fontSize: '14px', fontWeight: '700', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--primary)', outline: 'none' }} onFocus={(e) => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 15px rgba(251,191,36,0.15)'; e.target.style.background = 'rgba(255,255,255,0.06)' }} onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; e.target.style.background = 'rgba(255,255,255,0.03)' }} value={formData.leaveDeductionRate || ''} onChange={(e) => setFormData({ ...formData, leaveDeductionRate: e.target.value })} />
                                                         </div>
                                                     </div>
                                                 )}

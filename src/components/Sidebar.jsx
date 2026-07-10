@@ -290,7 +290,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
                 {hasAccess('driversService') && (
                     <NavGroup title="Drivers Services" labelKey="drivers_services" icon={Users} isOpen={openGroups.drivers} onToggle={() => toggleGroup('drivers')}>
-                        {hasAccess('driversService', 'drivers') && <NavItem item={{ path: '/admin/drivers-panel', label: 'Drivers', labelKey: 'drivers' }} onClick={onClose} isSubItem />}
+                        {hasAccess('driversService', 'drivers') && <NavItem item={{ path: '/admin/drivers-panel', label: 'Taxi Drivers', labelKey: 'drivers' }} onClick={onClose} isSubItem />}
 
                         {hasAccess('driversService', 'freelancers') && <NavItem item={{ path: '/admin/freelancers', label: 'Freelancers', labelKey: 'freelancers' }} onClick={onClose} isSubItem />}
                         {hasAccess('driversService', 'parking') && <NavItem item={{ path: '/admin/parking', label: 'Parking', labelKey: 'parking' }} onClick={onClose} isSubItem />}

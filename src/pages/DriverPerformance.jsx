@@ -4,7 +4,7 @@ import { User, Calendar, Plus, Trash2, AlertCircle, CheckCircle2, ShieldAlert, E
 import { useCompany } from '../context/CompanyContext';
 import ImageUploader from '../components/common/ImageUploader';
 
-const DriverPerformance = () => {
+const DriverPerformance = ({ driverType = 'Taxi' }) => {
     const { selectedCompany } = useCompany();
     
     // Compute current FY
@@ -76,7 +76,9 @@ const DriverPerformance = () => {
     const fetchDrivers = async () => {
         if (!selectedCompany?._id) return;
         try {
-            const { data } = await axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&isFreelancer=false`);
+            const { data } = await axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&isFreelancer=false&status=active&driverType=${driverType}`, {
+                headers: { Authorization: `Bearer ${userInfo.token}` }
+            });
             setDrivers(data.drivers || data);
         } catch (error) {
             console.error('Error fetching drivers', error);
@@ -91,7 +93,8 @@ const DriverPerformance = () => {
         try {
             setLoading(true);
             const { data } = await axios.get(
-                `/api/driver-performance/company/${selectedCompany._id}?month=${selectedMonth}&year=${actualYear}`
+                `/api/driver-performance/company/${selectedCompany._id}?month=${selectedMonth}&year=${actualYear}&driverType=${driverType}`,
+                { headers: { Authorization: `Bearer ${userInfo.token}` } }
             );
             setRecords(data);
             setLoading(false);

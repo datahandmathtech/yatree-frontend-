@@ -142,7 +142,7 @@ const Advances = () => {
         try {
             // Fetch drivers for the dropdown
             const [driversRes, advancesRes, salaryRes] = await Promise.all([
-                axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&isFreelancer=false&month=${selectedMonth}&year=${selectedYear}`),
+                axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&driverType=All&isFreelancer=false&month=${selectedMonth}&year=${selectedYear}`),
                 axios.get(`/api/admin/advances/${selectedCompany._id}?month=${selectedMonth}&year=${selectedYear}&isFreelancer=false`),
                 axios.get(`/api/admin/salary-summary/${selectedCompany._id}?month=${selectedMonth}&year=${selectedYear}`)
             ]);

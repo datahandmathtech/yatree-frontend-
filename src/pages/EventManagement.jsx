@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import axios from '../api/axios';
 import {
     Calendar, Plus, Search, Trash2, Edit, ChevronLeft, ChevronRight, Car, PlusCircle,
-    User, MapPin, Target, Briefcase, X, Save, FileSpreadsheet, Users, Building2, TruckIcon, Wallet, Navigation, Download, FileText, IndianRupee
+    User, MapPin, Target, Briefcase, X, Save, FileSpreadsheet, Users, Building2, TruckIcon, Wallet, Navigation, Download, FileText, IndianRupee, ArrowRight, Check
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -30,6 +30,24 @@ const renderTime = (t) => {
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hr12 = hour % 12 || 12;
     return `${hr12}:${m} ${ampm}`;
+};
+
+const VEHICLE_SUB_CATEGORIES = {
+    Sedan: ['Compact Sedan', 'Luxury Sedan'],
+    SUV: ['Ertiga', 'Innova', 'Innova Crysta', 'Fortuner'],
+    Tempo: ['Tempo 12 Seater', 'Tempo 17 Seater', 'Urbania 12 Seater', 'Urbania 17 Seater'],
+    Bus: ['Bus 35 Seater', 'Bus 45 Seater', 'Bus 50 Seater']
+};
+
+const isPDService = (serviceName) => {
+    if (!serviceName) return false;
+    const name = serviceName.toLowerCase();
+    return name.includes('p/d') || 
+           name.includes('pickup & drop') || 
+           name.includes('pick/drop') || 
+           name.includes('airport') || 
+           name.includes('rsd') || 
+           name.includes('bus stand');
 };
 
 const EventManagement = () => {
@@ -63,6 +81,23 @@ const EventManagement = () => {
     });
     const [selectedVehicleTypes, setSelectedVehicleTypes] = useState([]);
     const [multiRateCardsData, setMultiRateCardsData] = useState({});
+    
+    // New states for Sub-Categories and PDF Customizer
+    const [selectedSubTypes, setSelectedSubTypes] = useState([]);
+    const [showPDFCustomizerModal, setShowPDFCustomizerModal] = useState(false);
+    const [pdfCols, setPdfCols] = useState([]);
+    const [pdfRows, setPdfRows] = useState([]);
+    const [newColCategory, setNewColCategory] = useState('');
+    const [newRowService, setNewRowService] = useState('');
+    const [customServiceText, setCustomServiceText] = useState('');
+        const [customInputValues, setCustomInputValues] = useState({});
+    const [showAddCustomVehicleModal, setShowAddCustomVehicleModal] = useState(false);
+    const [customVehicleCategory, setCustomVehicleCategory] = useState('');
+    const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
+    const [newCustomCategoryName, setNewCustomCategoryName] = useState('');
+    const [customVehicleName, setCustomVehicleName] = useState('');
+    const [pricingStep, setPricingStep] = useState(1);
+    
 
     useEffect(() => {
         if (selectedMonth === 'All') {
@@ -399,35 +434,47 @@ const EventManagement = () => {
         e.preventDefault();
         try {
             const userInfo = JSON.parse(localStorage.getItem('userInfo'));
-            const config = { headers: { Authorization: `Bearer ${userInfo.token}` } };
+            const config = { headers: { Authorization: "Bearer " + userInfo.token } };
             
             if (rateCardFormData._id) {
                 // Update existing rate card
-                await axios.put(`/api/admin/events/${selectedEventForRates._id}/ratecard/${rateCardFormData._id}`, rateCardFormData, config);
+                const isPD = isPDService(rateCardFormData.serviceName);
+                const payload = {
+                    ...rateCardFormData,
+                    baseKms: isPD ? 0 : (rateCardFormData.baseKms || 0),
+                    baseHours: isPD ? 0 : (rateCardFormData.baseHours || 0),
+                    extraKmRate: isPD ? 0 : (rateCardFormData.extraKmRate || 0),
+                    extraHourRate: isPD ? 0 : (rateCardFormData.extraHourRate || 0),
+                    driverAllowance: isPD ? 0 : (rateCardFormData.driverAllowance || 0)
+                };
+                await axios.put("/api/admin/events/" + selectedEventForRates._id + "/ratecard/" + rateCardFormData._id, payload, config);
             } else {
                 // Add new rate cards (multiple)
-                const promises = selectedVehicleTypes.map(type => {
-                    const data = multiRateCardsData[type];
+                const isPD = isPDService(rateCardFormData.serviceName);
+                const promises = selectedSubTypes.map(key => {
+                    const [type, model] = key.split('|');
+                    const data = multiRateCardsData[key];
                     const payload = {
                         serviceName: rateCardFormData.serviceName,
                         vehicleType: type,
+                        vehicleModel: model,
                         baseRate: data.baseRate,
-                        baseKms: data.baseKms,
-                        baseHours: data.baseHours,
-                        extraKmRate: data.extraKmRate,
-                        extraHourRate: data.extraHourRate,
-                        driverAllowance: data.driverAllowance
+                        baseKms: isPD ? 0 : (data.baseKms || 0),
+                        baseHours: isPD ? 0 : (data.baseHours || 0),
+                        extraKmRate: isPD ? 0 : (data.extraKmRate || 0),
+                        extraHourRate: isPD ? 0 : (data.extraHourRate || 0),
+                        driverAllowance: isPD ? 0 : (data.driverAllowance || 0)
                     };
-                    return axios.post(`/api/admin/events/${selectedEventForRates._id}/ratecard`, payload, config);
+                    return axios.post("/api/admin/events/" + selectedEventForRates._id + "/ratecard", payload, config);
                 });
                 await Promise.all(promises);
             }
             fetchEvents();
             // Refetch the selected event details so the modal updates immediately
-            const res = await axios.get(`/api/admin/events/details/${selectedEventForRates._id}`, config);
+            const res = await axios.get("/api/admin/events/details/" + selectedEventForRates._id, config);
             setSelectedEventForRates(res.data.event);
-            setRateCardFormData({ serviceName: '', vehicleType: '', baseRate: '', baseKms: '', baseHours: '', extraKmRate: '', extraHourRate: '', driverAllowance: '' });
-            setSelectedVehicleTypes([]);
+            setRateCardFormData({ serviceName: '', vehicleType: '', vehicleModel: '', baseRate: '', baseKms: '', baseHours: '', extraKmRate: '', extraHourRate: '', driverAllowance: '' });
+            setSelectedSubTypes([]);
             setMultiRateCardsData({});
             setIsRateFormOpen(false);
         } catch (error) {
@@ -459,47 +506,123 @@ const EventManagement = () => {
             alert('No rate cards available to download.');
             return;
         }
+        handleOpenPDFCustomizer();
+    };
+
+    const handleOpenPDFCustomizer = () => {
+        if (!selectedEventForRates || !selectedEventForRates.rateCard || selectedEventForRates.rateCard.length === 0) {
+            alert('No rate cards available to export.');
+            return;
+        }
+
+        const rateCard = selectedEventForRates.rateCard || [];
+        
+        // Extract columns (unique vehicle type / model)
+        const cols = [];
+        rateCard.forEach(r => {
+            const name = r.vehicleModel || r.vehicleType || 'Any';
+            if (!cols.some(c => c.name === name)) {
+                cols.push({
+                    name: name,
+                    type: r.vehicleType || '',
+                    model: r.vehicleModel || ''
+                });
+            }
+        });
+
+        // Extract rows (services)
+        const rows = [];
+        const uniqueServices = [...new Set(rateCard.map(r => r.serviceName))];
+        
+        uniqueServices.forEach(s => {
+            const rowData = { serviceName: s };
+            cols.forEach(c => {
+                const entry = rateCard.find(r => r.serviceName === s && (r.vehicleModel === c.model && r.vehicleType === c.type));
+                rowData[c.name] = entry ? entry.baseRate : '';
+            });
+            rows.push({ type: 'service', data: rowData });
+        });
+
+        // Extra charge rows
+        const extraKmData = { serviceName: 'Extra KM Rate' };
+        const extraHrData = { serviceName: 'Extra Hour Rate' };
+        const allowanceData = { serviceName: 'Driver Allowance' };
+
+        let hasExtraKm = false;
+        let hasExtraHr = false;
+        let hasAllowance = false;
+
+        cols.forEach(c => {
+            const entries = rateCard.filter(r => (r.vehicleModel === c.model && r.vehicleType === c.type));
+            const extraKm = entries.find(r => r.extraKmRate)?.extraKmRate;
+            const extraHr = entries.find(r => r.extraHourRate)?.extraHourRate;
+            const allowance = entries.find(r => r.driverAllowance)?.driverAllowance;
+
+            if (extraKm) { extraKmData[c.name] = extraKm; hasExtraKm = true; }
+            if (extraHr) { extraHrData[c.name] = extraHr; hasExtraHr = true; }
+            if (allowance) { allowanceData[c.name] = allowance; hasAllowance = true; }
+        });
+
+        if (hasExtraKm) rows.push({ type: 'extraKm', data: extraKmData });
+        if (hasExtraHr) rows.push({ type: 'extraHr', data: extraHrData });
+        if (hasAllowance) rows.push({ type: 'allowance', data: allowanceData });
+
+        setPdfCols(cols);
+        setPdfRows(rows);
+        setNewColCategory('');
+        setNewRowService('');
+        setCustomServiceText('');
+        setShowPDFCustomizerModal(true);
+    };
+
+    const generateCustomPDFExport = async (cols, rows) => {
+        if (!selectedEventForRates) return;
 
         const loadImage = (url) => {
             return new Promise((resolve, reject) => {
                 if (!url) return resolve(null);
                 const img = new Image();
                 img.crossOrigin = 'Anonymous';
-                const finalUrl = url.startsWith('/') ? `${axios.defaults.baseURL || ''}${url}` : url;
+                const finalUrl = url.startsWith('/') ? (axios.defaults.baseURL || '') + url : url;
                 img.onload = () => resolve(img);
                 img.onerror = reject;
                 if (finalUrl.startsWith('http')) {
-                    img.src = `/api/admin/proxy-image?url=${encodeURIComponent(finalUrl)}`;
+                    img.src = "/api/admin/proxy-image?url=" + encodeURIComponent(finalUrl);
                 } else {
                     img.src = finalUrl;
                 }
             });
         };
 
-        const vehicleTypes = [...new Set(selectedEventForRates.rateCard.map(r => r.vehicleType))];
-        
-        // If there are many vehicle types, landscape might be needed, but we try portrait first to match design
-        const orientation = vehicleTypes.length > 5 ? 'landscape' : 'portrait';
+        const orientation = cols.length > 5 ? 'landscape' : 'portrait';
         const doc = new jsPDF(orientation);
         const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
         
-        // --- TOP HEADER SECTION ---
-        doc.setFillColor(15, 23, 42); // Dark blue background
-        doc.rect(0, 0, pageWidth, 45, 'F');
+        // --- 1. PREMIUM HEADER SECTION ---
+        doc.setFillColor(15, 23, 42); // Slate 900
+        doc.rect(0, 0, pageWidth, 55, 'F');
         
-        let logoOffset = 14;
+        doc.setFillColor(245, 158, 11);
+        doc.rect(0, 55, pageWidth, 2, 'F'); // Gold Border
+        
+        let logoOffset = 18;
         try {
             const logoSrc = selectedCompany?.logoUrl || '/logos/logo.png';
             const logoImg = await loadImage(logoSrc);
             
             if (logoImg) {
-                // Draw white rounded rectangle behind logo
+                // White rounded box for logo
                 doc.setFillColor(255, 255, 255);
-                doc.roundedRect(12, 8, 34, 34, 3, 3, 'F');
+                doc.roundedRect(14, 10, 36, 36, 4, 4, 'F');
+                doc.addImage(logoImg, 'PNG', 16, 12, 32, 32);
+                logoOffset = 58;
                 
-                // Draw logo inside the white box
-                doc.addImage(logoImg, 'PNG', 14, 10, 30, 30);
-                logoOffset = 52; // Shift text to the right
+                // Add centered watermark
+                doc.setGState(new doc.GState({ opacity: 0.04 }));
+                const watermarkSize = orientation === 'portrait' ? 120 : 150;
+                doc.addImage(logoImg, 'PNG', (pageWidth - watermarkSize) / 2, (pageHeight - watermarkSize) / 2, watermarkSize, watermarkSize);
+                doc.setGState(new doc.GState({ opacity: 1.0 }));
             }
         } catch (e) {
             console.warn('Could not load logo image for PDF', e);
@@ -507,164 +630,192 @@ const EventManagement = () => {
 
         // Title Text
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(22);
+        doc.setFontSize(24);
         doc.setFont('helvetica', 'bold');
-        doc.text((selectedCompany?.name || 'YATREEDESTINATION').toUpperCase(), logoOffset, 22);
+        doc.text((selectedCompany?.name || 'YATREE DESTINATION').toUpperCase(), logoOffset, 25);
         
         // Subtitle
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(200, 200, 200);
-        doc.text('Premium Fleet Management & Travel Solutions', logoOffset, 30);
+        doc.text('Premium Fleet Management & Travel Solutions', logoOffset, 33);
+        
+        doc.setTextColor(245, 158, 11);
+        doc.setFontSize(9);
+        doc.text(selectedCompany?.website || 'www.yatreedestination.com', logoOffset, 40);
         
         // Right side info
-        doc.setFontSize(14);
+        doc.setFontSize(18);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(255, 255, 255);
-        doc.text('EVENT RATE CARD', pageWidth - 14, 20, { align: 'right' });
+        doc.text('RATE CARD', pageWidth - 14, 25, { align: 'right' });
         
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
-        doc.text(`DATE: ${new Date().toLocaleDateString('en-IN')}`, pageWidth - 14, 28, { align: 'right' });
+        doc.setTextColor(220, 220, 220);
+        doc.text("DATE: " + new Date().toLocaleDateString('en-IN'), pageWidth - 14, 33, { align: 'right' });
 
-        // --- EVENT SPECIFICATIONS SECTION ---
+        // --- 2. EVENT SPECIFICATIONS SECTION ---
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(15, 23, 42);
-        doc.text('EVENT SPECIFICATIONS', 14, 60);
+        doc.text('EVENT SPECIFICATIONS', 14, 72);
         
-        // Yellow underline
-        doc.setDrawColor(245, 158, 11); // Amber/Yellow
+        doc.setDrawColor(245, 158, 11);
         doc.setLineWidth(1);
-        doc.line(14, 63, 65, 63);
+        doc.line(14, 75, 70, 75);
+
+        // Spec box
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(14, 80, pageWidth - 28, 25, 4, 4, 'F');
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.5);
+        doc.roundedRect(14, 80, pageWidth - 28, 25, 4, 4, 'S');
 
         doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
-        doc.text('EVENT NAME', 14, 73);
-        doc.text('CLIENT', 14, 81);
-        doc.text('EVENT DATE', 14, 89);
+        doc.setTextColor(100, 116, 139);
+        doc.text('EVENT NAME', 20, 88);
+        doc.text('CLIENT', 80, 88);
+        doc.text('EVENT DATE', 140, 88);
         
-        doc.setFont('helvetica', 'normal');
-        doc.text(selectedEventForRates.name.toUpperCase(), 50, 73);
-        doc.text((selectedEventForRates.client || 'N/A').toUpperCase(), 50, 81);
-        const eventDateStr = selectedEventForRates.date ? new Date(selectedEventForRates.date).toLocaleDateString('en-IN') : 'N/A';
-        doc.text(eventDateStr, 50, 89);
-
-        // Calculate total rate cards defined (just a stat)
+        doc.setTextColor(15, 23, 42);
         doc.setFont('helvetica', 'bold');
-        doc.text('TOTAL SERVICES', pageWidth / 2, 73);
+        doc.text(selectedEventForRates.name.toUpperCase(), 20, 96);
+        doc.text((selectedEventForRates.client || 'N/A').toUpperCase(), 80, 96);
+        const eventDateStr = selectedEventForRates.date ? new Date(selectedEventForRates.date).toLocaleDateString('en-IN') : 'N/A';
+        doc.text(eventDateStr, 140, 96);
+
+        // Stats
+        doc.setTextColor(100, 116, 139);
         doc.setFont('helvetica', 'normal');
-        const uniqueServices = [...new Set(selectedEventForRates.rateCard.map(r => r.serviceName))];
-        doc.text(`${uniqueServices.length} Defined`, pageWidth / 2 + 40, 73);
+        doc.text('TOTAL SERVICES', pageWidth - 20, 88, { align: 'right' });
+        doc.setTextColor(15, 23, 42);
+        doc.setFont('helvetica', 'bold');
+        const serviceCount = rows.filter(r => r.type === 'service').length;
+        doc.text(serviceCount + " Configured", pageWidth - 20, 96, { align: 'right' });
 
-
-        // --- TABLE SECTION ---
-        // Define columns
-        const head = [['S.NO.', 'SERVICES / PARTICULARS', ...vehicleTypes.map(v => v === 'Tempo' ? 'TEMPO TRAVELLER' : v.toUpperCase())]];
+        // --- 3. DYNAMIC TABLE SECTION ---
+        const head = [['S.NO.', 'SERVICES / PARTICULARS', ...cols.map(c => c.name.toUpperCase())]];
         
         const body = [];
-        
-        // Add service rows
-        uniqueServices.forEach((service, index) => {
-            const row = [index + 1, service.toUpperCase()];
-            vehicleTypes.forEach(vType => {
-                const rate = selectedEventForRates.rateCard.find(r => r.serviceName === service && r.vehicleType === vType);
-                row.push(rate && rate.baseRate ? `Rs. ${rate.baseRate}` : '-');
+        rows.forEach((r, idx) => {
+            const isExtra = r.type !== 'service';
+            const sNo = isExtra ? '*' : (body.filter(x => x[0] !== '*').length + 1).toString();
+            
+            const rowData = [sNo, r.data.serviceName.toUpperCase()];
+            cols.forEach(c => {
+                const val = r.data[c.name];
+                
+                let valStr = '-';
+                if (val !== undefined && val !== null && val !== '') {
+                    if (r.type === 'service') valStr = "Rs. " + val;
+                    else if (r.type === 'extraKm') valStr = "Rs. " + val + "/Km";
+                    else if (r.type === 'extraHr') valStr = "Rs. " + val + "/Hr";
+                    else if (r.type === 'allowance') valStr = "Rs. " + val;
+                }
+                rowData.push(valStr);
             });
-            body.push(row);
+            body.push(rowData);
         });
 
-        // Extra Rows (Extra KM, Extra Hr, Driver Allowance)
-        const extraKmRow = ['*', 'EXTRA KM RATE'];
-        const extraHrRow = ['*', 'EXTRA HOUR RATE'];
-        const driverAllowanceRow = ['*', 'DRIVER ALLOWANCE / NIGHT HOLD'];
-
-        let hasExtraKm = false;
-        let hasExtraHr = false;
-        let hasAllowance = false;
-
-        vehicleTypes.forEach(vType => {
-            const rates = selectedEventForRates.rateCard.filter(r => r.vehicleType === vType);
-            const rateKm = rates.find(r => r.extraKmRate)?.extraKmRate;
-            const rateHr = rates.find(r => r.extraHourRate)?.extraHourRate;
-            const rateAll = rates.find(r => r.driverAllowance)?.driverAllowance;
-
-            const extraKm = rateKm ? `Rs. ${rateKm}/Km` : '-';
-            const extraHr = rateHr ? `Rs. ${rateHr}/Hr` : '-';
-            const allowance = rateAll ? `Rs. ${rateAll}` : '-';
-
-            if (extraKm !== '-') hasExtraKm = true;
-            if (extraHr !== '-') hasExtraHr = true;
-            if (allowance !== '-') hasAllowance = true;
-
-            extraKmRow.push(extraKm);
-            extraHrRow.push(extraHr);
-            driverAllowanceRow.push(allowance);
-        });
-
-        if (hasExtraKm) body.push(extraKmRow);
-        if (hasExtraHr) body.push(extraHrRow);
-        if (hasAllowance) body.push(driverAllowanceRow);
+        // Dynamic font size to prevent overlapping
+        const dynamicFontSize = cols.length > 6 ? (cols.length > 9 ? 7 : 8) : 9;
 
         autoTable(doc, {
-            startY: 105,
+            startY: 115,
             head: head,
             body: body,
             theme: 'grid',
+            styles: {
+                font: 'helvetica',
+                fontSize: dynamicFontSize,
+                cellPadding: 6,
+                lineColor: [226, 232, 240],
+                lineWidth: 0.5,
+                overflow: 'linebreak'
+            },
             headStyles: { 
-                fillColor: [15, 23, 42], 
+                fillColor: [15, 23, 42],
                 textColor: [255, 255, 255], 
                 fontStyle: 'bold', 
                 halign: 'center', 
-                fontSize: 9, 
-                cellPadding: 6 
+                valign: 'middle'
             },
             bodyStyles: { 
                 halign: 'center', 
-                fontSize: 9, 
-                cellPadding: 5, 
-                textColor: [40, 40, 40] 
+                valign: 'middle',
+                textColor: [30, 41, 59]
             },
             columnStyles: { 
-                0: { halign: 'center', fontStyle: 'bold', cellWidth: 15 }, 
-                1: { halign: 'left', fontStyle: 'bold', cellWidth: orientation === 'portrait' ? 60 : 80 } 
+                0: { halign: 'center', fontStyle: 'bold', cellWidth: 15, fillColor: [248, 250, 252] },
+                1: { halign: 'left', fontStyle: 'bold', minCellWidth: 40, cellWidth: orientation === 'portrait' ? 60 : 70 } 
             },
-            alternateRowStyles: { fillColor: [248, 250, 252] }, // Light blue-gray alternate rows
+            alternateRowStyles: { fillColor: [247, 249, 252] },
             didParseCell: function(data) {
-                // Style currency values with green if it's in the body and starts with Rs.
                 if (data.section === 'body' && data.column.index > 1) {
                     if (data.cell.raw !== '-' && data.cell.raw.toString().includes('Rs.')) {
-                        data.cell.styles.textColor = [16, 185, 129]; // Emerald Green
+                        data.cell.styles.textColor = [5, 150, 105];
                         data.cell.styles.fontStyle = 'bold';
+                    } else if (data.cell.raw === '-') {
+                        data.cell.styles.textColor = [156, 163, 175];
                     }
                 }
-                // Highlight Extra rows
                 if (data.section === 'body' && data.row.raw[0] === '*') {
-                    data.cell.styles.fillColor = [255, 251, 235]; // Light amber background for extra charges
+                    data.cell.styles.fillColor = [254, 252, 232];
                 }
             }
         });
 
-        // Add Signature Section
-        const finalY = doc.lastAutoTable.finalY + 20; // 20 units below the table
+        // --- 4. SIGNATURE & FOOTER SECTION ---
+        let finalY = doc.lastAutoTable.finalY + 25;
+        
+        if (finalY > pageHeight - 50) {
+            doc.addPage();
+            finalY = 30;
+        }
         
         try {
             const sigSrc = selectedCompany?.ownerSignatureUrl || '/logos/signature.png';
             const sigImg = await loadImage(sigSrc);
             if (sigImg) {
-                // Draw signature on the right side
+                doc.setDrawColor(226, 232, 240);
+                doc.setLineWidth(1);
+                doc.line(pageWidth - 60, finalY + 20, pageWidth - 20, finalY + 20);
                 doc.addImage(sigImg, 'PNG', pageWidth - 60, finalY, 40, 20);
             }
         } catch (e) {
             console.warn('Could not load signature image for PDF', e);
         }
 
-        doc.setFontSize(10);
+        doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(15, 23, 42);
-        doc.text('AUTHORIZED SIGNATORY', pageWidth - 40, finalY + 25, { align: 'center' });
+        doc.text('AUTHORIZED SIGNATORY', pageWidth - 40, finalY + 26, { align: 'center' });
+        
+        // Terms & Conditions
+        doc.setFontSize(10);
+        doc.setTextColor(15, 23, 42);
+        doc.text('Terms & Conditions:', 14, finalY);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 116, 139);
+        doc.text('1. All rates are strictly subject to vehicle availability at the time of final confirmation.', 14, finalY + 6);
+        doc.text('2. Toll, Tax, and Parking charges will be charged on actuals unless explicitly mentioned.', 14, finalY + 11);
+        doc.text('3. Any changes in the itinerary may result in a change of quoted rates.', 14, finalY + 16);
 
-        doc.save(`${selectedEventForRates.name.replace(/\s+/g, '_')}_Rate_Card.pdf`);
+        // Footer block
+        doc.setFillColor(248, 250, 252);
+        doc.rect(0, pageHeight - 20, pageWidth, 20, 'F');
+        doc.setDrawColor(226, 232, 240);
+        doc.line(0, pageHeight - 20, pageWidth, pageHeight - 20);
+        
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184);
+        doc.text('This is a computer-generated document and does not require a physical signature.', pageWidth / 2, pageHeight - 12, { align: 'center' });
+        doc.text(selectedCompany?.email || 'info@yatreedestination.com', 14, pageHeight - 12);
+        doc.text(selectedCompany?.phone || '+91 99999 99999', pageWidth - 14, pageHeight - 12, { align: 'right' });
+
+        doc.save(selectedEventForRates.name.replace(/\s+/g, '_') + "_Rate_Card.pdf");
     };
 
     const handleSubmitDuty = async (e) => {
@@ -2265,7 +2416,7 @@ const EventManagement = () => {
             {/* ═══ RATE CARD MODAL ═══ */}
             <AnimatePresence>
                 {showRateCardModal && selectedEventForRates && (
-                    <div className="modal-overlay" onClick={() => { setShowRateCardModal(false); setSelectedEventForRates(null); setRateCardFormData({ serviceName: '', vehicleType: '', vehicleModel: '', baseRate: '', baseKms: '', baseHours: '', extraKmRate: '', extraHourRate: '', driverAllowance: '' }); }}>
+                    <div className="modal-overlay" onClick={() => { setShowRateCardModal(false); setSelectedEventForRates(null); setSelectedSubTypes([]); setMultiRateCardsData({}); setRateCardFormData({ serviceName: '', vehicleType: '', vehicleModel: '', baseRate: '', baseKms: '', baseHours: '', extraKmRate: '', extraHourRate: '', driverAllowance: '' }); }}>
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
                             className="premium-scroll"
@@ -2284,14 +2435,17 @@ const EventManagement = () => {
                                     <h2 style={{ color: 'white', fontSize: 'clamp(20px, 4vw, 28px)', fontWeight: '900', margin: 0 }}>Rate Card: {selectedEventForRates.name}</h2>
                                     <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', margin: '4px 0 0 0' }}>Manage tariffs for different services and vehicles.</p>
                                 </div>
-                                <div style={{ display: 'flex', gap: '12px' }}>
-                                    <button onClick={handleDownloadRateCardPDF} style={{ height: '40px', padding: '0 16px', borderRadius: '12px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.3)', color: '#38bdf8', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', transition: 'all 0.2s' }}>
+                                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                    <button onClick={() => { console.log('Clicked Add Custom Vehicle. Setting state to true.'); setShowAddCustomVehicleModal(true); }} style={{ height: '40px', padding: '0 16px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: '700', transition: 'all 0.2s' }}>
+                                        <Plus size={16} color="var(--primary)" /> Add Custom Vehicle
+                                    </button>
+                                    <button onClick={handleOpenPDFCustomizer} style={{ height: '40px', padding: '0 16px', borderRadius: '12px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.3)', color: '#38bdf8', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', transition: 'all 0.2s' }}>
                                         <Download size={16} /> PDF Export
                                     </button>
-                                    <button onClick={() => { setIsRateFormOpen(true); setRateCardFormData({ serviceName: '', vehicleType: '', baseRate: '', baseKms: '', baseHours: '', extraKmRate: '', extraHourRate: '', driverAllowance: '' }); }} style={{ height: '40px', padding: '0 16px', borderRadius: '12px', background: 'linear-gradient(to right, var(--primary), #f59e0b)', border: 'none', color: 'black', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                    <button onClick={() => { setIsRateFormOpen(true); setPricingStep(1); setSelectedSubTypes([]); setMultiRateCardsData({}); setRateCardFormData({ serviceName: '', vehicleType: '', vehicleModel: '', baseRate: '', baseKms: '', baseHours: '', extraKmRate: '', extraHourRate: '', driverAllowance: '' }); }} style={{ height: '40px', padding: '0 16px', borderRadius: '12px', background: 'linear-gradient(to right, var(--primary), #f59e0b)', border: 'none', color: 'black', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                                         <Plus size={16} /> Add New Rate
                                     </button>
-                                    <button onClick={() => { setShowRateCardModal(false); setSelectedEventForRates(null); setIsRateFormOpen(false); }} style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                    <button onClick={() => { setShowRateCardModal(false); setSelectedEventForRates(null); setIsRateFormOpen(false); setSelectedSubTypes([]); setMultiRateCardsData({}); }} style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                                         <X size={20} />
                                     </button>
                                 </div>
@@ -2311,7 +2465,8 @@ const EventManagement = () => {
                                             <Edit size={18} /> {rateCardFormData._id ? 'Edit Rate Details' : 'Configure New Rate'}
                                         </h3>
                                     </div>
-                                    <div className="form-grid-3">
+                                    <div style={{ display: pricingStep === 1 ? 'block' : 'none' }}>
+<div className="form-grid-3">
                                     <div className="input-group">
                                         <label className="label-text">Service Name *</label>
                                         <input required type="text" list="serviceOptions" className="premium-compact-input" placeholder="e.g. Airport Drop, 8Hr/80Km" value={rateCardFormData.serviceName} onChange={(e) => setRateCardFormData({ ...rateCardFormData, serviceName: e.target.value })} />
@@ -2328,7 +2483,7 @@ const EventManagement = () => {
                                         <>
                                             <div className="input-group">
                                                 <label className="label-text">Vehicle Category</label>
-                                                <select className="premium-compact-input" value={rateCardFormData.vehicleType} onChange={(e) => setRateCardFormData({ ...rateCardFormData, vehicleType: e.target.value })}>
+                                                <select className="premium-compact-input" value={rateCardFormData.vehicleType} onChange={(e) => setRateCardFormData({ ...rateCardFormData, vehicleType: e.target.value, vehicleModel: '' })}>
                                                     <option value="">Any</option>
                                                     <option value="Sedan">Sedan</option>
                                                     <option value="SUV">SUV</option>
@@ -2336,102 +2491,266 @@ const EventManagement = () => {
                                                     <option value="Tempo">Tempo Traveller</option>
                                                 </select>
                                             </div>
+                                            {rateCardFormData.vehicleType && (
+                                                <div className="input-group">
+                                                    <label className="label-text">Vehicle Model</label>
+                                                    <select 
+                                                        className="premium-compact-input" 
+                                                        value={rateCardFormData.vehicleModel || ''} 
+                                                        onChange={(e) => setRateCardFormData({ ...rateCardFormData, vehicleModel: e.target.value })}
+                                                    >
+                                                        <option value="">Any Model</option>
+                                                        {([
+                                                            ...(VEHICLE_SUB_CATEGORIES[rateCardFormData.vehicleType] || []),
+                                                            ...((selectedEventForRates?.customVehicles && selectedEventForRates.customVehicles[rateCardFormData.vehicleType]) || [])
+                                                        ]).map(model => (
+                                                            <option key={model} value={model}>{model}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
                                             <div className="input-group">
                                                 <label className="label-text">Base Rate (₹) *</label>
                                                 <input required type="number" className="premium-compact-input" placeholder="0" value={rateCardFormData.baseRate} onChange={(e) => setRateCardFormData({ ...rateCardFormData, baseRate: e.target.value })} />
                                             </div>
-                                            <div className="input-group">
-                                                <label className="label-text">Base Limit KMs</label>
-                                                <input type="number" className="premium-compact-input" placeholder="0" value={rateCardFormData.baseKms} onChange={(e) => setRateCardFormData({ ...rateCardFormData, baseKms: e.target.value })} />
-                                            </div>
-                                            <div className="input-group">
-                                                <label className="label-text">Base Limit Hours</label>
-                                                <input type="number" className="premium-compact-input" placeholder="0" value={rateCardFormData.baseHours} onChange={(e) => setRateCardFormData({ ...rateCardFormData, baseHours: e.target.value })} />
-                                            </div>
-                                            <div className="input-group">
-                                                <label className="label-text">Extra Rate / KM (₹)</label>
-                                                <input type="number" className="premium-compact-input" placeholder="0" value={rateCardFormData.extraKmRate} onChange={(e) => setRateCardFormData({ ...rateCardFormData, extraKmRate: e.target.value })} />
-                                            </div>
-                                            <div className="input-group">
-                                                <label className="label-text">Extra Rate / Hr (₹)</label>
-                                                <input type="number" className="premium-compact-input" placeholder="0" value={rateCardFormData.extraHourRate} onChange={(e) => setRateCardFormData({ ...rateCardFormData, extraHourRate: e.target.value })} />
-                                            </div>
-                                            <div className="input-group">
-                                                <label className="label-text">Driver Allowance (₹)</label>
-                                                <input type="number" className="premium-compact-input" placeholder="0" value={rateCardFormData.driverAllowance} onChange={(e) => setRateCardFormData({ ...rateCardFormData, driverAllowance: e.target.value })} />
-                                            </div>
+                                            {!isPDService(rateCardFormData.serviceName) && (
+                                                <>
+                                                    <div className="input-group">
+                                                        <label className="label-text">Base Limit KMs</label>
+                                                        <input type="number" className="premium-compact-input" placeholder="0" value={rateCardFormData.baseKms} onChange={(e) => setRateCardFormData({ ...rateCardFormData, baseKms: e.target.value })} />
+                                                    </div>
+                                                    <div className="input-group">
+                                                        <label className="label-text">Base Limit Hours</label>
+                                                        <input type="number" className="premium-compact-input" placeholder="0" value={rateCardFormData.baseHours} onChange={(e) => setRateCardFormData({ ...rateCardFormData, baseHours: e.target.value })} />
+                                                    </div>
+                                                    <div className="input-group">
+                                                        <label className="label-text">Extra Rate / KM (₹)</label>
+                                                        <input type="number" className="premium-compact-input" placeholder="0" value={rateCardFormData.extraKmRate} onChange={(e) => setRateCardFormData({ ...rateCardFormData, extraKmRate: e.target.value })} />
+                                                    </div>
+                                                    <div className="input-group">
+                                                        <label className="label-text">Extra Rate / Hr (₹)</label>
+                                                        <input type="number" className="premium-compact-input" placeholder="0" value={rateCardFormData.extraHourRate} onChange={(e) => setRateCardFormData({ ...rateCardFormData, extraHourRate: e.target.value })} />
+                                                    </div>
+                                                    <div className="input-group">
+                                                        <label className="label-text">Driver Allowance (₹)</label>
+                                                        <input type="number" className="premium-compact-input" placeholder="0" value={rateCardFormData.driverAllowance} onChange={(e) => setRateCardFormData({ ...rateCardFormData, driverAllowance: e.target.value })} />
+                                                    </div>
+                                                </>
+                                            )}
                                         </>
                                     ) : (
-                                        <div className="input-group" style={{ gridColumn: '1 / -1' }}>
-                                            <label className="label-text" style={{ marginBottom: '10px', display: 'block' }}>Select Vehicle Categories *</label>
-                                            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', padding: '10px 15px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px' }}>
-                                                {['Sedan', 'SUV', 'Bus', 'Tempo'].map(type => (
-                                                    <label key={type} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'white', cursor: 'pointer', fontWeight: '600' }}>
-                                                        <input 
-                                                            type="checkbox" 
-                                                            style={{ width: '18px', height: '18px', accentColor: 'var(--primary)' }}
-                                                            checked={selectedVehicleTypes.includes(type)}
-                                                            onChange={(e) => {
-                                                                if (e.target.checked) {
-                                                                    setSelectedVehicleTypes([...selectedVehicleTypes, type]);
-                                                                    setMultiRateCardsData({ ...multiRateCardsData, [type]: { baseRate: '', baseKms: '', baseHours: '', extraKmRate: '', extraHourRate: '', driverAllowance: '' } });
-                                                                } else {
-                                                                    setSelectedVehicleTypes(selectedVehicleTypes.filter(t => t !== type));
-                                                                    const newData = { ...multiRateCardsData };
-                                                                    delete newData[type];
-                                                                    setMultiRateCardsData(newData);
-                                                                }
-                                                            }}
-                                                        />
-                                                        {type === 'Tempo' ? 'Tempo Traveller' : type}
-                                                    </label>
-                                                ))}
+                                        <div className="input-group" style={{ gridColumn: '1 / -1', marginTop: '10px' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', fontSize: '12px', fontWeight: '900', color: 'white', textTransform: 'uppercase', letterSpacing: '1.5px' }}>
+                                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--primary)', boxShadow: '0 0 10px var(--primary)' }}></div>
+                                                Select Vehicle Categories *
+                                            </label>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+                                                {Array.from(new Set([...Object.keys(VEHICLE_SUB_CATEGORIES), ...Object.keys(selectedEventForRates?.customVehicles || {})])).map(type => {
+                                                    const hardcoded = VEHICLE_SUB_CATEGORIES[type] || [];
+                                                    const custom = (selectedEventForRates?.customVehicles && selectedEventForRates.customVehicles[type]) || [];
+                                                    const subCategories = [...hardcoded, ...custom];
+                                                    
+                                                    const isMainChecked = subCategories.length > 0 && subCategories.every(sub => selectedSubTypes.includes(type + "|" + sub));
+
+                                                    return (
+                                                        <div key={type} style={{ 
+                                                            background: 'linear-gradient(145deg, rgba(30, 41, 59, 0.4), rgba(15, 23, 42, 0.6))', 
+                                                            borderRadius: '20px', 
+                                                            border: '1px solid rgba(255,255,255,0.08)',
+                                                            overflow: 'hidden',
+                                                            boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                                                            transition: 'transform 0.3s'
+                                                        }}>
+                                                            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '15px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                                    <div style={{ width: '36px', height: '36px', borderRadius: '12px', background: 'rgba(251, 191, 36, 0.1)', color: 'var(--primary)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                                                        <Car size={18} />
+                                                                    </div>
+                                                                    <span style={{ color: 'white', fontSize: '15px', fontWeight: '800', letterSpacing: '0.5px' }}>{type === 'Tempo' ? 'Tempo Traveller' : type}</span>
+                                                                </div>
+                                                                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                                                                    <input 
+                                                                        type="checkbox" 
+                                                                        style={{ width: '18px', height: '18px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                                                                        checked={isMainChecked}
+                                                                        onChange={(e) => {
+                                                                            let updated = [...selectedSubTypes];
+                                                                            if (e.target.checked) {
+                                                                                subCategories.forEach(sub => {
+                                                                                    const key = type + "|" + sub;
+                                                                                    if (!updated.includes(key)) updated.push(key);
+                                                                                });
+                                                                            } else {
+                                                                                subCategories.forEach(sub => {
+                                                                                    const key = type + "|" + sub;
+                                                                                    updated = updated.filter(k => k !== key);
+                                                                                });
+                                                                            }
+                                                                            setSelectedSubTypes(updated);
+                                                                            
+                                                                            const newMultiData = { ...multiRateCardsData };
+                                                                            updated.forEach(key => {
+                                                                                if (!newMultiData[key]) {
+                                                                                    newMultiData[key] = { baseRate: '', baseKms: '', baseHours: '', extraKmRate: '', extraHourRate: '', driverAllowance: '' };
+                                                                                }
+                                                                            });
+                                                                            Object.keys(newMultiData).forEach(key => {
+                                                                                if (!updated.includes(key)) delete newMultiData[key];
+                                                                            });
+                                                                            setMultiRateCardsData(newMultiData);
+                                                                        }}
+                                                                    />
+                                                                </label>
+                                                            </div>
+                                                            
+                                                            <div style={{ padding: '20px', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                                                                {subCategories.map(sub => {
+                                                                    const key = type + "|" + sub;
+                                                                    const isChecked = selectedSubTypes.includes(key);
+                                                                    return (
+                                                                        <button
+                                                                            key={sub}
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                let updated = [...selectedSubTypes];
+                                                                                if (!isChecked) {
+                                                                                    updated.push(key);
+                                                                                    setMultiRateCardsData({
+                                                                                        ...multiRateCardsData,
+                                                                                        [key]: { baseRate: '', baseKms: '', baseHours: '', extraKmRate: '', extraHourRate: '', driverAllowance: '' }
+                                                                                    });
+                                                                                } else {
+                                                                                    updated = updated.filter(k => k !== key);
+                                                                                    const newMultiData = { ...multiRateCardsData };
+                                                                                    delete newMultiData[key];
+                                                                                    setMultiRateCardsData(newMultiData);
+                                                                                }
+                                                                                setSelectedSubTypes(updated);
+                                                                            }}
+                                                                            style={{
+                                                                                padding: '8px 16px',
+                                                                                borderRadius: '100px',
+                                                                                fontSize: '12px',
+                                                                                fontWeight: '700',
+                                                                                border: isChecked ? '1px solid var(--primary)' : '1px solid rgba(255,255,255,0.1)',
+                                                                                background: isChecked ? 'rgba(251, 191, 36, 0.15)' : 'rgba(255,255,255,0.02)',
+                                                                                color: isChecked ? 'var(--primary)' : 'rgba(255,255,255,0.6)',
+                                                                                cursor: 'pointer',
+                                                                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                                                display: 'flex',
+                                                                                alignItems: 'center',
+                                                                                gap: '6px',
+                                                                                boxShadow: isChecked ? '0 4px 12px rgba(251, 191, 36, 0.2)' : 'none'
+                                                                            }}
+                                                                        >
+                                                                            {isChecked && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--primary)' }}></div>}
+                                                                            {sub}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     )}
-                                </div>
+                                    </div>
 
-                                {!rateCardFormData._id && selectedVehicleTypes.map(type => (
-                                    <div key={type} style={{ border: '1px solid rgba(255,255,255,0.1)', padding: '20px', borderRadius: '15px', marginTop: '20px', background: 'rgba(255,255,255,0.02)' }}>
-                                        <h4 style={{ color: 'var(--primary)', marginTop: 0, marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--primary)' }}></div>
-                                            Pricing for {type === 'Tempo' ? 'Tempo Traveller' : type}
-                                        </h4>
-                                        <div className="form-grid-3">
-                                            <div className="input-group">
-                                                <label className="label-text">Base Rate (₹) *</label>
-                                                <input required type="number" className="premium-compact-input" placeholder="0" value={multiRateCardsData[type]?.baseRate || ''} onChange={(e) => setMultiRateCardsData({ ...multiRateCardsData, [type]: { ...multiRateCardsData[type], baseRate: e.target.value } })} />
-                                            </div>
-                                            <div className="input-group">
-                                                <label className="label-text">Base Limit KMs</label>
-                                                <input type="number" className="premium-compact-input" placeholder="0" value={multiRateCardsData[type]?.baseKms || ''} onChange={(e) => setMultiRateCardsData({ ...multiRateCardsData, [type]: { ...multiRateCardsData[type], baseKms: e.target.value } })} />
-                                            </div>
-                                            <div className="input-group">
-                                                <label className="label-text">Base Limit Hours</label>
-                                                <input type="number" className="premium-compact-input" placeholder="0" value={multiRateCardsData[type]?.baseHours || ''} onChange={(e) => setMultiRateCardsData({ ...multiRateCardsData, [type]: { ...multiRateCardsData[type], baseHours: e.target.value } })} />
-                                            </div>
-                                            <div className="input-group">
-                                                <label className="label-text">Extra Rate / KM (₹)</label>
-                                                <input type="number" className="premium-compact-input" placeholder="0" value={multiRateCardsData[type]?.extraKmRate || ''} onChange={(e) => setMultiRateCardsData({ ...multiRateCardsData, [type]: { ...multiRateCardsData[type], extraKmRate: e.target.value } })} />
-                                            </div>
-                                            <div className="input-group">
-                                                <label className="label-text">Extra Rate / Hr (₹)</label>
-                                                <input type="number" className="premium-compact-input" placeholder="0" value={multiRateCardsData[type]?.extraHourRate || ''} onChange={(e) => setMultiRateCardsData({ ...multiRateCardsData, [type]: { ...multiRateCardsData[type], extraHourRate: e.target.value } })} />
-                                            </div>
-                                            <div className="input-group">
-                                                <label className="label-text">Driver Allowance (₹)</label>
-                                                <input type="number" className="premium-compact-input" placeholder="0" value={multiRateCardsData[type]?.driverAllowance || ''} onChange={(e) => setMultiRateCardsData({ ...multiRateCardsData, [type]: { ...multiRateCardsData[type], driverAllowance: e.target.value } })} />
+                                    
+                                    </div> {/* Close Step 1 Div */}
+
+                                    <AnimatePresence>
+                                        {pricingStep === 2 && (
+                                            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                                                <h3 style={{ color: 'white', marginTop: 0, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--primary)', boxShadow: '0 0 10px var(--primary)' }}></div>
+                                                    Bulk Pricing Configuration
+                                                </h3>
+                                                <div style={{ overflowX: 'auto', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
+                                                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', color: 'white', fontSize: '13px' }}>
+                                                        <thead style={{ background: 'rgba(255,255,255,0.05)' }}>
+                                                            <tr>
+                                                                <th style={{ padding: '16px', fontWeight: '800', color: 'var(--primary)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Vehicle Model</th>
+                                                                <th style={{ padding: '16px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Base Rate (₹)*</th>
+                                                                {!isPDService(rateCardFormData.serviceName) && (
+                                                                    <>
+                                                                        <th style={{ padding: '16px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Limit KMs</th>
+                                                                        <th style={{ padding: '16px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Limit Hrs</th>
+                                                                        <th style={{ padding: '16px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Extra /KM (₹)</th>
+                                                                        <th style={{ padding: '16px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Extra /Hr (₹)</th>
+                                                                        <th style={{ padding: '16px', fontWeight: '800', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Driver Allow.</th>
+                                                                    </>
+                                                                )}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {selectedSubTypes.map((key, index) => {
+                                                                const [type, model] = key.split('|');
+                                                                const isPD = isPDService(rateCardFormData.serviceName);
+                                                                return (
+                                                                    <tr key={key} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: 'rgba(255,255,255,0.01)', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'} onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.01)'}>
+                                                                        <td style={{ padding: '12px 16px', fontWeight: '700' }}>
+                                                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                                                <span style={{ fontSize: '14px' }}>{model}</span>
+                                                                                <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>{type}</span>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td style={{ padding: '12px 16px' }}>
+                                                                            <input autoFocus={index === 0} required type="number" className="premium-compact-input" placeholder="0" value={multiRateCardsData[key]?.baseRate || ''} onChange={(e) => setMultiRateCardsData({ ...multiRateCardsData, [key]: { ...multiRateCardsData[key], baseRate: e.target.value } })} style={{ width: '100%', minWidth: '100px', height: '36px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                                                                        </td>
+                                                                        {!isPD && (
+                                                                            <>
+                                                                                <td style={{ padding: '12px 16px' }}>
+                                                                                    <input type="number" className="premium-compact-input" placeholder="0" value={multiRateCardsData[key]?.baseKms || ''} onChange={(e) => setMultiRateCardsData({ ...multiRateCardsData, [key]: { ...multiRateCardsData[key], baseKms: e.target.value } })} style={{ width: '100%', minWidth: '80px', height: '36px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                                                                                </td>
+                                                                                <td style={{ padding: '12px 16px' }}>
+                                                                                    <input type="number" className="premium-compact-input" placeholder="0" value={multiRateCardsData[key]?.baseHours || ''} onChange={(e) => setMultiRateCardsData({ ...multiRateCardsData, [key]: { ...multiRateCardsData[key], baseHours: e.target.value } })} style={{ width: '100%', minWidth: '80px', height: '36px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                                                                                </td>
+                                                                                <td style={{ padding: '12px 16px' }}>
+                                                                                    <input type="number" className="premium-compact-input" placeholder="0" value={multiRateCardsData[key]?.extraKmRate || ''} onChange={(e) => setMultiRateCardsData({ ...multiRateCardsData, [key]: { ...multiRateCardsData[key], extraKmRate: e.target.value } })} style={{ width: '100%', minWidth: '90px', height: '36px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                                                                                </td>
+                                                                                <td style={{ padding: '12px 16px' }}>
+                                                                                    <input type="number" className="premium-compact-input" placeholder="0" value={multiRateCardsData[key]?.extraHourRate || ''} onChange={(e) => setMultiRateCardsData({ ...multiRateCardsData, [key]: { ...multiRateCardsData[key], extraHourRate: e.target.value } })} style={{ width: '100%', minWidth: '90px', height: '36px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                                                                                </td>
+                                                                                <td style={{ padding: '12px 16px' }}>
+                                                                                    <input type="number" className="premium-compact-input" placeholder="0" value={multiRateCardsData[key]?.driverAllowance || ''} onChange={(e) => setMultiRateCardsData({ ...multiRateCardsData, [key]: { ...multiRateCardsData[key], driverAllowance: e.target.value } })} style={{ width: '100%', minWidth: '100px', height: '36px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                                                                                </td>
+                                                                            </>
+                                                                        )}
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
+                                    {pricingStep === 1 ? (
+                                        <div style={{ marginTop: '30px', display: 'flex', gap: '15px', justifyContent: 'flex-end', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px' }}>
+                                            <button type="button" onClick={() => { setIsRateFormOpen(false); setPricingStep(1); setRateCardFormData({ serviceName: '', vehicleType: '', baseRate: '', baseKms: '', baseHours: '', extraKmRate: '', extraHourRate: '', driverAllowance: '' }); setSelectedSubTypes([]); setMultiRateCardsData({}); }} className="secondary-btn" style={{ height: '48px', padding: '0 24px', background: 'rgba(255,255,255,0.05)' }}>Cancel</button>
+                                            <button type="button" onClick={() => {
+                                                if (!rateCardFormData.serviceName) { alert('Please enter Service Name'); return; }
+                                                if (selectedSubTypes.length === 0) { alert('Please select at least one vehicle category'); return; }
+                                                setPricingStep(2);
+                                            }} className="primary-btn" style={{ height: '48px', padding: '0 32px', fontSize: '15px' }}>
+                                                Next: Configure Pricing <ArrowRight size={18} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div style={{ marginTop: '30px', display: 'flex', gap: '15px', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px' }}>
+                                            <button type="button" onClick={() => setPricingStep(1)} className="secondary-btn" style={{ height: '48px', padding: '0 24px', background: 'rgba(255,255,255,0.05)' }}><ChevronRight size={18} style={{ transform: 'rotate(180deg)' }} /> Back to Selection</button>
+                                            <div style={{ display: 'flex', gap: '15px' }}>
+                                                <button type="button" onClick={() => { setIsRateFormOpen(false); setPricingStep(1); setRateCardFormData({ serviceName: '', vehicleType: '', baseRate: '', baseKms: '', baseHours: '', extraKmRate: '', extraHourRate: '', driverAllowance: '' }); setSelectedSubTypes([]); setMultiRateCardsData({}); }} className="secondary-btn" style={{ height: '48px', padding: '0 24px', background: 'rgba(255,255,255,0.05)' }}>Cancel</button>
+                                                <button type="submit" className="primary-btn" style={{ height: '48px', padding: '0 32px', fontSize: '15px' }}>
+                                                    <Save size={18} /> {rateCardFormData._id ? 'Update Rates' : 'Save All Rates'}
+                                                </button>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
-                                    <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                                        <button type="button" onClick={() => { setIsRateFormOpen(false); setRateCardFormData({ serviceName: '', vehicleType: '', baseRate: '', baseKms: '', baseHours: '', extraKmRate: '', extraHourRate: '', driverAllowance: '' }); setSelectedVehicleTypes([]); setMultiRateCardsData({}); }} className="secondary-btn" style={{ height: '40px', background: 'rgba(255,255,255,0.05)' }}>Cancel</button>
-                                        <button type="submit" className="primary-btn" style={{ height: '40px' }}>
-                                            <Save size={16} /> {rateCardFormData._id ? 'Update Rate' : 'Save Rate'}
-                                        </button>
-                                    </div>
-                                </motion.form>
+                                    )}
+</motion.form>
                             )}
                             </AnimatePresence>
 
@@ -2456,7 +2775,7 @@ const EventManagement = () => {
                                                         <div style={{ color: 'white', fontSize: '18px', fontWeight: '900' }}>₹{Number(rate.baseRate).toLocaleString()}</div>
                                                     </div>
                                                     <div style={{ display: 'flex', gap: '6px' }}>
-                                                        <button onClick={() => { setRateCardFormData(rate); setIsRateFormOpen(true); }} style={{ width: '32px', height: '32px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Edit size={14} /></button>
+                                                        <button onClick={() => { setRateCardFormData(rate); setIsRateFormOpen(true); setPricingStep(1); }} style={{ width: '32px', height: '32px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Edit size={14} /></button>
                                                         <button onClick={() => handleDeleteRateCard(rate._id)} style={{ width: '32px', height: '32px', borderRadius: '10px', background: 'rgba(244,63,94,0.1)', border: 'none', color: '#f43f5e', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Trash2 size={14} /></button>
                                                     </div>
                                                 </div>
@@ -2472,12 +2791,12 @@ const EventManagement = () => {
                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                                     <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '12px' }}>
                                                         <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '9px', fontWeight: '800', marginBottom: '4px' }}>LIMITS</div>
-                                                        <div style={{ color: 'white', fontSize: '11px', fontWeight: '700' }}>{rate.baseKms ? `${rate.baseKms} KM` : '--'} / {rate.baseHours ? `${rate.baseHours} Hr` : '--'}</div>
+                                                        <div style={{ color: 'white', fontSize: '11px', fontWeight: '700' }}>{rate.baseKms ? rate.baseKms + " KM" : '--'} / {rate.baseHours ? rate.baseHours + " Hr" : '--'}</div>
                                                     </div>
                                                     <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '12px' }}>
                                                         <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '9px', fontWeight: '800', marginBottom: '4px' }}>EXTRA CHARGES</div>
-                                                        <div style={{ color: '#f59e0b', fontSize: '11px', fontWeight: '700' }}>{rate.extraKmRate ? `₹${rate.extraKmRate}/KM` : '--'}</div>
-                                                        <div style={{ color: '#f59e0b', fontSize: '11px', fontWeight: '700' }}>{rate.extraHourRate ? `₹${rate.extraHourRate}/Hr` : '--'}</div>
+                                                        <div style={{ color: '#f59e0b', fontSize: '11px', fontWeight: '700' }}>{rate.extraKmRate ? "₹" + rate.extraKmRate + "/KM" : '--'}</div>
+                                                        <div style={{ color: '#f59e0b', fontSize: '11px', fontWeight: '700' }}>{rate.extraHourRate ? "₹" + rate.extraHourRate + "/Hr" : '--'}</div>
                                                     </div>
                                                     {Number(rate.driverAllowance) > 0 && (
                                                     <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '10px', borderRadius: '12px', gridColumn: 'span 2', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2490,6 +2809,420 @@ const EventManagement = () => {
                                         ))}
                                     </div>
                                 )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* ═══ ADD CUSTOM VEHICLE MODAL (PREMIUM UI) ═══ */}
+            <AnimatePresence>
+                {showAddCustomVehicleModal && (
+                    <div key="custom-vehicle-modal" className="modal-overlay" style={{ background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(12px)', zIndex: 99999 }} onClick={() => setShowAddCustomVehicleModal(false)}>
+                        <motion.div 
+                            initial={{ opacity: 0, scale: 0.9, y: 30 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 30 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+                            className="premium-modal-content"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                                background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(30px)', border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '24px', padding: '32px', width: '90%', maxWidth: '420px',
+                                boxShadow: '0 25px 50px rgba(0,0,0,0.5)', position: 'relative'
+                            }}
+                        >
+                            {/* Header */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <div className="premium-icon-bg" style={{ width: '44px', height: '44px' }}>
+                                        <PlusCircle size={24} color="var(--primary)" />
+                                    </div>
+                                    <div>
+                                        <h3 style={{ margin: 0, color: 'white', fontSize: '20px', fontWeight: '900', letterSpacing: '-0.5px' }}>Add Custom Vehicle</h3>
+                                        <p style={{ margin: '4px 0 0 0', color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>Specific to {selectedEventForRates?.name || 'this event'}</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowAddCustomVehicleModal(false)} style={{ width: '36px', height: '36px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            {/* Form Fields */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                <div className="input-group">
+                                    <label style={{ color: 'rgba(255,255,255,0.7)', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Vehicle Category *</label>
+                                    <div style={{ position: 'relative' }}>
+                                        <select 
+                                            value={isAddingNewCategory ? 'NEW_CATEGORY' : customVehicleCategory} 
+                                            onChange={(e) => {
+                                                if (e.target.value === 'NEW_CATEGORY') {
+                                                    setIsAddingNewCategory(true);
+                                                    setCustomVehicleCategory('');
+                                                } else {
+                                                    setIsAddingNewCategory(false);
+                                                    setCustomVehicleCategory(e.target.value);
+                                                }
+                                            }}
+                                            style={{ width: '100%', appearance: 'none', padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: 'white', fontSize: '15px', fontWeight: '500', outline: 'none', transition: 'all 0.3s' }}
+                                        >
+                                            <option value="" style={{ background: '#0f172a' }}>-- Select Category --</option>
+                                            {Array.from(new Set([...Object.keys(VEHICLE_SUB_CATEGORIES), ...Object.keys(selectedEventForRates?.customVehicles || {})])).map(type => (
+                                                <option key={type} value={type} style={{ background: '#0f172a' }}>{type === 'Tempo' ? 'Tempo Traveller' : type}</option>
+                                            ))}
+                                            <option value="NEW_CATEGORY" style={{ background: '#10b981', color: 'white', fontWeight: 'bold' }}>+ Add New Category</option>
+                                        </select>
+                                        
+                                        {isAddingNewCategory && (
+                                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} style={{ marginTop: '12px' }}>
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="Type New Category (e.g. Luxury Cars)" 
+                                                    value={newCustomCategoryName}
+                                                    onChange={(e) => setNewCustomCategoryName(e.target.value)}
+                                                    style={{ width: '100%', padding: '14px 16px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.4)', borderRadius: '12px', color: 'white', fontSize: '15px', outline: 'none', transition: 'all 0.3s' }}
+                                                />
+                                            </motion.div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="input-group">
+                                    <label style={{ color: 'rgba(255,255,255,0.7)', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Vehicle Name (Model) *</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="e.g. Mini Bus 20 Seater" 
+                                        value={customVehicleName} 
+                                        onChange={(e) => setCustomVehicleName(e.target.value)}
+                                        style={{ width: '100%', padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: 'white', fontSize: '15px', outline: 'none', transition: 'all 0.3s' }}
+                                    />
+                                </div>
+
+                                {/* Actions */}
+                                <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                                    <button onClick={() => { setIsAddingNewCategory(false); setNewCustomCategoryName(''); setShowAddCustomVehicleModal(false); }} style={{ flex: 1, height: '48px', borderRadius: '12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}>
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        onClick={async () => {
+                                            
+                                            const finalCategory = isAddingNewCategory ? newCustomCategoryName.trim() : customVehicleCategory;
+                                            if (!finalCategory || !customVehicleName.trim()) {
+                                                alert("Please fill both category and vehicle name.");
+                                                return;
+                                            }
+                                            
+                                            const val = customVehicleName.trim();
+                                            const currentCustoms = selectedEventForRates?.customVehicles || {};
+                                            const hardcoded = VEHICLE_SUB_CATEGORIES[finalCategory] || [];
+                                            const custom = currentCustoms[finalCategory] || [];
+                                            
+                                            if (hardcoded.includes(val) || custom.includes(val)) {
+                                                alert("Vehicle already exists in this category.");
+                                                return;
+                                            }
+
+                                            // Prepare new mapping
+                                            const newCustoms = {
+                                                ...currentCustoms,
+                                                [finalCategory]: [...custom, val]
+                                            };
+                                            
+                                            // Make API call to save persistently
+                                            try {
+                                                const res = await axios.put(`/api/admin/events/${selectedEventForRates._id}`, {
+                                                    customVehicles: newCustoms
+                                                }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+                                                
+                                                alert("Saved permanently to this event!");
+                                                
+                                                // Update local state and event object
+                                                const updatedEvent = res.data;
+                                                
+                                                let visualStatus = updatedEvent.status || 'Upcoming';
+                                                if (visualStatus === 'Upcoming' && toISTDateString(new Date(updatedEvent.date)) <= todayIST) {
+                                                    visualStatus = 'Running';
+                                                }
+                                                const finalUpdatedEvent = { ...updatedEvent, visualStatus };
+
+                                                setSelectedEventForRates(finalUpdatedEvent);
+                                                
+                                                // Also update it in the main events list
+                                                setEvents(prev => prev.map(ev => ev._id === finalUpdatedEvent._id ? finalUpdatedEvent : ev));
+                                                setAllMasterEvents(prev => prev.map(ev => ev._id === finalUpdatedEvent._id ? finalUpdatedEvent : ev));
+                                                
+                                                setCustomVehicleName('');
+                                                setCustomVehicleCategory('');
+                                                setIsAddingNewCategory(false);
+                                                setNewCustomCategoryName('');
+                                                setShowAddCustomVehicleModal(false);
+                                            } catch (err) {
+                                                console.error("Error saving custom vehicle:", err);
+                                                alert("Failed to save custom vehicle.");
+                                            }
+                                        }}
+                                        style={{ flex: 1, height: '48px', borderRadius: '12px', background: 'linear-gradient(135deg, var(--primary) 0%, #d97706 100%)', border: 'none', color: '#1e293b', fontWeight: '800', cursor: 'pointer', boxShadow: '0 4px 15px rgba(245, 158, 11, 0.4)', transition: 'all 0.3s' }}
+                                    >
+                                        Save Vehicle
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* ═══ PDF EXPORT CUSTOMIZER MODAL ═══ */}
+            <AnimatePresence>
+                {showPDFCustomizerModal && selectedEventForRates && (
+                    <div key="pdf-customizer-modal" className="modal-overlay" style={{ background: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)', zIndex: 99999 }} onClick={() => setShowPDFCustomizerModal(false)}>
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="premium-scroll"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                                background: 'rgba(15, 23, 42, 0.98)', backdropFilter: 'blur(30px)', border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '24px', padding: '30px', width: '95%', maxWidth: '1200px',
+                                maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', position: 'relative'
+                            }}
+                        >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '15px' }}>
+                                <div>
+                                    <h2 style={{ color: 'white', fontSize: '24px', fontWeight: '900', margin: 0 }}>Customize PDF Export</h2>
+                                    <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', margin: '4px 0 0 0' }}>Configure columns (Vehicle Categories) and rows (Services) before exporting to PDF.</p>
+                                </div>
+                                <button onClick={() => setShowPDFCustomizerModal(false)} style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '30px', alignItems: 'start' }}>
+                                
+                                {/* LEFT SIDE PANEL - CONFIGURATION */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', background: 'rgba(0,0,0,0.2)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    
+                                    {/* 1. Add Category Column */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <h3 style={{ color: 'var(--primary)', fontSize: '14px', fontWeight: '900', margin: '0 0 5px 0' }}>Add Vehicle Column</h3>
+                                        <select 
+                                            className="premium-compact-input" 
+                                            value={newColCategory} 
+                                            onChange={(e) => setNewColCategory(e.target.value)}
+                                        >
+                                            <option value="">-- Select Vehicle Category --</option>
+                                            {Array.from(new Set([...Object.keys(VEHICLE_SUB_CATEGORIES), ...Object.keys(selectedEventForRates?.customVehicles || {})])).map(type => (
+                                                <optgroup key={type} label={type === 'Tempo' ? 'Tempo Traveller' : type}>
+                                                    <option value={type + "|" + type}>{type} (Any)</option>
+                                                    {[...(VEHICLE_SUB_CATEGORIES[type] || []), ...(selectedEventForRates?.customVehicles?.[type] || [])].map(sub => (
+                                                        <option key={sub} value={type + "|" + sub}>{sub}</option>
+                                                    ))}
+                                                </optgroup>
+                                            ))}
+                                        </select>
+                                        <button 
+                                            onClick={() => {
+                                                if (!newColCategory) return;
+                                                const [type, model] = newColCategory.split('|');
+                                                const colName = model;
+                                                if (pdfCols.some(c => c.name === colName)) {
+                                                    alert('Column already exists!');
+                                                    return;
+                                                }
+                                                const newCol = { name: colName, type, model };
+                                                setPdfCols([...pdfCols, newCol]);
+                                                // Initialize cells for this new column in all rows
+                                                const updatedRows = pdfRows.map(r => ({
+                                                    ...r,
+                                                    data: { ...r.data, [colName]: '' }
+                                                }));
+                                                setPdfRows(updatedRows);
+                                                setNewColCategory('');
+                                            }}
+                                            className="primary-btn" 
+                                            style={{ height: '40px', fontSize: '12px', padding: '0 15px', justifyContent: 'center' }}
+                                        >
+                                            Add Column
+                                        </button>
+                                    </div>
+
+                                    <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', margin: '5px 0' }} />
+
+                                    {/* 2. Add Service Row */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <h3 style={{ color: 'var(--primary)', fontSize: '14px', fontWeight: '900', margin: '0 0 5px 0' }}>Add Service Row</h3>
+                                        <select 
+                                            className="premium-compact-input" 
+                                            value={newRowService} 
+                                            onChange={(e) => setNewRowService(e.target.value)}
+                                        >
+                                            <option value="">-- Select Service --</option>
+                                            <option value="Airport Pickup & Drop">Airport Pickup & Drop</option>
+                                            <option value="Railway Station Pickup & Drop">Railway Station Pickup & Drop</option>
+                                            <option value="Bus Stand Pickup & Drop">Bus Stand Pickup & Drop</option>
+                                            <option value="Local 8Hr/80Km">Local 8Hr/80Km</option>
+                                            <option value="Local 12Hr/120Km">Local 12Hr/120Km</option>
+                                            <option value="Outstation">Outstation</option>
+                                            <option value="Extra KM Rate">Extra KM Rate</option>
+                                            <option value="Extra Hour Rate">Extra Hour Rate</option>
+                                            <option value="Driver Allowance">Driver Allowance</option>
+                                            <option value="CUSTOM">Custom Particular...</option>
+                                        </select>
+                                        
+                                        {newRowService === 'CUSTOM' && (
+                                            <input 
+                                                type="text" 
+                                                className="premium-compact-input" 
+                                                placeholder="Enter Custom Service Name" 
+                                                value={customServiceText} 
+                                                onChange={(e) => setCustomServiceText(e.target.value)} 
+                                            />
+                                        )}
+
+                                        <button 
+                                            onClick={() => {
+                                                const sName = newRowService === 'CUSTOM' ? customServiceText.trim() : newRowService;
+                                                if (!sName) return;
+                                                if (pdfRows.some(r => r.data.serviceName.toLowerCase() === sName.toLowerCase())) {
+                                                    alert('Row already exists!');
+                                                    return;
+                                                }
+                                                const rowData = { serviceName: sName };
+                                                pdfCols.forEach(c => {
+                                                    rowData[c.name] = '';
+                                                });
+                                                
+                                                let rowType = 'service';
+                                                if (sName === 'Extra KM Rate') rowType = 'extraKm';
+                                                else if (sName === 'Extra Hour Rate') rowType = 'extraHr';
+                                                else if (sName === 'Driver Allowance') rowType = 'allowance';
+
+                                                setPdfRows([...pdfRows, { type: rowType, data: rowData }]);
+                                                setNewRowService('');
+                                                setCustomServiceText('');
+                                            }}
+                                            className="primary-btn" 
+                                            style={{ height: '40px', fontSize: '12px', padding: '0 15px', justifyContent: 'center' }}
+                                        >
+                                            Add Row
+                                        </button>
+                                    </div>
+
+                                </div>
+
+                                {/* RIGHT SIDE - LIVE PREVIEW & EDITING */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <h3 style={{ color: 'white', fontSize: '16px', fontWeight: '800', margin: 0 }}>Table Preview (Click cell values to edit)</h3>
+                                        <button 
+                                            onClick={() => {
+                                                handleOpenPDFCustomizer();
+                                            }} 
+                                            style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}
+                                        >
+                                            Reset Table
+                                        </button>
+                                    </div>
+
+                                    <div className="premium-scroll" style={{ overflowX: 'auto', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', background: 'rgba(10, 16, 30, 0.4)' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ background: 'rgba(255,255,255,0.02)', color: 'white', borderBottom: '2px solid rgba(255,255,255,0.1)', padding: '12px', fontWeight: '800' }}>S.No.</th>
+                                                    <th style={{ background: 'rgba(255,255,255,0.02)', color: 'white', borderBottom: '2px solid rgba(255,255,255,0.1)', padding: '12px', fontWeight: '800', textAlign: 'left' }}>Particulars / Services</th>
+                                                    {pdfCols.map((col, idx) => (
+                                                        <th key={idx} style={{ background: 'rgba(255,255,255,0.02)', color: 'white', borderBottom: '2px solid rgba(255,255,255,0.1)', padding: '12px', fontWeight: '800', minWidth: '120px', position: 'relative' }}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                                <span style={{ fontSize: '13px' }}>{col.name}</span>
+                                                                <span style={{ fontSize: '9px', opacity: 0.4 }}>{col.type}</span>
+                                                            </div>
+                                                            <button 
+                                                                onClick={() => {
+                                                                    if (pdfCols.length <= 1) {
+                                                                        alert('Must keep at least one column!');
+                                                                        return;
+                                                                    }
+                                                                    setPdfCols(pdfCols.filter(c => c.name !== col.name));
+                                                                    const updatedRows = pdfRows.map(r => {
+                                                                        const newData = { ...r.data };
+                                                                        delete newData[col.name];
+                                                                        return { ...r, data: newData };
+                                                                    });
+                                                                    setPdfRows(updatedRows);
+                                                                }}
+                                                                style={{ position: 'absolute', top: '2px', right: '2px', background: 'transparent', border: 'none', color: '#f43f5e', opacity: 0.5, cursor: 'pointer' }}
+                                                                title="Delete Column"
+                                                            >
+                                                                <X size={12} />
+                                                            </button>
+                                                        </th>
+                                                    ))}
+                                                    <th style={{ width: '40px' }}></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {pdfRows.map((row, rIdx) => {
+                                                    const isExtra = row.type !== 'service';
+                                                    return (
+                                                        <tr key={rIdx} style={{ background: isExtra ? 'rgba(251, 191, 36, 0.03)' : 'transparent', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                            <td style={{ padding: '12px', color: 'rgba(255,255,255,0.5)', fontWeight: 'bold' }}>{isExtra ? '*' : rIdx + 1}</td>
+                                                            <td style={{ padding: '12px', textAlign: 'left', fontWeight: 'bold', color: isExtra ? 'var(--primary)' : 'white' }}>{row.data.serviceName}</td>
+                                                            {pdfCols.map((col, cIdx) => (
+                                                                <td key={cIdx} style={{ padding: '8px' }}>
+                                                                    <input 
+                                                                        type="text" 
+                                                                        value={row.data[col.name] !== undefined ? row.data[col.name] : ''}
+                                                                        onChange={(e) => {
+                                                                            const val = e.target.value;
+                                                                            const updatedRows = [...pdfRows];
+                                                                            updatedRows[rIdx].data[col.name] = val;
+                                                                            setPdfRows(updatedRows);
+                                                                        }}
+                                                                        style={{
+                                                                            width: '100%',
+                                                                            height: '36px',
+                                                                            background: 'rgba(0,0,0,0.3)',
+                                                                            border: '1px solid rgba(255,255,255,0.08)',
+                                                                            borderRadius: '8px',
+                                                                            color: '#10b981',
+                                                                            fontWeight: 'bold',
+                                                                            textAlign: 'center',
+                                                                            outline: 'none'
+                                                                        }}
+                                                                        placeholder="-"
+                                                                    />
+                                                                </td>
+                                                            ))}
+                                                            <td style={{ padding: '8px' }}>
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        setPdfRows(pdfRows.filter((_, idx) => idx !== rIdx));
+                                                                    }}
+                                                                    style={{ background: 'transparent', border: 'none', color: '#f43f5e', cursor: 'pointer', opacity: 0.7 }}
+                                                                    title="Delete Row"
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                                        <button onClick={() => setShowPDFCustomizerModal(false)} className="secondary-btn" style={{ height: '44px' }}>Cancel</button>
+                                        <button 
+                                            onClick={async () => {
+                                                await generateCustomPDFExport(pdfCols, pdfRows);
+                                                setShowPDFCustomizerModal(false);
+                                            }} 
+                                            className="primary-btn" 
+                                            style={{ height: '44px' }}
+                                        >
+                                            <Download size={16} /> Generate & Download PDF
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </motion.div>
                     </div>

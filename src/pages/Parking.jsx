@@ -271,7 +271,7 @@ const ParkingPage = () => {
             const isToday = targetDate === new Date().toLocaleDateString('en-CA');
             const exactDateParam = !isToday ? '&exactDate=true' : '';
             const vehicleParam = vehicleId ? `&exactVehicleId=${vehicleId}` : '';
-            const { data } = await axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&toDate=${targetDate}${exactDateParam}${vehicleParam}`, {
+            const { data } = await axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&driverType=All&toDate=${targetDate}${exactDateParam}${vehicleParam}`, {
                 headers: { Authorization: `Bearer ${userInfo.token}` }
             });
             setDrivers(data.drivers || []);
@@ -1399,7 +1399,13 @@ const ParkingPage = () => {
                                                             className="input-field"
                                                             style={{ height: '52px', borderRadius: '14px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', color: 'white', padding: '0 15px 0 45px', width: '100%', outline: 'none', cursor: 'pointer' }}
                                                             value={formData.vehicleId || ''}
-                                                            onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
+                                                            onChange={(e) => {
+                                                                const vid = e.target.value;
+                                                                const selectedVehicle = vehicles.find(v => v._id === vid);
+                                                                const autoDriverId = selectedVehicle?.currentDriver?._id || '';
+                                                                const autoDriverName = selectedVehicle?.currentDriver?.name || '';
+                                                                setFormData({ ...formData, vehicleId: vid, driverId: autoDriverId, driver: autoDriverName });
+                                                            }}
                                                             required
                                                         >
                                                             <option value="" style={{ background: '#0f172a' }}>Select Vehicle</option>

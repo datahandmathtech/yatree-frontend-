@@ -138,7 +138,7 @@ const ActiveLogs = () => {
 
             const [vRes, dRes] = await Promise.all([
                 axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false&type=fleet`, { headers: { Authorization: `Bearer ${userInfo.token}` } }),
-                axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&isFreelancer=false`, { headers: { Authorization: `Bearer ${userInfo.token}` } })
+                axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&driverType=All&isFreelancer=false`, { headers: { Authorization: `Bearer ${userInfo.token}` } })
             ]);
 
             setVehicles(vRes.data.vehicles || []);
@@ -614,7 +614,7 @@ const ActiveLogs = () => {
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                                         <div>
                                             <label className="input-label" style={{ marginBottom: '10px', display: 'block' }}>Vehicle Identification</label>
-                                            <select className="input-field" style={{ height: '54px', borderRadius: '15px' }} value={formData.vehicleId} onChange={e => setFormData({ ...formData, vehicleId: e.target.value })} required>
+                                            <select className="input-field" style={{ height: '54px', borderRadius: '15px' }} value={formData.vehicleId} onChange={e => { const vid = e.target.value; const sv = vehicles.find(v => v._id === vid); setFormData({ ...formData, vehicleId: vid, driverId: sv?.currentDriver?._id || '' }); }} required>
                                                 <option value="" style={{ background: '#0f172a' }}>Select Vehicle</option>
                                                 {vehicles.map(v => <option key={v._id} value={v._id} style={{ background: '#0f172a' }}>{v.carNumber} ({v.model})</option>)}
                                             </select>
