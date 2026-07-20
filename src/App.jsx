@@ -34,6 +34,7 @@ const DriverSalaries = lazy(() => import('./pages/DriverSalaries'));
 const VehicleMonthlyDetails = lazy(() => import('./pages/VehicleMonthlyDetails'));
 const LiveFeed = lazy(() => import('./pages/LiveFeed'));
 const EventManagement = lazy(() => import('./pages/EventManagement'));
+const GPSMap = lazy(() => import('./pages/GPSMap'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Profile = lazy(() => import('./pages/Profile'));
 const DriverServices = lazy(() => import('./pages/DriverServices'));
@@ -144,6 +145,7 @@ const AdminRoutes = () => {
     <Routes>
       <Route index element={canAccess('dashboard') ? <AdminDashboard /> : <Navigate to="/login" />} />
       <Route path="live-feed" element={canAccess('liveFeed') || canAccess('vehiclesManagement') ? <LiveFeed /> : <Navigate to="/admin" />} />
+      <Route path="live-map" element={canAccess('liveFeed') || canAccess('vehiclesManagement') ? <GPSMap /> : <Navigate to="/admin" />} />
       <Route path="log-book" element={canAccess('logBook') || canAccess('vehiclesManagement') ? <Reports /> : <Navigate to="/admin" />} />
       {canAccess('driversService') && (
         <>
