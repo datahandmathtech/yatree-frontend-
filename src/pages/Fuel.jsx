@@ -111,6 +111,12 @@ const FuelPage = () => {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
+    
+    // Custom Vehicle Dropdown States
+    const [showVehicleDropdown, setShowVehicleDropdown] = useState(false);
+    const [expandedModel, setExpandedModel] = useState(null);
+    const [vehicleSearchQuery, setVehicleSearchQuery] = useState('');
+    const dropdownRef = useRef(null);
     const location = useLocation();
 
     useEffect(() => {
@@ -136,6 +142,17 @@ const FuelPage = () => {
             slipPhoto: ''
         });
     }, [location.pathname, location.key]);
+
+    // Handle click outside for dropdown
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setShowVehicleDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // ── AI AGENT SEARCH INTEGRATION ──
     useEffect(() => {
@@ -551,30 +568,138 @@ const FuelPage = () => {
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                     {/* SEARCH & FILTERS MOVED TO HEADER */}
                     <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(15, 23, 42, 0.6)', padding: '10 15px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', height: '36px', position: 'relative' }}>
-                            <Car size={13} color="#f59e0b" style={{ opacity: 0.8 }} />
-                            <select
-                                value={filterVehicle}
-                                onChange={(e) => setFilterVehicle(e.target.value)}
-                                style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: '800', fontSize: '11px', outline: 'none', cursor: 'pointer', height: '100%', width: '160px', textTransform: 'uppercase', appearance: 'none', paddingRight: '20px' }}
+                        {/* CUSTOM VEHICLE FILTER */}
+                        <div ref={dropdownRef} style={{ position: 'relative', zIndex: 50 }}>
+                            <div 
+                                onClick={() => setShowVehicleDropdown(!showVehicleDropdown)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(15, 23, 42, 0.6)', padding: '0 15px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', height: '36px', cursor: 'pointer', minWidth: '180px' }}
                             >
-                                <option value="All" style={{ background: '#0f172a', padding: '10px' }}>&nbsp;&nbsp;All Vehicles</option>
-                                {(() => {
-                                    const fuelCountsPerCar = entries.reduce((acc, e) => {
-                                        if (e.vehicle?._id) acc[e.vehicle._id] = (acc[e.vehicle._id] || 0) + 1;
-                                        return acc;
-                                    }, {});
-                                    return vehicles.map(v => {
-                                        const count = fuelCountsPerCar[v._id] || 0;
-                                        return (
-                                            <option key={v._id} value={v._id} style={{ background: '#0f172a', padding: '10px' }}>
-                                                &nbsp;&nbsp;{v.carNumber} {count > 0 ? `(${count})` : ''}
-                                            </option>
-                                        );
-                                    });
-                                })()}
-                            </select>
-                            <ChevronDown size={14} color="rgba(255,255,255,0.4)" style={{ position: 'absolute', right: '10px', pointerEvents: 'none' }} />
+                                <Car size={13} color="#f59e0b" style={{ opacity: 0.8 }} />
+                                <span style={{ color: 'white', fontWeight: '800', fontSize: '11px', textTransform: 'uppercase', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {filterVehicle === 'All' ? 'All Vehicles' : (vehicles.find(v => v._id === filterVehicle)?.carNumber || 'Unknown Vehicle')}
+                                </span>
+                                <ChevronDown size={14} color="rgba(255,255,255,0.4)" style={{ transition: 'transform 0.2s', transform: showVehicleDropdown ? 'rotate(180deg)' : 'rotate(0)' }} />
+                            </div>
+
+                            {/* DROPDOWN PANEL */}
+                            <AnimatePresence>
+                                {showVehicleDropdown && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: 15, scale: 0.95 }}
+                                        transition={{ duration: 0.2, ease: "easeOut" }}
+                                        style={{ position: 'absolute', top: '100%', left: 0, marginTop: '12px', width: '340px', background: 'linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98))', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '20px', padding: '16px', boxShadow: '0 25px 50px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '12px' }}
+                                    >
+                                        <div style={{ position: 'relative' }}>
+                                            <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.5)' }} />
+                                            <input 
+                                                type="text" 
+                                                placeholder="Search car number or model..." 
+                                                value={vehicleSearchQuery}
+                                                onChange={(e) => {
+                                                    setVehicleSearchQuery(e.target.value);
+                                                    if(e.target.value) setExpandedModel(null);
+                                                }}
+                                                style={{ width: '100%', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px 12px 12px 40px', color: 'white', fontSize: '13px', outline: 'none', transition: 'border-color 0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)' }}
+                                                onFocus={(e) => e.target.style.border = '1px solid rgba(245, 158, 11, 0.5)'}
+                                                onBlur={(e) => e.target.style.border = '1px solid rgba(255,255,255,0.1)'}
+                                            />
+                                        </div>
+
+                                        <div style={{ maxHeight: '380px', overflowY: 'auto', paddingRight: '6px' }} className="premium-scroll">
+                                            <div 
+                                                onClick={() => { setFilterVehicle('All'); setShowVehicleDropdown(false); setExpandedModel(null); setVehicleSearchQuery(''); }}
+                                                style={{ padding: '12px 16px', borderRadius: '12px', background: filterVehicle === 'All' ? 'linear-gradient(90deg, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 0.05))' : 'rgba(255,255,255,0.02)', border: filterVehicle === 'All' ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid transparent', color: filterVehicle === 'All' ? '#f59e0b' : 'white', fontSize: '14px', fontWeight: '800', cursor: 'pointer', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.2s' }}
+                                                onMouseEnter={(e) => { if(filterVehicle !== 'All') e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                                                onMouseLeave={(e) => { if(filterVehicle !== 'All') e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+                                            >
+                                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: filterVehicle === 'All' ? '#f59e0b' : 'rgba(255,255,255,0.2)', transition: 'all 0.2s', boxShadow: filterVehicle === 'All' ? '0 0 10px rgba(245,158,11,0.5)' : 'none' }} />
+                                                All Vehicles
+                                            </div>
+
+                                            {(() => {
+                                                const fuelCountsPerCar = entries.reduce((acc, e) => {
+                                                    if (e.vehicle?._id) acc[e.vehicle._id] = (acc[e.vehicle._id] || 0) + 1;
+                                                    return acc;
+                                                }, {});
+
+                                                let filteredVehicles = vehicles;
+                                                if (vehicleSearchQuery) {
+                                                    const sq = vehicleSearchQuery.toLowerCase();
+                                                    filteredVehicles = vehicles.filter(v => 
+                                                        (v.carNumber || '').toLowerCase().includes(sq) || 
+                                                        (v.model || '').toLowerCase().includes(sq)
+                                                    );
+                                                }
+
+                                                const grouped = filteredVehicles.reduce((acc, v) => {
+                                                    const mod = v.model || 'Unknown Model';
+                                                    if (!acc[mod]) acc[mod] = [];
+                                                    acc[mod].push(v);
+                                                    return acc;
+                                                }, {});
+
+                                                return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([modelName, cars]) => {
+                                                    const isExpanded = expandedModel === modelName || vehicleSearchQuery.length > 0;
+                                                    return (
+                                                        <div key={modelName} style={{ marginBottom: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', overflow: 'hidden', transition: 'all 0.2s' }}>
+                                                            <div 
+                                                                onClick={() => setExpandedModel(isExpanded ? null : modelName)}
+                                                                style={{ padding: '12px 16px', background: isExpanded ? 'rgba(255,255,255,0.05)' : 'transparent', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', transition: 'background 0.2s' }}
+                                                                onMouseEnter={(e) => { if(!isExpanded) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+                                                                onMouseLeave={(e) => { if(!isExpanded) e.currentTarget.style.background = 'transparent' }}
+                                                            >
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                                    <div style={{ background: 'rgba(255,255,255,0.1)', padding: '6px', borderRadius: '8px' }}>
+                                                                        <Car size={14} color="rgba(255,255,255,0.8)" />
+                                                                    </div>
+                                                                    <span style={{ color: 'white', fontWeight: '800', fontSize: '13px', letterSpacing: '0.5px' }}>{modelName}</span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '900', background: 'rgba(0,0,0,0.5)', padding: '4px 8px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.05)' }}>{cars.length} Cars</span>
+                                                                    <ChevronDown size={14} color="rgba(255,255,255,0.5)" style={{ transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)' }} />
+                                                                </div>
+                                                            </div>
+                                                            <AnimatePresence>
+                                                                {isExpanded && (
+                                                                    <motion.div
+                                                                        initial={{ height: 0, opacity: 0 }}
+                                                                        animate={{ height: 'auto', opacity: 1 }}
+                                                                        exit={{ height: 0, opacity: 0 }}
+                                                                        transition={{ duration: 0.2 }}
+                                                                        style={{ overflow: 'hidden' }}
+                                                                    >
+                                                                        <div style={{ padding: '8px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                                                            {cars.map(v => {
+                                                                                const count = fuelCountsPerCar[v._id] || 0;
+                                                                                const isSelected = filterVehicle === v._id;
+                                                                                return (
+                                                                                    <div 
+                                                                                        key={v._id}
+                                                                                        onClick={() => { setFilterVehicle(v._id); setShowVehicleDropdown(false); }}
+                                                                                        style={{ padding: '10px 14px 10px 36px', borderRadius: '8px', background: isSelected ? 'rgba(245, 158, 11, 0.15)' : 'transparent', color: isSelected ? '#f59e0b' : 'rgba(255,255,255,0.7)', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s', position: 'relative' }}
+                                                                                        onMouseEnter={(e) => { if(!isSelected) { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = 'white'; } }}
+                                                                                        onMouseLeave={(e) => { if(!isSelected) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; } }}
+                                                                                    >
+                                                                                        {isSelected && <div style={{ position: 'absolute', left: '12px', width: '4px', height: '4px', borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 8px #f59e0b' }} />}
+                                                                                        <span>{v.carNumber}</span>
+                                                                                        {count > 0 && <span style={{ fontSize: '10px', background: isSelected ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255,255,255,0.1)', color: isSelected ? '#f59e0b' : 'rgba(255,255,255,0.5)', padding: '2px 8px', borderRadius: '12px', fontWeight: '800' }}>{count} logs</span>}
+                                                                                    </div>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
                         <div style={{ position: 'relative', width: '220px' }}>
                             <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)' }} />

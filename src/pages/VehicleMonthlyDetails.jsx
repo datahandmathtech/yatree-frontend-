@@ -123,7 +123,7 @@ const VehicleMonthlyDetails = () => {
 
     // Summary Calculations
     const totalFuelAmount = filteredData.reduce((sum, v) => sum + (v.fuel?.totalAmount || 0), 0);
-    const totalDriverSalary = summary.totalSalary; // Use the backend global summary total for the top card (includes parking)
+    const totalDriverSalary = filteredData.reduce((sum, v) => sum + (v.driverSalary || 0), 0);
     
     // Process "Other" maintenance and Combined Services
     // Process "Maintenance" (Mechanical) vs "Misc. Repairs" vs "Operational Services"
@@ -170,12 +170,9 @@ const VehicleMonthlyDetails = () => {
     const totalFastagAmount = filteredData.reduce((sum, v) => sum + (v.fastag?.totalAmount || 0), 0);
     const totalBorderTaxAmount = filteredData.reduce((sum, v) => sum + (v.borderTax?.totalAmount || 0), 0);
     
-    // Grand Total: Driver Salary (backend summary) already includes Parking.
-    // So we add Fuel + Salary + Maint (base) + Misc + Wash/Tax/Fastag.
-    // Wait, totalServiceAmount already includes Parking, Fastag, BorderTax.
-    // If we use totalDriverSalary (with parking), we must subtract parking from the service sum to avoid double counting.
     const totalParking = filteredData.reduce((sum, v) => sum + (v.parking?.totalAmount || 0), 0);
-    const grandTotal = totalFuelAmount + totalDriverSalary + totalMaintAmount + totalMiscAmount + (totalServiceAmount - totalParking);
+    // Calculate Grand Total directly from individual components of filtered data
+    const grandTotal = totalFuelAmount + totalDriverSalary + totalMaintAmount + totalMiscAmount + totalServiceAmount;
 
     const downloadExcel = () => {
         const exportData = processedData.map(v => ({

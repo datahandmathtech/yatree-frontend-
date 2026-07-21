@@ -1128,7 +1128,7 @@ const Maintenance = () => {
                             style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: '700', fontSize: '14px', width: '100%', outline: 'none', cursor: 'pointer', textOverflow: 'ellipsis' }}
                         >
                             <option value="All" style={{ background: '#1e293b', color: 'white' }}>All Cars</option>
-                            {uniqueVehicles.map(v => <option key={v} value={v} style={{ background: '#1e293b', color: 'white' }}>{v} ({vehicleStats[v] || 0})</option>)}
+                            {uniqueVehicles.filter(v => (vehicleStats[v] || 0) > 0).map(v => <option key={v} value={v} style={{ background: '#1e293b', color: 'white' }}>{v} ({vehicleStats[v]})</option>)}
                         </select>
                     </div>
                 </motion.div>
@@ -1146,8 +1146,8 @@ const Maintenance = () => {
                                 style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: '700', fontSize: '14px', width: '100%', outline: 'none', cursor: 'pointer', textOverflow: 'ellipsis' }}
                             >
                                 <option value="All" style={{ background: '#1e293b', color: 'white' }}>All Types</option>
-                                {maintenanceTypes.map(t => (
-                                    <option key={t} value={t} style={{ background: '#1e293b', color: 'white' }}>{t} ({categoryStats[t] || 0})</option>
+                                {maintenanceTypes.filter(t => categoryStats[t] > 0).map(t => (
+                                    <option key={t} value={t} style={{ background: '#1e293b', color: 'white' }}>{t} ({categoryStats[t]})</option>
                                 ))}
                             </select>
                         </div>
