@@ -1052,14 +1052,19 @@ const EventManagement = () => {
         const allDuties = [...eventData.fleetDuties, ...eventData.externalDuties]
             .filter(d => dutyFilter === 'All' || (dutyFilter === 'Fleet' ? d.vehicleSource === 'Fleet' : d.vehicleSource !== 'Fleet'))
             .filter(d => dutyDateFilter === 'All' || formatDateIST(d.date || d.createdAt) === dutyDateFilter)
-            .sort((a, b) => new Date(a.createdAt || a.date) - new Date(b.createdAt || b.date));
+            .sort((a, b) => {
+                const dateA = new Date(a.date || a.createdAt);
+                const dateB = new Date(b.date || b.createdAt);
+                if (dateA.getTime() !== dateB.getTime()) return dateA - dateB;
+                return (a.dutyTime || '00:00').localeCompare(b.dutyTime || '00:00');
+            });
         const data = allDuties.map(v => ({
             'Date': formatDateIST(v.date || v.createdAt),
             'Vehicle': (v.vehicle?.carNumber || v.vehicleNumber || v.carNumber?.split('#')[0] || 'N/A').toUpperCase(),
             'Model': v.vehicle?.model || v.model || 'N/A',
             'Driver': v.driver?.name || v.driverName || 'N/A',
             'Guest Name': v.guestName || '-',
-            'TIME': v.dutyTime || '-',
+            'TIME': renderTime(v.dutyTime) || '-',
             'Duty Type': v.dutyType || 'General Duty',
             'Location': v.dropLocation || 'BASE',
             'Remarks': v.remarks || '-',
@@ -1222,12 +1227,17 @@ const EventManagement = () => {
                 ? [['DATE', 'VEHICLE', 'MODEL', 'GUEST', 'TIME', 'ROLE', 'REMARKS', 'AMOUNT']]
                 : [['DATE', 'VEHICLE', 'SOURCE', 'DRIVER', 'GUEST', 'TIME', 'ROLE', 'REMARKS', 'AMOUNT']];
 
-            const body = allDuties.sort((a, b) => new Date(a.createdAt || a.date) - new Date(b.createdAt || b.date)).map(d => {
+            const body = allDuties.sort((a, b) => {
+                const dateA = new Date(a.date || a.createdAt);
+                const dateB = new Date(b.date || b.createdAt);
+                if (dateA.getTime() !== dateB.getTime()) return dateA - dateB;
+                return (a.dutyTime || '00:00').localeCompare(b.dutyTime || '00:00');
+            }).map(d => {
                 const dateText = formatDateIST(d.date || d.createdAt);
                 const vehNo = (d.vehicle?.carNumber || d.vehicleNumber || d.carNumber?.split('#')[0] || 'N/A').toUpperCase();
                 const amount = `${Number(d.dutyAmount || d.dailyWage || 0).toLocaleString('en-IN')}`;
                 const guest = d.guestName || '-';
-                const time = d.dutyTime || '-';
+                const time = renderTime(d.dutyTime) || '-';
                 const role = d.dutyType || (mode === 'client' ? 'SUPPORT' : 'General');
                 const remarks = d.remarks || '-';
 
@@ -2090,7 +2100,7 @@ const EventManagement = () => {
                                     </div>
                                 </div>
                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                    {selectedEventDetails.event?.status === 'Closed' && (
+                                    {selectedEventDetails.event?.status !== 'Upcoming' && (
                                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                             <button onClick={() => exportEventSpecificExcel(selectedEventDetails)} className="hide-mobile" style={{ height: '40px', padding: '0 15px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', fontWeight: '800', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><FileSpreadsheet size={16} /> EXCEL</button>
                                             <button onClick={() => handleExportEventPDF('client')} style={{ height: '40px', padding: '0 15px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', color: '#10b981', fontWeight: '800', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><Download size={16} /> PDF</button>
@@ -2200,7 +2210,12 @@ const EventManagement = () => {
                                                 {[...selectedEventDetails.fleetDuties, ...selectedEventDetails.externalDuties]
                                                     .filter(d => dutyFilter === 'All' || (dutyFilter === 'Fleet' ? d.vehicleSource === 'Fleet' : d.vehicleSource !== 'Fleet'))
                                                     .filter(d => dutyDateFilter === 'All' || formatDateIST(d.date || d.createdAt) === dutyDateFilter)
-                                                    .sort((a, b) => new Date(a.createdAt || a.date) - new Date(b.createdAt || b.date))
+                                                    .sort((a, b) => {
+                                                        const dateA = new Date(a.date || a.createdAt);
+                                                        const dateB = new Date(b.date || b.createdAt);
+                                                        if (dateA.getTime() !== dateB.getTime()) return dateA - dateB;
+                                                        return (a.dutyTime || '00:00').localeCompare(b.dutyTime || '00:00');
+                                                    })
                                                     .map((d) => (
                                                         <tr key={d._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }} className="table-row-hover">
                                                             <td style={{ padding: '16px 24px', textAlign: 'center' }}>
@@ -2258,7 +2273,12 @@ const EventManagement = () => {
                                         {[...selectedEventDetails.fleetDuties, ...selectedEventDetails.externalDuties]
                                             .filter(d => dutyFilter === 'All' || (dutyFilter === 'Fleet' ? d.vehicleSource === 'Fleet' : d.vehicleSource !== 'Fleet'))
                                             .filter(d => dutyDateFilter === 'All' || formatDateIST(d.date || d.createdAt) === dutyDateFilter)
-                                            .sort((a, b) => new Date(a.createdAt || a.date) - new Date(b.createdAt || b.date))
+                                            .sort((a, b) => {
+                                                const dateA = new Date(a.date || a.createdAt);
+                                                const dateB = new Date(b.date || b.createdAt);
+                                                if (dateA.getTime() !== dateB.getTime()) return dateA - dateB;
+                                                return (a.dutyTime || '00:00').localeCompare(b.dutyTime || '00:00');
+                                            })
                                             .map((d) => (
                                                 <div key={d._id} style={{
                                                     background: 'rgba(255,255,255,0.02)',
