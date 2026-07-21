@@ -70,6 +70,8 @@ const EventManagement = () => {
     const [statusTab, setStatusTab] = useState('Running');
     const [selectedEventDetails, setSelectedEventDetails] = useState(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
+    const [dutyFilter, setDutyFilter] = useState('All');
+    const [dutyDateFilter, setDutyDateFilter] = useState('All');
     
     // Rate Card State
     const [showRateCardModal, setShowRateCardModal] = useState(false);
@@ -1047,15 +1049,20 @@ const EventManagement = () => {
 
     const exportEventSpecificExcel = (eventData) => {
         if (!eventData) return;
-        const allDuties = [...eventData.fleetDuties, ...eventData.externalDuties];
+        const allDuties = [...eventData.fleetDuties, ...eventData.externalDuties]
+            .filter(d => dutyFilter === 'All' || (dutyFilter === 'Fleet' ? d.vehicleSource === 'Fleet' : d.vehicleSource !== 'Fleet'))
+            .filter(d => dutyDateFilter === 'All' || formatDateIST(d.date || d.createdAt) === dutyDateFilter)
+            .sort((a, b) => new Date(a.createdAt || a.date) - new Date(b.createdAt || b.date));
         const data = allDuties.map(v => ({
             'Date': formatDateIST(v.date || v.createdAt),
             'Vehicle': (v.vehicle?.carNumber || v.vehicleNumber || v.carNumber?.split('#')[0] || 'N/A').toUpperCase(),
             'Model': v.vehicle?.model || v.model || 'N/A',
             'Driver': v.driver?.name || v.driverName || 'N/A',
-            'Source': v.vehicleSource || 'EXTERNAL',
+            'Guest Name': v.guestName || '-',
+            'TIME': v.dutyTime || '-',
             'Duty Type': v.dutyType || 'General Duty',
             'Location': v.dropLocation || 'BASE',
+            'Remarks': v.remarks || '-',
             'Amount': Number(v.dutyAmount || v.dailyWage || 0)
         }));
         const ws = XLSX.utils.json_to_sheet(data);
@@ -1167,10 +1174,12 @@ const EventManagement = () => {
             doc.setFont('helvetica', 'bold');
             doc.text('MISSION STATISTICS', pageWidth / 2 + 5, 70);
 
-            const allDuties = [...selectedEventDetails.fleetDuties, ...selectedEventDetails.externalDuties];
+            const allDuties = [...selectedEventDetails.fleetDuties, ...selectedEventDetails.externalDuties]
+                .filter(d => dutyFilter === 'All' || (dutyFilter === 'Fleet' ? d.vehicleSource === 'Fleet' : d.vehicleSource !== 'Fleet'))
+                .filter(d => dutyDateFilter === 'All' || formatDateIST(d.date || d.createdAt) === dutyDateFilter);
             const totalEarned = allDuties.reduce((sum, d) => sum + (Number(d.dutyAmount || d.dailyWage) || 0), 0);
-            const fleetCount = selectedEventDetails.fleetDuties.length;
-            const extCount = selectedEventDetails.externalDuties.length;
+            const fleetCount = allDuties.filter(d => d.vehicleSource === 'Fleet').length;
+            const extCount = allDuties.filter(d => d.vehicleSource !== 'Fleet').length;
 
             doc.setFontSize(9);
             doc.setFont('helvetica', 'normal');
@@ -1210,19 +1219,22 @@ const EventManagement = () => {
             doc.text('OPERATIONAL LOGS', 15, 115);
 
             const headers = mode === 'client'
-                ? [['DATE', 'VEHICLE ID', 'RESOURCES', 'MISSION ROLE', 'SERVICE VAL']]
-                : [['DATE', 'VEHICLE ID', 'LOG SOURCE', 'OPERATIVE', 'MISSION ROLE', 'SETTLEMENT']];
+                ? [['DATE', 'VEHICLE', 'MODEL', 'GUEST', 'TIME', 'ROLE', 'REMARKS', 'AMOUNT']]
+                : [['DATE', 'VEHICLE', 'SOURCE', 'DRIVER', 'GUEST', 'TIME', 'ROLE', 'REMARKS', 'AMOUNT']];
 
-            const body = allDuties.sort((a, b) => new Date(a.date || a.createdAt) - new Date(b.date || b.createdAt)).map(d => {
+            const body = allDuties.sort((a, b) => new Date(a.createdAt || a.date) - new Date(b.createdAt || b.date)).map(d => {
                 const dateText = formatDateIST(d.date || d.createdAt);
                 const vehNo = (d.vehicle?.carNumber || d.vehicleNumber || d.carNumber?.split('#')[0] || 'N/A').toUpperCase();
                 const amount = `${Number(d.dutyAmount || d.dailyWage || 0).toLocaleString('en-IN')}`;
+                const guest = d.guestName || '-';
+                const time = d.dutyTime || '-';
+                const role = d.dutyType || (mode === 'client' ? 'SUPPORT' : 'General');
+                const remarks = d.remarks || '-';
 
                 if (mode === 'client') {
-                    // Match the 5 client headers: ['DATE', 'VEHICLE ID', 'RESOURCES', 'MISSION ROLE', 'SERVICE VAL']
-                    return [dateText, vehNo, d.vehicle?.model || d.model || 'N/A', d.dutyType || 'MISSION SUPPORT', amount];
+                    return [dateText, vehNo, d.vehicle?.model || d.model || 'N/A', guest, time, role, remarks, amount];
                 } else {
-                    return [dateText, vehNo, d.vehicleSource?.toUpperCase() || 'EXTERNAL', d.isAttendance ? d.driver?.name : d.driverName, d.dutyType || 'General', amount];
+                    return [dateText, vehNo, d.vehicleSource?.toUpperCase() || 'EXT', d.isAttendance ? d.driver?.name : d.driverName, guest, time, role, remarks, amount];
                 }
             });
 
@@ -1235,8 +1247,8 @@ const EventManagement = () => {
                 bodyStyles: { fontSize: 8, halign: 'center', textColor: [51, 65, 85] },
                 alternateRowStyles: { fillColor: [248, 250, 252] },
                 columnStyles: {
-                    4: { halign: 'right', fontStyle: 'bold', textColor: [16, 185, 129] },
-                    5: { halign: 'right', fontStyle: 'bold', textColor: [16, 185, 129] }
+                    7: { halign: 'right', fontStyle: 'bold', textColor: [16, 185, 129] },
+                    8: { halign: 'right', fontStyle: 'bold', textColor: [16, 185, 129] }
                 },
                 margin: { left: 15, right: 15 }
             });
@@ -2143,6 +2155,33 @@ const EventManagement = () => {
                                             <Briefcase size={18} color="var(--primary)" />
                                             <h4 style={{ color: 'white', margin: 0, fontSize: '16px', fontWeight: '950' }}>OPERATIONAL LOGS</h4>
                                         </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <select
+                                                value={dutyDateFilter}
+                                                onChange={(e) => setDutyDateFilter(e.target.value)}
+                                                style={{
+                                                    background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)',
+                                                    borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', outline: 'none', cursor: 'pointer'
+                                                }}
+                                            >
+                                                <option value="All" style={{ color: 'black' }}>All Dates</option>
+                                                {[...new Set([...selectedEventDetails.fleetDuties, ...selectedEventDetails.externalDuties].map(d => formatDateIST(d.date || d.createdAt)))].map(dateStr => (
+                                                    <option key={dateStr} value={dateStr} style={{ color: 'black' }}>{dateStr}</option>
+                                                ))}
+                                            </select>
+                                            <select
+                                                value={dutyFilter}
+                                                onChange={(e) => setDutyFilter(e.target.value)}
+                                                style={{
+                                                    background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)',
+                                                    borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '700', outline: 'none', cursor: 'pointer'
+                                                }}
+                                            >
+                                                <option value="All" style={{ color: 'black' }}>All Vehicles</option>
+                                                <option value="Fleet" style={{ color: 'black' }}>Internal (Fleet)</option>
+                                                <option value="External" style={{ color: 'black' }}>External</option>
+                                            </select>
+                                        </div>
                                     </div>
 
                                     <div className="hide-mobile">
@@ -2159,14 +2198,9 @@ const EventManagement = () => {
                                             </thead>
                                             <tbody>
                                                 {[...selectedEventDetails.fleetDuties, ...selectedEventDetails.externalDuties]
-                                                    .sort((a, b) => {
-                                                        const dateA = new Date(a.date || a.createdAt);
-                                                        const dateB = new Date(b.date || b.createdAt);
-                                                        if (dateB.getTime() !== dateA.getTime()) return dateB - dateA;
-                                                        const timeA = a.dutyTime || '00:00';
-                                                        const timeB = b.dutyTime || '00:00';
-                                                        return timeB.localeCompare(timeA);
-                                                    })
+                                                    .filter(d => dutyFilter === 'All' || (dutyFilter === 'Fleet' ? d.vehicleSource === 'Fleet' : d.vehicleSource !== 'Fleet'))
+                                                    .filter(d => dutyDateFilter === 'All' || formatDateIST(d.date || d.createdAt) === dutyDateFilter)
+                                                    .sort((a, b) => new Date(a.createdAt || a.date) - new Date(b.createdAt || b.date))
                                                     .map((d) => (
                                                         <tr key={d._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }} className="table-row-hover">
                                                             <td style={{ padding: '16px 24px', textAlign: 'center' }}>
@@ -2222,14 +2256,9 @@ const EventManagement = () => {
 
                                     <div className="show-mobile" style={{ padding: '16px' }}>
                                         {[...selectedEventDetails.fleetDuties, ...selectedEventDetails.externalDuties]
-                                            .sort((a, b) => {
-                                                const dateA = new Date(a.date || a.createdAt);
-                                                const dateB = new Date(b.date || b.createdAt);
-                                                if (dateB.getTime() !== dateA.getTime()) return dateB - dateA;
-                                                const timeA = a.dutyTime || '00:00';
-                                                const timeB = b.dutyTime || '00:00';
-                                                return timeB.localeCompare(timeA);
-                                            })
+                                            .filter(d => dutyFilter === 'All' || (dutyFilter === 'Fleet' ? d.vehicleSource === 'Fleet' : d.vehicleSource !== 'Fleet'))
+                                            .filter(d => dutyDateFilter === 'All' || formatDateIST(d.date || d.createdAt) === dutyDateFilter)
+                                            .sort((a, b) => new Date(a.createdAt || a.date) - new Date(b.createdAt || b.date))
                                             .map((d) => (
                                                 <div key={d._id} style={{
                                                     background: 'rgba(255,255,255,0.02)',
