@@ -120,6 +120,8 @@ const FuelPage = () => {
     const [expandedModel, setExpandedModel] = useState(null);
     const [vehicleSearchQuery, setVehicleSearchQuery] = useState('');
     const dropdownRef = useRef(null);
+    const paymentFilterRef = useRef(null);
+    const [showPaymentFilter, setShowPaymentFilter] = useState(false);
     const location = useLocation();
 
     useEffect(() => {
@@ -152,6 +154,9 @@ const FuelPage = () => {
         const handleClickOutside = (event) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
                 setShowVehicleDropdown(false);
+            }
+            if (paymentFilterRef.current && !paymentFilterRef.current.contains(event.target)) {
+                setShowPaymentFilter(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -908,29 +913,76 @@ const FuelPage = () => {
                                     <th style={{ padding: '20px 25px', color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             PAYMENT SOURCE
-                                            <div style={{ position: 'relative' }}>
-                                                <select
-                                                    value={filterPaymentSource}
-                                                    onChange={(e) => setFilterPaymentSource(e.target.value)}
+                                            <div style={{ position: 'relative' }} ref={paymentFilterRef}>
+                                                <div 
+                                                    onClick={() => setShowPaymentFilter(!showPaymentFilter)}
                                                     style={{
-                                                        background: 'rgba(255,255,255,0.05)',
+                                                        background: showPaymentFilter ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
                                                         border: '1px solid rgba(255,255,255,0.1)',
                                                         borderRadius: '6px',
-                                                        padding: '4px 20px 4px 8px',
+                                                        padding: '4px 24px 4px 10px',
                                                         color: 'white',
                                                         fontSize: '10px',
                                                         fontWeight: '800',
                                                         textTransform: 'uppercase',
-                                                        outline: 'none',
                                                         cursor: 'pointer',
-                                                        appearance: 'none'
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        transition: 'all 0.2s'
                                                     }}
                                                 >
-                                                    <option value="All">All</option>
-                                                    <option value="Office">Office</option>
-                                                    <option value="Guest">Guest</option>
-                                                </select>
-                                                <ChevronDown size={12} style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)', pointerEvents: 'none' }} />
+                                                    {filterPaymentSource === 'All' ? 'ALL' : filterPaymentSource}
+                                                    <ChevronDown size={12} style={{ position: 'absolute', right: '8px', top: '50%', transform: `translateY(-50%) ${showPaymentFilter ? 'rotate(180deg)' : 'rotate(0deg)'}`, color: 'rgba(255,255,255,0.6)', transition: 'transform 0.2s' }} />
+                                                </div>
+                                                
+                                                <AnimatePresence>
+                                                    {showPaymentFilter && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                            exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                                                            transition={{ duration: 0.15 }}
+                                                            style={{
+                                                                position: 'absolute',
+                                                                top: '100%',
+                                                                left: 0,
+                                                                marginTop: '8px',
+                                                                width: '140px',
+                                                                background: '#0f172a',
+                                                                border: '1px solid rgba(255,255,255,0.1)',
+                                                                borderRadius: '8px',
+                                                                padding: '6px',
+                                                                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                                                                zIndex: 100,
+                                                                display: 'flex',
+                                                                flexDirection: 'column',
+                                                                gap: '4px'
+                                                            }}
+                                                        >
+                                                            {['All', 'Office', 'Guest'].map(option => (
+                                                                <div
+                                                                    key={option}
+                                                                    onClick={() => { setFilterPaymentSource(option); setShowPaymentFilter(false); }}
+                                                                    style={{
+                                                                        padding: '8px 12px',
+                                                                        borderRadius: '6px',
+                                                                        background: filterPaymentSource === option ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                                                                        color: filterPaymentSource === option ? '#3b82f6' : 'rgba(255,255,255,0.7)',
+                                                                        fontSize: '11px',
+                                                                        fontWeight: '800',
+                                                                        textTransform: 'uppercase',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s'
+                                                                    }}
+                                                                    onMouseEnter={(e) => { if(filterPaymentSource !== option) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                                                                    onMouseLeave={(e) => { if(filterPaymentSource !== option) e.currentTarget.style.background = 'transparent' }}
+                                                                >
+                                                                    {option}
+                                                                </div>
+                                                            ))}
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
                                             </div>
                                         </div>
                                     </th>
