@@ -1338,7 +1338,7 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                             <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px', padding: '0 10px', minWidth: '800px' }}>
                                 <thead>
                                     <tr style={{ textAlign: 'left' }}>
-                                        {['Driver', 'Daily Wage', 'Duty Days', 'SDR & Nights', 'Earnings', 'Advances', 'EMI', 'Total', 'Reports'].map(h => (
+                                        {['Driver', 'Daily Wage', 'Duty Days', 'Nights', 'Earnings', 'Advances', 'EMI', 'Total', 'Reports'].map(h => (
                                             <th key={h} style={{ padding: '15px 20px', color: (h === 'Total' || h === 'Reports') ? '#10b981' : 'var(--text-muted)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>{h}</th>
                                         ))}
                                     </tr>
@@ -1363,8 +1363,8 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                                     <td style={{ padding: '20px 20px', color: 'white', fontWeight: '800' }}>{s.workingDays || 0}</td>
                                                     <td style={{ padding: '20px 20px' }}>
                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                            {s.nightStayCount > 0 && <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.1)', color: 'var(--primary)', padding: '2px 6px', borderRadius: '4px', fontWeight: '800', whiteSpace: 'nowrap' }}>₹{s.totalNightStayAmount || 0} ({s.nightStayCount} N)</span>}
-                                                            {s.sameDayCount > 0 && <span style={{ fontSize: '10px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '2px 6px', borderRadius: '4px', fontWeight: '800', whiteSpace: 'nowrap' }}>₹{s.totalSameDayAmount || 0} ({s.sameDayCount} SDR)</span>}
+                                                            {s.nightStayCount > 0 && <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.1)', color: 'var(--primary)', padding: '2px 6px', borderRadius: '4px', fontWeight: '800' }}>{s.nightStayCount} NIGHTS</span>}
+                                                            {s.sameDayCount > 0 && <span style={{ fontSize: '10px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '2px 6px', borderRadius: '4px', fontWeight: '800' }}>{s.sameDayCount} DAY</span>}
                                                             {!(s.nightStayCount > 0 || s.sameDayCount > 0) && <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>}
                                                         </div>
                                                     </td>
@@ -1418,8 +1418,8 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                         {[
                                             ['DAILY WAGE', `₹ ${s.dailyWage}`, 'rgba(255,255,255,0.7)'],
                                             ['DUTY DAYS', s.workingDays, 'white'],
-                                            ['NIGHTS', s.nightStayCount > 0 ? `₹${s.totalNightStayAmount || 0} (${s.nightStayCount})` : 0, 'var(--primary)'],
-                                            ['SAME DAY', s.sameDayCount > 0 ? `₹${s.totalSameDayAmount || 0} (${s.sameDayCount})` : 0, '#10b981'],
+                                            ['NIGHTS', s.nightStayCount || 0, 'var(--primary)'],
+                                            ['SAME DAY', s.sameDayCount || 0, '#10b981'],
                                             ['EARNINGS', `₹ ${s.totalEarned - (s.totalAllowances || 0)}`, 'white'],
                                             ['ADVANCES', `₹ ${(s.totalAdvances || 0).toLocaleString()}`, '#f43f5e']
                                         ].map(([label, val, color]) => (
