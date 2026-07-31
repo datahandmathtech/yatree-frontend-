@@ -1584,15 +1584,15 @@ const FuelPage = () => {
                                 <div style={{ display: 'flex', gap: '15px', marginTop: '25px' }}>
                                     <button
                                         onClick={() => handleApproveReject(selectedPending.attendanceId, selectedPending._id, 'approved', { amount: formData.amount, quantity: formData.quantity, rate: formData.rate, odometer: formData.odometer, slipPhoto: formData.slipPhoto, paymentSource: formData.paymentSource, paymentBy: formData.paymentBy })}
-                                        disabled={isSubmitting}
-                                        style={{ flex: 2, height: '50px', borderRadius: '12px', fontSize: '15px', fontWeight: '800', background: isSubmitting ? 'rgba(16, 185, 129, 0.5)' : '#10b981', color: 'white', border: 'none', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
+                                        disabled={submitting}
+                                        style={{ flex: 2, height: '50px', borderRadius: '12px', fontSize: '15px', fontWeight: '800', background: submitting ? 'rgba(16, 185, 129, 0.5)' : '#10b981', color: 'white', border: 'none', cursor: submitting ? 'not-allowed' : 'pointer' }}
                                     >
-                                        {isSubmitting ? 'Processing...' : 'Confirm Approval'}
+                                        {submitting ? 'Processing...' : 'Confirm Approval'}
                                     </button>
                                     <button
                                         onClick={() => handleApproveReject(selectedPending.attendanceId, selectedPending._id, 'rejected')}
-                                        disabled={isSubmitting}
-                                        style={{ flex: 1, background: 'rgba(244, 63, 94, 0.1)', color: '#f43f5e', border: '1px solid rgba(244, 63, 94, 0.2)', borderRadius: '12px', fontWeight: '800', cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.5 : 1 }}
+                                        disabled={submitting}
+                                        style={{ flex: 1, background: 'rgba(244, 63, 94, 0.1)', color: '#f43f5e', border: '1px solid rgba(244, 63, 94, 0.2)', borderRadius: '12px', fontWeight: '800', cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.5 : 1 }}
                                     >
                                         Reject
                                     </button>
