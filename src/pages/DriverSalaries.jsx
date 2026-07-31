@@ -20,7 +20,7 @@ import {
 } from '../utils/istUtils';
 import PremiumDateInput from '../components/common/PremiumDateInput';
 
-const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi' }) => {
+const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUpdate }) => {
     const { selectedCompany } = useCompany();
     useEffect(() => {
         const style = document.createElement('style');
@@ -916,6 +916,14 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi' }) => {
     const totalSpecialPay = filteredSalaries.reduce((sum, s) => sum + (s.totalAllowances || 0), 0);
     const totalAdvancesTotal = filteredSalaries.reduce((sum, s) => sum + (s.totalAdvances || 0), 0);
     const totalEMITotal = filteredSalaries.reduce((sum, s) => sum + (s.totalEMI || 0), 0);
+    const totalSDRCount = filteredSalaries.reduce((sum, s) => sum + (s.sameDayCount || 0), 0);
+    const totalNightsCount = filteredSalaries.reduce((sum, s) => sum + (s.nightStayCount || 0), 0);
+
+    useEffect(() => {
+        if (onStatsUpdate) {
+            onStatsUpdate({ sdr: totalSDRCount, nights: totalNightsCount });
+        }
+    }, [totalSDRCount, totalNightsCount, onStatsUpdate]);
 
     const det = selectedDriverDetails;
     const dInfo = det?.driver?.name ? det.driver : (det?.driver?.[0] || {});

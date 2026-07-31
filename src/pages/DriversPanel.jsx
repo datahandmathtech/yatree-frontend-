@@ -9,10 +9,18 @@ import Reports from './Reports';
 import DriverSalaries from './DriverSalaries';
 import DriverPerformance from './DriverPerformance';
 
+const Chip = ({ label, value, color }) => (
+    <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', padding: '10px 20px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '120px' }}>
+        <span style={{ fontSize: '10px', fontWeight: '800', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</span>
+        <span style={{ fontSize: '18px', fontWeight: '950', color: color }}>{value}</span>
+    </div>
+);
+
 const DriversPanel = () => {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
     const activeTab = searchParams.get('tab') || 'drivers';
+    const [salaryStats, setSalaryStats] = React.useState({ sdr: 0, nights: 0 });
 
     const setActiveTab = (tab) => {
         setSearchParams({ tab });
@@ -32,7 +40,7 @@ const DriversPanel = () => {
             case 'dutys':
                 return <Reports isSubComponent={true} />;
             case 'settlement':
-                return <DriverSalaries isSubComponent={true} />;
+                return <DriverSalaries isSubComponent={true} onStatsUpdate={setSalaryStats} />;
             case 'performance':
                 return <DriverPerformance />;
             default:
@@ -44,7 +52,7 @@ const DriversPanel = () => {
         <div className="container-fluid" style={{ minHeight: '100vh', padding: '40px 20px', position: 'relative' }}>
             <SEO title="Drivers Dashboard" description="Access driver profiles, duty logs, and salary settlements." />
 
-            <header style={{ marginBottom: '30px' }}>
+            <header style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <div style={{
                         width: '40px',
@@ -64,6 +72,13 @@ const DriversPanel = () => {
                         </h1>
                     </div>
                 </div>
+
+                {activeTab === 'settlement' && (
+                    <div style={{ display: 'flex', gap: '15px' }}>
+                        <Chip label="TOTAL SDR" value={salaryStats.sdr} color="#10b981" />
+                        <Chip label="TOTAL NIGHTS" value={salaryStats.nights} color="var(--primary)" />
+                    </div>
+                )}
             </header>
 
             {/* Selection Bar (Tab Switcher) */}
