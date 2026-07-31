@@ -108,6 +108,7 @@ const FuelPage = () => {
     const [selectedPending, setSelectedPending] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterVehicle, setFilterVehicle] = useState('All');
+    const [filterPaymentSource, setFilterPaymentSource] = useState('All');
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [fromDate, setFromDate] = useState('');
@@ -530,7 +531,8 @@ const FuelPage = () => {
             e.stationName?.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
             e.driver?.toLowerCase()?.includes(searchTerm.toLowerCase()));
         const matchesVehicle = filterVehicle === 'All' || e.vehicle?._id === filterVehicle;
-        return matchesSearch && matchesVehicle;
+        const matchesPaymentSource = filterPaymentSource === 'All' || (e.paymentSource && e.paymentSource.toLowerCase().includes(filterPaymentSource.toLowerCase()));
+        return matchesSearch && matchesVehicle && matchesPaymentSource;
     }).sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -549,7 +551,7 @@ const FuelPage = () => {
     const dieselAmount = filteredEntries.filter(e => e.fuelType === 'Diesel').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
     const pageSize = 50;
-    useEffect(() => { setPage(1); }, [filteredEntries.length, filterVehicle]);
+    useEffect(() => { setPage(1); }, [filteredEntries.length, filterVehicle, filterPaymentSource]);
     const totalPages = Math.ceil(filteredEntries.length / pageSize);
     const paginatedEntries = filteredEntries.slice((page - 1) * pageSize, page * pageSize);
 
@@ -722,6 +724,32 @@ const FuelPage = () => {
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 style={{ width: '100%', height: '36px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', paddingLeft: '32px', color: 'white', fontSize: '11px', fontWeight: '600', outline: 'none' }}
                             />
+                        </div>
+                        <div style={{ position: 'relative' }}>
+                            <select
+                                value={filterPaymentSource}
+                                onChange={(e) => setFilterPaymentSource(e.target.value)}
+                                style={{
+                                    height: '36px',
+                                    background: 'rgba(15, 23, 42, 0.6)',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    borderRadius: '10px',
+                                    padding: '0 15px',
+                                    color: 'white',
+                                    fontSize: '11px',
+                                    fontWeight: '800',
+                                    textTransform: 'uppercase',
+                                    outline: 'none',
+                                    cursor: 'pointer',
+                                    appearance: 'none',
+                                    paddingRight: '30px'
+                                }}
+                            >
+                                <option value="All">All Sources</option>
+                                <option value="Office">Office</option>
+                                <option value="Guest">Guest / Client</option>
+                            </select>
+                            <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)', pointerEvents: 'none' }} />
                         </div>
                     </div>
 
