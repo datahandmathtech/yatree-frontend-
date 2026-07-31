@@ -725,32 +725,6 @@ const FuelPage = () => {
                                 style={{ width: '100%', height: '36px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', paddingLeft: '32px', color: 'white', fontSize: '11px', fontWeight: '600', outline: 'none' }}
                             />
                         </div>
-                        <div style={{ position: 'relative' }}>
-                            <select
-                                value={filterPaymentSource}
-                                onChange={(e) => setFilterPaymentSource(e.target.value)}
-                                style={{
-                                    height: '36px',
-                                    background: 'rgba(15, 23, 42, 0.6)',
-                                    border: '1px solid rgba(255,255,255,0.08)',
-                                    borderRadius: '10px',
-                                    padding: '0 15px',
-                                    color: 'white',
-                                    fontSize: '11px',
-                                    fontWeight: '800',
-                                    textTransform: 'uppercase',
-                                    outline: 'none',
-                                    cursor: 'pointer',
-                                    appearance: 'none',
-                                    paddingRight: '30px'
-                                }}
-                            >
-                                <option value="All">All Sources</option>
-                                <option value="Office">Office</option>
-                                <option value="Guest">Guest / Client</option>
-                            </select>
-                            <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)', pointerEvents: 'none' }} />
-                        </div>
                     </div>
 
                     <div style={{ width: '1px', height: '24px', background: 'rgba(255,255,255,0.1)', margin: '0 5px' }}></div>
@@ -931,7 +905,35 @@ const FuelPage = () => {
                                     <th style={{ padding: '20px 25px', color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>Fuel Details</th>
                                     <th style={{ padding: '20px 25px', color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>Odometer & Trip</th>
                                     <th style={{ padding: '20px 25px', color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>Efficiency</th>
-                                    <th style={{ padding: '20px 25px', color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>Payment Source</th>
+                                    <th style={{ padding: '20px 25px', color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            PAYMENT SOURCE
+                                            <div style={{ position: 'relative' }}>
+                                                <select
+                                                    value={filterPaymentSource}
+                                                    onChange={(e) => setFilterPaymentSource(e.target.value)}
+                                                    style={{
+                                                        background: 'rgba(255,255,255,0.05)',
+                                                        border: '1px solid rgba(255,255,255,0.1)',
+                                                        borderRadius: '6px',
+                                                        padding: '4px 20px 4px 8px',
+                                                        color: 'white',
+                                                        fontSize: '10px',
+                                                        fontWeight: '800',
+                                                        textTransform: 'uppercase',
+                                                        outline: 'none',
+                                                        cursor: 'pointer',
+                                                        appearance: 'none'
+                                                    }}
+                                                >
+                                                    <option value="All">All</option>
+                                                    <option value="Office">Office</option>
+                                                    <option value="Guest">Guest</option>
+                                                </select>
+                                                <ChevronDown size={12} style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)', pointerEvents: 'none' }} />
+                                            </div>
+                                        </div>
+                                    </th>
                                     <th style={{ padding: '20px 25px', color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>Total Amount</th>
                                     <th style={{ padding: '20px 25px', color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
                                 </tr>
