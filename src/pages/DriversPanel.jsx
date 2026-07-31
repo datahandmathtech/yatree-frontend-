@@ -10,9 +10,9 @@ import DriverSalaries from './DriverSalaries';
 import DriverPerformance from './DriverPerformance';
 
 const Chip = ({ label, value, color }) => (
-    <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', padding: '10px 20px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '120px' }}>
-        <span style={{ fontSize: '10px', fontWeight: '800', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</span>
-        <span style={{ fontSize: '18px', fontWeight: '950', color: color }}>{value}</span>
+    <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', padding: '15px 25px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '160px' }}>
+        <span style={{ fontSize: '12px', fontWeight: '800', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px' }}>{label}</span>
+        <span style={{ fontSize: '24px', fontWeight: '950', color: color, letterSpacing: '-0.5px' }}>{value}</span>
     </div>
 );
 
@@ -75,8 +75,8 @@ const DriversPanel = () => {
 
                 {activeTab === 'settlement' && (
                     <div style={{ display: 'flex', gap: '15px' }}>
-                        <Chip label="TOTAL SDR" value={salaryStats.sdr} color="#10b981" />
-                        <Chip label="TOTAL NIGHTS" value={salaryStats.nights} color="var(--primary)" />
+                        <Chip label="TOTAL SDR" value={`₹ ${(salaryStats.sdr || 0).toLocaleString()}`} color="#10b981" />
+                        <Chip label="TOTAL NIGHTS" value={`₹ ${(salaryStats.nights || 0).toLocaleString()}`} color="var(--primary)" />
                     </div>
                 )}
             </header>
