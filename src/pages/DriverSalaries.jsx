@@ -916,14 +916,21 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
     const totalSpecialPay = filteredSalaries.reduce((sum, s) => sum + (s.totalAllowances || 0), 0);
     const totalAdvancesTotal = filteredSalaries.reduce((sum, s) => sum + (s.totalAdvances || 0), 0);
     const totalEMITotal = filteredSalaries.reduce((sum, s) => sum + (s.totalEMI || 0), 0);
-    const totalSDRAmount = filteredSalaries.reduce((sum, s) => sum + (s.totalSameDayAmount || 0), 0);
-    const totalNightsAmount = filteredSalaries.reduce((sum, s) => sum + (s.totalNightStayAmount || 0), 0);
+    const totalSDRAmount = filteredSalaries.reduce((sum, s) => sum + (Number(s.totalSameDayAmount) || 0), 0);
+    const totalNightsAmount = filteredSalaries.reduce((sum, s) => sum + (Number(s.totalNightStayAmount) || 0), 0);
+    const totalSDRCount = filteredSalaries.reduce((sum, s) => sum + (Number(s.sameDayCount) || 0), 0);
+    const totalNightsCount = filteredSalaries.reduce((sum, s) => sum + (Number(s.nightStayCount) || 0), 0);
 
     useEffect(() => {
         if (onStatsUpdate) {
-            onStatsUpdate({ sdr: totalSDRAmount, nights: totalNightsAmount });
+            onStatsUpdate({ 
+                sdr: totalSDRAmount, 
+                nights: totalNightsAmount,
+                sdrCount: totalSDRCount,
+                nightsCount: totalNightsCount
+            });
         }
-    }, [totalSDRAmount, totalNightsAmount, onStatsUpdate]);
+    }, [totalSDRAmount, totalNightsAmount, totalSDRCount, totalNightsCount, onStatsUpdate]);
 
     const det = selectedDriverDetails;
     const dInfo = det?.driver?.name ? det.driver : (det?.driver?.[0] || {});

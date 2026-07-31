@@ -75,8 +75,16 @@ const DriversPanel = () => {
 
                 {activeTab === 'settlement' && (
                     <div style={{ display: 'flex', gap: '15px' }}>
-                        <Chip label="TOTAL SDR" value={`₹ ${(salaryStats.sdr || 0).toLocaleString()}`} color="#10b981" />
-                        <Chip label="TOTAL NIGHTS" value={`₹ ${(salaryStats.nights || 0).toLocaleString()}`} color="var(--primary)" />
+                        <Chip 
+                            label={`TOTAL SDR (${salaryStats.sdrCount || 0})`} 
+                            value={`₹ ${(salaryStats.sdr || 0).toLocaleString()}`} 
+                            color="#10b981" 
+                        />
+                        <Chip 
+                            label={`TOTAL NIGHTS (${salaryStats.nightsCount || 0})`} 
+                            value={`₹ ${(salaryStats.nights || 0).toLocaleString()}`} 
+                            color="var(--primary)" 
+                        />
                     </div>
                 )}
             </header>
