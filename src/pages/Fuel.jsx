@@ -140,6 +140,7 @@ const FuelPage = () => {
             stationName: '',
             paymentMode: 'Cash',
             paymentSource: 'Office',
+            paymentBy: '',
             driver: '',
             slipPhoto: ''
         });
@@ -214,6 +215,7 @@ const FuelPage = () => {
         stationName: '',
         paymentMode: 'Cash',
         paymentSource: 'Office',
+        paymentBy: '',
         driver: '',
         slipPhoto: ''
     });
@@ -375,6 +377,7 @@ const FuelPage = () => {
             stationName: entry.stationName || '',
             paymentMode: entry.paymentMode || 'Cash',
             paymentSource: entry.paymentSource || 'Office',
+            paymentBy: entry.paymentBy || '',
             driver: entry.driver || '',
             slipPhoto: entry.slipPhoto || ''
         });
@@ -454,6 +457,7 @@ const FuelPage = () => {
             driver: entry.driver || '',
             fuelType: entry.fuelType || 'Diesel',
             paymentSource: entry.paymentSource || 'Office',
+            paymentBy: entry.paymentBy || '',
             quantity: entry.quantity ? entry.quantity : '', // Pre-fill if driver submitted
             rate: (entry.quantity && entry.amount) ? (entry.amount / entry.quantity).toFixed(2) : '',
             slipPhoto: entry.slipPhoto || ''
@@ -497,8 +501,9 @@ const FuelPage = () => {
             'Odometer (KM)': e.odometer,
             'Distance (KM)': e.distance || 0,
             'Mileage (KM/L)': e.mileage || 0,
+            'Payment Mode': e.paymentMode || 'Cash',
             'Payment Source': e.paymentSource || 'Office',
-            'Payment Mode': e.paymentMode,
+            'Payer / Guest': e.paymentBy || '-',
             'Station': e.stationName || 'N/A',
             'Driver': e.driver || 'N/A',
             'Source': e.source || 'Admin'
@@ -953,12 +958,11 @@ const FuelPage = () => {
                                                 ₹{e.costPerKm || 0}/KM COST
                                             </div>
                                         </td>
-                                        <td style={{ padding: '15px 25px' }}>
-                                            <div style={{
-                                                color: 'white', fontWeight: '900', fontSize: '12px', padding: '4px 12px', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', background: 'rgba(255,255,255,0.02)', display: 'inline-block', textTransform: 'uppercase'
-                                            }}>
+                                        <td style={{ padding: '15px 20px', color: 'rgba(255,255,255,0.7)', fontSize: '14px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: e.paymentSource?.toLowerCase().includes('guest') ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: e.paymentSource?.toLowerCase().includes('guest') ? '#3b82f6' : '#10b981', padding: '4px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: '700' }}>
                                                 {e.paymentSource?.toLowerCase().includes('guest') ? 'Guest' : 'Office'}
-                                            </div>
+                                            </span>
+                                            {e.paymentBy && <div style={{ fontSize: '12px', marginTop: '4px', color: 'rgba(255,255,255,0.5)' }}>{e.paymentBy}</div>}
                                         </td>
                                         <td style={{ padding: '15px 25px' }}>
                                             <div style={{ color: 'white', fontWeight: '950', fontSize: '18px' }}>₹{e.amount.toLocaleString()}</div>
@@ -1223,10 +1227,24 @@ const FuelPage = () => {
                                         <div>
                                             <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Payment Source</label>
                                             <select className="input-field" value={formData.paymentSource} onChange={(e) => setFormData({ ...formData, paymentSource: e.target.value })} style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}>
-                                                <option value="Office" style={{ background: '#0f172a' }}>Office</option>
-                                                <option value="Guest" style={{ background: '#0f172a' }}>Guest</option>
+                                                <option value="Office">Office</option>
+                                                <option value="Guest / Client">Guest / Client</option>
                                             </select>
                                         </div>
+                                    </div>
+                                    
+                                    <div className="col-md-6" style={{ marginBottom: '20px' }}>
+                                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
+                                            {formData.paymentSource?.toLowerCase().includes('guest') ? 'Guest Name' : 'Office Payer Name'}
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className="input-field"
+                                            value={formData.paymentBy}
+                                            onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value })}
+                                            placeholder={formData.paymentSource?.toLowerCase().includes('guest') ? 'Enter Guest Name' : 'Enter Person Name'}
+                                            style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
+                                        />
                                     </div>
 
                                     {/* Vendor and Personnel */}
@@ -1426,6 +1444,19 @@ const FuelPage = () => {
                                         <option value="Guest">Guest</option>
                                     </select>
                                 </div>
+                                <div style={{ marginBottom: '20px' }}>
+                                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
+                                        {formData.paymentSource?.toLowerCase().includes('guest') ? 'Guest Name' : 'Office Payer Name'}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="input-field"
+                                        value={formData.paymentBy}
+                                        onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value })}
+                                        placeholder={formData.paymentSource?.toLowerCase().includes('guest') ? 'Enter Guest Name' : 'Enter Person Name'}
+                                        style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
+                                    />
+                                </div>
 
                                 <div style={{ padding: '20px', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)', marginTop: '20px' }}>
                                     <p style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '12px' }}>Slip Image Verification</p>
@@ -1466,7 +1497,7 @@ const FuelPage = () => {
 
                                 <div style={{ display: 'flex', gap: '15px', marginTop: '25px' }}>
                                     <button
-                                        onClick={() => handleApproveReject(selectedPending.attendanceId, selectedPending._id, 'approved', { amount: formData.amount, quantity: formData.quantity, rate: formData.rate, odometer: formData.odometer, slipPhoto: formData.slipPhoto, paymentSource: formData.paymentSource })}
+                                        onClick={() => handleApproveReject(selectedPending.attendanceId, selectedPending._id, 'approved', { amount: formData.amount, quantity: formData.quantity, rate: formData.rate, odometer: formData.odometer, slipPhoto: formData.slipPhoto, paymentSource: formData.paymentSource, paymentBy: formData.paymentBy })}
                                         style={{ flex: 2, height: '50px', borderRadius: '12px', fontSize: '15px', fontWeight: '800', background: '#10b981', color: 'white', border: 'none', cursor: 'pointer' }}
                                     >
                                         Confirm Approval
