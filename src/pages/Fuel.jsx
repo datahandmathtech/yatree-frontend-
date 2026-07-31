@@ -1261,20 +1261,19 @@ const FuelPage = () => {
                                                 <option value="Guest / Client">Guest / Client</option>
                                             </select>
                                         </div>
-                                    </div>
-                                    
-                                    <div className="col-md-6" style={{ marginBottom: '20px' }}>
-                                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
-                                            {formData.paymentSource?.toLowerCase().includes('guest') ? 'Guest Name' : 'Office Payer Name'}
-                                        </label>
-                                        <input
-                                            type="text"
-                                            className="input-field"
-                                            value={formData.paymentBy}
-                                            onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value })}
-                                            placeholder={formData.paymentSource?.toLowerCase().includes('guest') ? 'Enter Guest Name' : 'Enter Person Name'}
-                                            style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
-                                        />
+                                        <div>
+                                            <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>
+                                                {formData.paymentSource?.toLowerCase().includes('guest') ? 'Guest Name' : 'Office Payer Name'}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="input-field"
+                                                value={formData.paymentBy}
+                                                onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value })}
+                                                placeholder={formData.paymentSource?.toLowerCase().includes('guest') ? 'e.g. Rahul Kumar' : 'e.g. Admin Manager'}
+                                                style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
+                                            />
+                                        </div>
                                     </div>
 
                                     {/* Vendor and Personnel */}
@@ -1462,30 +1461,32 @@ const FuelPage = () => {
                                     </div>
                                 </div>
 
-                                <div style={{ marginTop: '15px' }}>
-                                    <label style={{ color: 'white', fontSize: '12px', marginBottom: '8px', display: 'block' }}>Payment Source</label>
-                                    <select
-                                        className="input-field"
-                                        value={formData.paymentSource}
-                                        onChange={(e) => setFormData({ ...formData, paymentSource: e.target.value })}
-                                        style={{ width: '100%', background: 'rgba(255,255,255,0.05)' }}
-                                    >
-                                        <option value="Office">Office</option>
-                                        <option value="Guest">Guest</option>
-                                    </select>
-                                </div>
-                                <div style={{ marginBottom: '20px' }}>
-                                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
-                                        {formData.paymentSource?.toLowerCase().includes('guest') ? 'Guest Name' : 'Office Payer Name'}
-                                    </label>
-                                    <input
-                                        type="text"
-                                        className="input-field"
-                                        value={formData.paymentBy}
-                                        onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value })}
-                                        placeholder={formData.paymentSource?.toLowerCase().includes('guest') ? 'Enter Guest Name' : 'Enter Person Name'}
-                                        style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
-                                    />
+                                <div style={{ marginTop: '15px', display: 'flex', gap: '15px' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ color: 'white', fontSize: '12px', marginBottom: '8px', display: 'block' }}>Payment Source</label>
+                                        <select
+                                            className="input-field"
+                                            value={formData.paymentSource}
+                                            onChange={(e) => setFormData({ ...formData, paymentSource: e.target.value })}
+                                            style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
+                                        >
+                                            <option value="Office">Office</option>
+                                            <option value="Guest / Client">Guest / Client</option>
+                                        </select>
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ display: 'block', fontSize: '12px', color: 'white', marginBottom: '8px' }}>
+                                            {formData.paymentSource?.toLowerCase().includes('guest') ? 'Guest Name' : 'Office Payer Name'}
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className="input-field"
+                                            value={formData.paymentBy}
+                                            onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value })}
+                                            placeholder={formData.paymentSource?.toLowerCase().includes('guest') ? 'e.g. Rahul Kumar' : 'e.g. Admin Manager'}
+                                            style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
+                                        />
+                                    </div>
                                 </div>
 
                                 <div style={{ padding: '20px', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)', marginTop: '20px' }}>
