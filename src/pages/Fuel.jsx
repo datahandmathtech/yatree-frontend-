@@ -537,7 +537,8 @@ const FuelPage = () => {
     const filteredEntries = entries.filter(e => {
         const matchesSearch = (e.vehicle?.carNumber?.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
             e.stationName?.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
-            e.driver?.toLowerCase()?.includes(searchTerm.toLowerCase()));
+            e.driver?.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
+            e.paymentBy?.toLowerCase()?.includes(searchTerm.toLowerCase()));
         const matchesVehicle = filterVehicle === 'All' || e.vehicle?._id === filterVehicle;
         const matchesPaymentSource = filterPaymentSource === 'All' || (e.paymentSource && e.paymentSource.toLowerCase().includes(filterPaymentSource.toLowerCase()));
         return matchesSearch && matchesVehicle && matchesPaymentSource;
