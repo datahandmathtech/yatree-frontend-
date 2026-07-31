@@ -13,6 +13,7 @@ import { useTheme } from '../context/ThemeContext';
 import SEO from '../components/SEO';
 import { todayIST, formatDateIST, nowIST, toISTDateString } from '../utils/istUtils';
 import ImageUploader from '../components/common/ImageUploader';
+import SearchableSelect from '../components/common/SearchableSelect';
 
 const CarUtility = () => {
     const { theme } = useTheme();
@@ -1187,12 +1188,12 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                         {!vehicle && (
                             <div className="premium-input-container">
                                 <label>Select Vehicle</label>
-                                <select value={form.vehicleId} onChange={e => setForm({ ...form, vehicleId: e.target.value })}>
-                                    <option value="" style={{ background: '#1a1a1a' }}>Choose a car...</option>
-                                    {allVehicles.map(v => (
-                                        <option key={v._id} value={v._id} style={{ background: '#1a1a1a' }}>{v.carNumber} ({v.model})</option>
-                                    ))}
-                                </select>
+                                <SearchableSelect 
+                                    options={allVehicles.map(v => ({ value: v._id, label: `${v.carNumber} (${v.model})` }))}
+                                    value={form.vehicleId}
+                                    onChange={(val) => setForm({ ...form, vehicleId: val })}
+                                    placeholder="Search Vehicle..."
+                                />
                             </div>
                         )}
 

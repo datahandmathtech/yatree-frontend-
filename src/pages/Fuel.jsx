@@ -10,6 +10,7 @@ import { useCompany } from '../context/CompanyContext';
 import { useTheme } from '../context/ThemeContext';
 import SEO from '../components/SEO';
 import PremiumDateInput from '../components/common/PremiumDateInput';
+import SearchableSelect from '../components/common/SearchableSelect';
 import { todayIST, toISTDateString, firstDayOfMonthIST, formatDateIST, nowIST, formatDateTimeIST } from '../utils/istUtils';
 
 
@@ -111,6 +112,7 @@ const FuelPage = () => {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
+    const [page, setPage] = useState(1);
     
     // Custom Vehicle Dropdown States
     const [showVehicleDropdown, setShowVehicleDropdown] = useState(false);
@@ -541,6 +543,11 @@ const FuelPage = () => {
     const petrolAmount = filteredEntries.filter(e => e.fuelType === 'Petrol').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     const dieselAmount = filteredEntries.filter(e => e.fuelType === 'Diesel').reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
+    const pageSize = 50;
+    useEffect(() => { setPage(1); }, [filteredEntries.length, filterVehicle]);
+    const totalPages = Math.ceil(filteredEntries.length / pageSize);
+    const paginatedEntries = filteredEntries.slice((page - 1) * pageSize, page * pageSize);
+
     return (
         <div className="container-fluid" style={{ paddingBottom: '40px' }}>
             <SEO title="Fuel Management" description="Track fuel entries, mileage, and costs for your entire fleet." />
@@ -897,7 +904,7 @@ const FuelPage = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredEntries.map((e, idx) => (
+                                {paginatedEntries.map((e, idx) => (
                                     <motion.tr
                                         key={e._id}
                                         initial={{ opacity: 0, x: -10 }}
@@ -1023,7 +1030,7 @@ const FuelPage = () => {
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                        {filteredEntries.map((e) => (
+                        {paginatedEntries.map((e) => (
                             <motion.div
                                 key={e._id}
                                 initial={{ opacity: 0, y: 10 }}
@@ -1098,6 +1105,26 @@ const FuelPage = () => {
                 )}
             </div>
 
+            {totalPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', padding: '20px 0' }}>
+                    <button 
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.05)', color: page === 1 ? 'rgba(255,255,255,0.2)' : 'white', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', cursor: page === 1 ? 'not-allowed' : 'pointer', fontWeight: '800' }}
+                    >
+                        Prev
+                    </button>
+                    <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', fontWeight: '800' }}>Page {page} of {totalPages}</span>
+                    <button 
+                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                        disabled={page === totalPages}
+                        style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.05)', color: page === totalPages ? 'rgba(255,255,255,0.2)' : 'white', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', cursor: page === totalPages ? 'not-allowed' : 'pointer', fontWeight: '800' }}
+                    >
+                        Next
+                    </button>
+                </div>
+            )}
+
             {/* Add Record Modal */}
             <AnimatePresence>
                 {showModal && (
@@ -1124,21 +1151,17 @@ const FuelPage = () => {
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: '20px' }}>
                                         <div>
                                             <label style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Vehicle Number *</label>
-                                            <select
-                                                className="input-field"
+                                            <SearchableSelect
+                                                options={vehicles.map(v => ({ value: v._id, label: `${v.carNumber} (${v.model})` }))}
                                                 value={formData.vehicleId}
-                                                required
-                                                onChange={(e) => {
-                                                    const vid = e.target.value;
+                                                onChange={(vid) => {
                                                     const selectedVehicle = vehicles.find(v => v._id === vid);
                                                     const autoDriver = selectedVehicle?.currentDriver?.name || '';
                                                     setFormData({ ...formData, vehicleId: vid, driver: autoDriver });
                                                 }}
-                                                style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
-                                            >
-                                                <option value="" style={{ background: '#0f172a' }}>-- Select Car --</option>
-                                                {vehicles.map(v => <option key={v._id} value={v._id} style={{ background: '#0f172a' }}>{v.carNumber} ({v.model})</option>)}
-                                            </select>
+                                                placeholder="Search Vehicle..."
+                                                required={true}
+                                            />
                                         </div>
                                         <div>
                                             <label style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Fuel Type</label>

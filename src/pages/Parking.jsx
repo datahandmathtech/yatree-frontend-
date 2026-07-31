@@ -10,6 +10,7 @@ import { useCompany } from '../context/CompanyContext';
 import { useTheme } from '../context/ThemeContext';
 import SEO from '../components/SEO';
 import PremiumDateInput from '../components/common/PremiumDateInput';
+import SearchableSelect from '../components/common/SearchableSelect';
 import { todayIST, toISTDateString, firstDayOfMonthIST, formatDateIST, nowIST, formatDateTimeIST } from '../utils/istUtils';
 
 const CameraModal = ({ onCapture, onClose }) => {
@@ -1395,24 +1396,18 @@ const ParkingPage = () => {
                                                     <label style={{ fontSize: '11px', fontWeight: '800', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px' }}>Vehicle *</label>
                                                     <div style={{ position: 'relative' }}>
                                                         <Car size={18} style={{ position: 'absolute', left: '15px', top: '16px', color: 'var(--primary)' }} />
-                                                        <select
-                                                            className="input-field"
-                                                            style={{ height: '52px', borderRadius: '14px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', color: 'white', padding: '0 15px 0 45px', width: '100%', outline: 'none', cursor: 'pointer' }}
+                                                        <SearchableSelect
+                                                            options={vehicles.map(v => ({ value: v._id, label: `${v.carNumber}` }))}
                                                             value={formData.vehicleId || ''}
-                                                            onChange={(e) => {
-                                                                const vid = e.target.value;
+                                                            onChange={(vid) => {
                                                                 const selectedVehicle = vehicles.find(v => v._id === vid);
                                                                 const autoDriverId = selectedVehicle?.currentDriver?._id || '';
                                                                 const autoDriverName = selectedVehicle?.currentDriver?.name || '';
                                                                 setFormData({ ...formData, vehicleId: vid, driverId: autoDriverId, driver: autoDriverName });
                                                             }}
-                                                            required
-                                                        >
-                                                            <option value="" style={{ background: '#0f172a' }}>Select Vehicle</option>
-                                                            {vehicles.map(v => (
-                                                                <option key={v._id} value={v._id} style={{ background: '#0f172a' }}>{v.carNumber}</option>
-                                                            ))}
-                                                        </select>
+                                                            placeholder="Search Vehicle..."
+                                                            required={true}
+                                                        />
                                                     </div>
                                                 </div>
 

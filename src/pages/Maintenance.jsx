@@ -39,6 +39,7 @@ import { useTheme } from '../context/ThemeContext';
 import SEO from '../components/SEO';
 import { todayIST, formatDateIST, nowIST, formatDateTimeIST } from '../utils/istUtils';
 import ImageUploader from '../components/common/ImageUploader';
+import SearchableSelect from '../components/common/SearchableSelect';
 
 const MAINTENANCE_CATEGORIES = [
     'Regular Service',
@@ -1651,21 +1652,17 @@ const Maintenance = () => {
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: '20px' }}>
                                         <div>
                                             <label style={{ display: 'block', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px' }}>Vehicle *</label>
-                                            <select
-                                                className="input-field"
+                                            <SearchableSelect
+                                                options={(vehicles || []).map(v => ({ value: v._id, label: `${v.carNumber} (${v.model})` }))}
                                                 value={formData.vehicleId}
-                                                onChange={(e) => {
-                                                    const vid = e.target.value;
+                                                onChange={(vid) => {
                                                     const selectedVehicle = (vehicles || []).find(v => v._id === vid);
                                                     const autoDriverId = selectedVehicle?.currentDriver?._id || '';
                                                     setFormData({ ...formData, vehicleId: vid, driverId: autoDriverId });
                                                 }}
-                                                required
-                                                style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
-                                            >
-                                                <option value="" style={{ background: '#0f172a' }}>Select Car</option>
-                                                {(vehicles || []).map(v => <option key={v._id} value={v._id} style={{ background: '#0f172a' }}>{v.carNumber} ({v.model})</option>)}
-                                            </select>
+                                                placeholder="Search Vehicle..."
+                                                required={true}
+                                            />
                                         </div>
                                         <div>
                                             <label style={{ display: 'block', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px' }}>Driver (Optional)</label>
@@ -1858,6 +1855,7 @@ const Maintenance = () => {
                                                 <label style={{ color: 'white', fontSize: '12px', marginBottom: '8px', display: 'block' }}>Amount (₹) *</label>
                                                 <input required type="number" className="input-field" style={{ borderRadius: '10px' }} placeholder="0.00" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} />
                                             </div>
+
                                             <div>
                                                 <label style={{ color: 'white', fontSize: '12px', marginBottom: '8px', display: 'block' }}>Payment Source</label>
                                                 <select

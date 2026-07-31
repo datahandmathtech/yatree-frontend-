@@ -8,6 +8,7 @@ import { useCompany } from '../context/CompanyContext';
 import { useTheme } from '../context/ThemeContext';
 import SEO from '../components/SEO';
 import ImageUploader from '../components/common/ImageUploader';
+import SearchableSelect from '../components/common/SearchableSelect';
 import {
     todayIST,
     toISTDateString,
@@ -1389,12 +1390,13 @@ const Drivers = ({ isSubComponent = false }) => {
                                     </div>
                                     <div>
                                         <label className="input-label">Vehicle *</label>
-                                        <select className="input-field" value={manualDutyForm.vehicleId} onChange={(e) => setManualDutyForm({ ...manualDutyForm, vehicleId: e.target.value })} required style={{ appearance: 'auto' }}>
-                                            <option value="" style={{ background: '#1e293b', color: 'white' }}>Select Vehicle</option>
-                                            {vehicles.map(v => (
-                                                <option key={v._id} value={v._id} style={{ background: '#1e293b', color: 'white' }}>{v.carNumber} ({v.model})</option>
-                                            ))}
-                                        </select>
+                                        <SearchableSelect 
+                                            options={vehicles.map(v => ({ value: v._id, label: `${v.carNumber} (${v.model})` }))}
+                                            value={manualDutyForm.vehicleId}
+                                            onChange={(val) => setManualDutyForm({ ...manualDutyForm, vehicleId: val })}
+                                            placeholder="Search Vehicle..."
+                                            required={true}
+                                        />
                                     </div>
                                 </div>
 
@@ -1477,31 +1479,22 @@ const Drivers = ({ isSubComponent = false }) => {
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                                     <div>
                                         <label style={{ display: 'block', color: 'rgba(255,255,255,0.6)', fontSize: '11px', fontWeight: '800', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Assign Vehicle</label>
-                                        <select
-                                            required
+                                        <SearchableSelect
+                                            options={vehicles.filter(v => {
+                                                const isToday = punchInForm.date?.split('T')[0] === getToday();
+                                                if (!isToday) return true;
+                                                if (!v.currentDriver) return true;
+                                                const currentDriverId = (v.currentDriver._id || v.currentDriver).toString();
+                                                return currentDriverId === selectedDriverForManual?._id.toString();
+                                            }).map(v => ({ value: v._id, label: `${v.carNumber} - ${v.model}` }))}
                                             value={punchInForm.vehicleId}
-                                            onChange={(e) => {
-                                                const vId = e.target.value;
+                                            onChange={(vId) => {
                                                 const selectedV = vehicles.find(v => v._id === vId);
                                                 setPunchInForm({ ...punchInForm, vehicleId: vId, km: selectedV?.lastOdometer || '' });
                                             }}
-                                            style={{ width: '100%', height: '54px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '0 20px', color: 'white', outline: 'none', fontSize: '14px', fontWeight: '600', transition: 'all 0.3s' }}
-                                        >
-                                            <option value="" style={{ background: '#0a0a0c' }}>Choose Vehicle</option>
-                                            {vehicles.filter(v => {
-                                                const isToday = punchInForm.date?.split('T')[0] === getToday();
-                                                if (!isToday) return true;
-
-                                                // Allow if no driver assigned
-                                                if (!v.currentDriver) return true;
-
-                                                // Allow if the assigned driver is same as the one we are punching in
-                                                const currentDriverId = (v.currentDriver._id || v.currentDriver).toString();
-                                                return currentDriverId === selectedDriverForManual?._id.toString();
-                                            }).map(v => (
-                                                <option key={v._id} value={v._id} style={{ background: '#0a0a0c' }}>{v.carNumber} - {v.model}</option>
-                                            ))}
-                                        </select>
+                                            placeholder="Search Vehicle..."
+                                            required={true}
+                                        />
                                     </div>
 
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
