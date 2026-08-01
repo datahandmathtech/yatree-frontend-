@@ -675,7 +675,7 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
             const showNight = driverType !== 'Bus' && (driverInfo.nightStayBonus > 0);
 
             const tableHeader = ['DATE', 'WAGE'];
-            if (showSDR) tableHeader.push('SAME DAY');
+            if (showSDR) tableHeader.push('DA');
             if (showNight) tableHeader.push('NIGHT STAY');
             tableHeader.push('PARKING', 'TOTAL');
 
@@ -923,14 +923,24 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
 
     useEffect(() => {
         if (onStatsUpdate) {
+            const sdrBreakdown = filteredSalaries
+                .filter(s => (Number(s.sameDayCount) || 0) > 0)
+                .map(s => ({ name: s.name, count: s.sameDayCount, amount: s.totalSameDayAmount }));
+                
+            const nightsBreakdown = filteredSalaries
+                .filter(s => (Number(s.nightStayCount) || 0) > 0)
+                .map(s => ({ name: s.name, count: s.nightStayCount, amount: s.totalNightStayAmount }));
+
             onStatsUpdate({ 
                 sdr: totalSDRAmount, 
                 nights: totalNightsAmount,
                 sdrCount: totalSDRCount,
-                nightsCount: totalNightsCount
+                nightsCount: totalNightsCount,
+                sdrBreakdown,
+                nightsBreakdown
             });
         }
-    }, [totalSDRAmount, totalNightsAmount, totalSDRCount, totalNightsCount, onStatsUpdate]);
+    }, [filteredSalaries, totalSDRAmount, totalNightsAmount, totalSDRCount, totalNightsCount, onStatsUpdate]);
 
     const det = selectedDriverDetails;
     const dInfo = det?.driver?.name ? det.driver : (det?.driver?.[0] || {});
@@ -2010,7 +2020,7 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                                     <div style={{ color: 'white', fontWeight: '900', fontSize: '20px' }}>₹{routineEarningsTotal.toLocaleString()}</div>
                                                     <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
                                                         Wages: ₹{calcWages.toLocaleString()}
-                                                        {showSDR && ` + SDR: ₹${calcSDR.toLocaleString()}`}
+                                                        {showSDR && ` + DA: ₹${calcSDR.toLocaleString()}`}
                                                         {showNight && ` + Night: ₹${calcNight.toLocaleString()}`}
                                                         {calcOT > 0 && ` + OT: ₹${calcOT.toLocaleString()}`}
                                                         {(calcSpecialPay > 0 || calcOtherBonuses > 0) && ` + Extra: ₹${(calcSpecialPay + calcOtherBonuses).toLocaleString()}`}
@@ -2084,7 +2094,7 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                                         ) : (
                                                             <th style={{ padding: '12px', textAlign: 'center', color: 'var(--text-muted)' }}>STATUS</th>
                                                         )}
-                                                        {showSDR && <th style={{ padding: '12px', textAlign: 'right', color: 'var(--text-muted)' }}>SDR</th>}
+                                                        {showSDR && <th style={{ padding: '12px', textAlign: 'right', color: 'var(--text-muted)' }}>DA</th>}
                                                         {showNight && <th style={{ padding: '12px', textAlign: 'right', color: 'var(--text-muted)' }}>Night</th>}
                                                         <th style={{ padding: '12px', textAlign: 'right', color: 'var(--text-muted)' }}>Parking</th>
                                                         {driverType !== 'Bus' && (

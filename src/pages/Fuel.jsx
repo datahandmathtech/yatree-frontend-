@@ -109,6 +109,7 @@ const FuelPage = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterVehicle, setFilterVehicle] = useState('All');
     const [filterPaymentSource, setFilterPaymentSource] = useState('All');
+    const [payerSearch, setPayerSearch] = useState('');
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [fromDate, setFromDate] = useState('');
@@ -534,13 +535,17 @@ const FuelPage = () => {
         }
     }, [formData.amount, formData.quantity]);
 
+    const uniquePayers = [...new Set(entries.map(e => e.paymentBy).filter(name => name && name.trim() !== ''))].sort();
+
     const filteredEntries = entries.filter(e => {
         const matchesSearch = (e.vehicle?.carNumber?.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
             e.stationName?.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
             e.driver?.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
             e.paymentBy?.toLowerCase()?.includes(searchTerm.toLowerCase()));
         const matchesVehicle = filterVehicle === 'All' || e.vehicle?._id === filterVehicle;
-        const matchesPaymentSource = filterPaymentSource === 'All' || (e.paymentSource && e.paymentSource.toLowerCase().includes(filterPaymentSource.toLowerCase()));
+        const matchesPaymentSource = filterPaymentSource === 'All' || 
+            (e.paymentSource && e.paymentSource.toLowerCase() === filterPaymentSource.toLowerCase()) ||
+            (e.paymentBy && e.paymentBy.toLowerCase() === filterPaymentSource.toLowerCase());
         return matchesSearch && matchesVehicle && matchesPaymentSource;
     }).sort((a, b) => {
         const dateA = new Date(a.date).getTime();
@@ -951,7 +956,7 @@ const FuelPage = () => {
                                                                 top: '100%',
                                                                 left: 0,
                                                                 marginTop: '8px',
-                                                                width: '140px',
+                                                                width: '180px',
                                                                 background: '#0f172a',
                                                                 border: '1px solid rgba(255,255,255,0.1)',
                                                                 borderRadius: '8px',
@@ -960,30 +965,55 @@ const FuelPage = () => {
                                                                 zIndex: 100,
                                                                 display: 'flex',
                                                                 flexDirection: 'column',
-                                                                gap: '4px'
+                                                                gap: '4px',
+                                                                maxHeight: '250px'
                                                             }}
                                                         >
-                                                            {['All', 'Office', 'Guest'].map(option => (
-                                                                <div
-                                                                    key={option}
-                                                                    onClick={() => { setFilterPaymentSource(option); setShowPaymentFilter(false); }}
-                                                                    style={{
-                                                                        padding: '8px 12px',
-                                                                        borderRadius: '6px',
-                                                                        background: filterPaymentSource === option ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
-                                                                        color: filterPaymentSource === option ? '#3b82f6' : 'rgba(255,255,255,0.7)',
-                                                                        fontSize: '11px',
-                                                                        fontWeight: '800',
-                                                                        textTransform: 'uppercase',
-                                                                        cursor: 'pointer',
-                                                                        transition: 'all 0.2s'
-                                                                    }}
-                                                                    onMouseEnter={(e) => { if(filterPaymentSource !== option) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                                                                    onMouseLeave={(e) => { if(filterPaymentSource !== option) e.currentTarget.style.background = 'transparent' }}
-                                                                >
-                                                                    {option}
+                                                            <div style={{ padding: '4px', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: '4px' }}>
+                                                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                                                    <Search size={12} color="rgba(255,255,255,0.4)" style={{ position: 'absolute', left: '8px' }} />
+                                                                    <input 
+                                                                        type="text" 
+                                                                        placeholder="Search..." 
+                                                                        value={payerSearch}
+                                                                        onChange={(e) => setPayerSearch(e.target.value)}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        style={{ 
+                                                                            width: '100%', background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '4px', 
+                                                                            padding: '6px 8px 6px 24px', color: 'white', fontSize: '11px', outline: 'none' 
+                                                                        }} 
+                                                                    />
                                                                 </div>
-                                                            ))}
+                                                            </div>
+                                                            <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', paddingRight: '2px' }} className="custom-scrollbar">
+                                                                {['All', 'Office', 'Guest', ...uniquePayers]
+                                                                    .filter(opt => opt.toLowerCase().includes(payerSearch.toLowerCase()))
+                                                                    .map(option => (
+                                                                    <div
+                                                                        key={option}
+                                                                        onClick={() => { setFilterPaymentSource(option); setShowPaymentFilter(false); setPayerSearch(''); }}
+                                                                        style={{
+                                                                            padding: '8px 12px',
+                                                                            borderRadius: '6px',
+                                                                            background: filterPaymentSource === option ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                                                                            color: filterPaymentSource === option ? '#3b82f6' : 'rgba(255,255,255,0.7)',
+                                                                            fontSize: '11px',
+                                                                            fontWeight: '800',
+                                                                            textTransform: 'uppercase',
+                                                                            cursor: 'pointer',
+                                                                            transition: 'all 0.2s',
+                                                                            whiteSpace: 'nowrap',
+                                                                            overflow: 'hidden',
+                                                                            textOverflow: 'ellipsis'
+                                                                        }}
+                                                                        onMouseEnter={(e) => { if(filterPaymentSource !== option) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                                                                        onMouseLeave={(e) => { if(filterPaymentSource !== option) e.currentTarget.style.background = 'transparent' }}
+                                                                        title={option}
+                                                                    >
+                                                                        {option}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
                                                         </motion.div>
                                                     )}
                                                 </AnimatePresence>
@@ -1327,8 +1357,14 @@ const FuelPage = () => {
                                                 value={formData.paymentBy}
                                                 onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value })}
                                                 placeholder={formData.paymentSource?.toLowerCase().includes('guest') ? 'e.g. Rahul Kumar' : 'e.g. Admin Manager'}
+                                                list="payer-names"
                                                 style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
                                             />
+                                            <datalist id="payer-names">
+                                                {uniquePayers.map((name, idx) => (
+                                                    <option key={idx} value={name} />
+                                                ))}
+                                            </datalist>
                                         </div>
                                     </div>
 
