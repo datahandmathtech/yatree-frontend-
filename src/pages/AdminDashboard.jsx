@@ -587,7 +587,6 @@ const AdminDashboard = () => {
                             {[
                                 { id: 'VehicleDocuments', label: 'Vehicle Documents', color: '#38bdf8', icon: FileText, desc: 'RC, Ins, Permit, PUC, Fit' },
                                 { id: 'MaintenanceServices', label: 'Maintenance', color: '#f59e0b', icon: Wrench, desc: 'Align & Bal, Regular' },
-                                { id: 'TireAir', label: 'Tire Air', color: '#10b981', icon: Activity, desc: 'Tire Checks' },
                                 { id: 'PendingLeave', label: 'Pending Leave', color: '#8b5cf6', icon: Calendar, desc: 'Staff Approvals' },
                                 { id: 'EventManagement', label: 'Events', color: '#ec4899', icon: CalendarDays, desc: 'Upcoming Events' }
                             ].map(btn => {
@@ -670,7 +669,6 @@ const AdminDashboard = () => {
                                         <h2 style={{ color: 'white', margin: 0, fontSize: '18px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '10px' }}>
                                             {activeAlertModal === 'VehicleDocuments' && <><FileText color="#38bdf8" /> Vehicle Documents Alerts</>}
                                             {activeAlertModal === 'MaintenanceServices' && <><Wrench color="#f59e0b" /> Maintenance Services Alerts</>}
-                                            {activeAlertModal === 'TireAir' && <><Activity color="#10b981" /> Tire Air Checks Due</>}
                                             {activeAlertModal === 'PendingLeave' && <><Calendar color="#8b5cf6" /> Pending Leave Approvals</>}
                                             {activeAlertModal === 'EventManagement' && <><CalendarDays color="#ec4899" /> Event Management Alerts</>}
                                         </h2>
