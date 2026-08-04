@@ -6,12 +6,13 @@ import { LanguageProvider } from './context/LanguageContext';
 // Last Updated: 2026-04-25 12:39 PM - Frontend Sync
 import { ThemeProvider } from './context/ThemeContext';
 import Sidebar from './components/Sidebar';
-
 import ThemeSwitcher from './components/common/ThemeSwitcher';
 
-// Lazy load pages
+// Lazy load pages for better performance
 const Login = lazy(() => import('./pages/Login'));
 const Bridge = lazy(() => import('./pages/Bridge'));
+const Leads = lazy(() => import('./pages/Leads'));
+const DRS = lazy(() => import('./pages/DRS'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const DriverPortal = lazy(() => import('./pages/DriverPortal'));
 const Drivers = lazy(() => import('./pages/Drivers'));
@@ -39,6 +40,7 @@ const Reports = lazy(() => import('./pages/Reports'));
 const Profile = lazy(() => import('./pages/Profile'));
 const DriverServices = lazy(() => import('./pages/DriverServices'));
 const DriversPanel = lazy(() => import('./pages/DriversPanel'));
+const ClientLedgers = lazy(() => import('./pages/ClientLedgers'));
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -144,6 +146,9 @@ const AdminRoutes = () => {
   return (
     <Routes>
       <Route index element={canAccess('dashboard') ? <AdminDashboard /> : <Navigate to="/login" />} />
+      <Route path="leads" element={canAccess('leads') ? <Leads /> : <Navigate to="/admin" />} />
+      <Route path="client-ledgers" element={canAccess('leads') ? <ClientLedgers /> : <Navigate to="/admin" />} />
+      <Route path="drs" element={canAccess('drs') ? <DRS /> : <Navigate to="/admin" />} />
       <Route path="live-feed" element={canAccess('liveFeed') || canAccess('vehiclesManagement') ? <LiveFeed /> : <Navigate to="/admin" />} />
       <Route path="live-map" element={canAccess('liveFeed') || canAccess('vehiclesManagement') ? <GPSMap /> : <Navigate to="/admin" />} />
       <Route path="log-book" element={canAccess('logBook') || canAccess('vehiclesManagement') ? <Reports /> : <Navigate to="/admin" />} />
@@ -273,7 +278,13 @@ function App() {
         });
     };
 
-    const observer = new MutationObserver(() => initInputs());
+    let mutationTimeout;
+    const observer = new MutationObserver(() => {
+        if (mutationTimeout) clearTimeout(mutationTimeout);
+        mutationTimeout = setTimeout(() => {
+            initInputs();
+        }, 100);
+    });
     observer.observe(document.body, { childList: true, subtree: true });
     
     initInputs();
@@ -282,6 +293,7 @@ function App() {
     document.addEventListener('input', updateDateDisplay, true);
 
     return () => {
+        if (mutationTimeout) clearTimeout(mutationTimeout);
         observer.disconnect();
         document.removeEventListener('change', updateDateDisplay, true);
         document.removeEventListener('input', updateDateDisplay, true);

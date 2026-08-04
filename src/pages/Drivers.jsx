@@ -1147,22 +1147,49 @@ const Drivers = ({ isSubComponent = false }) => {
                             <form onSubmit={handleUpdateDriver} style={{ padding: '25px' }}>
                                     <div style={{ marginBottom: '20px' }}>
                                         <p style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '15px' }}>Identity & Access</p>
-                                        <div style={{ marginBottom: '15px' }}>
-                                            <label className="input-label" style={{ marginBottom: '6px' }}>Username</label>
-                                            <input className="input-field" value={editForm.username} onChange={(e) => setEditForm({ ...editForm, username: e.target.value })} style={{ background: 'rgba(0,0,0,0.2)' }} />
-                                        </div>
-                                        <div style={{ marginBottom: '15px' }}>
-                                            <label className="input-label" style={{ marginBottom: '6px' }}>Password</label>
-                                            <input 
-                                                type="password" 
-                                                name="edit-driver-password" 
-                                                autoComplete="new-password"
-                                                className="input-field" 
-                                                value={editForm.password} 
-                                                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} 
-                                                placeholder="Enter new password" 
-                                                style={{ background: 'rgba(0,0,0,0.2)' }} 
-                                            />
+                                        <div className="modal-form-grid">
+                                            <div className="form-group">
+                                                <label className="input-label" style={{ marginBottom: '6px' }}>Full Name *</label>
+                                                <input 
+                                                    className="input-field" 
+                                                    value={editForm.name} 
+                                                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} 
+                                                    required 
+                                                    style={{ background: 'rgba(0,0,0,0.2)' }} 
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="input-label" style={{ marginBottom: '6px' }}>Mobile Number *</label>
+                                                <input 
+                                                    className="input-field" 
+                                                    value={editForm.mobile} 
+                                                    onChange={(e) => setEditForm({ ...editForm, mobile: e.target.value })} 
+                                                    required 
+                                                    style={{ background: 'rgba(0,0,0,0.2)' }} 
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="input-label" style={{ marginBottom: '6px' }}>Username</label>
+                                                <input 
+                                                    className="input-field" 
+                                                    value={editForm.username} 
+                                                    onChange={(e) => setEditForm({ ...editForm, username: e.target.value })} 
+                                                    style={{ background: 'rgba(0,0,0,0.2)' }} 
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="input-label" style={{ marginBottom: '6px' }}>Password</label>
+                                                <input 
+                                                    type="password" 
+                                                    name="edit-driver-password" 
+                                                    autoComplete="new-password"
+                                                    className="input-field" 
+                                                    value={editForm.password} 
+                                                    onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} 
+                                                    placeholder="Enter new password (optional)" 
+                                                    style={{ background: 'rgba(0,0,0,0.2)' }} 
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 

@@ -105,6 +105,8 @@ const FuelPage = () => {
     const [showModal, setShowModal] = useState(false);
     const [showApprovalModal, setShowApprovalModal] = useState(false);
     const [drivers, setDrivers] = useState([]);
+    const [clients, setClients] = useState([]);
+    const [duties, setDuties] = useState([]);
     const [selectedPending, setSelectedPending] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterVehicle, setFilterVehicle] = useState('All');
@@ -145,6 +147,8 @@ const FuelPage = () => {
             paymentMode: 'Cash',
             paymentSource: 'Office',
             paymentBy: '',
+            client: '',
+            drsDuty: '',
             driver: '',
             slipPhoto: ''
         });
@@ -238,8 +242,30 @@ const FuelPage = () => {
             fetchVehicles();
             fetchPendingEntries();
             fetchDrivers();
+            fetchClients();
+            fetchDuties();
         }
     }, [selectedCompany, fromDate, toDate]);
+
+    const fetchClients = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            const { data } = await axios.get(`/api/clients/company/${selectedCompany._id}`);
+            setClients(data);
+        } catch (error) {
+            console.error('Failed to fetch clients', error);
+        }
+    };
+
+    const fetchDuties = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            const { data } = await axios.get(`/api/drs/company/${selectedCompany._id}`);
+            setDuties(data);
+        } catch (error) {
+            console.error('Failed to fetch duties', error);
+        }
+    };
 
     const fetchPendingEntries = async () => {
         if (!selectedCompany?._id) return;
@@ -1342,30 +1368,50 @@ const FuelPage = () => {
                                         </div>
                                         <div>
                                             <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Payment Source</label>
-                                            <select className="input-field" value={formData.paymentSource} onChange={(e) => setFormData({ ...formData, paymentSource: e.target.value })} style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}>
+                                            <select className="input-field" value={formData.paymentSource} onChange={(e) => setFormData({ ...formData, paymentSource: e.target.value, paymentBy: '', client: '', drsDuty: '' })} style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}>
                                                 <option value="Office">Office</option>
                                                 <option value="Guest / Client">Guest / Client</option>
                                             </select>
                                         </div>
-                                        <div>
-                                            <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>
-                                                {formData.paymentSource?.toLowerCase().includes('guest') ? 'Guest Name' : 'Office Payer Name'}
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="input-field"
-                                                value={formData.paymentBy}
-                                                onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value })}
-                                                placeholder={formData.paymentSource?.toLowerCase().includes('guest') ? 'e.g. Rahul Kumar' : 'e.g. Admin Manager'}
-                                                list="payer-names"
-                                                style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
-                                            />
-                                            <datalist id="payer-names">
-                                                {uniquePayers.map((name, idx) => (
-                                                    <option key={idx} value={name} />
-                                                ))}
-                                            </datalist>
-                                        </div>
+                                        
+                                        {formData.paymentSource?.toLowerCase().includes('guest') ? (
+                                            <>
+                                                <div>
+                                                    <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Select Client Account</label>
+                                                    <select className="input-field" value={formData.client} onChange={(e) => setFormData({ ...formData, client: e.target.value })} style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}>
+                                                        <option value="">-- Select Client --</option>
+                                                        {clients.map(c => <option key={c._id} value={c._id}>{c.name} ({c.mobile})</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Active Ride / DRS</label>
+                                                    <select className="input-field" value={formData.drsDuty} onChange={(e) => setFormData({ ...formData, drsDuty: e.target.value })} style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}>
+                                                        <option value="">-- Optional: Link to Ride --</option>
+                                                        {duties.filter(d => d.status === 'Pending' || d.status === 'Ongoing').map(d => (
+                                                            <option key={d._id} value={d._id}>{new Date(d.date).toLocaleDateString()} - {d.clientName}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div>
+                                                <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Office Payer Name</label>
+                                                <input
+                                                    type="text"
+                                                    className="input-field"
+                                                    value={formData.paymentBy}
+                                                    onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value })}
+                                                    placeholder="e.g. Admin Manager"
+                                                    list="payer-names"
+                                                    style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
+                                                />
+                                                <datalist id="payer-names">
+                                                    {uniquePayers.map((name, idx) => (
+                                                        <option key={idx} value={name} />
+                                                    ))}
+                                                </datalist>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Vendor and Personnel */}
@@ -1566,19 +1612,45 @@ const FuelPage = () => {
                                             <option value="Guest / Client">Guest / Client</option>
                                         </select>
                                     </div>
-                                    <div style={{ flex: 1 }}>
-                                        <label style={{ display: 'block', fontSize: '12px', color: 'white', marginBottom: '8px' }}>
-                                            {formData.paymentSource?.toLowerCase().includes('guest') ? 'Guest Name' : 'Office Payer Name'}
-                                        </label>
-                                        <input
-                                            type="text"
-                                            className="input-field"
-                                            value={formData.paymentBy}
-                                            onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value })}
-                                            placeholder={formData.paymentSource?.toLowerCase().includes('guest') ? 'e.g. Rahul Kumar' : 'e.g. Admin Manager'}
-                                            style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
-                                        />
-                                    </div>
+
+                                    {formData.paymentSource?.toLowerCase().includes('guest') ? (
+                                        <>
+                                            <div style={{ flex: 1 }}>
+                                                <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Select Client Account</label>
+                                                <select className="input-field" value={formData.client} onChange={(e) => setFormData({ ...formData, client: e.target.value })} style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}>
+                                                    <option value="">-- Select Client --</option>
+                                                    {clients.map(c => <option key={c._id} value={c._id}>{c.name} ({c.mobile})</option>)}
+                                                </select>
+                                            </div>
+                                            <div style={{ flex: 1 }}>
+                                                <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Active Ride / DRS</label>
+                                                <select className="input-field" value={formData.drsDuty} onChange={(e) => setFormData({ ...formData, drsDuty: e.target.value })} style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}>
+                                                    <option value="">-- Optional: Link to Ride --</option>
+                                                    {duties.filter(d => d.status === 'Pending' || d.status === 'Ongoing').map(d => (
+                                                        <option key={d._id} value={d._id}>{new Date(d.date).toLocaleDateString()} - {d.clientName}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Office Payer Name</label>
+                                            <input
+                                                type="text"
+                                                className="input-field"
+                                                value={formData.paymentBy}
+                                                onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value })}
+                                                placeholder="e.g. Admin Manager"
+                                                list="payer-names"
+                                                style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
+                                            />
+                                            <datalist id="payer-names">
+                                                {uniquePayers.map((name, idx) => (
+                                                    <option key={idx} value={name} />
+                                                ))}
+                                            </datalist>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div style={{ padding: '20px', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)', marginTop: '20px' }}>
@@ -1620,7 +1692,7 @@ const FuelPage = () => {
 
                                 <div style={{ display: 'flex', gap: '15px', marginTop: '25px' }}>
                                     <button
-                                        onClick={() => handleApproveReject(selectedPending.attendanceId, selectedPending._id, 'approved', { amount: formData.amount, quantity: formData.quantity, rate: formData.rate, odometer: formData.odometer, slipPhoto: formData.slipPhoto, paymentSource: formData.paymentSource, paymentBy: formData.paymentBy })}
+                                        onClick={() => handleApproveReject(selectedPending.attendanceId, selectedPending._id, 'approved', { amount: formData.amount, quantity: formData.quantity, rate: formData.rate, odometer: formData.odometer, slipPhoto: formData.slipPhoto, paymentSource: formData.paymentSource, paymentBy: formData.paymentBy, client: formData.client, drsDuty: formData.drsDuty })}
                                         disabled={submitting}
                                         style={{ flex: 2, height: '50px', borderRadius: '12px', fontSize: '15px', fontWeight: '800', background: submitting ? 'rgba(16, 185, 129, 0.5)' : '#10b981', color: 'white', border: 'none', cursor: submitting ? 'not-allowed' : 'pointer' }}
                                     >
