@@ -7,6 +7,7 @@ import { LanguageProvider } from './context/LanguageContext';
 import { ThemeProvider } from './context/ThemeContext';
 import Sidebar from './components/Sidebar';
 import ThemeSwitcher from './components/common/ThemeSwitcher';
+import ErrorBoundary from './components/common/ErrorBoundary';
 
 // Lazy load pages for better performance
 const Login = lazy(() => import('./pages/Login'));
@@ -311,16 +312,18 @@ function App() {
       <LanguageProvider>
         <AuthProvider>
           <ThemeSwitcher />
-          <Suspense fallback={<LoadingFallback />}>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/bridge" element={<Bridge />} />
-              <Route path="/admin/*" element={<ProtectedRoute role="Admin"><CompanyProvider><AdminLayout><AdminRoutes /></AdminLayout></CompanyProvider></ProtectedRoute>} />
-              <Route path="/driver/*" element={<ProtectedRoute role="Driver"><DriverPortal /></ProtectedRoute>} />
-              <Route path="/staff/*" element={<ProtectedRoute role="Staff"><StaffPortal /></ProtectedRoute>} />
-              <Route path="/" element={<Navigate to="/login" />} />
-            </Routes>
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingFallback />}>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/bridge" element={<Bridge />} />
+                <Route path="/admin/*" element={<ProtectedRoute role="Admin"><CompanyProvider><AdminLayout><AdminRoutes /></AdminLayout></CompanyProvider></ProtectedRoute>} />
+                <Route path="/driver/*" element={<ProtectedRoute role="Driver"><DriverPortal /></ProtectedRoute>} />
+                <Route path="/staff/*" element={<ProtectedRoute role="Staff"><StaffPortal /></ProtectedRoute>} />
+                <Route path="/" element={<Navigate to="/login" />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
         </AuthProvider>
       </LanguageProvider>
     </Router>
