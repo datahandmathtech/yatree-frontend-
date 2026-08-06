@@ -26,6 +26,7 @@
     "react-helmet-async": "^2.0.5",
     "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.30.3",
+    "react-select": "^5.10.2",
     "stream-browserify": "^3.0.0",
     "util": "^0.12.5",
     "xlsx": "^0.18.5",
