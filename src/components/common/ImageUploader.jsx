@@ -30,9 +30,16 @@ const ImageUploader = ({ file, onChange, label = 'Attach Receipt / Bill', color 
                 <div style={{ position: 'relative', width: '100%' }}>
                     <div style={{ 
                         width: '100%', height: '80px', borderRadius: '12px', overflow: 'hidden', 
-                        border: `1px solid ${color}40`, position: 'relative' 
+                        border: `1px solid ${color}40`, position: 'relative', background: '#121a2f', display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}>
-                        <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        {(typeof file === 'string' && file.includes('.pdf')) || (file.type && file.type === 'application/pdf') ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
+                                <ImageIcon size={24} color={color} />
+                                <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.7)', fontWeight: 'bold' }}>PDF Document</span>
+                            </div>
+                        ) : (
+                            <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        )}
                         <button 
                             type="button" 
                             onClick={() => onChange(null)} 
@@ -56,7 +63,7 @@ const ImageUploader = ({ file, onChange, label = 'Attach Receipt / Bill', color 
                         </button>
                         <label style={{ flex: 1, padding: '6px', background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '11px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                             <ImageIcon size={14} /> Replace
-                            <input type="file" accept="image/*" onChange={handleGallerySelect} style={{ display: 'none' }} />
+                            <input type="file" accept="image/*,application/pdf" onChange={handleGallerySelect} style={{ display: 'none' }} />
                         </label>
                     </div>
                 </div>
@@ -86,8 +93,8 @@ const ImageUploader = ({ file, onChange, label = 'Attach Receipt / Bill', color 
                         onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; e.currentTarget.style.background = '#121a2f'; }}
                     >
                         <ImageIcon size={18} color="rgba(255,255,255,0.7)" strokeWidth={1.5} />
-                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)', fontWeight: '600' }}>Gallery</span>
-                        <input type="file" accept="image/*" onChange={handleGallerySelect} style={{ display: 'none' }} />
+                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)', fontWeight: '600' }}>Gallery / File</span>
+                        <input type="file" accept="image/*,application/pdf" onChange={handleGallerySelect} style={{ display: 'none' }} />
                     </label>
                 </div>
             )}

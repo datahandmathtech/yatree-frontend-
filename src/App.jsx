@@ -278,7 +278,13 @@ function App() {
         });
     };
 
-    const observer = new MutationObserver(() => initInputs());
+    let mutationTimeout;
+    const observer = new MutationObserver(() => {
+        if (mutationTimeout) clearTimeout(mutationTimeout);
+        mutationTimeout = setTimeout(() => {
+            initInputs();
+        }, 100);
+    });
     observer.observe(document.body, { childList: true, subtree: true });
     
     initInputs();
@@ -287,6 +293,7 @@ function App() {
     document.addEventListener('input', updateDateDisplay, true);
 
     return () => {
+        if (mutationTimeout) clearTimeout(mutationTimeout);
         observer.disconnect();
         document.removeEventListener('change', updateDateDisplay, true);
         document.removeEventListener('input', updateDateDisplay, true);

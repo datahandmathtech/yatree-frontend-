@@ -18,6 +18,7 @@ const OutsideCars = () => {
     const [companyVehicles, setCompanyVehicles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [activeTab, setActiveTab] = useState('All');
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // 1-12 or 'All'
     const [selectedYear, setSelectedYear] = useState(new Date().getMonth() < 3 ? new Date().getFullYear() - 1 : new Date().getFullYear());
     const [selectedDay, setSelectedDay] = useState('All'); 
@@ -106,6 +107,7 @@ const OutsideCars = () => {
         dutyAmount: '',
         dropLocation: '',
         transactionType: 'Buy',
+        workBasis: 'Fix Basis',
         date: ''
     });
 
@@ -400,6 +402,7 @@ const OutsideCars = () => {
                 isOutsideCar: true,
                 status: 'active',
                 transactionType: formData.transactionType || 'Buy',
+                workBasis: formData.workBasis || 'Fix Basis',
                 createdAt: formData.date
             };
 
@@ -440,6 +443,7 @@ const OutsideCars = () => {
             dutyAmount: vehicle.dutyAmount,
             dropLocation: vehicle.dropLocation,
             transactionType: vehicle.transactionType || 'Buy',
+            workBasis: vehicle.workBasis || 'Fix Basis',
             date: vehicle.carNumber?.split('#')[1] || toISTDateString(vehicle.createdAt)
         });
         setSelectedId(vehicle._id);
@@ -465,8 +469,9 @@ const OutsideCars = () => {
 
         const matchesDate = dutyTagDateStr >= fromDate && dutyTagDateStr <= toDate;
         const matchesTransaction = (v.transactionType || 'Buy') === transactionFilter;
+        const matchesTab = activeTab === 'All' || v.workBasis === activeTab;
 
-        return matchesSearch && matchesOwner && matchesProperty && matchesDate && matchesTransaction;
+        return matchesSearch && matchesOwner && matchesProperty && matchesDate && matchesTransaction && matchesTab;
     }).sort((a, b) => {
         const dateA = a.carNumber?.split('#')[1] || '';
         const dateB = b.carNumber?.split('#')[1] || '';
@@ -687,6 +692,18 @@ const OutsideCars = () => {
 
                 <div className="flex-resp" style={{ gap: '12px', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '4px', borderRadius: '14px', gap: '4px' }}>
+                            {['All', 'Fix Basis', 'Daily Basis'].map(tab => (
+                                <button key={tab} onClick={() => setActiveTab(tab)} style={{
+                                    padding: '8px 16px', borderRadius: '10px', border: 'none', fontSize: '11px', fontWeight: '900', cursor: 'pointer',
+                                    background: activeTab === tab ? 'rgba(255,255,255,0.1)' : 'transparent',
+                                    color: activeTab === tab ? '#ffffff' : 'rgba(255,255,255,0.3)',
+                                    transition: 'all 0.2s'
+                                }}>
+                                    {tab === 'All' ? 'All Cars' : tab}
+                                </button>
+                            ))}
+                        </div>
                         <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', padding: '4px', borderRadius: '14px', gap: '4px' }}>
                             {['Buy', 'Sell'].map(t => (
                                 <button key={t} onClick={() => setTransactionFilter(t)} style={{
@@ -910,6 +927,13 @@ const OutsideCars = () => {
                                         <label className="premium-label">Service Type</label>
                                         <input type="text" className="premium-compact-input" list="typeList" value={formData.dutyType} onChange={e => setFormData({ ...formData, dutyType: e.target.value })} placeholder="e.g. Local Duty" style={{ height: '52px' }} />
                                         <datalist id="typeList">{dutyTypeSuggestions.map(t => <option key={t} value={t} />)}</datalist>
+                                    </div>
+                                    <div className="premium-input-group">
+                                        <label className="premium-label">Work Basis *</label>
+                                        <select className="premium-compact-input" required value={formData.workBasis} onChange={e => setFormData({ ...formData, workBasis: e.target.value })} style={{ height: '52px' }}>
+                                            <option value="Fix Basis" style={{ background: '#0f172a' }}>Fix Basis</option>
+                                            <option value="Daily Basis" style={{ background: '#0f172a' }}>Daily Basis</option>
+                                        </select>
                                     </div>
                                     <div className="premium-input-group">
                                         <label className="premium-label">Payout Amount (₹) *</label>
