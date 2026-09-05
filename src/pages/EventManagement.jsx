@@ -89,6 +89,33 @@ const EventManagement = () => {
     const [showPDFCustomizerModal, setShowPDFCustomizerModal] = useState(false);
     const [pdfCols, setPdfCols] = useState([]);
     const [pdfRows, setPdfRows] = useState([]);
+    const [pdfTerms, setPdfTerms] = useState([
+        "All rates are strictly subject to vehicle availability at the time of final confirmation.",
+        "Toll, Tax, and Parking charges will be charged on actuals unless explicitly mentioned.",
+        "Any changes in the itinerary may result in a change of quoted rates."
+    ]);
+    const [savedPdfTermsList, setSavedPdfTermsList] = useState([]);
+    const [newTermText, setNewTermText] = useState("");
+
+    useEffect(() => {
+        const storedTerms = localStorage.getItem("fleetCrmPdfTerms");
+        if (storedTerms) {
+            try {
+                const parsed = JSON.parse(storedTerms);
+                setSavedPdfTermsList(parsed);
+                setPdfTerms(parsed); // By default, select all saved terms
+            } catch(e) {}
+        } else {
+            const defaultTerms = [
+                "All rates are strictly subject to vehicle availability at the time of final confirmation.",
+                "Toll, Tax, and Parking charges will be charged on actuals unless explicitly mentioned.",
+                "Any changes in the itinerary may result in a change of quoted rates."
+            ];
+            setSavedPdfTermsList(defaultTerms);
+            localStorage.setItem("fleetCrmPdfTerms", JSON.stringify(defaultTerms));
+        }
+    }, []);
+
     const [newColCategory, setNewColCategory] = useState('');
     const [newRowService, setNewRowService] = useState('');
     const [customServiceText, setCustomServiceText] = useState('');
