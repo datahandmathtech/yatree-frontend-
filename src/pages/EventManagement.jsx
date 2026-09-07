@@ -3221,7 +3221,7 @@ const EventManagement = () => {
                                                         style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", padding: "0 2px", marginLeft: "auto" }}
                                                         title="Delete Term"
                                                     >
-                                                        �
+                                                        <Trash2 size={12} />
                                                     </button>
                                                 </label>
                                             ))}
