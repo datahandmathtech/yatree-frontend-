@@ -78,7 +78,7 @@ export default function DRS() {
                 axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&status=active`).catch(() => ({ data: [] })),
                 axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false`).catch(() => ({ data: [] })),
                 axios.get(`/api/bookings/${selectedCompany._id}`).catch(() => ({ data: [] })),
-                axios.get(`/api/leads/company/${selectedCompany._id}`).catch(() => ({ data: [] })),
+                axios.get(`/api/leads/${selectedCompany._id}`).catch(() => ({ data: [] })),
                 axios.get(`/api/clients/company/${selectedCompany._id}`).catch(() => ({ data: [] }))
             ]);
             setDrivers(driverRes.data.drivers || driverRes.data || []);
