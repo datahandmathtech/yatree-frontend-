@@ -128,7 +128,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         maintenance: location.pathname.includes('/admin/maintenance') || location.pathname.includes('/admin/vehicle-month-details') || location.pathname.includes('/admin/vehicles') || location.pathname.includes('/admin/accident-logs') || location.pathname.includes('/admin/warranties'),
         vehicles: location.pathname.includes('/admin/fuel') || location.pathname.includes('/admin/border-tax') || location.pathname.includes('/admin/fastag') || location.pathname.includes('/admin/parking') || location.pathname.includes('/admin/driver-services') || location.pathname.includes('/admin/border-tax') || location.pathname.includes('/admin/fastag') || location.pathname.includes('/admin/accident-logs') || location.pathname.includes('/admin/warranties'),
         logbook: location.pathname.includes('/admin/log-book'),
-        bookings: location.pathname.includes('/admin/leads') || location.pathname.includes('/admin/bookings') || location.pathname.includes('/admin/drs') || location.pathname.includes('/admin/client-ledgers'),
+        bookings: location.pathname.includes('/admin/leads') || location.pathname.includes('/admin/bookings') || location.pathname.includes('/admin/drs') || location.pathname.includes('/admin/client-ledgers') || location.pathname.includes('/admin/invoices'),
     });
 
     const toggleGroup = (group) => {
@@ -298,6 +298,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                     <NavItem item={{ path: '/admin/bookings', label: 'Confirmed Bookings', labelKey: 'bookings' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/drs', label: 'DRS Schedule', labelKey: 'drs' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/client-ledgers', label: 'Client Ledgers', labelKey: 'client_ledgers' }} onClick={onClose} isSubItem />
+                    <NavItem item={{ path: '/admin/invoices', label: 'Tax Invoices', labelKey: 'tax_invoices' }} onClick={onClose} isSubItem />
                 </NavGroup>
 
                 {hasAccess('driversService') && (
