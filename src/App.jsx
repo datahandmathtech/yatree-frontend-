@@ -13,6 +13,7 @@ import ErrorBoundary from './components/common/ErrorBoundary';
 const Login = lazy(() => import('./pages/Login'));
 const Bridge = lazy(() => import('./pages/Bridge'));
 const Leads = lazy(() => import('./pages/Leads'));
+const Bookings = lazy(() => import('./pages/Bookings'));
 const DRS = lazy(() => import('./pages/DRS'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const DriverPortal = lazy(() => import('./pages/DriverPortal'));
@@ -148,6 +149,7 @@ const AdminRoutes = () => {
     <Routes>
       <Route index element={canAccess('dashboard') ? <AdminDashboard /> : <Navigate to="/login" />} />
       <Route path="leads" element={canAccess('leads') ? <Leads /> : <Navigate to="/admin" />} />
+      <Route path="bookings" element={canAccess('leads') ? <Bookings /> : <Navigate to="/admin" />} />
       <Route path="client-ledgers" element={canAccess('leads') ? <ClientLedgers /> : <Navigate to="/admin" />} />
       <Route path="drs" element={canAccess('drs') ? <DRS /> : <Navigate to="/admin" />} />
       <Route path="live-feed" element={canAccess('liveFeed') || canAccess('vehiclesManagement') ? <LiveFeed /> : <Navigate to="/admin" />} />

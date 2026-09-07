@@ -821,16 +821,22 @@ const EventManagement = () => {
         doc.setTextColor(15, 23, 42);
         doc.text('AUTHORIZED SIGNATORY', pageWidth - 40, finalY + 26, { align: 'center' });
         
-        // Terms & Conditions
-        doc.setFontSize(10);
-        doc.setTextColor(15, 23, 42);
-        doc.text('Terms & Conditions:', 14, finalY);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(100, 116, 139);
-        doc.text('1. All rates are strictly subject to vehicle availability at the time of final confirmation.', 14, finalY + 6);
-        doc.text('2. Toll, Tax, and Parking charges will be charged on actuals unless explicitly mentioned.', 14, finalY + 11);
-        doc.text('3. Any changes in the itinerary may result in a change of quoted rates.', 14, finalY + 16);
+                // Terms & Conditions
+        if (pdfTerms && pdfTerms.length > 0) {
+            doc.setFontSize(10);
+            doc.setTextColor(15, 23, 42);
+            doc.text("Terms & Conditions:", 14, finalY);
+            doc.setFontSize(8);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(100, 116, 139);
+            let termY = finalY + 6;
+            pdfTerms.forEach((term, idx) => {
+                // Split long terms into multiple lines
+                const splitTerm = doc.splitTextToSize((idx + 1) + ". " + term, pageWidth - 28);
+                doc.text(splitTerm, 14, termY);
+                termY += (splitTerm.length * 4) + 1; // Adjust line height
+            });
+        }
 
         // Footer block
         doc.setFillColor(248, 250, 252);
@@ -3180,6 +3186,76 @@ const EventManagement = () => {
                                         >
                                             Add Row
                                         </button>
+                                    </div>
+
+                                    <hr style={{ border: "none", borderTop: "1px solid rgba(255,255,255,0.08)", margin: "5px 0" }} />
+
+                                    {/* 3. Manage Terms & Conditions */}
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                        <h3 style={{ color: "var(--primary)", fontSize: "14px", fontWeight: "900", margin: "0 0 5px 0" }}>Terms & Conditions</h3>
+                                        
+                                        <div style={{ maxHeight: "150px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "5px", paddingRight: "5px" }}>
+                                            {savedPdfTermsList && savedPdfTermsList.map((term, index) => (
+                                                <label key={index} style={{ display: "flex", alignItems: "flex-start", gap: "8px", fontSize: "11px", color: "rgba(255,255,255,0.8)", cursor: "pointer", lineHeight: "1.3" }}>
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={pdfTerms && pdfTerms.includes(term)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setPdfTerms([...(pdfTerms || []), term]);
+                                                            } else {
+                                                                setPdfTerms((pdfTerms || []).filter(t => t !== term));
+                                                            }
+                                                        }}
+                                                        style={{ marginTop: "2px", accentColor: "var(--primary)" }}
+                                                    />
+                                                    <span>{term}</span>
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            const newList = savedPdfTermsList.filter(t => t !== term);
+                                                            setSavedPdfTermsList(newList);
+                                                            setPdfTerms((pdfTerms || []).filter(t => t !== term));
+                                                            localStorage.setItem("fleetCrmPdfTerms", JSON.stringify(newList));
+                                                        }}
+                                                        style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", padding: "0 2px", marginLeft: "auto" }}
+                                                        title="Delete Term"
+                                                    >
+                                                        �
+                                                    </button>
+                                                </label>
+                                            ))}
+                                        </div>
+
+                                        <div style={{ display: "flex", gap: "5px", marginTop: "5px" }}>
+                                            <input 
+                                                type="text" 
+                                                className="premium-compact-input" 
+                                                placeholder="Type new term..." 
+                                                value={newTermText || ""} 
+                                                onChange={(e) => setNewTermText(e.target.value)} 
+                                                style={{ flex: 1 }}
+                                            />
+                                            <button 
+                                                onClick={() => {
+                                                    const trimmed = (newTermText || "").trim();
+                                                    if (!trimmed) return;
+                                                    if (savedPdfTermsList && savedPdfTermsList.includes(trimmed)) {
+                                                        alert("Term already exists!");
+                                                        return;
+                                                    }
+                                                    const newList = [...(savedPdfTermsList || []), trimmed];
+                                                    setSavedPdfTermsList(newList);
+                                                    setPdfTerms([...(pdfTerms || []), trimmed]);
+                                                    localStorage.setItem("fleetCrmPdfTerms", JSON.stringify(newList));
+                                                    setNewTermText("");
+                                                }}
+                                                className="primary-btn" 
+                                                style={{ height: "40px", fontSize: "12px", padding: "0 10px", justifyContent: "center", minWidth: "60px" }}
+                                            >
+                                                Add
+                                            </button>
+                                        </div>
                                     </div>
 
                                 </div>
