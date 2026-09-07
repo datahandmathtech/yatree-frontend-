@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import SEO from '../components/SEO';
 import { generateBookingConfirmationPDF } from '../utils/bookingConfirmationPdf';
 
@@ -298,7 +298,7 @@ export default function Leads() {
             `Rs. ${(day.amount || 0).toLocaleString('en-IN')}`
         ]);
 
-        doc.autoTable({
+        autoTable(doc, {
             startY: 48,
             head: [tableColumn],
             body: tableRows,
@@ -309,7 +309,7 @@ export default function Leads() {
             margin: { left: 14, right: 14 }
         });
 
-        const finalY = doc.lastAutoTable.finalY + 8;
+        const finalY = (doc.lastAutoTable?.finalY || 48) + 8;
 
         // Total
         doc.setFontSize(12);

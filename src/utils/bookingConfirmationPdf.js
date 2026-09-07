@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 export const generateBookingConfirmationPDF = (booking, company) => {
     const doc = new jsPDF();
@@ -99,7 +99,7 @@ export const generateBookingConfirmationPDF = (booking, company) => {
         item.vehicleType || booking.vehicleType || 'Committed'
     ]);
 
-    doc.autoTable({
+    autoTable(doc, {
         startY: startY + 38,
         head: tableHead,
         body: tableBody,
@@ -121,7 +121,7 @@ export const generateBookingConfirmationPDF = (booking, company) => {
         margin: { left: 14, right: 14 }
     });
 
-    let currentY = doc.lastAutoTable.finalY + 8;
+    let currentY = (doc.lastAutoTable?.finalY || startY + 50) + 8;
 
     // If table leaves less than 65mm space on page, add new page
     if (currentY > pageHeight - 65) {
