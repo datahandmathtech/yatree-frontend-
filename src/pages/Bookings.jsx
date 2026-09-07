@@ -8,6 +8,7 @@ import {
     FileText, X, ArrowUpRight, ShieldCheck, UserCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import SEO from '../components/SEO';
 import { generateBookingConfirmationPDF } from '../utils/bookingConfirmationPdf';
 
@@ -398,6 +399,28 @@ export default function Bookings() {
                                         >
                                             <FileText size={13} />
                                         </button>
+
+                                        {/* Jump to DRS Schedule */}
+                                        <Link to="/admin/drs" style={{ textDecoration: 'none' }}>
+                                            <button
+                                                title="View or Assign in DRS Schedule"
+                                                style={{
+                                                    background: 'rgba(168, 85, 247, 0.15)',
+                                                    color: '#c084fc',
+                                                    border: '1px solid rgba(168, 85, 247, 0.3)',
+                                                    padding: '6px 10px',
+                                                    borderRadius: '8px',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px',
+                                                    fontSize: '12px',
+                                                    fontWeight: '700'
+                                                }}
+                                            >
+                                                <Calendar size={13} /> DRS
+                                            </button>
+                                        </Link>
                                     </div>
                                 </td>
                             </tr>

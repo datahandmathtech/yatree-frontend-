@@ -26,11 +26,12 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useCompany } from '../context/CompanyContext';
-import { useLanguage } from '../context/LanguageContext';
+import { useLanguage, translations } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
 
 const NavItem = ({ item, onClick, isSubItem = false }) => {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
+    const displayText = (item.labelKey && translations[language]?.[item.labelKey]) ? t(item.labelKey) : item.label;
     return (
         <NavLink
             to={item.path}
@@ -53,13 +54,14 @@ const NavItem = ({ item, onClick, isSubItem = false }) => {
             })}
         >
             {item.icon && <item.icon size={isSubItem ? 18 : 20} />}
-            <span style={{ fontWeight: '600', fontSize: isSubItem ? '14px' : '15px' }}>{t(item.labelKey) || item.label}</span>
+            <span style={{ fontWeight: '600', fontSize: isSubItem ? '14px' : '15px' }}>{displayText}</span>
         </NavLink>
     );
 };
 
 const NavGroup = ({ title, labelKey, icon: Icon, children, isOpen, onToggle }) => {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
+    const displayTitle = (labelKey && translations[language]?.[labelKey]) ? t(labelKey) : title;
     return (
         <div style={{ marginBottom: '6px' }}>
             <button
@@ -80,7 +82,7 @@ const NavGroup = ({ title, labelKey, icon: Icon, children, isOpen, onToggle }) =
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <Icon size={20} />
-                    <span style={{ fontWeight: '700', fontSize: '15px' }}>{t(labelKey) || title}</span>
+                    <span style={{ fontWeight: '700', fontSize: '15px' }}>{displayTitle}</span>
                 </div>
                 <motion.div
                     animate={{ rotate: isOpen ? 180 : 0 }}
