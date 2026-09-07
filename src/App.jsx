@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CompanyProvider, useCompany } from './context/CompanyContext';
 import { LanguageProvider } from './context/LanguageContext';
-// Last Updated: 2026-04-25 12:39 PM - Frontend Sync
+// Last Updated: 2026-09-07 05:15 PM - LogKaro Booking, Leads, DRS & Invoices Sync
 import { ThemeProvider } from './context/ThemeContext';
 import Sidebar from './components/Sidebar';
 import ThemeSwitcher from './components/common/ThemeSwitcher';
