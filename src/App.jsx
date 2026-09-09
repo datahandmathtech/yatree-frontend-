@@ -14,6 +14,7 @@ const Login = lazy(() => import('./pages/Login'));
 const Bridge = lazy(() => import('./pages/Bridge'));
 const Leads = lazy(() => import('./pages/Leads'));
 const Bookings = lazy(() => import('./pages/Bookings'));
+const CompletedBookings = lazy(() => import('./pages/CompletedBookings'));
 const DRS = lazy(() => import('./pages/DRS'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const DriverPortal = lazy(() => import('./pages/DriverPortal'));
@@ -151,6 +152,7 @@ const AdminRoutes = () => {
       <Route index element={canAccess('dashboard') ? <AdminDashboard /> : <Navigate to="/login" />} />
       <Route path="leads" element={canAccess('leads') ? <Leads /> : <Navigate to="/admin" />} />
       <Route path="bookings" element={canAccess('leads') ? <Bookings /> : <Navigate to="/admin" />} />
+      <Route path="completed-bookings" element={canAccess('leads') ? <CompletedBookings /> : <Navigate to="/admin" />} />
       <Route path="client-ledgers" element={canAccess('leads') ? <ClientLedgers /> : <Navigate to="/admin" />} />
       <Route path="drs" element={canAccess('drs') ? <DRS /> : <Navigate to="/admin" />} />
       <Route path="invoices" element={canAccess('leads') ? <Invoices /> : <Navigate to="/admin" />} />
