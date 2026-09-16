@@ -1962,35 +1962,56 @@ export default function Leads() {
                                     </div>
 
                                     {/* DATE OF LEAD Box */}
-                                    <div style={{
-                                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                                        background: 'rgba(255, 255, 255, 0.04)',
-                                        borderRadius: '8px',
-                                        padding: '6px 14px',
-                                        display: 'flex',
-                                        flexDirection: 'column'
-                                    }}>
-                                        <div style={{ fontSize: '9px', fontWeight: '700', color: 'rgba(255,255,255,0.5)' }}>
+                                    <div
+                                        onClick={() => {
+                                            try {
+                                                const el = document.getElementById('leadDateInput');
+                                                if (el && el.showPicker) el.showPicker();
+                                                else el?.focus();
+                                            } catch (err) {}
+                                        }}
+                                        style={{
+                                            border: '1px solid rgba(251, 191, 36, 0.35)',
+                                            background: 'rgba(251, 191, 36, 0.06)',
+                                            borderRadius: '8px',
+                                            padding: '6px 14px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s'
+                                        }}
+                                        title="Click to select Date of Lead"
+                                    >
+                                        <div style={{ fontSize: '9px', fontWeight: '800', color: '#fbbf24', letterSpacing: '0.4px' }}>
                                             DATE OF LEAD
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                                            <Calendar size={13} color="var(--primary)" />
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                                            <Calendar size={15} color="#fbbf24" style={{ flexShrink: 0 }} />
                                             <input
+                                                id="leadDateInput"
                                                 type="date"
-                                                value={formData.leadDate}
+                                                value={toLocalDateString(formData.leadDate)}
                                                 onChange={(e) => {
                                                     const val = e.target.value;
                                                     setFormData({ ...formData, leadDate: val });
                                                     fetchNextClientCodePreview(val);
+                                                }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    try {
+                                                        if (e.target.showPicker) e.target.showPicker();
+                                                    } catch (err) {}
                                                 }}
                                                 style={{
                                                     background: 'transparent',
                                                     border: 'none',
                                                     color: 'white',
                                                     fontSize: '13px',
-                                                    fontWeight: '700',
+                                                    fontWeight: '800',
                                                     outline: 'none',
-                                                    cursor: 'pointer'
+                                                    cursor: 'pointer',
+                                                    colorScheme: 'dark',
+                                                    width: '125px'
                                                 }}
                                             />
                                         </div>
