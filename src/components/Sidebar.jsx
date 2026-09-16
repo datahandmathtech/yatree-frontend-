@@ -195,6 +195,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                         .sidebar {
                             left: 0 !important;
                             box-shadow: none !important;
+                            z-index: 40 !important;
                         }
                     }
                     @media (max-width: 380px) {

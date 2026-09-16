@@ -89,6 +89,46 @@ const BASELINE_SEPTEMBER_DISTRIBUTION = [
     { day: 30, leadsCount: 0, leadsAmt: 0, convCount: 0, convAmt: 0 }
 ];
 
+// Robust local date helpers without UTC offset shifts
+const toLocalDateString = (val) => {
+    if (!val) return '';
+    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+        return val;
+    }
+    const d = new Date(val);
+    if (isNaN(d.getTime())) {
+        if (typeof val === 'string' && val.includes('T')) return val.split('T')[0];
+        return '';
+    }
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
+
+const addDaysToDateString = (dateStr, days) => {
+    if (!dateStr) return '';
+    const cleanStr = toLocalDateString(dateStr);
+    const parts = cleanStr.split('-').map(Number);
+    if (parts.length !== 3) return dateStr;
+    const [year, month, day] = parts;
+    const d = new Date(year, month - 1, day + days);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+};
+
+const getDaysDifference = (startStr, endStr) => {
+    if (!startStr || !endStr) return 1;
+    const [sy, sm, sd] = startStr.split('-').map(Number);
+    const [ey, em, ed] = endStr.split('-').map(Number);
+    const s = new Date(sy, sm - 1, sd);
+    const e = new Date(ey, em - 1, ed);
+    const diffTime = e.getTime() - s.getTime();
+    return Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1);
+};
+
 export default function Leads() {
     const { selectedCompany } = useCompany();
     const { theme } = useTheme();
@@ -103,11 +143,10 @@ export default function Leads() {
 
     // Hover tooltip state
     const [hoveredLeadId, setHoveredLeadId] = useState(null);
-    // Right Analytics Sidebar state
-    const [showRightSidebar, setShowRightSidebar] = useState(true);
+    // Right Analytics Sidebar state (Closed by default as requested)
+    const [showRightSidebar, setShowRightSidebar] = useState(false);
     const [selectedSidebarMonth, setSelectedSidebarMonth] = useState('September 2026');
     const [showMonthDropdown, setShowMonthDropdown] = useState(false);
-
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -215,7 +254,7 @@ export default function Leads() {
     const fetchNextClientCodePreview = async (dateVal) => {
         if (!selectedCompany?._id) return;
         try {
-            const dateParam = dateVal || new Date().toISOString().split('T')[0];
+            const dateParam = toLocalDateString(dateVal || new Date());
             const { data } = await axios.get(`/api/leads/next-client-code/${selectedCompany._id}?date=${dateParam}`);
             if (data?.clientCode) {
                 setPreviewClientCode(data.clientCode);
@@ -245,42 +284,36 @@ export default function Leads() {
             };
 
             if (sDate && eDate) {
-                const s = new Date(sDate + 'T00:00:00');
-                const e = new Date(eDate + 'T00:00:00');
-                if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && e >= s) {
-                    const daysCount = Math.max(1, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-                    const newItinerary = [];
+                const daysCount = getDaysDifference(sDate, eDate);
+                const newItinerary = [];
 
-                    for (let i = 0; i < daysCount; i++) {
-                        const curDate = new Date(s);
-                        curDate.setDate(curDate.getDate() + i);
-                        const dateStr = curDate.toISOString().split('T')[0];
+                for (let i = 0; i < daysCount; i++) {
+                    const dateStr = addDaysToDateString(sDate, i);
 
-                        // Keep existing day info if already entered
-                        const existingDay = prev.itinerary[i];
-                        const isApg = existingDay ? existingDay.isApg : false;
-                        const rate = existingDay ? (Number(existingDay.rate) || 0) : 0;
-                        const qty = existingDay ? (Number(existingDay.quantity || existingDay.vehicleCount) || updated.numberOfCars || 1) : (updated.numberOfCars || 1);
+                    // Keep existing day info if already entered
+                    const existingDay = prev.itinerary[i];
+                    const isApg = existingDay ? existingDay.isApg : false;
+                    const rate = existingDay ? (Number(existingDay.rate) || 0) : 0;
+                    const qty = existingDay ? (Number(existingDay.quantity || existingDay.vehicleCount) || updated.numberOfCars || 1) : (updated.numberOfCars || 1);
 
-                        newItinerary.push({
-                            dayNo: i + 1,
-                            date: dateStr,
-                            time: existingDay?.time || (isApg ? 'APG' : (i === 0 ? '09:00 AM' : '10:00 AM')),
-                            isApg: isApg,
-                            duty: existingDay?.duty || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
-                            description: existingDay?.description || existingDay?.duty || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
-                            vehicleType: existingDay?.vehicleType || updated.carType || 'Innova Crysta',
-                            vehicleCount: qty,
-                            quantity: qty,
-                            rate: rate,
-                            amount: existingDay ? (Number(existingDay.amount) || (qty * rate)) : (qty * rate)
-                        });
-                    }
-
-                    const total = newItinerary.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-                    updated.itinerary = newItinerary;
-                    updated.totalAmount = total;
+                    newItinerary.push({
+                        dayNo: i + 1,
+                        date: dateStr,
+                        time: existingDay?.time || (isApg ? 'APG' : (i === 0 ? '09:00 AM' : '10:00 AM')),
+                        isApg: isApg,
+                        duty: existingDay?.duty || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
+                        description: existingDay?.description || existingDay?.duty || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
+                        vehicleType: existingDay?.vehicleType || updated.carType || 'Innova Crysta',
+                        vehicleCount: qty,
+                        quantity: qty,
+                        rate: rate,
+                        amount: existingDay ? (Number(existingDay.amount) || (qty * rate)) : (qty * rate)
+                    });
                 }
+
+                const total = newItinerary.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+                updated.itinerary = newItinerary;
+                updated.totalAmount = total;
             }
             return updated;
         });
@@ -329,13 +362,11 @@ export default function Leads() {
         let nextDate = '';
         const len = formData.itinerary.length;
         if (len > 0 && formData.itinerary[len - 1].date) {
-            const last = new Date(formData.itinerary[len - 1].date);
-            last.setDate(last.getDate() + 1);
-            nextDate = last.toISOString().split('T')[0];
+            nextDate = addDaysToDateString(toLocalDateString(formData.itinerary[len - 1].date), 1);
         } else if (formData.travelStartDate) {
-            const s = new Date(formData.travelStartDate);
-            s.setDate(s.getDate() + len);
-            nextDate = s.toISOString().split('T')[0];
+            nextDate = addDaysToDateString(formData.travelStartDate, len);
+        } else {
+            nextDate = toLocalDateString(new Date());
         }
 
         const newDay = {
@@ -367,7 +398,7 @@ export default function Leads() {
             .map((d, i) => ({ ...d, dayNo: i + 1 }));
         const total = updated.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
         const lastDay = updated[updated.length - 1];
-        const newEndDate = lastDay?.date || formData.travelStartDate;
+        const newEndDate = lastDay?.date ? toLocalDateString(lastDay.date) : formData.travelStartDate;
         setFormData(prev => ({
             ...prev,
             itinerary: updated,
@@ -393,6 +424,8 @@ export default function Leads() {
         if (lead) {
             setEditingLead(lead);
             setPreviewClientCode(lead.clientCode || lead.leadId || '');
+            const sDate = toLocalDateString(lead.travelStartDate);
+            const eDate = toLocalDateString(lead.travelEndDate);
             setFormData({
                 clientName: lead.clientName || '',
                 mobileNumber: lead.mobileNumber || '',
@@ -402,9 +435,9 @@ export default function Leads() {
                 source: lead.source || 'Website',
                 reference: lead.reference || '',
                 salesPerson: lead.salesPerson || '',
-                leadDate: lead.leadDate ? new Date(lead.leadDate).toISOString().split('T')[0] : '',
-                travelStartDate: lead.travelStartDate ? new Date(lead.travelStartDate).toISOString().split('T')[0] : '',
-                travelEndDate: lead.travelEndDate ? new Date(lead.travelEndDate).toISOString().split('T')[0] : '',
+                leadDate: toLocalDateString(lead.leadDate) || toLocalDateString(new Date()),
+                travelStartDate: sDate,
+                travelEndDate: eDate,
                 carType: lead.carType || 'Innova Crysta',
                 numberOfCars: lead.numberOfCars || 1,
                 gstMode: lead.gstMode || 'GST Inclusive',
@@ -417,25 +450,28 @@ export default function Leads() {
                     tollParking: true,
                     gstIncluded: true
                 },
-                itinerary: (lead.itinerary || []).map((d, i) => ({
-                    dayNo: d.dayNo || i + 1,
-                    date: d.date ? new Date(d.date).toISOString().split('T')[0] : '',
-                    time: d.time || '09:00 AM',
-                    isApg: d.isApg || d.time === 'APG',
-                    duty: d.duty || d.description || 'Standard Duty',
-                    description: d.duty || d.description || 'Standard Duty',
-                    vehicleType: d.vehicleType || lead.carType || 'Innova Crysta',
-                    vehicleCount: d.vehicleCount || lead.numberOfCars || 1,
-                    quantity: d.vehicleCount || lead.numberOfCars || 1,
-                    rate: d.rate || 0,
-                    amount: d.amount || 0
-                })),
+                itinerary: (lead.itinerary || []).map((d, i) => {
+                    const rowDate = sDate ? addDaysToDateString(sDate, i) : toLocalDateString(d.date);
+                    return {
+                        dayNo: d.dayNo || i + 1,
+                        date: rowDate || toLocalDateString(d.date),
+                        time: d.time || '09:00 AM',
+                        isApg: d.isApg || d.time === 'APG',
+                        duty: d.duty || d.description || 'Standard Duty',
+                        description: d.duty || d.description || 'Standard Duty',
+                        vehicleType: d.vehicleType || lead.carType || 'Innova Crysta',
+                        vehicleCount: d.vehicleCount || lead.numberOfCars || 1,
+                        quantity: d.quantity || d.vehicleCount || lead.numberOfCars || 1,
+                        rate: d.rate !== undefined ? d.rate : 0,
+                        amount: d.amount !== undefined ? d.amount : 0
+                    };
+                }),
                 extraCharges: lead.extraCharges || [],
                 totalAmount: lead.totalAmount || 0
             });
         } else {
             setEditingLead(null);
-            const today = new Date().toISOString().split('T')[0];
+            const today = toLocalDateString(new Date());
             fetchNextClientCodePreview(today);
 
             const initialItinerary = [
@@ -933,6 +969,7 @@ export default function Leads() {
         border: '1px solid rgba(255, 255, 255, 0.12)',
         borderRadius: '8px',
         color: '#f1f5f9',
+        colorScheme: 'dark',
         padding: '10px 14px',
         fontSize: '13px',
         outline: 'none',
@@ -1050,28 +1087,31 @@ export default function Leads() {
                     </div>
 
                     
-                    {/* Side Bar Toggle Button */}
+                    {/* Tally-Style Daily Breakdown Drawer Button */}
                     <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
                         onClick={() => setShowRightSidebar(!showRightSidebar)}
-                        title={showRightSidebar ? "Collapse Sidebar" : "Expand Sidebar"}
+                        title={showRightSidebar ? "Close Daily Breakdown" : "Open Daily Breakdown (Tally Sidebar)"}
                         style={{
-                            width: '42px',
                             height: '42px',
+                            padding: '0 16px',
                             borderRadius: '12px',
-                            background: showRightSidebar ? 'rgba(251, 191, 36, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                            border: showRightSidebar ? '1px solid rgba(251, 191, 36, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
-                            color: showRightSidebar ? 'var(--primary)' : 'white',
+                            background: showRightSidebar ? 'rgba(251, 191, 36, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                            border: showRightSidebar ? '1px solid #fbbf24' : '1px solid rgba(251, 191, 36, 0.35)',
+                            color: '#fbbf24',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center',
+                            gap: '8px',
                             cursor: 'pointer',
                             boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-                            transition: 'all 0.2s'
+                            transition: 'all 0.2s',
+                            fontSize: '13px',
+                            fontWeight: '800'
                         }}
                     >
-                        {showRightSidebar ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+                        <BarChart3 size={18} />
+                        <span>Daily Breakdown</span>
                     </motion.button>
 
                     {/* + Create a Lead Button */}
@@ -1154,10 +1194,10 @@ export default function Leads() {
             </div>
 
             
-            {/* Main Content Layout with Right Analytics Sidebar */}
-            <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', position: 'relative' }}>
-                {/* Left Side: Filter Bar + Table + Pagination */}
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            {/* Main Content Layout: Table & Pagination */}
+            <div style={{ width: '100%', position: 'relative' }}>
+                {/* Full Width Table Content */}
+                <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
                     {/* 3. Filter Bar: Search + Sales Person Dropdown + Source Dropdown */}
             <div className="glass-card" style={{
                 padding: '14px 18px',
@@ -1559,33 +1599,100 @@ export default function Leads() {
                 </div>
             </div>
 
-                            </div>
+                </div>
+            </div>
 
-                {/* Right Analytics Sidebar matching media_1788861066499.png */}
-                <AnimatePresence>
-                    {showRightSidebar && (
+            {/* ========================================================================= */}
+            {/* Tally-Style Full-Height Right Drawer for Daily Breakdown (Overlaid)       */}
+            {/* ========================================================================= */}
+            <AnimatePresence>
+                {showRightSidebar && (
+                    <>
+                        {/* Dark Backdrop Overlay */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            onClick={() => setShowRightSidebar(false)}
+                            style={{
+                                position: 'fixed',
+                                inset: 0,
+                                background: 'rgba(0, 0, 0, 0.72)',
+                                backdropFilter: 'blur(3px)',
+                                zIndex: 200000
+                            }}
+                        />
+
+                        {/* Full Screen Height Drawer from Right */}
                         <motion.aside
-                            initial={{ width: 0, opacity: 0, x: 20 }}
-                            animate={{ width: 330, opacity: 1, x: 0 }}
-                            exit={{ width: 0, opacity: 0, x: 20 }}
-                            transition={{ duration: 0.22, ease: "easeInOut" }}
-                            style={{ width: '330px', flexShrink: 0, overflow: 'visible' }}
-                        >
-                            <div style={{
+                            initial={{ x: '100%' }}
+                            animate={{ x: 0 }}
+                            exit={{ x: '100%' }}
+                            transition={{ type: 'spring', damping: 26, stiffness: 240 }}
+                            style={{
+                                position: 'fixed',
+                                top: 0,
+                                right: 0,
+                                bottom: 0,
+                                width: '420px',
+                                maxWidth: '92vw',
+                                height: '100vh',
                                 background: '#070d19',
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
-                                borderRadius: '16px',
-                                padding: '16px',
+                                borderLeft: '1px solid rgba(255, 255, 255, 0.12)',
+                                boxShadow: '-12px 0 45px rgba(0, 0, 0, 0.9)',
+                                zIndex: 200001,
                                 display: 'flex',
                                 flexDirection: 'column',
-                                height: 'calc(100vh - 190px)',
-                                minHeight: '620px',
-                                boxShadow: '0 8px 30px rgba(0,0,0,0.4)',
-                                position: 'sticky',
-                                top: '20px'
+                                overflow: 'hidden'
+                            }}
+                        >
+                            {/* Drawer Top Header */}
+                            <div style={{
+                                padding: '18px 20px',
+                                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 100%)'
                             }}>
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <BarChart3 size={18} color="#fbbf24" />
+                                        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '900', color: '#f8fafc', letterSpacing: '0.3px' }}>
+                                            Daily Lead Breakdown
+                                        </h3>
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)', marginTop: '2px' }}>
+                                        Tally-style analytics & conversion matrix
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowRightSidebar(false)}
+                                    style={{
+                                        width: '34px',
+                                        height: '34px',
+                                        borderRadius: '10px',
+                                        background: 'rgba(255, 255, 255, 0.06)',
+                                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                                        color: 'white',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s'
+                                    }}
+                                    title="Close Drawer"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            {/* Drawer Body (Scrollable) */}
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column' }}>
                                 {/* Month Dropdown Selector */}
-                                <div style={{ position: 'relative', marginBottom: '14px' }}>
+                                <div style={{ position: 'relative', marginBottom: '16px' }}>
                                     <button
                                         type="button"
                                         onClick={() => setShowMonthDropdown(!showMonthDropdown)}
@@ -1594,10 +1701,10 @@ export default function Leads() {
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'space-between',
-                                            background: 'rgba(255, 255, 255, 0.03)',
-                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                            background: 'rgba(255, 255, 255, 0.04)',
+                                            border: '1px solid rgba(255, 255, 255, 0.12)',
                                             borderRadius: '10px',
-                                            padding: '10px 14px',
+                                            padding: '11px 14px',
                                             color: 'white',
                                             cursor: 'pointer',
                                             transition: 'all 0.2s'
@@ -1662,10 +1769,10 @@ export default function Leads() {
 
                                 {/* Monthly Summary Card */}
                                 <div style={{
-                                    border: '1px solid rgba(251, 191, 36, 0.3)',
+                                    border: '1px solid rgba(251, 191, 36, 0.35)',
                                     borderRadius: '12px',
                                     padding: '14px',
-                                    background: 'rgba(251, 191, 36, 0.02)',
+                                    background: 'rgba(251, 191, 36, 0.03)',
                                     marginBottom: '16px',
                                     display: 'grid',
                                     gridTemplateColumns: '1fr 1fr',
@@ -1699,8 +1806,10 @@ export default function Leads() {
                                 {/* Table Header */}
                                 <div style={{
                                     display: 'grid',
-                                    gridTemplateColumns: '45px 1fr 1fr',
-                                    padding: '8px 6px',
+                                    gridTemplateColumns: '50px 1fr 1fr',
+                                    padding: '10px 8px',
+                                    background: 'rgba(255, 255, 255, 0.03)',
+                                    borderRadius: '8px 8px 0 0',
                                     borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
                                     fontSize: '12px',
                                     fontWeight: '800',
@@ -1718,8 +1827,8 @@ export default function Leads() {
                                             key={item.day}
                                             style={{
                                                 display: 'grid',
-                                                gridTemplateColumns: '45px 1fr 1fr',
-                                                padding: '9px 6px',
+                                                gridTemplateColumns: '50px 1fr 1fr',
+                                                padding: '9px 8px',
                                                 borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
                                                 alignItems: 'center'
                                             }}
@@ -1752,10 +1861,40 @@ export default function Leads() {
                                     ))}
                                 </div>
                             </div>
+
+                            {/* Drawer Footer */}
+                            <div style={{
+                                padding: '14px 20px',
+                                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                                background: 'rgba(0,0,0,0.35)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between'
+                            }}>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
+                                    {selectedSidebarMonth}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowRightSidebar(false)}
+                                    style={{
+                                        padding: '7px 16px',
+                                        borderRadius: '8px',
+                                        background: 'rgba(255, 255, 255, 0.08)',
+                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                        color: '#f8fafc',
+                                        fontSize: '12px',
+                                        fontWeight: '700',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Close
+                                </button>
+                            </div>
                         </motion.aside>
-                    )}
-                </AnimatePresence>
-            </div>
+                    </>
+                )}
+            </AnimatePresence>
 
             {/* ========================================================================= */}
             {/* 6. MODAL: Create / Edit Lead & Quotation (Exact Pixel Mockup Alignment)   */}
@@ -1765,12 +1904,12 @@ export default function Leads() {
                     <div style={{
                         position: 'fixed',
                         inset: 0,
-                        background: 'rgba(0, 0, 0, 0.82)',
+                        background: 'rgba(0, 0, 0, 0.85)',
                         backdropFilter: 'blur(8px)',
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        zIndex: 9999,
+                        zIndex: 200005,
                         padding: '16px'
                     }}>
                         <motion.div
@@ -1778,8 +1917,8 @@ export default function Leads() {
                             animate={{ y: 0, opacity: 1, scale: 1 }}
                             exit={{ y: 20, opacity: 0, scale: 0.98 }}
                             style={{
-                                width: '100%',
-                                maxWidth: '1020px',
+                                width: '96vw',
+                                maxWidth: '1200px',
                                 maxHeight: '94vh',
                                 overflowY: 'auto',
                                 background: '#090f1d',
@@ -1995,23 +2134,95 @@ export default function Leads() {
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
                                         <div>
                                             <label style={labelStyle}>Travel Start Date *</label>
-                                            <input
-                                                required
-                                                type="date"
-                                                value={formData.travelStartDate}
-                                                onChange={e => handleTravelDateChange('travelStartDate', e.target.value)}
-                                                style={darkInputStyle}
-                                            />
+                                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                                <input
+                                                    id="travelStartDateInput"
+                                                    required
+                                                    type="date"
+                                                    value={toLocalDateString(formData.travelStartDate)}
+                                                    onChange={e => handleTravelDateChange('travelStartDate', e.target.value)}
+                                                    onClick={e => { try { if (e.target.showPicker) e.target.showPicker(); } catch(err){} }}
+                                                    style={{
+                                                        ...darkInputStyle,
+                                                        cursor: 'pointer',
+                                                        paddingRight: '38px',
+                                                        fontSize: '13px',
+                                                        fontWeight: '700'
+                                                    }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    tabIndex={-1}
+                                                    onClick={() => {
+                                                        try {
+                                                            const el = document.getElementById('travelStartDateInput');
+                                                            if (el && el.showPicker) el.showPicker();
+                                                            else el?.focus();
+                                                        } catch(e) {}
+                                                    }}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        right: '10px',
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        color: '#fbbf24',
+                                                        cursor: 'pointer',
+                                                        padding: '4px',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center'
+                                                    }}
+                                                    title="Open Calendar"
+                                                >
+                                                    <Calendar size={18} />
+                                                </button>
+                                            </div>
                                         </div>
                                         <div>
                                             <label style={labelStyle}>Travel End Date *</label>
-                                            <input
-                                                required
-                                                type="date"
-                                                value={formData.travelEndDate}
-                                                onChange={e => handleTravelDateChange('travelEndDate', e.target.value)}
-                                                style={darkInputStyle}
-                                            />
+                                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                                <input
+                                                    id="travelEndDateInput"
+                                                    required
+                                                    type="date"
+                                                    value={toLocalDateString(formData.travelEndDate)}
+                                                    onChange={e => handleTravelDateChange('travelEndDate', e.target.value)}
+                                                    onClick={e => { try { if (e.target.showPicker) e.target.showPicker(); } catch(err){} }}
+                                                    style={{
+                                                        ...darkInputStyle,
+                                                        cursor: 'pointer',
+                                                        paddingRight: '38px',
+                                                        fontSize: '13px',
+                                                        fontWeight: '700'
+                                                    }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    tabIndex={-1}
+                                                    onClick={() => {
+                                                        try {
+                                                            const el = document.getElementById('travelEndDateInput');
+                                                            if (el && el.showPicker) el.showPicker();
+                                                            else el?.focus();
+                                                        } catch(e) {}
+                                                    }}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        right: '10px',
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        color: '#fbbf24',
+                                                        cursor: 'pointer',
+                                                        padding: '4px',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center'
+                                                    }}
+                                                    title="Open Calendar"
+                                                >
+                                                    <Calendar size={18} />
+                                                </button>
+                                            </div>
                                         </div>
                                         <div>
                                             <label style={labelStyle}>Vehicle Model *</label>
@@ -2090,19 +2301,19 @@ export default function Leads() {
                                         border: '1px solid rgba(255,255,255,0.08)',
                                         overflowX: 'auto'
                                     }}>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '820px' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1050px' }}>
                                             <thead style={{ background: '#0a101d', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                                                 <tr>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)' }}>DAY</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)' }}>DATE</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)' }}>TIME (Optional) ⓘ</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>APG ⓘ</th>
+                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '60px' }}>DAY</th>
+                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '160px', minWidth: '160px' }}>DATE</th>
+                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '110px' }}>TIME (Optional) ⓘ</th>
+                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center', width: '55px' }}>APG ⓘ</th>
                                                     <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)' }}>ROUTE / ITINERARY</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)' }}>VEHICLE</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center', width: '80px' }}>QTY</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'right', width: '100px' }}>RATE (₹)</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'right', width: '110px' }}>AMOUNT (₹)</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>ACTION</th>
+                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '140px' }}>VEHICLE</th>
+                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center', width: '70px' }}>QTY</th>
+                                                    <th style={{ padding: '12px 10px', fontSize: '12px', fontWeight: '800', color: '#f8fafc', textAlign: 'right', width: '140px', minWidth: '140px' }}>RATE (₹)</th>
+                                                    <th style={{ padding: '12px 10px', fontSize: '12px', fontWeight: '800', color: '#fbbf24', textAlign: 'right', width: '150px', minWidth: '150px' }}>AMOUNT (₹)</th>
+                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center', width: '60px' }}>ACTION</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -2124,13 +2335,28 @@ export default function Leads() {
                                                         </td>
 
                                                         {/* DATE */}
-                                                        <td style={{ padding: '10px', minWidth: '130px' }}>
-                                                            <input
-                                                                type="date"
-                                                                value={day.date ? new Date(day.date).toISOString().split('T')[0] : ''}
-                                                                onChange={e => handleItineraryRowChange(idx, 'date', e.target.value)}
-                                                                style={{ ...darkInputStyle, padding: '6px 8px', fontSize: '12px' }}
-                                                            />
+                                                        <td style={{ padding: '10px', width: '160px', minWidth: '160px' }}>
+                                                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                                                <input
+                                                                    type="date"
+                                                                    value={toLocalDateString(day.date)}
+                                                                    onChange={e => handleItineraryRowChange(idx, 'date', e.target.value)}
+                                                                    onClick={e => { try { if (e.target.showPicker) e.target.showPicker(); } catch(err){} }}
+                                                                    style={{
+                                                                        ...darkInputStyle,
+                                                                        colorScheme: 'dark',
+                                                                        padding: '7px 32px 7px 10px',
+                                                                        fontSize: '13px',
+                                                                        fontWeight: '600',
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                />
+                                                                <Calendar
+                                                                    size={15}
+                                                                    color="#fbbf24"
+                                                                    style={{ position: 'absolute', right: '10px', pointerEvents: 'none' }}
+                                                                />
+                                                            </div>
                                                         </td>
 
                                                         {/* TIME */}
@@ -2192,7 +2418,7 @@ export default function Leads() {
                                                         </td>
 
                                                         {/* QTY */}
-                                                        <td style={{ padding: '10px', width: '80px', textAlign: 'center' }}>
+                                                        <td style={{ padding: '10px', width: '70px', textAlign: 'center' }}>
                                                             <input
                                                                 required
                                                                 type="number"
@@ -2215,7 +2441,7 @@ export default function Leads() {
                                                         </td>
 
                                                         {/* RATE (₹) */}
-                                                        <td style={{ padding: '10px', width: '100px' }}>
+                                                        <td style={{ padding: '10px', width: '140px', minWidth: '140px' }}>
                                                             <input
                                                                 type="number"
                                                                 min="0"
@@ -2223,19 +2449,35 @@ export default function Leads() {
                                                                 className="no-spinner"
                                                                 value={day.rate !== undefined && day.rate !== null ? day.rate : 0}
                                                                 onChange={e => handleItineraryRowChange(idx, 'rate', e.target.value)}
-                                                                style={{ ...darkInputStyle, padding: '6px 8px', fontSize: '12px', textAlign: 'right', color: '#ffffff' }}
+                                                                style={{
+                                                                    ...darkInputStyle,
+                                                                    padding: '8px 12px',
+                                                                    fontSize: '14px',
+                                                                    fontWeight: '700',
+                                                                    textAlign: 'right',
+                                                                    color: '#ffffff',
+                                                                    width: '100%'
+                                                                }}
                                                             />
                                                         </td>
 
                                                         {/* AMOUNT (₹) */}
-                                                        <td style={{ padding: '10px', width: '110px' }}>
+                                                        <td style={{ padding: '10px', width: '150px', minWidth: '150px' }}>
                                                             <input
                                                                 type="number"
                                                                 min="0"
                                                                 className="no-spinner"
                                                                 value={day.amount !== undefined && day.amount !== null ? day.amount : 0}
                                                                 onChange={e => handleItineraryRowChange(idx, 'amount', e.target.value)}
-                                                                style={{ ...darkInputStyle, padding: '6px 8px', fontSize: '12px', textAlign: 'right', fontWeight: '700', color: '#fbbf24' }}
+                                                                style={{
+                                                                    ...darkInputStyle,
+                                                                    padding: '8px 12px',
+                                                                    fontSize: '15px',
+                                                                    fontWeight: '900',
+                                                                    textAlign: 'right',
+                                                                    color: '#fbbf24',
+                                                                    width: '100%'
+                                                                }}
                                                             />
                                                         </td>
 
@@ -2465,7 +2707,7 @@ export default function Leads() {
             {/* Modal: Convert to Booking */}
             <AnimatePresence>
                 {showConvertModal && convertingLead && (
-                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 200005 }}>
                         <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '480px', background: '#0f172a', padding: '30px', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
                             <div style={{ textAlign: 'center', marginBottom: '20px' }}>
                                 <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px auto' }}>
