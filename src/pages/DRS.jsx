@@ -203,6 +203,7 @@ export default function DRS() {
         time: '11:00',
         duty: '',
         revenue: '',
+        km: '',
         carType: 'Sedan',
         customCarNumber: '',
         customDriverName: '',
@@ -430,6 +431,7 @@ export default function DRS() {
             time: duty.time || '11:00',
             duty: duty.duty || duty.itinerary || '',
             revenue: duty.revenue !== undefined ? duty.revenue : '',
+            km: duty.km || '',
             carType: duty.carType || '',
             customCarNumber: duty.customCarNumber || duty.carNumber || (duty.vehicle?.carNumber || ''),
             customDriverName: duty.customDriverName || duty.driverName || (duty.driver?.name || ''),
@@ -685,6 +687,7 @@ export default function DRS() {
                             <th style={{ padding: '14px 16px', color: '#fbbf24', fontWeight: '800', fontSize: '13px', background: 'rgba(251, 191, 36, 0.04)', width: '85px' }}>Time ↑</th>
                             <th style={{ padding: '14px 16px', color: 'rgba(255,255,255,0.65)', fontWeight: '700', fontSize: '13px' }}>Duty</th>
                             <th style={{ padding: '14px 16px', color: 'rgba(255,255,255,0.65)', fontWeight: '700', fontSize: '13px' }}>Amount (₹)</th>
+                            <th style={{ padding: '14px 16px', color: 'rgba(255,255,255,0.65)', fontWeight: '700', fontSize: '13px' }}>KM</th>
                             <th style={{ padding: '14px 16px', color: 'rgba(255,255,255,0.65)', fontWeight: '700', fontSize: '13px' }}>Car Type</th>
                             <th style={{ padding: '14px 16px', color: 'rgba(255,255,255,0.65)', fontWeight: '700', fontSize: '13px' }}>Car Number</th>
                             <th style={{ padding: '14px 16px', color: 'rgba(255,255,255,0.65)', fontWeight: '700', fontSize: '13px' }}>Driver Name</th>
@@ -694,13 +697,13 @@ export default function DRS() {
                     <tbody>
                         {loading ? (
                             <tr>
-                                <td colSpan="11" style={{ textAlign: 'center', padding: '50px' }}>
+                                <td colSpan="12" style={{ textAlign: 'center', padding: '50px' }}>
                                     <div className="loader"></div>
                                 </td>
                             </tr>
                         ) : processedDuties.length === 0 ? (
                             <tr>
-                                <td colSpan="11" style={{ textAlign: 'center', padding: '60px 20px' }}>
+                                <td colSpan="12" style={{ textAlign: 'center', padding: '60px 20px' }}>
                                     <div style={{ color: 'rgba(255,255,255,0.35)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                                         <Calendar size={42} />
                                         <p style={{ margin: 0, fontSize: '15px', fontWeight: '600' }}>No duties scheduled for this date</p>
@@ -778,6 +781,11 @@ export default function DRS() {
                                         {/* 7. Amount (₹) */}
                                         <td style={{ padding: '13px 16px', color: 'white', fontSize: '13px', fontWeight: '700' }}>
                                             {Number(duty.revenue) > 0 ? Number(duty.revenue).toLocaleString('en-IN') : '0'}
+                                        </td>
+
+                                        {/* 7b. KM */}
+                                        <td style={{ padding: '13px 16px', color: 'rgba(255,255,255,0.85)', fontSize: '13px', fontWeight: '600' }}>
+                                            {duty.km || '-'}
                                         </td>
 
                                         {/* 8. Car Type */}
@@ -1133,6 +1141,20 @@ export default function DRS() {
                                             placeholder="0 or Amount" 
                                         />
                                     </div>
+                                </div>
+
+                                {/* 7b. KM */}
+                                <div>
+                                    <label style={{ color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '5px', fontSize: '12px', fontWeight: '700' }}>
+                                        KM (Kilometers)
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        value={formData.km} 
+                                        onChange={e => setFormData({ ...formData, km: e.target.value })} 
+                                        style={inputStyle} 
+                                        placeholder="e.g. 250 KM or 80" 
+                                    />
                                 </div>
 
                                 {/* 8. Car Type */}

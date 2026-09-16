@@ -21,7 +21,8 @@ import {
     Activity,
     Briefcase,
     FileText,
-    Sparkles
+    Sparkles,
+    Landmark
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -31,14 +32,20 @@ import { useTheme } from '../context/ThemeContext';
 
 const NavItem = ({ item, onClick, isSubItem = false }) => {
     const { t, language } = useLanguage();
+    const location = useLocation();
     const displayText = (item.labelKey && translations[language]?.[item.labelKey]) ? t(item.labelKey) : item.label;
+
+    const isActive = item.path.includes('?')
+        ? (location.pathname + location.search === item.path)
+        : (location.pathname === item.path && (!location.search || !location.search.includes('tab=')));
+
     return (
         <NavLink
             to={item.path}
             className="sidebar-nav-item"
             onClick={onClick}
             end={item.path === '/admin'}
-            style={({ isActive }) => ({
+            style={() => ({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '12px',
@@ -128,7 +135,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         maintenance: location.pathname.includes('/admin/maintenance') || location.pathname.includes('/admin/vehicle-month-details') || location.pathname.includes('/admin/vehicles') || location.pathname.includes('/admin/accident-logs') || location.pathname.includes('/admin/warranties'),
         vehicles: location.pathname.includes('/admin/fuel') || location.pathname.includes('/admin/border-tax') || location.pathname.includes('/admin/fastag') || location.pathname.includes('/admin/parking') || location.pathname.includes('/admin/driver-services') || location.pathname.includes('/admin/border-tax') || location.pathname.includes('/admin/fastag') || location.pathname.includes('/admin/accident-logs') || location.pathname.includes('/admin/warranties'),
         logbook: location.pathname.includes('/admin/log-book'),
-        bookings: location.pathname.includes('/admin/leads') || location.pathname.includes('/admin/bookings') || location.pathname.includes('/admin/completed-bookings') || location.pathname.includes('/admin/drs') || location.pathname.includes('/admin/client-ledgers') || location.pathname.includes('/admin/invoices'),
+        bookings: location.pathname.includes('/admin/leads') || location.pathname.includes('/admin/bookings') || location.pathname.includes('/admin/completed-bookings') || location.pathname.includes('/admin/drs') || location.pathname.includes('/admin/client-ledgers') || location.pathname.includes('/admin/bank-book') || location.pathname.includes('/admin/invoices'),
     });
 
     const toggleGroup = (group) => {
@@ -299,7 +306,9 @@ const Sidebar = ({ isOpen, onClose }) => {
                     <NavItem item={{ path: '/admin/bookings', label: 'Confirmed Bookings', labelKey: 'bookings' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/drs', label: 'DRS Bookings', labelKey: 'drs' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/completed-bookings', label: 'Completed Bookings', labelKey: 'completed_bookings' }} onClick={onClose} isSubItem />
+                    <NavItem item={{ path: '/admin/client-ledgers?tab=agents', label: 'Travel Agents', labelKey: 'travel_agents' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/client-ledgers', label: 'Client Ledgers', labelKey: 'client_ledgers' }} onClick={onClose} isSubItem />
+                    <NavItem item={{ path: '/admin/bank-book', label: 'Bank Book / Ledger', labelKey: 'bank_book' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/invoices', label: 'Tax Invoices', labelKey: 'tax_invoices' }} onClick={onClose} isSubItem />
                 </NavGroup>
 

@@ -7,13 +7,16 @@ import {
     Calendar, Car, IndianRupee, MapPin, Search, Filter, AlertTriangle,
     Clock, Phone, ShieldCheck, Share2, HelpCircle, User, Users,
     Globe, Building2, Repeat, CircleDot, XCircle, ChevronLeft, ChevronRight, ChevronDown,
-    TrendingUp, BarChart2, BarChart3, Info, CheckSquare, Square, CreditCard
+    TrendingUp, BarChart2, BarChart3, Info, CheckSquare, Square, CreditCard,
+    Landmark, UploadCloud, Camera, Eye, Image as ImageIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 import SEO from '../components/SEO';
 import { generateBookingConfirmationPDF } from '../utils/bookingConfirmationPdf';
+import ImageUploader from '../components/common/ImageUploader';
 
 const LEAD_SOURCES = [
     'Website', 'Google Ads', 'Repeat Guest', 'Hotel', 'Referral',
@@ -166,11 +169,39 @@ export default function Leads() {
     const [adminOverride, setAdminOverride] = useState(false);
     const [adminOverrideReason, setAdminOverrideReason] = useState('');
 
+    // Bank Accounts State (for Confirm Modal and Quotation PDF)
+    const [companyBanks, setCompanyBanks] = useState([]);
+    const [selectedBankId, setSelectedBankId] = useState('');
+    const [paymentScreenshotFile, setPaymentScreenshotFile] = useState(null);
+    const [isUploadingScreenshot, setIsUploadingScreenshot] = useState(false);
+
+    // Travel Agent States
+    const [travelAgents, setTravelAgents] = useState([]);
+    const [showAddAgentModal, setShowAddAgentModal] = useState(false);
+    const [newAgentData, setNewAgentData] = useState({
+        agencyName: '',
+        contactPerson: '',
+        mobile: '',
+        email: '',
+        city: '',
+        gstNumber: ''
+    });
+    const [savingAgent, setSavingAgent] = useState(false);
+
     // Duplicate Phone Check State
     const [phoneCheckResult, setPhoneCheckResult] = useState(null);
     const phoneDebounceRef = useRef(null);
 
+    // Tour Itinerary & Quotation Preview State (Image & PDF)
+    const [previewTourLead, setPreviewTourLead] = useState(null);
+    const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+    const tourCardRef = useRef(null);
+
     const [formData, setFormData] = useState({
+        bookingReference: 'Direct',
+        travelAgent: '',
+        travelAgentName: '',
+        travelAgentMobile: '',
         clientName: '',
         mobileNumber: '',
         alternateMobile: '',
@@ -185,6 +216,7 @@ export default function Leads() {
         carType: 'Innova Crysta',
         numberOfCars: 1,
         gstMode: 'GST Inclusive',
+        gstRate: 5,
         status: 'New',
         notes: '',
         specialRemarks: '',
@@ -192,16 +224,43 @@ export default function Leads() {
             driverAllowance: true,
             nightAllowance: true,
             tollParking: true,
-            gstIncluded: true
+            gstIncluded: true,
+            manualRemarks: localStorage.getItem('last_manual_inclusion_remarks') || ''
         },
         itinerary: [],
         extraCharges: [],
         totalAmount: 0
     });
 
+    const fetchTravelAgents = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            const { data } = await axios.get(`/api/clients/company/${selectedCompany._id}`);
+            const agents = (data || []).filter(c => c.clientType === 'Travel Agent');
+            setTravelAgents(agents);
+        } catch (err) {
+            console.error('Error fetching travel agents:', err);
+        }
+    };
+
+    const fetchCompanyBanks = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            const { data } = await axios.get(`/api/banks/company/${selectedCompany._id}`);
+            setCompanyBanks(data || []);
+            if (data?.length > 0 && !selectedBankId) {
+                setSelectedBankId(data[0]._id);
+            }
+        } catch (err) {
+            console.error('Error fetching company banks:', err);
+        }
+    };
+
     useEffect(() => {
         if (selectedCompany?._id) {
             fetchLeads();
+            fetchTravelAgents();
+            fetchCompanyBanks();
         }
     }, [selectedCompany, statusFilter, monthFilter]);
 
@@ -427,6 +486,10 @@ export default function Leads() {
             const sDate = toLocalDateString(lead.travelStartDate);
             const eDate = toLocalDateString(lead.travelEndDate);
             setFormData({
+                bookingReference: lead.bookingReference || 'Direct',
+                travelAgent: lead.travelAgent || '',
+                travelAgentName: lead.travelAgentName || '',
+                travelAgentMobile: lead.travelAgentMobile || '',
                 clientName: lead.clientName || '',
                 mobileNumber: lead.mobileNumber || '',
                 alternateMobile: lead.alternateMobile || '',
@@ -441,14 +504,16 @@ export default function Leads() {
                 carType: lead.carType || 'Innova Crysta',
                 numberOfCars: lead.numberOfCars || 1,
                 gstMode: lead.gstMode || 'GST Inclusive',
+                gstRate: lead.gstRate || 5,
                 status: lead.status || 'New',
                 notes: lead.notes || '',
                 specialRemarks: lead.specialRemarks || '',
-                inclusions: lead.inclusions || {
-                    driverAllowance: true,
-                    nightAllowance: true,
-                    tollParking: true,
-                    gstIncluded: true
+                inclusions: {
+                    driverAllowance: lead.inclusions?.driverAllowance !== false,
+                    nightAllowance: lead.inclusions?.nightAllowance !== false,
+                    tollParking: lead.inclusions?.tollParking !== false,
+                    gstIncluded: lead.inclusions?.gstIncluded !== false,
+                    manualRemarks: lead.inclusions?.manualRemarks || ''
                 },
                 itinerary: (lead.itinerary || []).map((d, i) => {
                     const rowDate = sDate ? addDaysToDateString(sDate, i) : toLocalDateString(d.date);
@@ -491,6 +556,10 @@ export default function Leads() {
             ];
 
             setFormData({
+                bookingReference: 'Direct',
+                travelAgent: '',
+                travelAgentName: '',
+                travelAgentMobile: '',
                 clientName: '',
                 mobileNumber: '',
                 alternateMobile: '',
@@ -505,6 +574,7 @@ export default function Leads() {
                 carType: 'Innova Crysta',
                 numberOfCars: 1,
                 gstMode: 'GST Inclusive',
+                gstRate: 5,
                 status: 'New',
                 notes: '',
                 specialRemarks: '',
@@ -512,7 +582,8 @@ export default function Leads() {
                     driverAllowance: true,
                     nightAllowance: true,
                     tollParking: true,
-                    gstIncluded: true
+                    gstIncluded: true,
+                    manualRemarks: localStorage.getItem('last_manual_inclusion_remarks') || ''
                 },
                 itinerary: initialItinerary,
                 extraCharges: [],
@@ -526,8 +597,15 @@ export default function Leads() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
+            const isAgent = formData.source === 'Agent' || formData.bookingReference === 'Travel Agent';
+            const finalClientName = formData.clientName?.trim() || (isAgent ? (formData.travelAgentName ? `${formData.travelAgentName} (Guest)` : 'Guest (TBA)') : '');
+            const finalMobileNumber = formData.mobileNumber?.trim() || (isAgent ? (formData.travelAgentMobile || 'TBA') : '');
+
             const payload = {
                 ...formData,
+                clientName: finalClientName,
+                mobileNumber: finalMobileNumber,
+                bookingReference: isAgent ? 'Travel Agent' : formData.bookingReference,
                 company: selectedCompany._id
             };
 
@@ -557,98 +635,270 @@ export default function Leads() {
         }
     };
 
-    // Generate Quotation PDF
+    // Save New Travel Agent inline
+    const handleSaveNewAgent = async (e) => {
+        e.preventDefault();
+        if (!newAgentData.agencyName && !newAgentData.contactPerson) {
+            alert('Please enter Agency Name or Contact Person');
+            return;
+        }
+        try {
+            setSavingAgent(true);
+            const { data } = await axios.post('/api/clients', {
+                company: selectedCompany._id,
+                name: newAgentData.agencyName || newAgentData.contactPerson,
+                agencyName: newAgentData.agencyName,
+                contactPerson: newAgentData.contactPerson,
+                mobile: newAgentData.mobile || `AGENT-${Date.now().toString().slice(-6)}`,
+                email: newAgentData.email,
+                city: newAgentData.city,
+                gstNumber: newAgentData.gstNumber,
+                clientType: 'Travel Agent'
+            });
+
+            await fetchTravelAgents();
+            setFormData(prev => ({
+                ...prev,
+                bookingReference: 'Travel Agent',
+                source: 'Agent',
+                travelAgent: data._id,
+                travelAgentName: data.agencyName || data.name,
+                travelAgentMobile: data.mobile || ''
+            }));
+            setShowAddAgentModal(false);
+            setNewAgentData({
+                agencyName: '',
+                contactPerson: '',
+                mobile: '',
+                email: '',
+                city: '',
+                gstNumber: ''
+            });
+            alert(`Travel Agent "${data.agencyName || data.name}" enlisted successfully!`);
+        } catch (err) {
+            console.error('Error adding travel agent:', err);
+            alert(err.response?.data?.message || 'Failed to enlist travel agent');
+        } finally {
+            setSavingAgent(false);
+        }
+    };
+
+    // Standardized Corporate Quotation PDF
     const generateQuotationPDF = (lead) => {
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.width || 210;
 
-        // Top accent
+        // Top branded accent banner
         doc.setFillColor(245, 158, 11);
-        doc.rect(0, 0, pageWidth, 4, 'F');
+        doc.rect(0, 0, pageWidth, 5, 'F');
 
+        // Header - Company Info
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(20);
+        doc.setFontSize(22);
         doc.setTextColor(15, 23, 42);
-        doc.text(selectedCompany?.name || 'LOGKARO FLEET', 14, 18);
+        doc.text(selectedCompany?.name || 'YatreeDestination', 14, 18);
 
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8.5);
         doc.setTextColor(100, 116, 139);
-        doc.text(`Contact: ${selectedCompany?.whatsappNumber || 'N/A'}  |  Email: ${selectedCompany?.email || 'N/A'}`, 14, 24);
+        const companyPhone = selectedCompany?.whatsappNumber || selectedCompany?.phone || '911234512345';
+        const companyEmail = selectedCompany?.email || 'N/A';
+        const companyGst = selectedCompany?.gstNumber ? `  |  GSTIN: ${selectedCompany.gstNumber}` : '';
+        doc.text(`Contact: ${companyPhone}  |  Email: ${companyEmail}${companyGst}`, 14, 24);
 
-        // Quote badge
+        // Header - Quotation Badge (Top Right)
         doc.setFillColor(241, 245, 249);
-        doc.roundedRect(pageWidth - 85, 10, 71, 18, 2, 2, 'F');
+        doc.roundedRect(pageWidth - 85, 10, 71, 22, 2, 2, 'F');
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(8);
         doc.setTextColor(245, 158, 11);
-        doc.text('TRAVEL QUOTATION', pageWidth - 50, 16, { align: 'center' });
-        doc.setFontSize(10);
+        doc.text('TRAVEL QUOTATION / ITINERARY', pageWidth - 50, 16, { align: 'center' });
+        doc.setFontSize(10.5);
         doc.setTextColor(15, 23, 42);
-        doc.text(`Client Code: ${lead.clientCode || lead.leadId || 'N/A'}`, pageWidth - 50, 23, { align: 'center' });
+        doc.text(`Client Code: ${lead.clientCode || lead.leadId || 'N/A'}`, pageWidth - 50, 22.5, { align: 'center' });
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 116, 139);
+        const quoteDate = lead.leadDate ? new Date(lead.leadDate).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN');
+        doc.text(`Date: ${quoteDate}`, pageWidth - 50, 28, { align: 'center' });
 
         doc.setDrawColor(226, 232, 240);
-        doc.line(14, 30, pageWidth - 14, 30);
+        doc.setLineWidth(0.5);
+        doc.line(14, 34, pageWidth - 14, 34);
 
-        // Info box
+        // Client & Booking Information Card
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(14, 37, pageWidth - 28, 22, 2, 2, 'F');
+        doc.setDrawColor(226, 232, 240);
+        doc.roundedRect(14, 37, pageWidth - 28, 22, 2, 2, 'S');
+
         doc.setFontSize(9);
         doc.setTextColor(15, 23, 42);
         doc.setFont('helvetica', 'bold');
-        doc.text(`Guest Name: ${lead.clientName}`, 14, 37);
-        doc.text(`Vehicle Required: ${lead.numberOfCars}x ${lead.carType}`, 120, 37);
+        doc.text(`Guest Name: ${lead.clientName || 'Guest (TBA)'}`, 18, 44);
+        if (lead.bookingReference === 'Travel Agent' && lead.travelAgentName) {
+            doc.setTextColor(2, 132, 199);
+            const agMob = lead.travelAgentMobile ? ` (${lead.travelAgentMobile})` : '';
+            doc.text(`Travel Agent: ${lead.travelAgentName}${agMob}`, 18, 50);
+            doc.setTextColor(15, 23, 42);
+        } else {
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 116, 139);
+            doc.text(`Contact: ${lead.mobileNumber || 'TBA'}`, 18, 50);
+            doc.setTextColor(15, 23, 42);
+        }
 
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Vehicle: ${lead.numberOfCars}x ${lead.carType}`, 120, 44);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100, 116, 139);
-        doc.text(`Mobile: ${lead.mobileNumber}`, 14, 43);
         const sDate = lead.travelStartDate ? new Date(lead.travelStartDate).toLocaleDateString('en-IN') : '';
         const eDate = lead.travelEndDate ? new Date(lead.travelEndDate).toLocaleDateString('en-IN') : '';
-        doc.text(`Travel Dates: ${sDate} to ${eDate}`, 120, 43);
+        const diffDays = getDaysDifference(toLocalDateString(lead.travelStartDate), toLocalDateString(lead.travelEndDate));
+        doc.text(`Travel Dates: ${sDate} to ${eDate} (${diffDays} Days)`, 120, 50);
 
-        // Itinerary table
-        const tableColumn = ["Day", "Date", "Reporting", "Pickup Point", "Duty Description", "Amount (Rs)"];
+        // Day-wise Itinerary Table
+        const tableColumn = ["Day", "Date", "Reporting", "Pickup Point", "Duty / Route Description", "Vehicle", "Amount (Rs)"];
         const tableRows = (lead.itinerary || []).map((day, idx) => [
             `Day ${day.dayNo || idx + 1}`,
             day.date ? new Date(day.date).toLocaleDateString('en-IN') : 'TBA',
             day.isApg ? 'APG' : (day.time || '09:00 AM'),
             day.pickupPoint || 'Hotel / City',
-            day.duty || day.description || 'Full Day',
+            day.duty || day.description || 'Sightseeing / Transfer',
+            day.vehicleType || lead.carType || 'Sedan',
             `Rs. ${(day.amount || 0).toLocaleString('en-IN')}`
         ]);
 
         autoTable(doc, {
-            startY: 48,
+            startY: 63,
             head: [tableColumn],
             body: tableRows,
             theme: 'grid',
-            headStyles: { fillColor: [15, 23, 42], fontSize: 8.5, fontStyle: 'bold' },
-            styles: { fontSize: 8, cellPadding: 3 },
+            headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 8.5, fontStyle: 'bold', halign: 'left' },
+            styles: { fontSize: 8, cellPadding: 3, textColor: [51, 65, 85] },
+            columnStyles: {
+                0: { cellWidth: 16, fontStyle: 'bold' },
+                1: { cellWidth: 22 },
+                2: { cellWidth: 18 },
+                3: { cellWidth: 26 },
+                4: { cellWidth: 'auto' },
+                5: { cellWidth: 24 },
+                6: { cellWidth: 26, halign: 'right', fontStyle: 'bold' }
+            },
             alternateRowStyles: { fillColor: [248, 250, 252] },
             margin: { left: 14, right: 14 }
         });
 
-        const finalY = (doc.lastAutoTable?.finalY || 48) + 8;
+        let finalY = (doc.lastAutoTable?.finalY || 63) + 8;
 
-        // Total
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(15, 23, 42);
-        doc.text(`Total Package Fare (${lead.gstMode || 'GST Inclusive'}): Rs. ${(lead.totalAmount || 0).toLocaleString('en-IN')}`, 14, finalY + 4);
+        // Total Package Fare with exact GST rate display
+        const isGstExtra = lead.gstMode === 'GST Extra';
+        const ratePercent = lead.gstRate || 5;
+        const baseAmount = lead.totalAmount || 0;
+        const gstVal = Math.round((baseAmount * ratePercent) / 100);
+        const netPayable = isGstExtra ? (baseAmount + gstVal) : baseAmount;
 
-        // Special Remarks if present
+        // Total Box
+        doc.setFillColor(254, 243, 199);
+        doc.setDrawColor(245, 158, 11);
+        doc.roundedRect(pageWidth - 95, finalY, 81, isGstExtra ? 24 : 16, 2, 2, 'FD');
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(120, 53, 15);
+        if (isGstExtra) {
+            doc.text(`Base Fare: Rs. ${baseAmount.toLocaleString('en-IN')}`, pageWidth - 90, finalY + 6);
+            doc.text(`GST @ ${ratePercent}% Extra: Rs. ${gstVal.toLocaleString('en-IN')}`, pageWidth - 90, finalY + 12);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.text(`Total Payable: Rs. ${netPayable.toLocaleString('en-IN')}`, pageWidth - 90, finalY + 19);
+        } else {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.text(`Total Package Fare (${lead.gstMode || 'GST Inclusive'}):`, pageWidth - 90, finalY + 7);
+            doc.text(`Rs. ${baseAmount.toLocaleString('en-IN')}`, pageWidth - 90, finalY + 13);
+        }
+
+        // Remarks on the left
         if (lead.specialRemarks) {
             doc.setFontSize(8.5);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(15, 23, 42);
-            doc.text(`Guest Remarks: ${lead.specialRemarks}`, 14, finalY + 11);
+            doc.text('Special Remarks / Guest Request:', 14, finalY + 5);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(71, 85, 105);
+            doc.text(lead.specialRemarks, 14, finalY + 11, { maxWidth: 90 });
         }
 
-        // Terms
-        doc.setFontSize(8);
+        finalY = Math.max(finalY + (isGstExtra ? 28 : 20), finalY + 22);
+
+        // Bank Details for Advance Transfer (Standardized)
+        if (companyBanks && companyBanks.length > 0) {
+            const primaryBank = companyBanks[0];
+            doc.setFillColor(241, 245, 249);
+            doc.roundedRect(14, finalY, pageWidth - 28, 16, 2, 2, 'F');
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 23, 42);
+            doc.text('BANK DETAILS FOR ADVANCE TRANSFER:', 18, finalY + 6);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(71, 85, 105);
+            doc.text(`Bank: ${primaryBank.bankName}  |  A/C: ${primaryBank.accountNumber || 'N/A'}  |  IFSC: ${primaryBank.ifsc || 'N/A'}${primaryBank.upiId ? `  |  UPI ID: ${primaryBank.upiId}` : ''}`, 18, finalY + 11);
+            finalY += 20;
+        }
+
+        // Inclusions & Terms
+        doc.setFontSize(7.5);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(100, 116, 139);
-        doc.text('Inclusions: Driver & Night Allowance, Toll & Parking (if specified). AC off in hills/parked.', 14, finalY + (lead.specialRemarks ? 17 : 12));
+        const incList = [];
+        if (lead.inclusions?.driverAllowance !== false) incList.push('Driver Allowance');
+        if (lead.inclusions?.nightAllowance !== false) incList.push('Night Allowance');
+        if (lead.inclusions?.tollParking !== false) incList.push('Toll & Parking');
+        if (lead.inclusions?.gstIncluded) incList.push('GST');
+        const incText = incList.length > 0 ? incList.join(', ') + ' included.' : 'As per itinerary.';
+        doc.text(`• Inclusions: ${incText}`, 14, finalY);
+        if (lead.inclusions?.manualRemarks) {
+            doc.text(`• Remarks: ${lead.inclusions.manualRemarks}`, 14, finalY + 4);
+            doc.text('• Exclusions: Monument entrance fees, camera charges, personal expenses, or any route deviation not specified.', 14, finalY + 8);
+            doc.text('• Note: AC will remain turned off in hill sections or parked/stationary vehicle.', 14, finalY + 12);
+        } else {
+            doc.text('• Exclusions: Monument entrance fees, camera charges, personal expenses, or any route deviation not specified.', 14, finalY + 4);
+            doc.text('• Note: AC will remain turned off in hill sections or parked/stationary vehicle.', 14, finalY + 8);
+        }
 
         doc.save(`${(lead.clientName || 'Guest').replace(/\s+/g, '_')}_${lead.clientCode ? lead.clientCode.replace('/', '-') : 'Quotation'}.pdf`);
+    };
+
+    // Download Tour Itinerary Card as crisp High-Resolution Image for WhatsApp sharing
+    const handleDownloadTourImage = async () => {
+        if (!tourCardRef.current || !previewTourLead) return;
+        try {
+            setIsGeneratingImage(true);
+            const element = tourCardRef.current;
+            const canvas = await html2canvas(element, {
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                logging: false,
+                backgroundColor: '#090f1d'
+            });
+
+            const image = canvas.toDataURL('image/png', 1.0);
+            const link = document.createElement('a');
+            const safeCode = (previewTourLead.clientCode ? previewTourLead.clientCode.replace('/', '-') : 'Tour');
+            const safeName = (previewTourLead.clientName || 'Guest').replace(/\s+/g, '_');
+            link.download = `${safeCode}_${safeName}_Itinerary.png`;
+            link.href = image;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (err) {
+            console.error('Error generating itinerary image:', err);
+            alert('Failed to generate image. Please try again.');
+        } finally {
+            setIsGeneratingImage(false);
+        }
     };
 
     // Convert Lead to Booking
@@ -661,18 +911,38 @@ export default function Leads() {
                 return;
             }
 
+            let screenshotUrl = '';
+            if (paymentScreenshotFile) {
+                setIsUploadingScreenshot(true);
+                const uploadFormData = new FormData();
+                uploadFormData.append('file', paymentScreenshotFile);
+                const uploadRes = await axios.post('/api/admin/upload', uploadFormData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                screenshotUrl = uploadRes.data?.url || '';
+                setIsUploadingScreenshot(false);
+            }
+
             const { data } = await axios.post(`/api/leads/${convertingLead._id}/convert`, {
                 advancePayment: adv,
                 paymentMode,
                 paymentReference: paymentRef,
+                bankAccountId: selectedBankId || null,
+                paymentScreenshot: screenshotUrl,
                 adminOverrideReason: adminOverride ? adminOverrideReason : ''
             });
 
-            alert(`Booking confirmed successfully! Booking ID: ${data.booking?.bookingId || data.bookingId}`);
+            const codeToShow = convertingLead.clientCode || data.clientCode || data.booking?.clientCode || 'N/A';
+            const bkgIdToShow = data.booking?.bookingId || data.bookingId;
+            alert(`Booking confirmed successfully!\nClient Code: ${codeToShow}\nBooking ID: ${bkgIdToShow}`);
+            
             setShowConvertModal(false);
+            setPaymentScreenshotFile(null);
             fetchLeads();
+            fetchCompanyBanks();
         } catch (error) {
             console.error('Error converting lead to booking:', error);
+            setIsUploadingScreenshot(false);
             alert(error.response?.data?.message || 'Failed to convert lead to booking');
         }
     };
@@ -699,9 +969,9 @@ export default function Leads() {
         const activeOption = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5]; // default September
         const { monthIdx, year, days } = activeOption;
 
-        // Filter real leads that fall in this month and year
+        // Filter real leads that fall in this month and year (by travelStartDate)
         const monthRealLeads = leads.filter(l => {
-            const rawDate = l.createdAt || l.date || l.travelStartDate;
+            const rawDate = l.travelStartDate || l.leadDate || l.createdAt;
             if (!rawDate) return false;
             const d = new Date(rawDate);
             return !isNaN(d.getTime()) && d.getFullYear() === year && d.getMonth() === monthIdx;
@@ -717,7 +987,7 @@ export default function Leads() {
 
             for (let day = 1; day <= days; day++) {
                 const dayLeads = monthRealLeads.filter(l => {
-                    const d = new Date(l.createdAt || l.date || l.travelStartDate);
+                    const d = new Date(l.travelStartDate || l.leadDate || l.createdAt);
                     return d.getDate() === day;
                 });
 
@@ -1460,22 +1730,23 @@ export default function Leads() {
                                                 </span>
                                             )}
 
-                                            {/* Quotation PDF */}
+                                            {/* Preview Tour & Quotation (Eye icon) */}
                                             <button
-                                                onClick={() => generateQuotationPDF(lead)}
-                                                title="Download Quotation PDF"
+                                                onClick={() => setPreviewTourLead(lead)}
+                                                title="View Tour Itinerary (Preview & Image Download)"
                                                 style={{
-                                                    background: 'rgba(59, 130, 246, 0.15)',
+                                                    background: 'rgba(59, 130, 246, 0.18)',
                                                     color: '#60a5fa',
-                                                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                                                    border: '1px solid rgba(59, 130, 246, 0.35)',
                                                     padding: '6px 8px',
                                                     borderRadius: '8px',
                                                     cursor: 'pointer',
                                                     display: 'flex',
-                                                    alignItems: 'center'
+                                                    alignItems: 'center',
+                                                    transition: 'all 0.15s ease'
                                                 }}
                                             >
-                                                <FileText size={14} />
+                                                <Eye size={14} />
                                             </button>
 
                                             {/* Edit */}
@@ -2082,34 +2353,191 @@ export default function Leads() {
                                         </span>
                                     </div>
 
+                                    {/* Row 1: Booking Reference / Type */}
+                                    <div style={{
+                                        background: (formData.source === 'Agent' || formData.bookingReference === 'Travel Agent') ? 'rgba(56, 189, 248, 0.08)' : 'rgba(255,255,255,0.03)',
+                                        border: `1px solid ${(formData.source === 'Agent' || formData.bookingReference === 'Travel Agent') ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255,255,255,0.08)'}`,
+                                        borderRadius: '10px',
+                                        padding: '12px 14px',
+                                        marginBottom: '14px'
+                                    }}>
+                                        <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            flexWrap: 'wrap',
+                                            gap: '12px'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <span style={{ fontSize: '11px', fontWeight: '800', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                    Booking Reference:
+                                                </span>
+                                                <div style={{ display: 'flex', gap: '6px' }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData(prev => ({
+                                                            ...prev,
+                                                            bookingReference: 'Direct',
+                                                            travelAgent: '',
+                                                            travelAgentName: '',
+                                                            travelAgentMobile: '',
+                                                            source: prev.source === 'Agent' ? 'Website' : prev.source
+                                                        }))}
+                                                        style={{
+                                                            padding: '5px 14px',
+                                                            borderRadius: '6px',
+                                                            fontSize: '12px',
+                                                            fontWeight: '800',
+                                                            cursor: 'pointer',
+                                                            border: 'none',
+                                                            background: !(formData.source === 'Agent' || formData.bookingReference === 'Travel Agent') ? '#fbbf24' : 'rgba(255,255,255,0.08)',
+                                                            color: !(formData.source === 'Agent' || formData.bookingReference === 'Travel Agent') ? '#000' : 'rgba(255,255,255,0.7)',
+                                                            transition: 'all 0.2s'
+                                                        }}
+                                                    >
+                                                        Direct Client
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData(prev => ({
+                                                            ...prev,
+                                                            bookingReference: 'Travel Agent',
+                                                            source: 'Agent'
+                                                        }))}
+                                                        style={{
+                                                            padding: '5px 14px',
+                                                            borderRadius: '6px',
+                                                            fontSize: '12px',
+                                                            fontWeight: '800',
+                                                            cursor: 'pointer',
+                                                            border: 'none',
+                                                            background: (formData.source === 'Agent' || formData.bookingReference === 'Travel Agent') ? '#38bdf8' : 'rgba(255,255,255,0.08)',
+                                                            color: (formData.source === 'Agent' || formData.bookingReference === 'Travel Agent') ? '#000' : 'rgba(255,255,255,0.7)',
+                                                            transition: 'all 0.2s'
+                                                        }}
+                                                    >
+                                                        Travel Agent
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {(formData.source === 'Agent' || formData.bookingReference === 'Travel Agent') && (
+                                                <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '700' }}>
+                                                    ⚡ Agent Booking Mode: Guest details optional
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Dedicated Agent Details Dropbox */}
+                                        {(formData.source === 'Agent' || formData.bookingReference === 'Travel Agent') && (
+                                            <div style={{
+                                                marginTop: '12px',
+                                                paddingTop: '12px',
+                                                borderTop: '1px dashed rgba(56, 189, 248, 0.3)',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '8px'
+                                            }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#38bdf8', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+                                                        Travel Agent Selection & Contact (Dropbox):
+                                                    </span>
+                                                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+                                                        Agent will reflect on DRS placard & company ledger
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.5fr) minmax(160px, 1fr) auto', gap: '8px', alignItems: 'center' }}>
+                                                    <select
+                                                        value={formData.travelAgent}
+                                                        onChange={e => {
+                                                            const agId = e.target.value;
+                                                            const agObj = travelAgents.find(a => a._id === agId);
+                                                            setFormData(prev => ({
+                                                                ...prev,
+                                                                bookingReference: 'Travel Agent',
+                                                                source: 'Agent',
+                                                                travelAgent: agId,
+                                                                travelAgentName: agObj ? (agObj.agencyName || agObj.name) : '',
+                                                                travelAgentMobile: agObj ? (agObj.mobile || '') : prev.travelAgentMobile
+                                                            }));
+                                                        }}
+                                                        style={{ ...darkInputStyle, cursor: 'pointer', padding: '8px 10px', fontSize: '12px' }}
+                                                    >
+                                                        <option value="">-- Select Travel Agent --</option>
+                                                        {travelAgents.map(a => (
+                                                            <option key={a._id} value={a._id} style={{ background: '#090f1d' }}>
+                                                                {a.agencyName ? `${a.agencyName} (${a.name})` : a.name} - {a.mobile}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <input
+                                                        type="text"
+                                                        value={formData.travelAgentMobile}
+                                                        onChange={e => setFormData(prev => ({ ...prev, travelAgentMobile: e.target.value }))}
+                                                        placeholder="Agent Mobile Number"
+                                                        style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12px' }}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowAddAgentModal(true)}
+                                                        style={{
+                                                            padding: '8px 14px',
+                                                            background: 'rgba(56, 189, 248, 0.2)',
+                                                            border: '1px solid #38bdf8',
+                                                            color: '#38bdf8',
+                                                            borderRadius: '6px',
+                                                            fontSize: '11px',
+                                                            fontWeight: '800',
+                                                            cursor: 'pointer',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                    >
+                                                        + Enlist Agent
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
                                         <div>
-                                            <label style={labelStyle}>Guest / Client Name *</label>
+                                            <label style={labelStyle}>
+                                                {(formData.source === 'Agent' || formData.bookingReference === 'Travel Agent') ? 'Guest Name (Optional - Details later on)' : 'Guest / Client Name *'}
+                                            </label>
                                             <input
-                                                required
+                                                required={!(formData.source === 'Agent' || formData.bookingReference === 'Travel Agent')}
                                                 type="text"
                                                 value={formData.clientName}
                                                 onChange={e => setFormData({ ...formData, clientName: e.target.value })}
                                                 style={darkInputStyle}
-                                                placeholder="e.g. Rahul Sharma"
+                                                placeholder={(formData.source === 'Agent' || formData.bookingReference === 'Travel Agent') ? "Optional (e.g. Rahul / Placard TBA)" : "e.g. Rahul Sharma"}
                                             />
                                         </div>
                                         <div>
-                                            <label style={labelStyle}>Mobile Number *</label>
+                                            <label style={labelStyle}>
+                                                {(formData.source === 'Agent' || formData.bookingReference === 'Travel Agent') ? 'Guest Mobile (Optional - Details later on)' : 'Mobile Number *'}
+                                            </label>
                                             <input
-                                                required
+                                                required={!(formData.source === 'Agent' || formData.bookingReference === 'Travel Agent')}
                                                 type="text"
                                                 value={formData.mobileNumber}
                                                 onChange={handleMobileChange}
                                                 style={darkInputStyle}
-                                                placeholder="e.g. 9876543210"
+                                                placeholder={(formData.source === 'Agent' || formData.bookingReference === 'Travel Agent') ? "Optional (Guest details arrive later)" : "e.g. 9876543210"}
                                             />
                                         </div>
                                         <div>
                                             <label style={labelStyle}>Enquiry Source</label>
                                             <select
                                                 value={formData.source}
-                                                onChange={e => setFormData({ ...formData, source: e.target.value })}
+                                                onChange={e => {
+                                                    const newSource = e.target.value;
+                                                    setFormData(prev => ({
+                                                        ...prev,
+                                                        source: newSource,
+                                                        bookingReference: newSource === 'Agent' ? 'Travel Agent' : prev.bookingReference
+                                                    }));
+                                                }}
                                                 style={{ ...darkInputStyle, cursor: 'pointer' }}
                                             >
                                                 {LEAD_SOURCES.map(src => <option key={src} value={src} style={{ background: '#090f1d' }}>{src}</option>)}
@@ -2117,13 +2545,51 @@ export default function Leads() {
                                         </div>
                                         <div>
                                             <label style={labelStyle}>GST Mode</label>
-                                            <select
-                                                value={formData.gstMode}
-                                                onChange={e => setFormData({ ...formData, gstMode: e.target.value })}
-                                                style={{ ...darkInputStyle, cursor: 'pointer' }}
-                                            >
-                                                {GST_MODES.map(mode => <option key={mode} value={mode} style={{ background: '#090f1d' }}>{mode}</option>)}
-                                            </select>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <select
+                                                    value={formData.gstMode}
+                                                    onChange={e => setFormData({ ...formData, gstMode: e.target.value })}
+                                                    style={{ ...darkInputStyle, cursor: 'pointer', flex: 1 }}
+                                                >
+                                                    {GST_MODES.map(mode => <option key={mode} value={mode} style={{ background: '#090f1d' }}>{mode}</option>)}
+                                                </select>
+                                                {formData.gstMode === 'GST Extra' && (
+                                                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setFormData(prev => ({ ...prev, gstRate: 5 }))}
+                                                            style={{
+                                                                padding: '6px 10px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: '800',
+                                                                border: (formData.gstRate || 5) === 5 ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)',
+                                                                background: (formData.gstRate || 5) === 5 ? 'rgba(251, 191, 36, 0.25)' : 'rgba(255,255,255,0.05)',
+                                                                color: (formData.gstRate || 5) === 5 ? '#fbbf24' : 'rgba(255,255,255,0.6)',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            5%
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setFormData(prev => ({ ...prev, gstRate: 18 }))}
+                                                            style={{
+                                                                padding: '6px 10px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: '800',
+                                                                border: formData.gstRate === 18 ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)',
+                                                                background: formData.gstRate === 18 ? 'rgba(251, 191, 36, 0.25)' : 'rgba(255,255,255,0.05)',
+                                                                color: formData.gstRate === 18 ? '#fbbf24' : 'rgba(255,255,255,0.6)',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            18%
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -2562,9 +3028,16 @@ export default function Leads() {
                                             borderRadius: '10px',
                                             padding: '8px 20px'
                                         }}>
-                                            <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '600' }}>
-                                                Total Quoted Fare ({formData.gstMode})
-                                            </span>
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '600' }}>
+                                                    Total Quoted Fare ({formData.gstMode === 'GST Extra' ? `${formData.gstRate || 5}% GST Extra` : formData.gstMode})
+                                                </span>
+                                                {formData.gstMode === 'GST Extra' && (
+                                                    <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '700' }}>
+                                                        (+ ₹{Math.round((formData.totalAmount * (formData.gstRate || 5)) / 100).toLocaleString('en-IN')} GST = ₹{Math.round(formData.totalAmount * (1 + (formData.gstRate || 5) / 100)).toLocaleString('en-IN')} Net)
+                                                    </span>
+                                                )}
+                                            </div>
                                             <span style={{ fontSize: '22px', fontWeight: '900', color: '#fbbf24' }}>
                                                 ₹{formData.totalAmount.toLocaleString('en-IN')}
                                             </span>
@@ -2664,6 +3137,47 @@ export default function Leads() {
                                                 </label>
                                             ))}
                                         </div>
+
+                                        {/* Manual / Custom Inclusion Remarks (Auto-saved) */}
+                                        <div style={{ marginTop: '14px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '12px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                                <label style={{ fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.75)' }}>
+                                                    Manual / Custom Inclusions
+                                                </label>
+                                                <span style={{ fontSize: '10px', color: '#fbbf24', fontWeight: '700' }}>
+                                                    Auto-Saved
+                                                </span>
+                                            </div>
+                                            <textarea
+                                                rows={3}
+                                                value={formData.inclusions?.manualRemarks || ''}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setFormData(prev => ({
+                                                        ...prev,
+                                                        inclusions: {
+                                                            ...(prev.inclusions || {}),
+                                                            manualRemarks: val
+                                                        }
+                                                    }));
+                                                    localStorage.setItem('last_manual_inclusion_remarks', val);
+                                                }}
+                                                placeholder="e.g. State border tax included. 250 KM/day limit. AC off on hills. Parking at client's cost..."
+                                                style={{
+                                                    width: '100%',
+                                                    background: 'rgba(0,0,0,0.3)',
+                                                    border: '1px solid rgba(255,255,255,0.12)',
+                                                    borderRadius: '8px',
+                                                    padding: '8px 10px',
+                                                    color: 'white',
+                                                    fontSize: '12px',
+                                                    resize: 'vertical',
+                                                    fontFamily: 'inherit',
+                                                    outline: 'none',
+                                                    lineHeight: '1.4'
+                                                }}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
@@ -2715,7 +3229,7 @@ export default function Leads() {
                                                 boxShadow: '0 4px 14px rgba(251, 191, 36, 0.3)'
                                             }}
                                         >
-                                            {editingLead ? 'Update Lead' : 'Save & Generate Lead'}
+                                            {editingLead ? 'Update Lead' : 'Save Lead'}
                                         </button>
                                     </div>
                                 </div>
@@ -2773,6 +3287,38 @@ export default function Leads() {
                                     <input type="text" placeholder="e.g. UTR12345678" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} style={darkInputStyle} />
                                 </div>
 
+                                {/* Receiving Bank Account */}
+                                {(paymentMode === 'UPI / QR Code' || paymentMode === 'Bank Transfer / NEFT') && (
+                                    <div>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>
+                                            Receiving Bank Account
+                                        </label>
+                                        <select
+                                            value={selectedBankId}
+                                            onChange={e => setSelectedBankId(e.target.value)}
+                                            className="premium-compact-input"
+                                            style={{ width: '100%', height: '40px' }}
+                                        >
+                                            <option value="">-- Select Bank Account --</option>
+                                            {companyBanks.map(b => (
+                                                <option key={b._id} value={b._id}>
+                                                    {b.bankName} {b.accountNumber ? `(A/C: ${b.accountNumber.slice(-4)})` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+
+                                {/* Payment Screenshot / Receipt */}
+                                <div>
+                                    <ImageUploader
+                                        file={paymentScreenshotFile}
+                                        onChange={setPaymentScreenshotFile}
+                                        label="Payment Screenshot / Receipt (Sales Team)"
+                                        color="#22c55e"
+                                    />
+                                </div>
+
                                 {/* Admin Override if 0 advance */}
                                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px' }}>
                                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'rgba(255,255,255,0.7)', cursor: 'pointer' }}>
@@ -2792,9 +3338,579 @@ export default function Leads() {
 
                                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                                     <button type="button" onClick={() => setShowConvertModal(false)} style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
-                                    <button type="submit" style={{ flex: 1, padding: '12px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '800' }}>Confirm & Create DRS</button>
+                                    <button type="submit" disabled={isUploadingScreenshot} style={{ flex: 1, padding: '12px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '8px', cursor: isUploadingScreenshot ? 'not-allowed' : 'pointer', fontWeight: '800' }}>
+                                        {isUploadingScreenshot ? 'Uploading Receipt...' : 'Confirm'}
+                                    </button>
                                 </div>
                             </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Modal: Enlist New Travel Agent Inline */}
+            <AnimatePresence>
+                {showAddAgentModal && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 200010 }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '480px', background: '#0f172a', padding: '24px', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Briefcase size={20} color="#f59e0b" />
+                                    <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Enlist Travel Agent</h3>
+                                </div>
+                                <button type="button" onClick={() => setShowAddAgentModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <form onSubmit={handleSaveNewAgent} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Agency / Company Name *</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Royal Tours & Travels"
+                                        value={newAgentData.agencyName}
+                                        onChange={e => setNewAgentData({ ...newAgentData, agencyName: e.target.value })}
+                                        style={darkInputStyle}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Contact Person Name</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Ramesh Sharma"
+                                        value={newAgentData.contactPerson}
+                                        onChange={e => setNewAgentData({ ...newAgentData, contactPerson: e.target.value })}
+                                        style={darkInputStyle}
+                                    />
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Phone / Mobile</label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. 9876543210"
+                                            value={newAgentData.mobile}
+                                            onChange={e => setNewAgentData({ ...newAgentData, mobile: e.target.value })}
+                                            style={darkInputStyle}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>City / Location</label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. Jaipur"
+                                            value={newAgentData.city}
+                                            onChange={e => setNewAgentData({ ...newAgentData, city: e.target.value })}
+                                            style={darkInputStyle}
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Email Address (Optional)</label>
+                                    <input
+                                        type="email"
+                                        placeholder="e.g. agent@royaltours.com"
+                                        value={newAgentData.email}
+                                        onChange={e => setNewAgentData({ ...newAgentData, email: e.target.value })}
+                                        style={darkInputStyle}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>GSTIN (Optional)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. 08AAAAA0000A1Z5"
+                                        value={newAgentData.gstNumber}
+                                        onChange={e => setNewAgentData({ ...newAgentData, gstNumber: e.target.value })}
+                                        style={darkInputStyle}
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                    <button type="button" onClick={() => setShowAddAgentModal(false)} style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                                    <button type="submit" disabled={savingAgent} style={{ flex: 1, padding: '10px', background: '#f59e0b', color: 'black', border: 'none', borderRadius: '8px', cursor: savingAgent ? 'not-allowed' : 'pointer', fontWeight: '800' }}>
+                                        {savingAgent ? 'Enlisting...' : 'Enlist Agent'}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+
+                {/* 5. Tour Itinerary & Quotation Preview Modal (View Tour & Download as Image) */}
+                {previewTourLead && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: 'rgba(3, 7, 18, 0.85)',
+                        backdropFilter: 'blur(8px)',
+                        zIndex: 9999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '20px'
+                    }}>
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            style={{
+                                width: '100%',
+                                maxWidth: '900px',
+                                maxHeight: '92vh',
+                                background: '#0a0f1d',
+                                border: '1px solid rgba(255, 255, 255, 0.15)',
+                                borderRadius: '16px',
+                                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                overflow: 'hidden'
+                            }}
+                        >
+                            {/* Modal Header Bar */}
+                            <div style={{
+                                padding: '14px 20px',
+                                background: '#050a14',
+                                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '12px',
+                                flexWrap: 'wrap'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <div style={{
+                                        width: '32px',
+                                        height: '32px',
+                                        borderRadius: '8px',
+                                        background: 'rgba(251, 191, 36, 0.15)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: '#fbbf24'
+                                    }}>
+                                        <Eye size={18} />
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '15px', fontWeight: '800', color: 'white' }}>
+                                            Tour Itinerary & Quotation
+                                        </div>
+                                        <div style={{ fontSize: '11.5px', color: 'rgba(255, 255, 255, 0.5)' }}>
+                                            Client Code: <strong style={{ color: '#fbbf24' }}>{previewTourLead.clientCode || previewTourLead.leadId || 'N/A'}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Header Actions */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <button
+                                        type="button"
+                                        onClick={handleDownloadTourImage}
+                                        disabled={isGeneratingImage}
+                                        style={{
+                                            padding: '8px 16px',
+                                            background: '#fbbf24',
+                                            color: '#000',
+                                            border: 'none',
+                                            borderRadius: '8px',
+                                            fontSize: '12.5px',
+                                            fontWeight: '800',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            cursor: isGeneratingImage ? 'not-allowed' : 'pointer',
+                                            boxShadow: '0 2px 10px rgba(251, 191, 36, 0.35)',
+                                            opacity: isGeneratingImage ? 0.7 : 1
+                                        }}
+                                        title="Download as high-resolution PNG image to send on WhatsApp"
+                                    >
+                                        <Download size={14} />
+                                        <span>{isGeneratingImage ? 'Saving Image...' : 'Download as Image'}</span>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => generateQuotationPDF(previewTourLead)}
+                                        style={{
+                                            padding: '8px 14px',
+                                            background: 'rgba(255, 255, 255, 0.07)',
+                                            color: 'rgba(255, 255, 255, 0.85)',
+                                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                                            borderRadius: '8px',
+                                            fontSize: '12px',
+                                            fontWeight: '700',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '5px',
+                                            cursor: 'pointer'
+                                        }}
+                                        title="Download PDF document"
+                                    >
+                                        <FileText size={13} />
+                                        <span>PDF</span>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setPreviewTourLead(null)}
+                                        style={{
+                                            width: '32px',
+                                            height: '32px',
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: 'none',
+                                            borderRadius: '8px',
+                                            color: 'rgba(255, 255, 255, 0.7)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modal Scrollable Body containing the downloadable Card */}
+                            <div style={{
+                                padding: '20px',
+                                overflowY: 'auto',
+                                display: 'flex',
+                                justifyContent: 'center'
+                            }}>
+                                {/* The Capture Card */}
+                                <div
+                                    ref={tourCardRef}
+                                    style={{
+                                        width: '100%',
+                                        maxWidth: '820px',
+                                        background: '#090f1d',
+                                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                                        borderRadius: '12px',
+                                        overflow: 'hidden',
+                                        color: '#ffffff',
+                                        fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
+                                    }}
+                                >
+                                    {/* Top Branded Accent Bar */}
+                                    <div style={{ height: '5px', background: 'linear-gradient(90deg, #f59e0b, #d97706)' }} />
+
+                                    <div style={{ padding: '24px' }}>
+                                        {/* Card Header: Company Details & Quotation Badge */}
+                                        <div style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'flex-start',
+                                            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                                            paddingBottom: '18px',
+                                            marginBottom: '18px',
+                                            flexWrap: 'wrap',
+                                            gap: '14px'
+                                        }}>
+                                            <div>
+                                                <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '900', color: '#fbbf24', letterSpacing: '-0.5px' }}>
+                                                    {selectedCompany?.name || 'YatreeDestination'}
+                                                </h1>
+                                                <div style={{ fontSize: '11.5px', color: 'rgba(255, 255, 255, 0.65)', marginTop: '4px', lineHeight: '1.5' }}>
+                                                    <span>Contact: {selectedCompany?.whatsappNumber || selectedCompany?.phone || '+91 911234512345'}</span>
+                                                    <span style={{ margin: '0 8px' }}>•</span>
+                                                    <span>Email: {selectedCompany?.email || 'booking@yatree.com'}</span>
+                                                    {selectedCompany?.gstNumber && (
+                                                        <>
+                                                            <span style={{ margin: '0 8px' }}>•</span>
+                                                            <span>GSTIN: {selectedCompany.gstNumber}</span>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Top Right Client Code Badge */}
+                                            <div style={{
+                                                background: 'rgba(251, 191, 36, 0.08)',
+                                                border: '1px solid rgba(251, 191, 36, 0.3)',
+                                                borderRadius: '10px',
+                                                padding: '8px 18px',
+                                                textAlign: 'right'
+                                            }}>
+                                                <div style={{ fontSize: '10px', fontWeight: '800', color: '#fbbf24', letterSpacing: '0.5px' }}>
+                                                    TRAVEL QUOTATION / ITINERARY
+                                                </div>
+                                                <div style={{ fontSize: '18px', fontWeight: '900', color: 'white', marginTop: '2px' }}>
+                                                    Client Code: {previewTourLead.clientCode || previewTourLead.leadId || 'N/A'}
+                                                </div>
+                                                <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.5)', marginTop: '2px' }}>
+                                                    Date: {previewTourLead.leadDate ? new Date(previewTourLead.leadDate).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN')}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Guest & Trip Summary Box */}
+                                        <div style={{
+                                            background: 'rgba(255, 255, 255, 0.03)',
+                                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                                            borderRadius: '10px',
+                                            padding: '14px 18px',
+                                            display: 'grid',
+                                            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                                            gap: '14px',
+                                            marginBottom: '20px'
+                                        }}>
+                                            <div>
+                                                <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.45)', fontWeight: '700', textTransform: 'uppercase' }}>
+                                                    Guest Name
+                                                </div>
+                                                <div style={{ fontSize: '14px', fontWeight: '800', color: 'white', marginTop: '3px' }}>
+                                                    {previewTourLead.clientName || 'Guest (TBA)'}
+                                                </div>
+                                                {previewTourLead.bookingReference === 'Travel Agent' && previewTourLead.travelAgentName ? (
+                                                    <div style={{ fontSize: '11px', color: '#38bdf8', marginTop: '2px', fontWeight: '600' }}>
+                                                        Agent: {previewTourLead.travelAgentName}{previewTourLead.travelAgentMobile ? ` (${previewTourLead.travelAgentMobile})` : ''}
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.65)', marginTop: '2px' }}>
+                                                        {previewTourLead.mobileNumber || 'TBA'}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div>
+                                                <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.45)', fontWeight: '700', textTransform: 'uppercase' }}>
+                                                    Vehicle Assigned
+                                                </div>
+                                                <div style={{ fontSize: '14px', fontWeight: '800', color: 'white', marginTop: '3px' }}>
+                                                    {previewTourLead.numberOfCars || 1}x {previewTourLead.carType || 'Sedan'}
+                                                </div>
+                                                <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.65)', marginTop: '2px' }}>
+                                                    Source: {previewTourLead.source || 'Direct'}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.45)', fontWeight: '700', textTransform: 'uppercase' }}>
+                                                    Travel Dates & Duration
+                                                </div>
+                                                <div style={{ fontSize: '13px', fontWeight: '800', color: 'white', marginTop: '3px' }}>
+                                                    {previewTourLead.travelStartDate ? new Date(previewTourLead.travelStartDate).toLocaleDateString('en-IN') : 'TBA'} to {previewTourLead.travelEndDate ? new Date(previewTourLead.travelEndDate).toLocaleDateString('en-IN') : 'TBA'}
+                                                </div>
+                                                <div style={{ fontSize: '11px', color: '#fbbf24', marginTop: '2px', fontWeight: '700' }}>
+                                                    {getDaysDifference(toLocalDateString(previewTourLead.travelStartDate), toLocalDateString(previewTourLead.travelEndDate))} Days Tour
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Day-Wise Itinerary Table */}
+                                        <div style={{ marginBottom: '20px' }}>
+                                            <div style={{ fontSize: '13px', fontWeight: '800', color: '#fbbf24', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                Day-Wise Tour Itinerary
+                                            </div>
+                                            <div style={{ border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', overflow: 'hidden' }}>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '11.5px' }}>
+                                                    <thead>
+                                                        <tr style={{ background: '#050a14', color: 'rgba(255, 255, 255, 0.7)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                                                            <th style={{ padding: '8px 12px', width: '55px' }}>Day</th>
+                                                            <th style={{ padding: '8px 12px', width: '90px' }}>Date</th>
+                                                            <th style={{ padding: '8px 12px', width: '80px' }}>Time</th>
+                                                            <th style={{ padding: '8px 12px', width: '110px' }}>Pickup</th>
+                                                            <th style={{ padding: '8px 12px' }}>Duty / Route Details</th>
+                                                            <th style={{ padding: '8px 12px', width: '90px' }}>Vehicle</th>
+                                                            <th style={{ padding: '8px 12px', textAlign: 'right', width: '90px' }}>Amount</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {(previewTourLead.itinerary || []).map((day, idx) => (
+                                                            <tr key={idx} style={{
+                                                                background: idx % 2 === 0 ? 'rgba(255, 255, 255, 0.015)' : 'rgba(255, 255, 255, 0.04)',
+                                                                borderBottom: '1px solid rgba(255, 255, 255, 0.05)'
+                                                            }}>
+                                                                <td style={{ padding: '9px 12px', fontWeight: '800', color: '#fbbf24' }}>
+                                                                    Day {day.dayNo || idx + 1}
+                                                                </td>
+                                                                <td style={{ padding: '9px 12px', color: 'rgba(255, 255, 255, 0.85)' }}>
+                                                                    {day.date ? new Date(day.date).toLocaleDateString('en-IN') : 'TBA'}
+                                                                </td>
+                                                                <td style={{ padding: '9px 12px', color: 'rgba(255, 255, 255, 0.85)', fontWeight: '600' }}>
+                                                                    {day.isApg ? 'APG' : (day.time || '09:00 AM')}
+                                                                </td>
+                                                                <td style={{ padding: '9px 12px', color: 'rgba(255, 255, 255, 0.85)' }}>
+                                                                    {day.pickupPoint || 'Hotel / City'}
+                                                                </td>
+                                                                <td style={{ padding: '9px 12px', color: 'white', fontWeight: '600' }}>
+                                                                    {day.duty || day.description || 'Sightseeing / Transfer'}
+                                                                </td>
+                                                                <td style={{ padding: '9px 12px', color: 'rgba(255, 255, 255, 0.75)' }}>
+                                                                    {day.vehicleType || previewTourLead.carType || 'Sedan'}
+                                                                </td>
+                                                                <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: '800', color: 'white' }}>
+                                                                    ₹{(day.amount || 0).toLocaleString('en-IN')}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+
+                                        {/* Bottom Grid: Inclusions, Special Remarks, Bank Info & Total Box */}
+                                        <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                                            gap: '16px',
+                                            marginBottom: '16px'
+                                        }}>
+                                            {/* Left: Inclusions, Remarks & Bank Account */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                {/* Inclusions */}
+                                                <div style={{
+                                                    background: 'rgba(255, 255, 255, 0.025)',
+                                                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                                                    borderRadius: '8px',
+                                                    padding: '12px'
+                                                }}>
+                                                    <div style={{ fontSize: '11px', fontWeight: '800', color: '#fbbf24', textTransform: 'uppercase', marginBottom: '6px' }}>
+                                                        Trip Inclusions
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', fontSize: '11px', color: 'rgba(255, 255, 255, 0.85)' }}>
+                                                        {previewTourLead.inclusions?.driverAllowance !== false && (
+                                                            <span style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', padding: '2px 7px', borderRadius: '4px', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                                                                ✓ Driver Allowance
+                                                            </span>
+                                                        )}
+                                                        {previewTourLead.inclusions?.nightAllowance !== false && (
+                                                            <span style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', padding: '2px 7px', borderRadius: '4px', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                                                                ✓ Night Allowance
+                                                            </span>
+                                                        )}
+                                                        {previewTourLead.inclusions?.tollParking !== false && (
+                                                            <span style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', padding: '2px 7px', borderRadius: '4px', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                                                                ✓ Toll & Parking
+                                                            </span>
+                                                        )}
+                                                        {previewTourLead.inclusions?.gstIncluded && (
+                                                            <span style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', padding: '2px 7px', borderRadius: '4px', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                                                                ✓ GST Included
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {previewTourLead.inclusions?.manualRemarks && (
+                                                        <div style={{ marginTop: '8px', fontSize: '11.5px', color: '#fef08a', lineHeight: '1.4', background: 'rgba(251, 191, 36, 0.05)', padding: '6px 8px', borderRadius: '4px', borderLeft: '2px solid #fbbf24' }}>
+                                                            <strong>Custom Inclusions:</strong> {previewTourLead.inclusions.manualRemarks}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Special Remarks if any */}
+                                                {previewTourLead.specialRemarks && (
+                                                    <div style={{
+                                                        background: 'rgba(255, 255, 255, 0.025)',
+                                                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                                                        borderRadius: '8px',
+                                                        padding: '10px 12px',
+                                                        fontSize: '11px',
+                                                        color: 'rgba(255, 255, 255, 0.8)'
+                                                    }}>
+                                                        <strong style={{ color: 'white' }}>Guest Special Request:</strong> {previewTourLead.specialRemarks}
+                                                    </div>
+                                                )}
+
+                                                {/* Bank Details for Advance */}
+                                                {companyBanks && companyBanks.length > 0 && (
+                                                    <div style={{
+                                                        background: 'rgba(255, 255, 255, 0.025)',
+                                                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                                                        borderRadius: '8px',
+                                                        padding: '10px 12px',
+                                                        fontSize: '11px'
+                                                    }}>
+                                                        <div style={{ fontWeight: '800', color: '#38bdf8', marginBottom: '4px', textTransform: 'uppercase' }}>
+                                                            Bank Details for Advance Payment
+                                                        </div>
+                                                        <div style={{ color: 'rgba(255, 255, 255, 0.85)', lineHeight: '1.5' }}>
+                                                            <span><strong>Bank:</strong> {companyBanks[0].bankName}</span>
+                                                            <span style={{ margin: '0 6px' }}>|</span>
+                                                            <span><strong>A/C:</strong> {companyBanks[0].accountNumber || 'N/A'}</span>
+                                                            <span style={{ margin: '0 6px' }}>|</span>
+                                                            <span><strong>IFSC:</strong> {companyBanks[0].ifsc || 'N/A'}</span>
+                                                            {companyBanks[0].upiId && (
+                                                                <>
+                                                                    <span style={{ margin: '0 6px' }}>|</span>
+                                                                    <span><strong>UPI:</strong> {companyBanks[0].upiId}</span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Right: Total Package Fare Box */}
+                                            {(() => {
+                                                const isExtra = previewTourLead.gstMode === 'GST Extra';
+                                                const rPercent = previewTourLead.gstRate || 5;
+                                                const bAmt = previewTourLead.totalAmount || 0;
+                                                const gVal = Math.round((bAmt * rPercent) / 100);
+                                                const nPayable = isExtra ? (bAmt + gVal) : bAmt;
+
+                                                return (
+                                                    <div style={{
+                                                        background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(217, 119, 6, 0.05))',
+                                                        border: '1px solid rgba(251, 191, 36, 0.35)',
+                                                        borderRadius: '10px',
+                                                        padding: '16px',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        justifyContent: 'space-between'
+                                                    }}>
+                                                        <div>
+                                                            <div style={{ fontSize: '11px', color: '#fbbf24', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                                Quotation Summary
+                                                            </div>
+                                                            {isExtra ? (
+                                                                <div style={{ marginTop: '8px', fontSize: '12px', color: 'rgba(255, 255, 255, 0.75)' }}>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                                        <span>Base Fare:</span>
+                                                                        <span style={{ color: 'white', fontWeight: '700' }}>₹{bAmt.toLocaleString('en-IN')}</span>
+                                                                    </div>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                        <span>GST ({rPercent}% Extra):</span>
+                                                                        <span style={{ color: 'white', fontWeight: '700' }}>₹{gVal.toLocaleString('en-IN')}</span>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div style={{ fontSize: '11.5px', color: 'rgba(255, 255, 255, 0.65)', marginTop: '4px' }}>
+                                                                    Includes all specified duties, vehicle and {previewTourLead.gstMode || 'GST Inclusive'}.
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(251, 191, 36, 0.25)' }}>
+                                                            <div style={{ fontSize: '10.5px', color: '#fbbf24', fontWeight: '800', textTransform: 'uppercase' }}>
+                                                                {isExtra ? 'Total Amount Payable' : 'Total Package Fare'}
+                                                            </div>
+                                                            <div style={{ fontSize: '26px', fontWeight: '900', color: 'white', marginTop: '2px' }}>
+                                                                ₹{nPayable.toLocaleString('en-IN')}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+
+                                        {/* Terms & Conditions Footer */}
+                                        <div style={{
+                                            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                                            paddingTop: '12px',
+                                            fontSize: '10px',
+                                            color: 'rgba(255, 255, 255, 0.45)',
+                                            lineHeight: '1.5'
+                                        }}>
+                                            <div>• AC will remain switched off during hill sections or when vehicle is parked.</div>
+                                            <div>• Exclusions: Monument entry fees, camera tickets, activities, guide fees, or any unmentioned routes.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </motion.div>
                     </div>
                 )}

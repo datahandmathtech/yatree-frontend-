@@ -241,6 +241,8 @@ export default function Bookings() {
     const [driversList, setDriversList] = useState([]);
     const [vehiclesList, setVehiclesList] = useState([]);
     const [savingAssignment, setSavingAssignment] = useState(false);
+    const [masterDriverId, setMasterDriverId] = useState('');
+    const [masterVehicleNumber, setMasterVehicleNumber] = useState('');
 
     useEffect(() => {
         if (selectedCompany?._id) {
@@ -263,6 +265,49 @@ export default function Bookings() {
         } catch (err) {
             console.error('Error fetching drivers/vehicles:', err);
         }
+    };
+
+    const handleApplyMasterDriver = (driverVal) => {
+        setMasterDriverId(driverVal);
+        const allDrivers = (driversList && driversList.length > 0) ? driversList : BASELINE_DRIVERS;
+        let drvId = '';
+        let drvName = '';
+        let drvPhone = '';
+        let vehNum = masterVehicleNumber;
+        let vehId = '';
+
+        if (driverVal && driverVal !== '__custom__') {
+            const found = allDrivers.find(d => String(d._id) === String(driverVal));
+            if (found) {
+                drvId = found._id;
+                drvName = found.name;
+                drvPhone = found.mobile || found.phone || '';
+                if (found.vehicleNumber || found.vehicle?.carNumber) {
+                    vehNum = found.vehicleNumber || found.vehicle?.carNumber;
+                    vehId = found.vehicleId || found.vehicle?._id || '';
+                    setMasterVehicleNumber(vehNum);
+                }
+            }
+        } else if (driverVal === '__custom__') {
+            drvId = 'custom';
+        }
+
+        setAssignItinerary(prev => prev.map(day => ({
+            ...day,
+            driverId: drvId,
+            driverName: drvName || (drvId === 'custom' ? day.driverName : ''),
+            driverPhone: drvPhone || (drvId === 'custom' ? day.driverPhone : ''),
+            vehicleNumber: vehNum || day.vehicleNumber,
+            vehicleId: vehId || day.vehicleId
+        })));
+    };
+
+    const handleApplyMasterVehicle = (vehVal) => {
+        setMasterVehicleNumber(vehVal);
+        setAssignItinerary(prev => prev.map(day => ({
+            ...day,
+            vehicleNumber: vehVal
+        })));
     };
 
     const handleOpenAssignDriver = (bkg) => {
@@ -302,6 +347,9 @@ export default function Bookings() {
                 });
             }
         }
+        const firstAssigned = days.find(d => d.driverId || d.driverName);
+        setMasterDriverId(firstAssigned ? (firstAssigned.driverId || '__custom__') : '');
+        setMasterVehicleNumber(firstAssigned ? firstAssigned.vehicleNumber : (bkg.vehicleNumber || ''));
         setAssignItinerary(days);
         setShowAssignDriverModal(true);
     };
@@ -1173,28 +1221,53 @@ export default function Bookings() {
                                                     <CreditCard size={13} /> Pay
                                                 </button>
 
-                                                {/* Assign Driver Button */}
-                                                <button
-                                                    onClick={() => handleOpenAssignDriver(bkg)}
-                                                    title="Assign Driver & Vehicle"
-                                                    style={{
-                                                        padding: '6px 14px',
-                                                        background: 'rgba(29, 78, 216, 0.85)',
-                                                        border: '1px solid rgba(96, 165, 250, 0.4)',
-                                                        borderRadius: '20px',
-                                                        color: '#ffffff',
-                                                        fontSize: '11.5px',
-                                                        fontWeight: '700',
-                                                        cursor: 'pointer',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '5px',
-                                                        transition: 'all 0.2s',
-                                                        whiteSpace: 'nowrap'
-                                                    }}
-                                                >
-                                                    <Car size={13} /> Assign Driver
-                                                </button>
+                                                {/* Assign Driver / Assigned Button */}
+                                                {((bkg.itinerary && bkg.itinerary.some(d => d.driverId || d.driverName)) || bkg.driverAssigned || bkg.driver || bkg.assignedDriver) ? (
+                                                    <button
+                                                        onClick={() => handleOpenAssignDriver(bkg)}
+                                                        title="Driver Assigned - Click to View or Reassign"
+                                                        style={{
+                                                            padding: '6px 14px',
+                                                            background: 'rgba(34, 197, 94, 0.2)',
+                                                            border: '1px solid rgba(34, 197, 94, 0.6)',
+                                                            borderRadius: '20px',
+                                                            color: '#4ade80',
+                                                            fontSize: '11.5px',
+                                                            fontWeight: '800',
+                                                            cursor: 'pointer',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '5px',
+                                                            transition: 'all 0.2s',
+                                                            whiteSpace: 'nowrap',
+                                                            boxShadow: '0 0 10px rgba(34, 197, 94, 0.25)'
+                                                        }}
+                                                    >
+                                                        <CheckCircle size={13} /> Assigned
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => handleOpenAssignDriver(bkg)}
+                                                        title="Assign Driver & Vehicle"
+                                                        style={{
+                                                            padding: '6px 14px',
+                                                            background: 'rgba(29, 78, 216, 0.85)',
+                                                            border: '1px solid rgba(96, 165, 250, 0.4)',
+                                                            borderRadius: '20px',
+                                                            color: '#ffffff',
+                                                            fontSize: '11.5px',
+                                                            fontWeight: '700',
+                                                            cursor: 'pointer',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '5px',
+                                                            transition: 'all 0.2s',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                    >
+                                                        <Car size={13} /> Assign Driver
+                                                    </button>
+                                                )}
 
                                                 {/* More Options Dropdown */}
                                                 <div style={{ position: 'relative' }}>
@@ -1613,6 +1686,80 @@ export default function Bookings() {
                                     <strong>Bidirectional DRS Sync:</strong> Assign a driver for each day of the itinerary below. If not confirmed yet, leave it as <em>"Assign Later"</em>. Drivers assigned here instantly shoot into DRS, and assignments changed in DRS automatically update here.
                                 </span>
                             </div>
+
+                            {/* Trip Master Assignment (Quick Assign for All Days) */}
+                            {(() => {
+                                const allDrivers = (driversList && driversList.length > 0) ? driversList : BASELINE_DRIVERS;
+                                return (
+                                    <div style={{
+                                        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(30, 58, 138, 0.25))',
+                                        border: '1.5px solid rgba(245, 158, 11, 0.4)',
+                                        borderRadius: '12px',
+                                        padding: '16px',
+                                        marginBottom: '18px'
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <span style={{ fontSize: '16px' }}>🚀</span>
+                                                <strong style={{ color: '#fbbf24', fontSize: '13.5px' }}>Trip Master Assignment (Applies to All Days)</strong>
+                                            </div>
+                                            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>
+                                                Sets vehicle and driver for entire trip at once
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                                            <div>
+                                                <label style={{ display: 'block', color: 'rgba(255,255,255,0.85)', fontSize: '11.5px', fontWeight: '700', marginBottom: '4px' }}>
+                                                    Assign Driver (All Days)
+                                                </label>
+                                                <select
+                                                    value={masterDriverId}
+                                                    onChange={(e) => handleApplyMasterDriver(e.target.value)}
+                                                    className="premium-compact-input"
+                                                    style={{
+                                                        width: '100%',
+                                                        height: '40px',
+                                                        background: '#070d18',
+                                                        color: masterDriverId ? '#34d399' : 'white',
+                                                        border: '1px solid rgba(245, 158, 11, 0.5)',
+                                                        borderRadius: '8px',
+                                                        fontSize: '12.5px',
+                                                        fontWeight: '600'
+                                                    }}
+                                                >
+                                                    <option value="">-- Choose Driver for Whole Trip --</option>
+                                                    <optgroup label="Company Drivers">
+                                                        {allDrivers.map(drv => (
+                                                            <option key={drv._id} value={drv._id}>
+                                                                {drv.name} ({drv.mobile || drv.phone}) {drv.vehicleNumber ? `[${drv.vehicleNumber}]` : ''}
+                                                            </option>
+                                                        ))}
+                                                    </optgroup>
+                                                    <option value="__custom__">-- Other / Outsourced Driver --</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', color: 'rgba(255,255,255,0.85)', fontSize: '11.5px', fontWeight: '700', marginBottom: '4px' }}>
+                                                    Assigned Vehicle / Cab (All Days)
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="e.g. RJ27 TA 9822 (or Crysta)"
+                                                    value={masterVehicleNumber}
+                                                    onChange={(e) => handleApplyMasterVehicle(e.target.value)}
+                                                    style={{
+                                                        ...inputStyle,
+                                                        height: '40px',
+                                                        fontSize: '12.5px',
+                                                        border: '1px solid rgba(245, 158, 11, 0.5)',
+                                                        fontWeight: '600'
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
 
                             {/* Day-Wise Itinerary List */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>

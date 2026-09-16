@@ -39,9 +39,9 @@ export const generateBookingConfirmationPDF = (booking, company) => {
     doc.setFontSize(8);
     doc.setTextColor(...primaryColor);
     doc.text('BOOKING CONFIRMATION', pageWidth - 50, 17, { align: 'center' });
-    doc.setFontSize(10.5);
+    doc.setFontSize(11);
     doc.setTextColor(...darkColor);
-    doc.text(booking.bookingId || 'LK-BKG-CONFIRMED', pageWidth - 50, 24, { align: 'center' });
+    doc.text(booking.clientCode || booking.bookingCode || booking.bookingId || 'LK-BKG-CONFIRMED', pageWidth - 50, 24, { align: 'center' });
 
     // Divider
     doc.setDrawColor(226, 232, 240);

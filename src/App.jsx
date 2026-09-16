@@ -44,6 +44,7 @@ const Profile = lazy(() => import('./pages/Profile'));
 const DriverServices = lazy(() => import('./pages/DriverServices'));
 const DriversPanel = lazy(() => import('./pages/DriversPanel'));
 const ClientLedgers = lazy(() => import('./pages/ClientLedgers'));
+const BankBook = lazy(() => import('./pages/BankBook'));
 const Invoices = lazy(() => import('./pages/Invoices'));
 
 const ScrollToTop = () => {
@@ -154,6 +155,7 @@ const AdminRoutes = () => {
       <Route path="bookings" element={canAccess('leads') ? <Bookings /> : <Navigate to="/admin" />} />
       <Route path="completed-bookings" element={canAccess('leads') ? <CompletedBookings /> : <Navigate to="/admin" />} />
       <Route path="client-ledgers" element={canAccess('leads') ? <ClientLedgers /> : <Navigate to="/admin" />} />
+      <Route path="bank-book" element={canAccess('leads') ? <BankBook /> : <Navigate to="/admin" />} />
       <Route path="drs" element={canAccess('drs') ? <DRS /> : <Navigate to="/admin" />} />
       <Route path="invoices" element={canAccess('leads') ? <Invoices /> : <Navigate to="/admin" />} />
       <Route path="live-feed" element={canAccess('liveFeed') || canAccess('vehiclesManagement') ? <LiveFeed /> : <Navigate to="/admin" />} />
