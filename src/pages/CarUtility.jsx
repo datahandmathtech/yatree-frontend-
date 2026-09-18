@@ -206,7 +206,7 @@ const CarUtility = () => {
             const [vehRes, borderRes, serviceRes, dvrRes] = await Promise.all([
                 axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false&type=fleet`, { headers }),
                 axios.get(`/api/admin/border-tax/${selectedCompany._id}`, { headers }),
-                axios.get(`/api/admin/maintenance/${selectedCompany._id}?type=driver_services`, { headers }),
+                axios.get(`/api/admin/maintenance/${selectedCompany._id}`, { headers }),
                 axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&driverType=All`, { headers })
             ]);
 
@@ -416,7 +416,7 @@ const CarUtility = () => {
             const act = getVehicleActivity(v._id);
             act.items.fastag.forEach(x => logs.push({ ...x, type: 'fastag', typeLabel: 'Fastag', car: v.carNumber, carModel: v.model, color: '#38bdf8', icon: CreditCard, vehicleId: v._id }));
             act.items.border.forEach(x => logs.push({ ...x, type: 'border', typeLabel: 'Border Tax', car: v.carNumber, carModel: v.model, color: '#fbbf24', icon: Shield, vehicleId: v._id }));
-            act.items.service.forEach(x => logs.push({ ...x, type: 'services', typeLabel: 'Other Service', car: v.carNumber, carModel: v.model, color: '#10b981', icon: Wrench, vehicleId: v._id }));
+            act.items.service.forEach(x => logs.push({ ...x, type: 'services', typeLabel: 'Maintenance', car: v.carNumber, carModel: v.model, color: '#10b981', icon: Wrench, vehicleId: v._id }));
         });
         // Sort newest first
         return logs.sort((a, b) => new Date(b.date || b.billDate) - new Date(a.date || a.billDate));
@@ -568,7 +568,7 @@ const CarUtility = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '35px' }}>
                     <SummaryStat label="Fastag Paid" val={globalStats.f} col="#38bdf8" icon={CreditCard} desc="Total Highway Tolls" />
                     <SummaryStat label="Border Tax" val={globalStats.b} col="#fbbf24" icon={Shield} desc="State Entry Permits" />
-                    <SummaryStat label="Service Exp" val={globalStats.s} col="#10b981" icon={Wrench} desc="Miscellaneous Upkeeps" />
+                    <SummaryStat label="Maintenance Exp" val={globalStats.s} col="#10b981" icon={Wrench} desc="Workshop & Servicing" />
                     <SummaryStat label="Month Total" val={globalStats.t} col="#a855f7" icon={TrendingUp} isDark desc="Total Utility Budget" />
                 </div>
 
@@ -603,7 +603,7 @@ const CarUtility = () => {
                                         <option value="All" style={{ background: '#0f172a' }}>All Utility Types</option>
                                         <option value="fastag" style={{ background: '#0f172a' }}>Fastag tolls {filterVehicle !== 'All' ? `(${unifiedUtilityLogs.filter(l => l.type === 'fastag' && l.vehicleId === filterVehicle).length})` : ''}</option>
                                         <option value="border" style={{ background: '#0f172a' }}>Border tax permits {filterVehicle !== 'All' ? `(${unifiedUtilityLogs.filter(l => l.type === 'border' && l.vehicleId === filterVehicle).length})` : ''}</option>
-                                        <option value="services" style={{ background: '#0f172a' }}>Driver services {filterVehicle !== 'All' ? `(${unifiedUtilityLogs.filter(l => l.type === 'services' && l.vehicleId === filterVehicle).length})` : ''}</option>
+                                        <option value="services" style={{ background: '#0f172a' }}>Vehicle Maintenance {filterVehicle !== 'All' ? `(${unifiedUtilityLogs.filter(l => l.type === 'services' && l.vehicleId === filterVehicle).length})` : ''}</option>
                                     </select>
                                 </div>
 
@@ -870,7 +870,7 @@ const CarUtility = () => {
                                                 desc={`${allBorderEntries.filter(e => (e.vehicle?._id === detailVehicleId || e.vehicle === detailVehicleId)).length} Total Logs`}
                                             />
                                             <DetailStat 
-                                                label="Extra Service" 
+                                                label="Maintenance" 
                                                 val={getVehicleActivity(detailVehicleId).service} 
                                                 icon={Wrench} col="#10b981" 
                                                 desc={`${allServiceRecords.filter(r => (r.vehicle?._id === detailVehicleId || r.vehicle === detailVehicleId)).length} Total Logs`}
@@ -889,7 +889,7 @@ const CarUtility = () => {
                                     {[
                                         { id: 'fastag', label: 'Fastag Logs', icon: CreditCard, color: '#38bdf8' },
                                         { id: 'border', label: 'Border Permits', icon: Shield, color: '#fbbf24' },
-                                        { id: 'services', label: 'Extra Services', icon: Wrench, color: '#10b981' }
+                                        { id: 'services', label: 'Maintenance Logs', icon: Wrench, color: '#10b981' }
                                     ].map(t => (
                                         <button
                                             key={t.id}
@@ -963,7 +963,7 @@ const CarUtility = () => {
                                     {[
                                         { id: 'fastag', label: 'Fastag', icon: CreditCard },
                                         { id: 'border', label: 'Border Tax', icon: Shield },
-                                        { id: 'services', label: 'Other Service', icon: Wrench }
+                                        { id: 'services', label: 'Maintenance', icon: Wrench }
                                     ].map(tab => (
                                         <button
                                             key={tab.id}
@@ -1046,7 +1046,7 @@ const SummaryStat = ({ label, val, col, icon: Icon, isDark, desc }) => (
 );
 
 const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setViewingImage, submitting, vehicle, getImageUrl, companyId, selectedMonth, selectedYear, hideForm = false, allVehicles = [] }) => {
-    const [form, setForm] = useState({ amount: '', remarks: '', borderName: '', date: '', billDate: '', validTill: '', driverId: '', category: 'Car Wash', vehicleId: vehicle?._id || '', paymentSource: 'Office', paymentMode: 'UPI' });
+    const [form, setForm] = useState({ amount: '', remarks: '', borderName: '', date: '', billDate: '', validTill: '', driverId: '', category: 'General Servicing', vehicleId: vehicle?._id || '', paymentSource: 'Office', paymentMode: 'UPI' });
     const [file, setFile] = useState(null);
     const [editingItem, setEditingItem] = useState(null);
 
@@ -1078,7 +1078,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 billDate: toISTDateString(editingItem.billDate || editingItem.date || ''),
                 validTill: toISTDateString(editingItem.validTill || ''),
                 driverId: editingItem.driver?._id || editingItem.driver || '',
-                category: editingItem.category || 'Car Wash',
+                category: editingItem.category || 'General Servicing',
                 paymentMode: editingItem.method || editingItem.paymentMode || 'UPI',
                 vehicleId: vehicle?._id || editingItem.vehicle?._id || editingItem.vehicle || editingItem.vehicleId || '',
                 paymentSource: editingItem.paymentSource || 'Office'
@@ -1097,7 +1097,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 billDate: defaultDate, 
                 validTill: '',
                 driverId: '', 
-                category: 'Car Wash', 
+                category: 'General Servicing', 
                 vehicleId: vehicle?._id || '', 
                 paymentSource: 'Office', 
                 paymentMode: 'UPI' 
@@ -1143,7 +1143,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                     success = await onAdd(targetVehicleId, formData);
                 }
             } else {
-                if (type === 'services') fd.append('maintenanceType', 'Driver Services');
+                if (type === 'services') fd.append('maintenanceType', 'Regular Service');
                 if (editingItem) {
                     success = await onUpdate(editingItem._id, fd);
                 } else {
@@ -1156,7 +1156,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 const isCurrentMonth = (istNow.getUTCMonth() + 1) === selectedMonth && istNow.getUTCFullYear() === selectedYear;
                 const defaultDate = isCurrentMonth ? todayIST() : `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
                 
-                setForm({ amount: '', remarks: '', borderName: '', date: defaultDate, billDate: defaultDate, validTill: '', driverId: '', category: 'Car Wash', vehicleId: vehicle?._id || '', paymentSource: 'Office', paymentMode: 'UPI' });
+                setForm({ amount: '', remarks: '', borderName: '', date: defaultDate, billDate: defaultDate, validTill: '', driverId: '', category: 'General Servicing', vehicleId: vehicle?._id || '', paymentSource: 'Office', paymentMode: 'UPI' });
                 setFile(null);
                 if (editingItem) setEditingItem(null);
             }
@@ -1259,13 +1259,15 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
 
                         {type === 'services' && (
                             <div className="premium-input-container">
-                                <label>Service Category</label>
+                                <label>Maintenance Category</label>
                                 <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
-                                    <option style={{ background: '#0f172a' }}>Car Wash</option>
-                                    <option style={{ background: '#0f172a' }}>Puncture / Tyre</option>
-                                    <option style={{ background: '#0f172a' }}>Cleaning Supplies</option>
+                                    <option style={{ background: '#0f172a' }}>General Servicing</option>
+                                    <option style={{ background: '#0f172a' }}>Engine oil change</option>
                                     <option style={{ background: '#0f172a' }}>Periodic Service</option>
-                                    <option style={{ background: '#0f172a' }}>Other Misc</option>
+                                    <option style={{ background: '#0f172a' }}>Brake & Clutch</option>
+                                    <option style={{ background: '#0f172a' }}>Tyre & Alignment</option>
+                                    <option style={{ background: '#0f172a' }}>AC & Electrical</option>
+                                    <option style={{ background: '#0f172a' }}>Other Maintenance</option>
                                 </select>
                             </div>
                         )}
