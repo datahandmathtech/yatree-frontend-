@@ -150,6 +150,9 @@ export default function Leads() {
     const [showRightSidebar, setShowRightSidebar] = useState(false);
     const [selectedSidebarMonth, setSelectedSidebarMonth] = useState('September 2026');
     const [showMonthDropdown, setShowMonthDropdown] = useState(false);
+    const [sidebarLeads, setSidebarLeads] = useState([]);
+    const [loadingSidebarLeads, setLoadingSidebarLeads] = useState(false);
+    const searchDebounceRef = useRef(null);
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -282,6 +285,41 @@ export default function Leads() {
             setLoading(false);
         }
     };
+
+    const fetchSidebarLeads = async (monthTab) => {
+        if (!selectedCompany?._id) return;
+        try {
+            setLoadingSidebarLeads(true);
+            let url = `/api/leads/${selectedCompany._id}?status=All`;
+            if (monthTab && monthTab !== 'All') {
+                url += `&month=${monthTab}`;
+            }
+            const { data } = await axios.get(url);
+            setSidebarLeads(data || []);
+        } catch (err) {
+            console.error('Error fetching sidebar leads:', err);
+        } finally {
+            setLoadingSidebarLeads(false);
+        }
+    };
+
+    useEffect(() => {
+        if (selectedCompany?._id) {
+            const activeOption = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5];
+            fetchSidebarLeads(activeOption.tab);
+        }
+    }, [selectedCompany, selectedSidebarMonth]);
+
+    useEffect(() => {
+        if (!selectedCompany?._id) return;
+        if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+        searchDebounceRef.current = setTimeout(() => {
+            fetchLeads();
+        }, 300);
+        return () => {
+            if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+        };
+    }, [searchTerm]);
 
     const handleSearchSubmit = (e) => {
         e.preventDefault();
@@ -617,6 +655,8 @@ export default function Leads() {
 
             setShowModal(false);
             fetchLeads();
+            const activeOpt = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5];
+            fetchSidebarLeads(activeOpt.tab);
         } catch (error) {
             console.error('Error saving lead:', error);
             alert(error.response?.data?.message || 'Error saving lead');
@@ -628,6 +668,8 @@ export default function Leads() {
             try {
                 await axios.delete(`/api/leads/single/${id}`);
                 fetchLeads();
+                const activeOpt = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5];
+                fetchSidebarLeads(activeOpt.tab);
             } catch (error) {
                 console.error('Error deleting lead:', error);
                 alert(error.response?.data?.message || 'Failed to delete lead');
@@ -934,12 +976,14 @@ export default function Leads() {
 
             const codeToShow = convertingLead.clientCode || data.clientCode || data.booking?.clientCode || 'N/A';
             const bkgIdToShow = data.booking?.bookingId || data.bookingId;
-            alert(`Booking confirmed successfully!\nClient Code: ${codeToShow}\nBooking ID: ${bkgIdToShow}`);
+            alert(`Booking confirmed successfully!\nClient Code: ${codeToShow}\nBooking ID: ${bkgIdToShow}\n\nThis lead has been converted and moved to Confirmed Bookings.`);
             
             setShowConvertModal(false);
             setPaymentScreenshotFile(null);
             fetchLeads();
             fetchCompanyBanks();
+            const activeOpt = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5];
+            fetchSidebarLeads(activeOpt.tab);
         } catch (error) {
             console.error('Error converting lead to booking:', error);
             setIsUploadingScreenshot(false);
@@ -947,14 +991,42 @@ export default function Leads() {
         }
     };
 
-    // Filter leads on client side
+    // Filter leads on client side: Confirmed leads move to Confirmed Bookings page, so exclude from this active leads grid
     const filteredLeads = useMemo(() => {
-        return leads.filter(lead => {
+        return (leads || []).filter(lead => {
+            // Confirmed leads are moved to Confirmed Bookings page, so do not display them in Sales Leads table!
+            if (lead.status === 'Confirmed' || lead.bookingId) {
+                return false;
+            }
+
             if (sourceFilter !== 'All' && lead.source !== sourceFilter) return false;
             if (salesPersonFilter !== 'All' && lead.salesPerson !== salesPersonFilter) return false;
+
+            // Instant Live Search by Name / Phone / Agent / Code / Salesperson
+            if (searchTerm && searchTerm.trim()) {
+                const q = searchTerm.trim().toLowerCase();
+                const cName = (lead.clientName || '').toLowerCase();
+                const aName = (lead.travelAgentName || '').toLowerCase();
+                const phone = (lead.mobileNumber || '').toLowerCase();
+                const aPhone = (lead.travelAgentMobile || '').toLowerCase();
+                const code = (lead.clientCode || lead.leadId || '').toLowerCase();
+                const src = (lead.source || '').toLowerCase();
+                const sp = (lead.salesPerson || '').toLowerCase();
+
+                const matches = cName.includes(q) ||
+                    aName.includes(q) ||
+                    phone.includes(q) ||
+                    aPhone.includes(q) ||
+                    code.includes(q) ||
+                    src.includes(q) ||
+                    sp.includes(q);
+
+                if (!matches) return false;
+            }
+
             return true;
         });
-    }, [leads, sourceFilter, salesPersonFilter]);
+    }, [leads, sourceFilter, salesPersonFilter, searchTerm]);
 
     // Unique sales persons
     const salesPersonsList = useMemo(() => {
@@ -963,14 +1035,16 @@ export default function Leads() {
         return Array.from(set);
     }, [leads]);
 
-    
     // Calculate Right Sidebar daily breakdown and totals
     const sidebarStats = useMemo(() => {
         const activeOption = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5]; // default September
         const { monthIdx, year, days } = activeOption;
 
+        // Use dedicated sidebarLeads fetched independently for this month, or fallback to leads
+        const sourceList = (sidebarLeads && sidebarLeads.length > 0) ? sidebarLeads : leads;
+
         // Filter real leads that fall in this month and year (by travelStartDate)
-        const monthRealLeads = leads.filter(l => {
+        const monthRealLeads = (sourceList || []).filter(l => {
             const rawDate = l.travelStartDate || l.leadDate || l.createdAt;
             if (!rawDate) return false;
             const d = new Date(rawDate);
@@ -1041,7 +1115,7 @@ export default function Leads() {
             totalConversionsAmt: 0,
             dailyList
         };
-    }, [leads, selectedSidebarMonth]);
+    }, [sidebarLeads, leads, selectedSidebarMonth]);
 
     // KPI Summary Calculations
     const kpiData = useMemo(() => {
@@ -1438,10 +1512,6 @@ export default function Leads() {
                             key={m}
                             onClick={() => {
                                 setMonthFilter(m);
-                                if (m !== 'All') {
-                                    const found = SIDEBAR_MONTH_OPTIONS.find(o => o.tab === m);
-                                    if (found) setSelectedSidebarMonth(found.label);
-                                }
                                 setCurrentPage(1);
                             }}
                             style={{
@@ -1463,42 +1533,71 @@ export default function Leads() {
                 })}
             </div>
 
-            
             {/* Main Content Layout: Table & Pagination */}
             <div style={{ width: '100%', position: 'relative' }}>
                 {/* Full Width Table Content */}
                 <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+
                     {/* 3. Filter Bar: Search + Sales Person Dropdown + Source Dropdown */}
-            <div className="glass-card" style={{
-                padding: '14px 18px',
-                marginBottom: '18px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '12px'
-            }}>
-                {/* Search Input */}
-                <form onSubmit={handleSearchSubmit} style={{ flex: '1 1 300px', display: 'flex', gap: '8px' }}>
-                    <div style={{ position: 'relative', width: '100%' }}>
-                        <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
-                        <input
-                            type="text"
-                            placeholder="Search by client code, phone number, source..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            style={{
-                                ...darkInputStyle,
-                                paddingLeft: '40px',
-                                background: 'rgba(0,0,0,0.3)',
-                                borderRadius: '10px'
-                            }}
-                        />
-                    </div>
-                    <button type="submit" className="primary-btn" style={{ padding: '0 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '700' }}>
-                        Search
-                    </button>
-                </form>
+                    <div className="glass-card" style={{
+                        padding: '14px 18px',
+                        marginBottom: '18px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '12px'
+                    }}>
+                        {/* Instant Live Search Input */}
+                        <form onSubmit={(e) => { e.preventDefault(); fetchLeads(); }} style={{ flex: '1 1 320px', display: 'flex', gap: '8px' }}>
+                            <div style={{ position: 'relative', width: '100%' }}>
+                                <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
+                                <input
+                                    type="text"
+                                    placeholder="Type client or agent name, phone, code to search..."
+                                    value={searchTerm}
+                                    onChange={(e) => {
+                                        setSearchTerm(e.target.value);
+                                        setCurrentPage(1);
+                                    }}
+                                    style={{
+                                        ...darkInputStyle,
+                                        paddingLeft: '40px',
+                                        paddingRight: searchTerm ? '38px' : '14px',
+                                        background: 'rgba(0,0,0,0.3)',
+                                        borderRadius: '10px'
+                                    }}
+                                />
+                                {searchTerm && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSearchTerm('');
+                                            setCurrentPage(1);
+                                        }}
+                                        style={{
+                                            position: 'absolute',
+                                            right: '10px',
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            background: 'transparent',
+                                            border: 'none',
+                                            color: 'rgba(255,255,255,0.5)',
+                                            cursor: 'pointer',
+                                            padding: '4px',
+                                            display: 'flex',
+                                            alignItems: 'center'
+                                        }}
+                                        title="Clear Search"
+                                    >
+                                        <X size={15} />
+                                    </button>
+                                )}
+                            </div>
+                            <button type="submit" className="primary-btn" style={{ padding: '0 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '700' }}>
+                                Search
+                            </button>
+                        </form>
 
                 {/* Filters */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -1691,7 +1790,7 @@ export default function Leads() {
                                                         setAdminOverride(false);
                                                         setShowConvertModal(true);
                                                     }}
-                                                    title="Record Advance & Confirm Booking"
+                                                    title="Record Advance & Confirm Booking (Moves to Confirmed Bookings)"
                                                     style={{
                                                         background: 'rgba(34, 197, 94, 0.2)',
                                                         color: '#4ade80',
@@ -1708,26 +1807,28 @@ export default function Leads() {
                                                         whiteSpace: 'nowrap'
                                                     }}
                                                 >
-                                                    <CreditCard size={13} /> Record Advance
+                                                    <CheckCircle size={13} /> Confirm / Record Advance
                                                 </button>
                                             ) : (
-                                                <span
+                                                <a
+                                                    href="/admin/bookings"
                                                     style={{
                                                         padding: '5px 10px',
                                                         borderRadius: '8px',
                                                         fontSize: '11px',
                                                         fontWeight: '800',
-                                                        background: 'rgba(34, 197, 94, 0.1)',
+                                                        background: 'rgba(34, 197, 94, 0.15)',
                                                         color: '#4ade80',
-                                                        border: '1px solid rgba(34, 197, 94, 0.25)',
+                                                        border: '1px solid rgba(34, 197, 94, 0.3)',
                                                         display: 'inline-flex',
                                                         alignItems: 'center',
-                                                        gap: '4px'
+                                                        gap: '4px',
+                                                        textDecoration: 'none'
                                                     }}
-                                                    title="Booking Confirmed"
+                                                    title="View in Confirmed Bookings"
                                                 >
-                                                    <CheckCircle size={12} /> Confirmed
-                                                </span>
+                                                    <CheckCircle size={12} /> Confirmed (View ➔)
+                                                </a>
                                             )}
 
                                             {/* Preview Tour & Quotation (Eye icon) */}
@@ -2010,9 +2111,7 @@ export default function Leads() {
                                                     type="button"
                                                     onClick={() => {
                                                         setSelectedSidebarMonth(opt.label);
-                                                        setMonthFilter(opt.tab);
                                                         setShowMonthDropdown(false);
-                                                        setCurrentPage(1);
                                                     }}
                                                     style={{
                                                         width: '100%',

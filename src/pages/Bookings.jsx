@@ -7,7 +7,7 @@ import {
     AlertCircle, Search, Filter, Phone, MessageSquare, Plus,
     FileText, X, ArrowUpRight, ShieldCheck, UserCheck,
     CreditCard, Hourglass, Edit, MoreVertical, User, ArrowUpDown,
-    ChevronLeft, ChevronRight
+    ChevronLeft, ChevronRight, AlertTriangle, AlertOctagon, Ban, XCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SEO from '../components/SEO';
@@ -188,6 +188,19 @@ const formatTripDate = (dateVal) => {
     return `${day} ${month} ${year}`;
 };
 
+const isDatePassedBooking = (bkg) => {
+    if (!bkg) return false;
+    const status = (bkg.bookingStatus || '').toLowerCase();
+    if (status === 'completed' || status === 'cancelled') return false;
+    const dateVal = bkg.travelStartDate;
+    if (!dateVal) return false;
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return d < today;
+};
+
 export default function Bookings() {
     const { selectedCompany } = useCompany();
     const { theme } = useTheme();
@@ -233,6 +246,7 @@ export default function Bookings() {
 
     // Cancel Form
     const [cancelReason, setCancelReason] = useState('');
+    const [cancelling, setCancelling] = useState(false);
 
     // Assign Driver Modal State
     const [showAssignDriverModal, setShowAssignDriverModal] = useState(false);
@@ -424,6 +438,52 @@ export default function Bookings() {
     };
 
 
+    const handleConfirmCancel = async () => {
+        if (!selectedBooking) return;
+        try {
+            setCancelling(true);
+            const reason = cancelReason.trim() || 'Date Passed & Guest did not call (No-Show)';
+            if (selectedBooking._id && !String(selectedBooking._id).startsWith('bkg-mock')) {
+                await axios.post(`/api/bookings/${selectedBooking._id}/cancel`, { reason });
+            }
+            // Remove from active confirmed bookings
+            setBookings(prev => prev.filter(b => b._id !== selectedBooking._id));
+            setShowCancelModal(false);
+            setCancelReason('');
+            alert(`Booking ${selectedBooking.bookingCode || selectedBooking.bookingId} cancelled and moved to Cancelled Bookings.`);
+        } catch (err) {
+            console.error('Error cancelling booking:', err);
+            alert(err.response?.data?.message || 'Failed to cancel booking');
+        } finally {
+            setCancelling(false);
+        }
+    };
+
+    const handleAutoCancelAllOverdue = async () => {
+        const overdueList = processedBookings.filter(isDatePassedBooking);
+        if (overdueList.length === 0) return;
+        const confirmCancel = window.confirm(`Move all ${overdueList.length} date-passed booking(s) to Cancelled Bookings? (Reason: Date Passed & Guest did not call / No-Show)`);
+        if (!confirmCancel) return;
+
+        try {
+            setLoading(true);
+            for (const bkg of overdueList) {
+                if (bkg._id && !String(bkg._id).startsWith('bkg-mock')) {
+                    await axios.post(`/api/bookings/${bkg._id}/cancel`, {
+                        reason: 'Date Passed & Guest did not call (No-Show)'
+                    }).catch(e => console.error('Cancel error for bkg:', bkg._id, e));
+                }
+            }
+            const overdueIds = new Set(overdueList.map(b => b._id));
+            setBookings(prev => prev.filter(b => !overdueIds.has(b._id)));
+            alert(`Successfully moved ${overdueList.length} date-passed ride(s) to Cancelled Bookings!`);
+        } catch (err) {
+            console.error('Error auto-cancelling overdue:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const fetchBookings = async () => {
         try {
             setLoading(true);
@@ -448,6 +508,9 @@ export default function Bookings() {
         if (list.length === 0) {
             list = BASELINE_SEPTEMBER_BOOKINGS;
         }
+
+        // Filter out Cancelled bookings so they appear exclusively in Cancelled Bookings
+        list = list.filter(b => b.bookingStatus !== 'Cancelled' && b.status !== 'Cancelled');
 
         // 1. Month Filter
         if (selectedMonth !== 'All Months') {
@@ -518,6 +581,11 @@ export default function Bookings() {
             receivedAmount,
             balanceDue
         };
+    }, [processedBookings]);
+
+    // Overdue / Date-Passed Bookings
+    const overdueBookings = useMemo(() => {
+        return processedBookings.filter(isDatePassedBooking);
     }, [processedBookings]);
 
     const handleSort = (field) => {
@@ -790,6 +858,53 @@ export default function Bookings() {
                     )}
                 </div>
             </div>
+
+            {/* DATE PASSED / NO-SHOW WARNING BANNER */}
+            {overdueBookings.length > 0 && (
+                <div style={{
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    borderRadius: '12px',
+                    padding: '12px 18px',
+                    marginBottom: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    flexWrap: 'wrap'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <AlertTriangle size={20} color="#f87171" />
+                        <div>
+                            <div style={{ color: '#ffffff', fontWeight: '700', fontSize: '13px' }}>
+                                {overdueBookings.length} booking{overdueBookings.length > 1 ? 's have' : ' has'} passed scheduled travel date without guest contact (No-Show).
+                            </div>
+                            <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '11.5px', marginTop: '2px' }}>
+                                Date has passed and guest did not call. You can move these rides to Cancelled Bookings.
+                            </div>
+                        </div>
+                    </div>
+                    <button
+                        onClick={handleAutoCancelAllOverdue}
+                        style={{
+                            padding: '7px 14px',
+                            background: '#ef4444',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
+                        }}
+                    >
+                        <XCircle size={14} /> Move All ({overdueBookings.length}) to Cancelled Bookings
+                    </button>
+                </div>
+            )}
 
             {/* 4 KPI METRIC CARDS (Exact match with media_1788927832202.png) */}
             <div style={{
@@ -1158,18 +1273,37 @@ export default function Bookings() {
 
                                         {/* 9. Status Pill */}
                                         <td style={{ padding: '14px 16px' }}>
-                                            <span style={{
-                                                padding: '4px 12px',
-                                                borderRadius: '20px',
-                                                fontSize: '11px',
-                                                fontWeight: '800',
-                                                background: isRunning ? 'rgba(30, 58, 138, 0.45)' : 'rgba(6, 95, 70, 0.45)',
-                                                color: isRunning ? '#60a5fa' : '#34d399',
-                                                border: isRunning ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(52, 211, 153, 0.4)',
-                                                display: 'inline-block'
-                                            }}>
-                                                {isRunning ? 'Running' : 'Confirmed'}
-                                            </span>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                                <span style={{
+                                                    padding: '4px 12px',
+                                                    borderRadius: '20px',
+                                                    fontSize: '11px',
+                                                    fontWeight: '800',
+                                                    background: isRunning ? 'rgba(30, 58, 138, 0.45)' : 'rgba(6, 95, 70, 0.45)',
+                                                    color: isRunning ? '#60a5fa' : '#34d399',
+                                                    border: isRunning ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(52, 211, 153, 0.4)',
+                                                    display: 'inline-block'
+                                                }}>
+                                                    {isRunning ? 'Running' : 'Confirmed'}
+                                                </span>
+                                                {isDatePassedBooking(bkg) && (
+                                                    <span style={{
+                                                        padding: '2px 8px',
+                                                        borderRadius: '6px',
+                                                        fontSize: '10px',
+                                                        fontWeight: '800',
+                                                        background: 'rgba(239, 68, 68, 0.2)',
+                                                        color: '#fca5a5',
+                                                        border: '1px solid rgba(239, 68, 68, 0.4)',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '3px',
+                                                        whiteSpace: 'nowrap'
+                                                    }}>
+                                                        <AlertTriangle size={10} /> Date Passed
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
 
                                         {/* 10. Actions (PDF, Pay, Assign Driver, ⋮) matching media_1788929159044.png */}
@@ -1266,6 +1400,35 @@ export default function Bookings() {
                                                         }}
                                                     >
                                                         <Car size={13} /> Assign Driver
+                                                    </button>
+                                                )}
+
+                                                {/* Quick Cancel Button if Date Passed & Guest did not call */}
+                                                {isDatePassedBooking(bkg) && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedBooking(bkg);
+                                                            setCancelReason('Date Passed & Guest did not call (No-Show)');
+                                                            setShowCancelModal(true);
+                                                        }}
+                                                        title="Date passed without guest contact - Mark Cancelled"
+                                                        style={{
+                                                            padding: '6px 12px',
+                                                            background: 'rgba(239, 68, 68, 0.2)',
+                                                            border: '1px solid rgba(239, 68, 68, 0.45)',
+                                                            borderRadius: '20px',
+                                                            color: '#fca5a5',
+                                                            fontSize: '11.5px',
+                                                            fontWeight: '700',
+                                                            cursor: 'pointer',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                            transition: 'all 0.2s',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                    >
+                                                        <XCircle size={12} color="#f87171" /> Cancel (No-Show)
                                                     </button>
                                                 )}
 
@@ -1378,6 +1541,7 @@ export default function Bookings() {
                                                                 onClick={() => {
                                                                     setActiveActionMenu(null);
                                                                     setSelectedBooking(bkg);
+                                                                    setCancelReason(isDatePassedBooking(bkg) ? 'Date Passed & Guest did not call (No-Show)' : 'Customer request');
                                                                     setShowCancelModal(true);
                                                                 }}
                                                                 style={{
@@ -1395,7 +1559,7 @@ export default function Bookings() {
                                                                     borderRadius: '6px'
                                                                 }}
                                                             >
-                                                                <AlertCircle size={13} /> Cancel Booking
+                                                                <AlertCircle size={13} /> {isDatePassedBooking(bkg) ? 'Cancel (Date Passed / No-Show)' : 'Cancel Booking'}
                                                             </button>
                                                         </div>
                                                     )}
@@ -1552,18 +1716,97 @@ export default function Bookings() {
             {/* CANCEL MODAL */}
             <AnimatePresence>
                 {showCancelModal && selectedBooking && (
-                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px' }}>
-                        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} style={{ width: '100%', maxWidth: '420px', background: '#0b1120', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '16px', padding: '24px' }}>
-                            <h2 style={{ color: '#f87171', margin: '0 0 8px 0', fontSize: '18px', fontWeight: '800' }}>Cancel Booking</h2>
-                            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', margin: '0 0 14px 0' }}>Are you sure you want to cancel booking {selectedBooking.bookingCode || selectedBooking.bookingId}?</p>
-                            <input type="text" placeholder="Reason for cancellation..." value={cancelReason} onChange={e => setCancelReason(e.target.value)} style={{ ...inputStyle, marginBottom: '14px' }} />
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px' }}>
+                        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} style={{ width: '100%', maxWidth: '480px', background: '#0b1120', border: '1px solid rgba(239, 68, 68, 0.35)', borderRadius: '16px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <XCircle size={22} color="#f87171" />
+                                    <h2 style={{ color: '#f87171', margin: 0, fontSize: '18px', fontWeight: '800' }}>Cancel Booking</h2>
+                                </div>
+                                <button onClick={() => setShowCancelModal(false)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}><X size={18} /></button>
+                            </div>
+
+                            <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', margin: '0 0 14px 0' }}>
+                                Are you sure you want to cancel booking <strong style={{ color: 'white' }}>{selectedBooking.bookingCode || selectedBooking.bookingId}</strong> for <strong style={{ color: '#fbbf24' }}>{selectedBooking.clientName}</strong>?
+                            </p>
+
+                            <div style={{ marginBottom: '14px' }}>
+                                <label style={{ display: 'block', color: 'rgba(255,255,255,0.6)', fontSize: '11.5px', fontWeight: '600', marginBottom: '6px' }}>
+                                    Quick Select Reason
+                                </label>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+                                    {[
+                                        'Date Passed & Guest did not call (No-Show)',
+                                        'Customer Request / Tour Cancelled',
+                                        'Flight / Train Cancelled',
+                                        'Emergency / Personal Reasons'
+                                    ].map((r) => (
+                                        <button
+                                            key={r}
+                                            type="button"
+                                            onClick={() => setCancelReason(r)}
+                                            style={{
+                                                padding: '5px 10px',
+                                                borderRadius: '6px',
+                                                border: cancelReason === r ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.1)',
+                                                background: cancelReason === r ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.03)',
+                                                color: cancelReason === r ? '#fca5a5' : 'rgba(255,255,255,0.7)',
+                                                fontSize: '11px',
+                                                fontWeight: cancelReason === r ? '700' : '500',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.15s'
+                                            }}
+                                        >
+                                            {r}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <label style={{ display: 'block', color: 'rgba(255,255,255,0.6)', fontSize: '11.5px', fontWeight: '600', marginBottom: '4px' }}>
+                                    Cancellation Note / Reason
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="Enter reason for cancellation..."
+                                    value={cancelReason}
+                                    onChange={e => setCancelReason(e.target.value)}
+                                    style={{ ...inputStyle, width: '100%' }}
+                                />
+                            </div>
+
+                            <p style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', margin: '0 0 16px 0' }}>
+                                ℹ️ This booking will be removed from Confirmed Bookings and stored in <strong>Cancelled Bookings</strong>. It can be restored anytime.
+                            </p>
+
                             <div style={{ display: 'flex', gap: '10px' }}>
-                                <button onClick={() => setShowCancelModal(false)} style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Keep</button>
-                                <button onClick={() => {
-                                    setBookings(prev => prev.filter(b => b._id !== selectedBooking._id));
-                                    setShowCancelModal(false);
-                                    alert('Booking cancelled.');
-                                }} style={{ flex: 1, padding: '10px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '800' }}>Confirm Cancel</button>
+                                <button
+                                    onClick={() => setShowCancelModal(false)}
+                                    style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.06)', color: 'white', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '12.5px' }}
+                                >
+                                    Keep Booking
+                                </button>
+                                <button
+                                    onClick={handleConfirmCancel}
+                                    disabled={cancelling}
+                                    style={{
+                                        flex: 1,
+                                        padding: '10px',
+                                        background: '#ef4444',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontWeight: '800',
+                                        fontSize: '12.5px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '6px',
+                                        boxShadow: '0 4px 12px rgba(239, 68, 68, 0.4)'
+                                    }}
+                                >
+                                    {cancelling ? 'Cancelling...' : <><XCircle size={14} /> Confirm & Move</>}
+                                </button>
                             </div>
                         </motion.div>
                     </div>

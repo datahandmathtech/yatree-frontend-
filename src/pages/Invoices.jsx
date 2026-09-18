@@ -16,18 +16,17 @@ const MONTH_TABS = [
     'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'
 ];
 
-// Baseline Data exactly matching media_1788930365517.png
-// 9 Invoices, Total Debit: ₹54,900.00, Taxable: ₹46,525.42, GST: ₹8,374.58
+// Baseline Data exactly matching media_1788930365517.png with payment received (credit) tracking
 const BASELINE_INVOICES = [
-    { _id: 'inv-117', date: '03-Aug-26', rawDate: '2026-08-03', particulars: 'Nishta Mehta', vchType: 'Sales', vchNo: '117', debitAmount: 900.00, creditAmount: 0.00, taxableValue: 857.00, cgst: 21.43, sgst: 21.43, roundOff: 0.14, bookingId: '08/23', mobile: '+91 98765 43210' },
-    { _id: 'inv-118', date: '10-Aug-26', rawDate: '2026-08-10', particulars: 'Shivsham Bhagat', vchType: 'Sales', vchNo: '118', debitAmount: 5000.00, creditAmount: 0.00, taxableValue: 4237.29, cgst: 381.36, sgst: 381.36, roundOff: 0.00, bookingId: '08/24', mobile: '+91 98234 56789' },
-    { _id: 'inv-119', date: '12-Aug-26', rawDate: '2026-08-12', particulars: 'Shubham Verma', vchType: 'Sales', vchNo: '119', debitAmount: 7500.00, creditAmount: 0.00, taxableValue: 6355.93, cgst: 572.04, sgst: 572.04, roundOff: -0.01, bookingId: '08/25', mobile: '+91 98111 22233' },
-    { _id: 'inv-120', date: '12-Aug-26', rawDate: '2026-08-12', particulars: 'Ramesh Jain', vchType: 'Sales', vchNo: '120', debitAmount: 2500.00, creditAmount: 0.00, taxableValue: 2118.64, cgst: 190.68, sgst: 190.68, roundOff: 0.00, bookingId: '08/26', mobile: '+91 97654 32109' },
-    { _id: 'inv-121', date: '20-Aug-26', rawDate: '2026-08-20', particulars: 'Rakesh Mehta', vchType: 'Sales', vchNo: '121', debitAmount: 10500.00, creditAmount: 0.00, taxableValue: 8898.31, cgst: 800.85, sgst: 800.85, roundOff: -0.01, bookingId: '08/27', mobile: '+91 98333 44455' },
-    { _id: 'inv-122', date: '26-Aug-26', rawDate: '2026-08-26', particulars: 'Tulsidas Mange', vchType: 'Sales', vchNo: '122', debitAmount: 12500.00, creditAmount: 0.00, taxableValue: 10593.22, cgst: 953.39, sgst: 953.39, roundOff: 0.00, bookingId: '08/28', mobile: '+91 99887 76655' },
-    { _id: 'inv-123', date: '31-Aug-26', rawDate: '2026-08-31', particulars: 'Avi Garg', vchType: 'Sales', vchNo: '123', debitAmount: 3000.00, creditAmount: 0.00, taxableValue: 2542.37, cgst: 228.82, sgst: 228.82, roundOff: -0.01, bookingId: '08/29', mobile: '+91 91234 56780' },
-    { _id: 'inv-124', date: '31-Aug-26', rawDate: '2026-08-31', particulars: 'Rahul Jaiswal', vchType: 'Sales', vchNo: '124', debitAmount: 11000.00, creditAmount: 0.00, taxableValue: 9322.03, cgst: 838.99, sgst: 838.99, roundOff: -0.01, bookingId: '08/30', mobile: '+91 97777 88899' },
-    { _id: 'inv-125', date: '31-Aug-26', rawDate: '2026-08-31', particulars: 'Vikram Singh', vchType: 'Sales', vchNo: '125', debitAmount: 2000.00, creditAmount: 0.00, taxableValue: 1694.92, cgst: 152.54, sgst: 152.54, roundOff: 0.00, bookingId: '08/31', mobile: '+91 98450 11223' }
+    { _id: 'inv-117', date: '03-Aug-26', rawDate: '2026-08-03', particulars: 'Nishta Mehta', vchType: 'Sales', vchNo: '117', debitAmount: 900.00, creditAmount: 900.00, taxableValue: 857.00, cgst: 21.43, sgst: 21.43, roundOff: 0.14, bookingId: '08/23', mobile: '+91 98765 43210', status: 'Paid' },
+    { _id: 'inv-118', date: '10-Aug-26', rawDate: '2026-08-10', particulars: 'Shivsham Bhagat', vchType: 'Sales', vchNo: '118', debitAmount: 5000.00, creditAmount: 3000.00, taxableValue: 4237.29, cgst: 381.36, sgst: 381.36, roundOff: 0.00, bookingId: '08/24', mobile: '+91 98234 56789', status: 'Partial' },
+    { _id: 'inv-119', date: '12-Aug-26', rawDate: '2026-08-12', particulars: 'Shubham Verma', vchType: 'Sales', vchNo: '119', debitAmount: 7500.00, creditAmount: 7500.00, taxableValue: 6355.93, cgst: 572.04, sgst: 572.04, roundOff: -0.01, bookingId: '08/25', mobile: '+91 98111 22233', status: 'Paid' },
+    { _id: 'inv-120', date: '12-Aug-26', rawDate: '2026-08-12', particulars: 'Ramesh Jain', vchType: 'Sales', vchNo: '120', debitAmount: 2500.00, creditAmount: 2500.00, taxableValue: 2118.64, cgst: 190.68, sgst: 190.68, roundOff: 0.00, bookingId: '08/26', mobile: '+91 97654 32109', status: 'Paid' },
+    { _id: 'inv-121', date: '20-Aug-26', rawDate: '2026-08-20', particulars: 'Rakesh Mehta', vchType: 'Sales', vchNo: '121', debitAmount: 10500.00, creditAmount: 5000.00, taxableValue: 8898.31, cgst: 800.85, sgst: 800.85, roundOff: -0.01, bookingId: '08/27', mobile: '+91 98333 44455', status: 'Partial' },
+    { _id: 'inv-122', date: '26-Aug-26', rawDate: '2026-08-26', particulars: 'Tulsidas Mange', vchType: 'Sales', vchNo: '122', debitAmount: 12500.00, creditAmount: 12500.00, taxableValue: 10593.22, cgst: 953.39, sgst: 953.39, roundOff: 0.00, bookingId: '08/28', mobile: '+91 99887 76655', status: 'Paid' },
+    { _id: 'inv-123', date: '31-Aug-26', rawDate: '2026-08-31', particulars: 'Avi Garg', vchType: 'Sales', vchNo: '123', debitAmount: 3000.00, creditAmount: 3000.00, taxableValue: 2542.37, cgst: 228.82, sgst: 228.82, roundOff: -0.01, bookingId: '08/29', mobile: '+91 91234 56780', status: 'Paid' },
+    { _id: 'inv-124', date: '31-Aug-26', rawDate: '2026-08-31', particulars: 'Rahul Jaiswal', vchType: 'Sales', vchNo: '124', debitAmount: 11000.00, creditAmount: 6000.00, taxableValue: 9322.03, cgst: 838.99, sgst: 838.99, roundOff: -0.01, bookingId: '08/30', mobile: '+91 97777 88899', status: 'Partial' },
+    { _id: 'inv-125', date: '31-Aug-26', rawDate: '2026-08-31', particulars: 'Vikram Singh', vchType: 'Sales', vchNo: '125', debitAmount: 2000.00, creditAmount: 2000.00, taxableValue: 1694.92, cgst: 152.54, sgst: 152.54, roundOff: 0.00, bookingId: '08/31', mobile: '+91 98450 11223', status: 'Paid' }
 ];
 
 export default function Invoices() {
@@ -98,6 +97,9 @@ export default function Invoices() {
                 const mapped = data.invoices.map((inv, idx) => {
                     const invDate = inv.invoiceDate ? new Date(inv.invoiceDate) : new Date();
                     const dStr = invDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '-');
+                    const collected = inv.status === 'Paid'
+                        ? (Number(inv.totalAmount) || 0)
+                        : (Number(inv.advanceAdjusted) || (inv.booking && Number(inv.booking.advancePaid)) || 0);
                     return {
                         _id: inv._id,
                         date: dStr,
@@ -106,11 +108,12 @@ export default function Invoices() {
                         vchType: inv.voucherType || 'Sales',
                         vchNo: inv.invoiceNumber ? inv.invoiceNumber.replace(/^.*?-/, '') : String(117 + idx),
                         debitAmount: Number(inv.totalAmount) || 0,
-                        creditAmount: 0.00,
+                        creditAmount: collected,
                         taxableValue: Number(inv.taxableAmount) || (Number(inv.totalAmount) * 0.9523),
                         gstValue: Number(inv.totalTaxAmount) || (Number(inv.totalAmount) * 0.0476),
                         bookingId: inv.bookingId || '',
-                        mobile: inv.billTo?.mobile || ''
+                        mobile: inv.billTo?.mobile || '',
+                        status: inv.status || 'Issued'
                     };
                 });
                 setInvoices(mapped);
@@ -315,9 +318,13 @@ export default function Invoices() {
         };
     }, [filteredInvoices]);
 
-    // Total Debit sum for table bottom row
+    // Total Debit & Credit sum for table bottom row
     const tableTotalDebit = useMemo(() => {
         return filteredInvoices.reduce((acc, curr) => acc + (Number(curr.debitAmount) || 0), 0);
+    }, [filteredInvoices]);
+
+    const tableTotalCredit = useMemo(() => {
+        return filteredInvoices.reduce((acc, curr) => acc + (Number(curr.creditAmount) || 0), 0);
     }, [filteredInvoices]);
 
     const handleSort = (field) => {
@@ -1298,7 +1305,13 @@ export default function Invoices() {
                                         </td>
 
                                         {/* Credit Amount */}
-                                        <td style={{ padding: '14px 18px', fontSize: '13px', fontWeight: '600', color: 'rgba(255,255,255,0.6)', textAlign: 'right' }}>
+                                        <td style={{ 
+                                            padding: '14px 18px', 
+                                            fontSize: '13px', 
+                                            fontWeight: '700', 
+                                            color: Number(inv.creditAmount) > 0 ? '#34d399' : 'rgba(255,255,255,0.4)', 
+                                            textAlign: 'right' 
+                                        }}>
                                             {Number(inv.creditAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                         </td>
                                     </tr>
@@ -1319,8 +1332,8 @@ export default function Invoices() {
                                     <td style={{ padding: '16px 18px', fontSize: '14px', color: '#ffffff', textAlign: 'right', fontWeight: '900' }}>
                                         {Number(tableTotalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                     </td>
-                                    <td style={{ padding: '16px 18px', fontSize: '14px', color: 'rgba(255,255,255,0.7)', textAlign: 'right', fontWeight: '700' }}>
-                                        0.00
+                                    <td style={{ padding: '16px 18px', fontSize: '14px', color: '#34d399', textAlign: 'right', fontWeight: '900' }}>
+                                        {Number(tableTotalCredit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                     </td>
                                 </tr>
                             )}

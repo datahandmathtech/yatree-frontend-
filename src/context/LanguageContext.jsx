@@ -275,6 +275,8 @@ export const translations = {
         bookings_leads: 'बुकिंग और लीड्स',
         leads: 'सेल्स लीड्स',
         bookings: 'कन्फर्म बुकिंग्स',
+        cancelled_bookings: 'रद्द बुकिंग',
+        completed_bookings: 'पूरी हुई बुकिंग',
         drs: 'DRS शेड्यूल',
         client_ledgers: 'क्लाइंट लेजर्स',
         travel_agents: 'ट्रैवल एजेंट्स',
