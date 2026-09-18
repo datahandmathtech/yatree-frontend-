@@ -255,6 +255,7 @@ export default function Bookings() {
     const [driversList, setDriversList] = useState([]);
     const [vehiclesList, setVehiclesList] = useState([]);
     const [savingAssignment, setSavingAssignment] = useState(false);
+    const [downloadOptionModal, setDownloadOptionModal] = useState(null);
     const [masterDriverId, setMasterDriverId] = useState('');
     const [masterVehicleNumber, setMasterVehicleNumber] = useState('');
 
@@ -1311,7 +1312,7 @@ export default function Bookings() {
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                                                 {/* PDF Button */}
                                                 <button
-                                                    onClick={() => generateBookingConfirmationPDF(bkg, selectedCompany)}
+                                                    onClick={() => setDownloadOptionModal(bkg)}
                                                     title="Download Confirmation PDF"
                                                     style={{
                                                         padding: '6px 14px',
@@ -2180,6 +2181,128 @@ export default function Bookings() {
                                 </button>
                             </div>
                         </motion.div>
+                    </div>
+                )}
+                {/* Export Options Modal (With Amount vs Without Amount) */}
+                {downloadOptionModal && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: 'rgba(3, 7, 18, 0.85)',
+                        backdropFilter: 'blur(8px)',
+                        zIndex: 100000,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '20px'
+                    }}>
+                        <div style={{
+                            width: '100%',
+                            maxWidth: '460px',
+                            background: '#0d1526',
+                            border: '1px solid rgba(251, 191, 36, 0.35)',
+                            borderRadius: '16px',
+                            padding: '24px',
+                            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.85)'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                                <h3 style={{ margin: 0, color: 'white', fontSize: '17px', fontWeight: '900' }}>
+                                    📄 Download PDF Options
+                                </h3>
+                                <button
+                                    type="button"
+                                    onClick={() => setDownloadOptionModal(null)}
+                                    style={{
+                                        background: 'rgba(255, 255, 255, 0.06)',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        color: 'rgba(255,255,255,0.7)',
+                                        width: '28px',
+                                        height: '28px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+                            <p style={{ fontSize: '12.5px', color: 'rgba(255,255,255,0.65)', marginBottom: '18px', lineHeight: '1.4' }}>
+                                Select whether you want to display quotation prices or export itinerary without pricing figures for your client.
+                            </p>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {/* Option 1: With Amount */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        generateBookingConfirmationPDF(downloadOptionModal, selectedCompany, { withAmount: true });
+                                        setDownloadOptionModal(null);
+                                    }}
+                                    style={{
+                                        padding: '14px 16px',
+                                        background: 'rgba(251, 191, 36, 0.08)',
+                                        border: '1px solid rgba(251, 191, 36, 0.35)',
+                                        borderRadius: '12px',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(251, 191, 36, 0.15)'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(251, 191, 36, 0.08)'}
+                                >
+                                    <div>
+                                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#fbbf24' }}>
+                                            💰 With Amount (Full Quotation)
+                                        </div>
+                                        <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.6)', marginTop: '3px' }}>
+                                            Shows day-wise amount, base fare, GST & total payable price.
+                                        </div>
+                                    </div>
+                                    <span style={{ fontSize: '18px', color: '#fbbf24', fontWeight: '900' }}>➔</span>
+                                </button>
+
+                                {/* Option 2: Without Amount */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        generateBookingConfirmationPDF(downloadOptionModal, selectedCompany, { withAmount: false });
+                                        setDownloadOptionModal(null);
+                                    }}
+                                    style={{
+                                        padding: '14px 16px',
+                                        background: 'rgba(255, 255, 255, 0.04)',
+                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                        borderRadius: '12px',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'}
+                                >
+                                    <div>
+                                        <div style={{ fontSize: '14px', fontWeight: '800', color: 'white' }}>
+                                            👁️ Without Amount (Client Mode)
+                                        </div>
+                                        <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.5)', marginTop: '3px' }}>
+                                            Hides all financial details for sharing with guests directly.
+                                        </div>
+                                    </div>
+                                    <span style={{ fontSize: '18px', color: 'white', fontWeight: '900' }}>➔</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
             </AnimatePresence>

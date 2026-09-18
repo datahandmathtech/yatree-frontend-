@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-export const generateBookingConfirmationPDF = (booking, company) => {
+export const generateBookingConfirmationPDF = (booking, company, { withAmount = true } = {}) => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
     const pageHeight = doc.internal.pageSize.height;
@@ -146,40 +146,42 @@ export const generateBookingConfirmationPDF = (booking, company) => {
     const splitNotes = doc.splitTextToSize(notesText, summaryBoxX - 22);
     doc.text(splitNotes, 14, currentY + 10);
 
-    // Right side: Financial Breakdown Card
-    doc.setFillColor(241, 245, 249);
-    doc.roundedRect(summaryBoxX, currentY, summaryBoxWidth, 38, 2, 2, 'F');
-    doc.setDrawColor(203, 213, 225);
-    doc.roundedRect(summaryBoxX, currentY, summaryBoxWidth, 38, 2, 2, 'S');
+    // Right side: Financial Breakdown Card (Conditional)
+    if (withAmount) {
+        doc.setFillColor(241, 245, 249);
+        doc.roundedRect(summaryBoxX, currentY, summaryBoxWidth, 38, 2, 2, 'F');
+        doc.setDrawColor(203, 213, 225);
+        doc.roundedRect(summaryBoxX, currentY, summaryBoxWidth, 38, 2, 2, 'S');
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(...textMuted);
-    doc.text('Total Package Value:', summaryBoxX + 6, currentY + 8);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...darkColor);
-    doc.text(`Rs. ${(booking.totalAmount || 0).toLocaleString('en-IN')}`, summaryBoxX + summaryBoxWidth - 6, currentY + 8, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(...textMuted);
+        doc.text('Total Package Value:', summaryBoxX + 6, currentY + 8);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...darkColor);
+        doc.text(`Rs. ${(booking.totalAmount || 0).toLocaleString('en-IN')}`, summaryBoxX + summaryBoxWidth - 6, currentY + 8, { align: 'right' });
 
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...textMuted);
-    doc.text(`GST Mode (${booking.gstMode || 'Inclusive'}):`, summaryBoxX + 6, currentY + 15);
-    doc.setFont('helvetica', 'bold');
-    doc.text(booking.gstAmount ? `Rs. ${booking.gstAmount.toLocaleString('en-IN')}` : 'Included', summaryBoxX + summaryBoxWidth - 6, currentY + 15, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...textMuted);
+        doc.text(`GST Mode (${booking.gstMode || 'Inclusive'}):`, summaryBoxX + 6, currentY + 15);
+        doc.setFont('helvetica', 'bold');
+        doc.text(booking.gstAmount ? `Rs. ${booking.gstAmount.toLocaleString('en-IN')}` : 'Included', summaryBoxX + summaryBoxWidth - 6, currentY + 15, { align: 'right' });
 
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(22, 101, 52); // Green
-    doc.text('Advance Received:', summaryBoxX + 6, currentY + 22);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Rs. ${(booking.advancePaid || 0).toLocaleString('en-IN')}`, summaryBoxX + summaryBoxWidth - 6, currentY + 22, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(22, 101, 52); // Green
+        doc.text('Advance Received:', summaryBoxX + 6, currentY + 22);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Rs. ${(booking.advancePaid || 0).toLocaleString('en-IN')}`, summaryBoxX + summaryBoxWidth - 6, currentY + 22, { align: 'right' });
 
-    doc.setDrawColor(203, 213, 225);
-    doc.line(summaryBoxX + 4, currentY + 26, summaryBoxX + summaryBoxWidth - 4, currentY + 26);
+        doc.setDrawColor(203, 213, 225);
+        doc.line(summaryBoxX + 4, currentY + 26, summaryBoxX + summaryBoxWidth - 4, currentY + 26);
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(185, 28, 28); // Red
-    doc.text('Balance Payable:', summaryBoxX + 6, currentY + 33);
-    doc.text(`Rs. ${(booking.balanceDue || 0).toLocaleString('en-IN')}`, summaryBoxX + summaryBoxWidth - 6, currentY + 33, { align: 'right' });
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(185, 28, 28); // Red
+        doc.text('Balance Payable:', summaryBoxX + 6, currentY + 33);
+        doc.text(`Rs. ${(booking.balanceDue || 0).toLocaleString('en-IN')}`, summaryBoxX + summaryBoxWidth - 6, currentY + 33, { align: 'right' });
+    }
 
     currentY += 46;
 

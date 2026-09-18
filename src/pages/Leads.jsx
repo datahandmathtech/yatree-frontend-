@@ -1111,10 +1111,19 @@ export default function Leads() {
         // Use dedicated sidebarLeads fetched independently for this month, or fallback to leads
         const sourceList = (sidebarLeads && sidebarLeads.length > 0) ? sidebarLeads : leads;
 
-        // Filter real leads that fall in this month and year (by travelStartDate / leadDate / createdAt)
+        // Filter real leads that overlap with this month and year
         const monthRealLeads = (sourceList || []).filter(l => {
-            const p = parseLeadDateInfo(l.travelStartDate || l.leadDate || l.createdAt);
-            return p && p.year === year && p.monthIdx === monthIdx;
+            const pStart = parseLeadDateInfo(l.travelStartDate || l.leadDate || l.createdAt);
+            if (!pStart) return false;
+            
+            const startD = new Date(pStart.year, pStart.monthIdx, pStart.day);
+            const pEnd = parseLeadDateInfo(l.travelEndDate);
+            const endD = pEnd ? new Date(pEnd.year, pEnd.monthIdx, pEnd.day) : startD;
+            
+            const monthStart = new Date(year, monthIdx, 1);
+            const monthEnd = new Date(year, monthIdx, days);
+            
+            return startD <= monthEnd && endD >= monthStart;
         });
 
         // If real leads exist for this month, calculate directly from them
@@ -1127,8 +1136,22 @@ export default function Leads() {
 
             for (let day = 1; day <= days; day++) {
                 const dayLeads = monthRealLeads.filter(l => {
-                    const p = parseLeadDateInfo(l.travelStartDate || l.leadDate || l.createdAt);
-                    return p && p.day === day;
+                    // Check if this 'day' falls within the lead's travel dates
+                    const pStart = parseLeadDateInfo(l.travelStartDate || l.leadDate || l.createdAt);
+                    if (!pStart) return false;
+                    
+                    // If no end date, just check the start date
+                    if (!l.travelEndDate) {
+                        return pStart.year === year && pStart.monthIdx === monthIdx && pStart.day === day;
+                    }
+                    
+                    // If there's an end date, check the range
+                    const startD = new Date(pStart.year, pStart.monthIdx, pStart.day);
+                    const pEnd = parseLeadDateInfo(l.travelEndDate);
+                    const endD = pEnd ? new Date(pEnd.year, pEnd.monthIdx, pEnd.day) : startD;
+                    
+                    const currentD = new Date(year, monthIdx, day);
+                    return currentD >= startD && currentD <= endD;
                 });
 
                 const leadsCount = dayLeads.length;
