@@ -22,8 +22,11 @@ const ClientLedgers = () => {
     useEffect(() => {
         if (tabParam === 'agents') {
             setTabFilter('agents');
+        } else {
+            setTabFilter('direct');
         }
     }, [tabParam]);
+
     const [selectedClient, setSelectedClient] = useState(null);
     const [ledgerEntries, setLedgerEntries] = useState([]);
     const [ledgerLoading, setLedgerLoading] = useState(false);
@@ -147,18 +150,30 @@ const ClientLedgers = () => {
         return nameMatch || mobileMatch || cityMatch;
     });
 
+    const isAgentView = tabFilter === 'agents';
+
     return (
         <div style={{ padding: '30px', maxWidth: '1600px', margin: '0 auto', color: 'white' }}>
             <header style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
                 <div>
-                    <h1 style={{ fontSize: '32px', fontWeight: '900', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '15px' }}>
-                        <div style={{ padding: '12px', background: 'var(--primary)', borderRadius: '16px', color: '#000' }}>
-                            <Wallet size={28} />
+                    <h1 style={{ fontSize: '30px', fontWeight: '900', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{ 
+                            padding: '10px', 
+                            background: isAgentView ? '#f59e0b' : 'var(--primary)', 
+                            borderRadius: '14px', 
+                            color: '#000',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}>
+                            {isAgentView ? <Briefcase size={26} /> : <Users size={26} />}
                         </div>
-                        Client & Travel Agent Ledgers
+                        {isAgentView ? 'Travel Agents Directory & Ledgers' : 'Client & Guest Ledgers'}
                     </h1>
-                    <p style={{ color: 'rgba(255,255,255,0.6)', margin: 0, fontSize: '15px' }}>
-                        Track separate accounts for Travel Agents and Direct Clients, manage statements, and record receipts.
+                    <p style={{ color: 'rgba(255,255,255,0.6)', margin: 0, fontSize: '14px' }}>
+                        {isAgentView 
+                            ? 'Manage B2B travel agency partners, commission statements, and agency account ledgers.'
+                            : 'Track statements, debit/credit transactions, and balances for direct guests and corporate clients.'}
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
