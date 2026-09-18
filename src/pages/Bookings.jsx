@@ -1362,27 +1362,7 @@ export default function Bookings() {
                                                     <FileText size={13} /> PDF
                                                 </button>
 
-                                                {/* Pay Button */}
-                                                <button
-                                                    onClick={() => handleOpenLedger(bkg)}
-                                                    title="View Accounts Ledger"
-                                                    style={{
-                                                        padding: '6px 14px',
-                                                        background: 'rgba(37, 99, 235, 0.2)',
-                                                        border: '1px solid rgba(59, 130, 246, 0.4)',
-                                                        borderRadius: '20px',
-                                                        color: '#60a5fa',
-                                                        fontSize: '11.5px',
-                                                        fontWeight: '700',
-                                                        cursor: 'pointer',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                        whiteSpace: 'nowrap'
-                                                    }}
-                                                >
-                                                    Accounts
-                                                </button>
+                                                
 
                                                 {/* Assign Driver / Assigned Button */}
                                                 {((bkg.itinerary && bkg.itinerary.some(d => d.driverId || d.driverName)) || bkg.driverAssigned || bkg.driver || bkg.assignedDriver) ? (
