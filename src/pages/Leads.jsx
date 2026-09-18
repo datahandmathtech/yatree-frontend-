@@ -264,16 +264,20 @@ export default function Leads() {
     // Create / Edit Modal
     
     const [customSources, setCustomSources] = useState([]);
+    const [customVehicles, setCustomVehicles] = useState([]);
     useEffect(() => {
         if (selectedCompany?._id) {
             try {
                 const saved = JSON.parse(localStorage.getItem('leadSources_' + selectedCompany._id));
                 if (saved) setCustomSources(saved);
+                const savedVehicles = JSON.parse(localStorage.getItem('leadVehicles_' + selectedCompany._id));
+                if (savedVehicles) setCustomVehicles(savedVehicles);
             } catch(e) {}
         }
     }, [selectedCompany]);
     
     const ALL_SOURCES = [...new Set([...LEAD_SOURCES, ...customSources])];
+    const ALL_VEHICLES = [...new Set([...VEHICLE_OPTIONS, ...customVehicles])];
 
     const [showModal, setShowModal] = useState(false);
     const [remarksModalLead, setRemarksModalLead] = useState(null);
@@ -679,10 +683,9 @@ export default function Leads() {
                     manualRemarks: lead.inclusions?.manualRemarks || ''
                 },
                 itinerary: (lead.itinerary || []).map((d, i) => {
-                    const rowDate = sDate ? addDaysToDateString(sDate, i) : toLocalDateString(d.date);
                     return {
                         dayNo: d.dayNo || i + 1,
-                        date: rowDate || toLocalDateString(d.date),
+                        date: toLocalDateString(d.date),
                         time: d.time || '09:00 AM',
                         isApg: d.isApg || d.time === 'APG',
                         duty: d.duty || d.description || 'Standard Duty',
@@ -2240,15 +2243,29 @@ export default function Leads() {
                                 background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 100%)'
                             }}>
                                 <div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <BarChart3 size={18} color="#fbbf24" />
-                                        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '900', color: '#f8fafc', letterSpacing: '0.3px' }}>
-                                            Daily Lead Breakdown
-                                        </h3>
-                                    </div>
-                                    <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)', marginTop: '2px' }}>
-                                        Tally-style analytics & conversion matrix
-                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between', width: '100%', paddingRight: '15px' }}>
+    <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <BarChart3 size={18} color="#fbbf24" />
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '900', color: '#f8fafc', letterSpacing: '0.3px' }}>
+                Daily Lead Breakdown
+            </h3>
+        </div>
+        <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)', marginTop: '2px' }}>
+            Tally-style analytics
+        </div>
+    </div>
+    <div style={{ display: 'flex', gap: '16px' }}>
+        <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.6)', fontWeight: '700' }}>Total Leads</div>
+            <div style={{ fontSize: '15px', fontWeight: '900', color: 'white' }}>{sidebarStats.totalLeads}</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '10px', color: '#86efac', fontWeight: '700' }}>Total Conversions</div>
+            <div style={{ fontSize: '15px', fontWeight: '900', color: '#4ade80' }}>{sidebarStats.convertedCount || sidebarStats.totalConversions}</div>
+        </div>
+    </div>
+</div>
                                 </div>
                                 <button
                                     type="button"
@@ -2274,59 +2291,6 @@ export default function Leads() {
 
                             {/* Drawer Body (Scrollable) */}
                             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column' }}>
-                                {/* Monthly Summary Card */}
-                                <div style={{
-                                    border: '1px solid rgba(251, 191, 36, 0.35)',
-                                    borderRadius: '12px',
-                                    padding: '14px',
-                                    background: 'rgba(251, 191, 36, 0.03)',
-                                    marginBottom: '16px',
-                                    display: 'grid',
-                                    gridTemplateColumns: '1fr 1fr',
-                                    gap: '12px'
-                                }}>
-                                    <div>
-                                        <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.6)', fontWeight: '700' }}>
-                                            Total Leads
-                                        </div>
-                                        <div style={{ fontSize: '22px', fontWeight: '950', color: 'white', marginTop: '2px', lineHeight: '1.2' }}>
-                                            {sidebarStats.totalLeads}
-                                        </div>
-                                        <div style={{ fontSize: '13px', fontWeight: '800', color: '#f1f5f9', marginTop: '2px' }}>
-                                            ₹{sidebarStats.totalLeadsAmt.toLocaleString('en-IN')}
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.6)', fontWeight: '700' }}>
-                                            Total Conversions
-                                        </div>
-                                        <div style={{ fontSize: '22px', fontWeight: '950', color: 'white', marginTop: '2px', lineHeight: '1.2' }}>
-                                            {sidebarStats.totalConversions}
-                                        </div>
-                                        <div style={{ fontSize: '13px', fontWeight: '800', color: '#4ade80', marginTop: '2px' }}>
-                                            ₹{sidebarStats.totalConversionsAmt.toLocaleString('en-IN')}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Table Header */}
-                                <div style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: '50px 1fr 1fr',
-                                    padding: '10px 8px',
-                                    background: 'rgba(255, 255, 255, 0.03)',
-                                    borderRadius: '8px 8px 0 0',
-                                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                                    fontSize: '12px',
-                                    fontWeight: '800',
-                                    color: 'rgba(255, 255, 255, 0.65)'
-                                }}>
-                                    <div>Date</div>
-                                    <div style={{ textAlign: 'right' }}>Leads</div>
-                                    <div style={{ textAlign: 'right' }}>Conversion</div>
-                                </div>
-
                                 {/* Day-wise Scrollable Table */}
                                 <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
                                     {sidebarStats.dailyList.map(item => {
@@ -2346,7 +2310,7 @@ export default function Leads() {
                                                         padding: '10px 8px',
                                                         alignItems: 'center',
                                                         cursor: 'pointer',
-                                                        background: isExpanded ? 'rgba(251, 191, 36, 0.08)' : (hasLeads ? 'rgba(255, 255, 255, 0.015)' : 'transparent'),
+                                                        background: isExpanded ? 'rgba(251, 191, 36, 0.08)' : (new Date().getDate() === item.day && selectedSidebarMonth === new Date().toLocaleString('en-US', { month: 'short' }) + ' ' + new Date().getFullYear() ? 'rgba(34, 197, 94, 0.2)' : (hasLeads ? 'rgba(255, 255, 255, 0.015)' : 'transparent')),
                                                         borderLeft: isExpanded ? '3px solid #fbbf24' : '3px solid transparent',
                                                         transition: 'all 0.2s ease',
                                                     }}
@@ -2560,35 +2524,7 @@ export default function Leads() {
                                 </div>
                             </div>
 
-                            {/* Drawer Footer */}
-                            <div style={{
-                                padding: '14px 20px',
-                                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-                                background: 'rgba(0,0,0,0.35)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between'
-                            }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
-                                    {selectedSidebarMonth}
-                                </span>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowRightSidebar(false)}
-                                    style={{
-                                        padding: '7px 16px',
-                                        borderRadius: '8px',
-                                        background: 'rgba(255, 255, 255, 0.08)',
-                                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                                        color: '#f8fafc',
-                                        fontSize: '12px',
-                                        fontWeight: '700',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Close
-                                </button>
-                            </div>
+                            
                         </motion.aside>
                     </>
                 )}
@@ -3163,22 +3099,54 @@ export default function Leads() {
                                         </div>
                                         <div>
                                             <label style={labelStyle}>Vehicle Model *</label>
-                                            <select
-                                                value={formData.carType}
-                                                onChange={e => {
-                                                    const newCar = e.target.value;
-                                                    setFormData({
-                                                        ...formData,
-                                                        carType: newCar,
-                                                        itinerary: formData.itinerary.map(item => ({ ...item, vehicleType: newCar }))
-                                                    });
-                                                }}
-                                                style={{ ...darkInputStyle, cursor: 'pointer' }}
-                                            >
-                                                {VEHICLE_OPTIONS.map(v => (
-                                                    <option key={v} value={v} style={{ background: '#090f1d' }}>{v}</option>
-                                                ))}
-                                            </select>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+    <select
+        value={formData.carType}
+        onChange={e => {
+            const newCar = e.target.value;
+            setFormData({
+                ...formData,
+                carType: newCar,
+                itinerary: formData.itinerary.map(item => ({ ...item, vehicleType: newCar }))
+            });
+        }}
+        style={{ ...darkInputStyle, cursor: 'pointer', flex: 1 }}
+    >
+        {ALL_VEHICLES.map(v => (
+            <option key={v} value={v} style={{ background: '#090f1d' }}>{v}</option>
+        ))}
+    </select>
+    <button type="button" onClick={() => {
+        const v = prompt('Enter new vehicle model:');
+        if (v && !ALL_VEHICLES.includes(v)) {
+            const newVs = [...customVehicles, v];
+            setCustomVehicles(newVs);
+            localStorage.setItem('leadVehicles_' + selectedCompany?._id, JSON.stringify(newVs));
+            setFormData(prev => ({
+                ...prev,
+                carType: v,
+                itinerary: prev.itinerary.map(item => ({ ...item, vehicleType: v }))
+            }));
+        }
+    }} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '0 12px', borderRadius: '8px', cursor: 'pointer' }}>+</button>
+    {customVehicles.includes(formData.carType) && (
+        <button type="button" onClick={() => {
+            if (window.confirm('Delete this custom vehicle?')) {
+                const newVs = customVehicles.filter(cv => cv !== formData.carType);
+                setCustomVehicles(newVs);
+                localStorage.setItem('leadVehicles_' + selectedCompany?._id, JSON.stringify(newVs));
+                const defV = VEHICLE_OPTIONS[0];
+                setFormData(prev => ({
+                    ...prev,
+                    carType: defV,
+                    itinerary: prev.itinerary.map(item => ({ ...item, vehicleType: defV }))
+                }));
+            }
+        }} style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', padding: '0 10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+            <Trash2 size={13} />
+        </button>
+    )}
+</div>
                                         </div>
                                         <div>
                                             <label style={labelStyle}>Number of Vehicles *</label>
@@ -3355,7 +3323,7 @@ export default function Leads() {
                                                                 onChange={e => handleItineraryRowChange(idx, 'vehicleType', e.target.value)}
                                                                 style={{ ...darkInputStyle, padding: '6px 8px', fontSize: '12px', cursor: 'pointer' }}
                                                             >
-                                                                {VEHICLE_OPTIONS.map(v => (
+                                                                {ALL_VEHICLES.map(v => (
                                                                     <option key={v} value={v} style={{ background: '#090f1d' }}>{v}</option>
                                                                 ))}
                                                             </select>
@@ -3974,50 +3942,7 @@ export default function Leads() {
 
                                 {/* Header Actions */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                                    {/* Amount Toggle */}
-                                    <div style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        background: 'rgba(255, 255, 255, 0.06)',
-                                        borderRadius: '8px',
-                                        padding: '3px',
-                                        border: '1px solid rgba(255, 255, 255, 0.12)'
-                                    }}>
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPriceInPreview(true)}
-                                            style={{
-                                                padding: '5px 10px',
-                                                borderRadius: '6px',
-                                                border: 'none',
-                                                fontSize: '11.5px',
-                                                fontWeight: '800',
-                                                cursor: 'pointer',
-                                                background: showPriceInPreview ? '#fbbf24' : 'transparent',
-                                                color: showPriceInPreview ? '#000' : 'rgba(255, 255, 255, 0.75)',
-                                                transition: 'all 0.2s ease'
-                                            }}
-                                        >
-                                            💰 With Amount
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPriceInPreview(false)}
-                                            style={{
-                                                padding: '5px 10px',
-                                                borderRadius: '6px',
-                                                border: 'none',
-                                                fontSize: '11.5px',
-                                                fontWeight: '800',
-                                                cursor: 'pointer',
-                                                background: !showPriceInPreview ? '#fbbf24' : 'transparent',
-                                                color: !showPriceInPreview ? '#000' : 'rgba(255, 255, 255, 0.75)',
-                                                transition: 'all 0.2s ease'
-                                            }}
-                                        >
-                                            📄 Without Amount
-                                        </button>
-                                    </div>
+                                    
 
                                     <button
                                         type="button"
