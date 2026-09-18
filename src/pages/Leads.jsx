@@ -644,6 +644,9 @@ export default function Leads() {
                 clientName: finalClientName,
                 mobileNumber: finalMobileNumber,
                 bookingReference: isAgent ? 'Travel Agent' : formData.bookingReference,
+                travelAgent: (isAgent && formData.travelAgent) ? formData.travelAgent : null,
+                salesUser: formData.salesUser || null,
+                bookingRef: formData.bookingRef || null,
                 company: selectedCompany._id
             };
 
