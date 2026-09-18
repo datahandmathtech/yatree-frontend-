@@ -561,10 +561,19 @@ const BankBook = () => {
                                             </span>
                                         </td>
                                         <td style={{ padding: '16px 20px', fontSize: '13px' }}>
-                                            <div style={{ fontWeight: '600' }}>{tx.description}</div>
+                                            <div style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>
+                                                {tx.description}
+                                            </div>
                                             {tx.bookingRef && (
-                                                <div style={{ fontSize: '11px', color: '#60a5fa', marginTop: '2px' }}>
-                                                    Booking: {tx.bookingRef.bookingId} {tx.bookingRef.clientCode ? `(Client Code: ${tx.bookingRef.clientCode})` : ''} - {tx.bookingRef.clientName}
+                                                <div style={{ fontSize: '11px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                    <span style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '2px 8px', borderRadius: '6px', fontWeight: '800', letterSpacing: '0.3px' }}>
+                                                        {tx.bookingRef.bookingId}
+                                                    </span>
+                                                    {tx.bookingRef.clientCode && (
+                                                        <span style={{ color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
+                                                            Client Code: <span style={{ color: '#e2e8f0', fontWeight: '800' }}>{tx.bookingRef.clientCode}</span>
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )}
                                         </td>
