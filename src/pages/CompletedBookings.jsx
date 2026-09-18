@@ -87,6 +87,7 @@ export default function CompletedBookings() {
             const { data } = await axios.get(`/api/bookings/${selectedCompany._id}?status=Completed`);
             if (Array.isArray(data) && data.length > 0) {
                 const formatted = data.map(b => ({
+                    ...b,
                     _id: b._id,
                     bookingId: b.bookingCode || b.clientCode || b.bookingId || 'BKG',
                     bookingCode: b.bookingCode || b.clientCode || b.bookingId || 'BKG',
@@ -620,39 +621,67 @@ export default function CompletedBookings() {
                                                 {bkg.guestName}
                                             </td>
 
-                                            {/* Package Price */}
-                                            <td style={{ padding: '14px 18px', fontSize: '13px', fontWeight: '700', color: '#ffffff' }}>
-                                                {Number(bkg.packagePrice || bkg.totalAmount || 0).toLocaleString('en-IN')}
-                                            </td>
+                                            {/* Package Price & Accounts */}
+<td style={{ padding: '14px 18px', fontSize: '13px', fontWeight: '700', color: '#ffffff' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <span>{Number(bkg.packagePrice || bkg.totalAmount || 0).toLocaleString('en-IN')}</span>
+        
+        {(() => {
+            const bal = (bkg.packagePrice || bkg.totalAmount || 0) - (bkg.advancePaid || 0);
+            return (
+                <button
+                    type="button"
+                    onClick={() => setLedgerModalBooking(bkg)}
+                    title="View Accounts Ledger"
+                    style={{
+                        padding: '4px 12px',
+                        background: bal > 0 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)',
+                        border: `1px solid ${bal > 0 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(34, 197, 94, 0.4)'}`,
+                        borderRadius: '20px',
+                        color: bal > 0 ? '#ef4444' : '#4ade80',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                    }}
+                >
+                    Accounts
+                </button>
+            );
+        })()}
+    </div>
+</td>
 
-                                            {/* Actions */}
-                                            <td style={{ padding: '14px 18px', textAlign: 'right' }}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleDownloadInvoice(bkg)}
-                                                    style={{
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '6px',
-                                                        background: '#0284c7',
-                                                        border: 'none',
-                                                        borderRadius: '20px',
-                                                        padding: '6px 14px',
-                                                        color: '#ffffff',
-                                                        fontSize: '11.5px',
-                                                        fontWeight: '700',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.2s',
-                                                        whiteSpace: 'nowrap',
-                                                        boxShadow: '0 2px 8px rgba(2, 132, 199, 0.3)'
-                                                    }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.background = '#0369a1'}
-                                                    onMouseLeave={(e) => e.currentTarget.style.background = '#0284c7'}
-                                                >
-                                                    <FileText size={14} />
-                                                    <span>Invoice PDF</span>
-                                                </button>
-                                            </td>
+{/* Actions */}
+<td style={{ padding: '14px 18px', textAlign: 'right' }}>
+    {bkg.invoiceGenerated ? (
+        <button
+            type="button"
+            onClick={() => setInvoiceModalBooking(bkg)}
+            style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: '#0284c7',
+                border: 'none',
+                borderRadius: '20px',
+                padding: '6px 14px',
+                color: '#ffffff',
+                fontSize: '11.5px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#0369a1'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#0284c7'}
+        >
+            <Edit size={14} />
+            <span>Edit Invoice</span>
+        </button>
+    ) : (
+        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', fontWeight: '600' }}>Blank</span>
+    )}
+</td>
                                         </tr>
                                     );
                                 })

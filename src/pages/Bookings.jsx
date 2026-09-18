@@ -1527,29 +1527,6 @@ export default function Bookings() {
                                                             <button
                                                                 onClick={() => {
                                                                     setActiveActionMenu(null);
-                                                                    handleOpenInvoiceModal(bkg);
-                                                                }}
-                                                                style={{
-                                                                    width: '100%',
-                                                                    padding: '7px 10px',
-                                                                    background: 'transparent',
-                                                                    border: 'none',
-                                                                    color: 'white',
-                                                                    fontSize: '12px',
-                                                                    fontWeight: '600',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '8px',
-                                                                    cursor: 'pointer',
-                                                                    borderRadius: '6px'
-                                                                }}
-                                                            >
-                                                                <FileText size={13} /> Tax Invoice
-                                                            </button>
-
-                                                            <button
-                                                                onClick={() => {
-                                                                    setActiveActionMenu(null);
                                                                     setSelectedBooking(bkg);
                                                                     setCancelReason(isDatePassedBooking(bkg) ? 'Date Passed & Guest did not call (No-Show)' : 'Customer request');
                                                                     setShowCancelModal(true);
