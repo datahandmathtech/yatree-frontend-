@@ -295,17 +295,18 @@ const Sidebar = ({ isOpen, onClose }) => {
                     <NavItem item={{ path: '/admin/live-feed', icon: Activity, label: 'Live Feed', labelKey: 'live_feed' }} onClick={onClose} />
                 )}
 
+                {(hasAccess('drs') || hasAccess('bookings') || isAdmin) && (
+                    <NavItem item={{ path: '/admin/drs', icon: Sparkles, label: 'Live DRS', labelKey: 'live_drs' }} onClick={onClose} />
+                )}
+
                 {(hasAccess('logBook') || hasAccess('vehiclesManagement')) && (
                     <NavItem item={{ path: '/admin/log-book', icon: ClipboardList, label: 'Log Book', labelKey: 'log_book' }} onClick={onClose} />
                 )}
 
-
-
-                <NavGroup title="Bookings & Quotation" labelKey="bookings_leads" icon={Briefcase} isOpen={openGroups.bookings} onToggle={() => toggleGroup('bookings')}>
-                    <NavItem item={{ path: '/admin/leads', label: 'Sales Leads', labelKey: 'sales_leads' }} onClick={onClose} isSubItem />
+                <NavGroup title="Bookings & Leads" labelKey="bookings_leads" icon={Briefcase} isOpen={openGroups.bookings} onToggle={() => toggleGroup('bookings')}>
+                    <NavItem item={{ path: '/admin/leads', label: 'Leads', labelKey: 'leads' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/bookings', label: 'Confirmed Bookings', labelKey: 'bookings' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/cancelled-bookings', label: 'Cancelled Bookings', labelKey: 'cancelled_bookings' }} onClick={onClose} isSubItem />
-                    <NavItem item={{ path: '/admin/drs', label: 'DRS Bookings', labelKey: 'drs' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/completed-bookings', label: 'Completed Bookings', labelKey: 'completed_bookings' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/client-ledgers?tab=agents', label: 'Travel Agents', labelKey: 'travel_agents' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/client-ledgers', label: 'Client Ledgers', labelKey: 'client_ledgers' }} onClick={onClose} isSubItem />

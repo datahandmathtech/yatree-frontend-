@@ -197,8 +197,13 @@ export default function Leads() {
 
     // Tour Itinerary & Quotation Preview State (Image & PDF)
     const [previewTourLead, setPreviewTourLead] = useState(null);
+    const [showPriceInPreview, setShowPriceInPreview] = useState(true);
+    const [downloadOptionModal, setDownloadOptionModal] = useState(null); // { type: 'pdf' | 'image', lead }
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
     const tourCardRef = useRef(null);
+
+    // Daily Breakdown Expanded Day
+    const [expandedBreakdownDay, setExpandedBreakdownDay] = useState(null);
 
     const [formData, setFormData] = useState({
         bookingReference: 'Direct',
@@ -728,8 +733,8 @@ export default function Leads() {
         }
     };
 
-    // Standardized Corporate Quotation PDF
-    const generateQuotationPDF = (lead) => {
+    // Standardized Corporate Quotation PDF (With Amount OR Without Amount)
+    const generateQuotationPDF = (lead, { withAmount = true } = {}) => {
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.width || 210;
 
@@ -757,7 +762,7 @@ export default function Leads() {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(8);
         doc.setTextColor(245, 158, 11);
-        doc.text('TRAVEL QUOTATION / ITINERARY', pageWidth - 50, 16, { align: 'center' });
+        doc.text(withAmount ? 'TRAVEL QUOTATION / ITINERARY' : 'TOUR ITINERARY SCHEDULE', pageWidth - 50, 16, { align: 'center' });
         doc.setFontSize(10.5);
         doc.setTextColor(15, 23, 42);
         doc.text(`Client Code: ${lead.clientCode || lead.leadId || 'N/A'}`, pageWidth - 50, 22.5, { align: 'center' });
@@ -803,16 +808,41 @@ export default function Leads() {
         doc.text(`Travel Dates: ${sDate} to ${eDate} (${diffDays} Days)`, 120, 50);
 
         // Day-wise Itinerary Table
-        const tableColumn = ["Day", "Date", "Reporting", "Pickup Point", "Duty / Route Description", "Vehicle", "Amount (Rs)"];
-        const tableRows = (lead.itinerary || []).map((day, idx) => [
-            `Day ${day.dayNo || idx + 1}`,
-            day.date ? new Date(day.date).toLocaleDateString('en-IN') : 'TBA',
-            day.isApg ? 'APG' : (day.time || '09:00 AM'),
-            day.pickupPoint || 'Hotel / City',
-            day.duty || day.description || 'Sightseeing / Transfer',
-            day.vehicleType || lead.carType || 'Sedan',
-            `Rs. ${(day.amount || 0).toLocaleString('en-IN')}`
-        ]);
+        const tableColumn = withAmount
+            ? ["Day", "Date", "Reporting", "Pickup Point", "Duty / Route Description", "Vehicle", "Amount (Rs)"]
+            : ["Day", "Date", "Reporting", "Pickup Point", "Duty / Route Description", "Vehicle"];
+
+        const tableRows = (lead.itinerary || []).map((day, idx) => {
+            const row = [
+                `Day ${day.dayNo || idx + 1}`,
+                day.date ? new Date(day.date).toLocaleDateString('en-IN') : 'TBA',
+                day.isApg ? 'APG' : (day.time || '09:00 AM'),
+                day.pickupPoint || 'Hotel / City',
+                day.duty || day.description || 'Sightseeing / Transfer',
+                day.vehicleType || lead.carType || 'Sedan'
+            ];
+            if (withAmount) {
+                row.push(`Rs. ${(day.amount || 0).toLocaleString('en-IN')}`);
+            }
+            return row;
+        });
+
+        const columnStyles = withAmount ? {
+            0: { cellWidth: 16, fontStyle: 'bold' },
+            1: { cellWidth: 22 },
+            2: { cellWidth: 18 },
+            3: { cellWidth: 26 },
+            4: { cellWidth: 'auto' },
+            5: { cellWidth: 24 },
+            6: { cellWidth: 26, halign: 'right', fontStyle: 'bold' }
+        } : {
+            0: { cellWidth: 18, fontStyle: 'bold' },
+            1: { cellWidth: 25 },
+            2: { cellWidth: 22 },
+            3: { cellWidth: 32 },
+            4: { cellWidth: 'auto' },
+            5: { cellWidth: 30 }
+        };
 
         autoTable(doc, {
             startY: 63,
@@ -821,75 +851,81 @@ export default function Leads() {
             theme: 'grid',
             headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 8.5, fontStyle: 'bold', halign: 'left' },
             styles: { fontSize: 8, cellPadding: 3, textColor: [51, 65, 85] },
-            columnStyles: {
-                0: { cellWidth: 16, fontStyle: 'bold' },
-                1: { cellWidth: 22 },
-                2: { cellWidth: 18 },
-                3: { cellWidth: 26 },
-                4: { cellWidth: 'auto' },
-                5: { cellWidth: 24 },
-                6: { cellWidth: 26, halign: 'right', fontStyle: 'bold' }
-            },
+            columnStyles,
             alternateRowStyles: { fillColor: [248, 250, 252] },
             margin: { left: 14, right: 14 }
         });
 
         let finalY = (doc.lastAutoTable?.finalY || 63) + 8;
 
-        // Total Package Fare with exact GST rate display
-        const isGstExtra = lead.gstMode === 'GST Extra';
-        const ratePercent = lead.gstRate || 5;
-        const baseAmount = lead.totalAmount || 0;
-        const gstVal = Math.round((baseAmount * ratePercent) / 100);
-        const netPayable = isGstExtra ? (baseAmount + gstVal) : baseAmount;
+        if (withAmount) {
+            // Total Package Fare with exact GST rate display
+            const isGstExtra = lead.gstMode === 'GST Extra';
+            const ratePercent = lead.gstRate || 5;
+            const baseAmount = lead.totalAmount || 0;
+            const gstVal = Math.round((baseAmount * ratePercent) / 100);
+            const netPayable = isGstExtra ? (baseAmount + gstVal) : baseAmount;
 
-        // Total Box
-        doc.setFillColor(254, 243, 199);
-        doc.setDrawColor(245, 158, 11);
-        doc.roundedRect(pageWidth - 95, finalY, 81, isGstExtra ? 24 : 16, 2, 2, 'FD');
+            // Total Box
+            doc.setFillColor(254, 243, 199);
+            doc.setDrawColor(245, 158, 11);
+            doc.roundedRect(pageWidth - 95, finalY, 81, isGstExtra ? 24 : 16, 2, 2, 'FD');
 
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(120, 53, 15);
-        if (isGstExtra) {
-            doc.text(`Base Fare: Rs. ${baseAmount.toLocaleString('en-IN')}`, pageWidth - 90, finalY + 6);
-            doc.text(`GST @ ${ratePercent}% Extra: Rs. ${gstVal.toLocaleString('en-IN')}`, pageWidth - 90, finalY + 12);
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(11);
-            doc.text(`Total Payable: Rs. ${netPayable.toLocaleString('en-IN')}`, pageWidth - 90, finalY + 19);
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(120, 53, 15);
+            if (isGstExtra) {
+                doc.text(`Base Fare: Rs. ${baseAmount.toLocaleString('en-IN')}`, pageWidth - 90, finalY + 6);
+                doc.text(`GST @ ${ratePercent}% Extra: Rs. ${gstVal.toLocaleString('en-IN')}`, pageWidth - 90, finalY + 12);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(11);
+                doc.text(`Total Payable: Rs. ${netPayable.toLocaleString('en-IN')}`, pageWidth - 90, finalY + 19);
+            } else {
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(11);
+                doc.text(`Total Package Fare (${lead.gstMode || 'GST Inclusive'}):`, pageWidth - 90, finalY + 7);
+                doc.text(`Rs. ${baseAmount.toLocaleString('en-IN')}`, pageWidth - 90, finalY + 13);
+            }
+
+            // Remarks on the left
+            if (lead.specialRemarks) {
+                doc.setFontSize(8.5);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(15, 23, 42);
+                doc.text('Special Remarks / Guest Request:', 14, finalY + 5);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(71, 85, 105);
+                doc.text(lead.specialRemarks, 14, finalY + 11, { maxWidth: 90 });
+            }
+
+            finalY = Math.max(finalY + (isGstExtra ? 28 : 20), finalY + 22);
+
+            // Bank Details for Advance Transfer (Standardized)
+            if (companyBanks && companyBanks.length > 0) {
+                const primaryBank = companyBanks[0];
+                doc.setFillColor(241, 245, 249);
+                doc.roundedRect(14, finalY, pageWidth - 28, 16, 2, 2, 'F');
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(15, 23, 42);
+                doc.text('BANK DETAILS FOR ADVANCE TRANSFER:', 18, finalY + 6);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(71, 85, 105);
+                doc.text(`Bank: ${primaryBank.bankName}  |  A/C: ${primaryBank.accountNumber || 'N/A'}  |  IFSC: ${primaryBank.ifsc || 'N/A'}${primaryBank.upiId ? `  |  UPI ID: ${primaryBank.upiId}` : ''}`, 18, finalY + 11);
+                finalY += 20;
+            }
         } else {
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(11);
-            doc.text(`Total Package Fare (${lead.gstMode || 'GST Inclusive'}):`, pageWidth - 90, finalY + 7);
-            doc.text(`Rs. ${baseAmount.toLocaleString('en-IN')}`, pageWidth - 90, finalY + 13);
-        }
-
-        // Remarks on the left
-        if (lead.specialRemarks) {
-            doc.setFontSize(8.5);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(15, 23, 42);
-            doc.text('Special Remarks / Guest Request:', 14, finalY + 5);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(71, 85, 105);
-            doc.text(lead.specialRemarks, 14, finalY + 11, { maxWidth: 90 });
-        }
-
-        finalY = Math.max(finalY + (isGstExtra ? 28 : 20), finalY + 22);
-
-        // Bank Details for Advance Transfer (Standardized)
-        if (companyBanks && companyBanks.length > 0) {
-            const primaryBank = companyBanks[0];
-            doc.setFillColor(241, 245, 249);
-            doc.roundedRect(14, finalY, pageWidth - 28, 16, 2, 2, 'F');
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(15, 23, 42);
-            doc.text('BANK DETAILS FOR ADVANCE TRANSFER:', 18, finalY + 6);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(71, 85, 105);
-            doc.text(`Bank: ${primaryBank.bankName}  |  A/C: ${primaryBank.accountNumber || 'N/A'}  |  IFSC: ${primaryBank.ifsc || 'N/A'}${primaryBank.upiId ? `  |  UPI ID: ${primaryBank.upiId}` : ''}`, 18, finalY + 11);
-            finalY += 20;
+            // Without Amount - print Special Remarks if any
+            if (lead.specialRemarks) {
+                doc.setFontSize(8.5);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(15, 23, 42);
+                doc.text('Special Remarks / Guest Request:', 14, finalY + 2);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(71, 85, 105);
+                doc.text(lead.specialRemarks, 14, finalY + 7, { maxWidth: pageWidth - 28 });
+                finalY += 16;
+            }
         }
 
         // Inclusions & Terms
@@ -912,14 +948,19 @@ export default function Leads() {
             doc.text('• Note: AC will remain turned off in hill sections or parked/stationary vehicle.', 14, finalY + 8);
         }
 
-        doc.save(`${(lead.clientName || 'Guest').replace(/\s+/g, '_')}_${lead.clientCode ? lead.clientCode.replace('/', '-') : 'Quotation'}.pdf`);
+        const docSuffix = withAmount ? 'Quotation' : 'Itinerary';
+        doc.save(`${(lead.clientName || 'Guest').replace(/\s+/g, '_')}_${lead.clientCode ? lead.clientCode.replace('/', '-') : docSuffix}.pdf`);
     };
 
     // Download Tour Itinerary Card as crisp High-Resolution Image for WhatsApp sharing
-    const handleDownloadTourImage = async () => {
+    const handleDownloadTourImage = async (withPrice = showPriceInPreview) => {
         if (!tourCardRef.current || !previewTourLead) return;
         try {
             setIsGeneratingImage(true);
+            setShowPriceInPreview(withPrice);
+            // Give DOM time to update with/without amounts
+            await new Promise(resolve => setTimeout(resolve, 80));
+
             const element = tourCardRef.current;
             const canvas = await html2canvas(element, {
                 scale: 2,
@@ -933,11 +974,12 @@ export default function Leads() {
             const link = document.createElement('a');
             const safeCode = (previewTourLead.clientCode ? previewTourLead.clientCode.replace('/', '-') : 'Tour');
             const safeName = (previewTourLead.clientName || 'Guest').replace(/\s+/g, '_');
-            link.download = `${safeCode}_${safeName}_Itinerary.png`;
+            link.download = `${safeCode}_${safeName}_${withPrice ? 'Quotation' : 'Itinerary'}.png`;
             link.href = image;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            setDownloadOptionModal(null);
         } catch (err) {
             console.error('Error generating itinerary image:', err);
             alert('Failed to generate image. Please try again.');
@@ -1038,6 +1080,29 @@ export default function Leads() {
         return Array.from(set);
     }, [leads]);
 
+    // Helper to safely parse lead date to year, month index, and day
+    const parseLeadDateInfo = (rawDate) => {
+        if (!rawDate) return null;
+        if (typeof rawDate === 'string' && rawDate.length >= 10) {
+            const parts = rawDate.slice(0, 10).split('-');
+            if (parts.length === 3) {
+                const yr = parseInt(parts[0], 10);
+                const mo = parseInt(parts[1], 10) - 1;
+                const dy = parseInt(parts[2], 10);
+                if (!isNaN(yr) && !isNaN(mo) && !isNaN(dy)) {
+                    return { year: yr, monthIdx: mo, day: dy };
+                }
+            }
+        }
+        const d = new Date(rawDate);
+        if (isNaN(d.getTime())) return null;
+        return {
+            year: d.getFullYear(),
+            monthIdx: d.getMonth(),
+            day: d.getDate()
+        };
+    };
+
     // Calculate Right Sidebar daily breakdown and totals
     const sidebarStats = useMemo(() => {
         const activeOption = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5]; // default September
@@ -1046,12 +1111,10 @@ export default function Leads() {
         // Use dedicated sidebarLeads fetched independently for this month, or fallback to leads
         const sourceList = (sidebarLeads && sidebarLeads.length > 0) ? sidebarLeads : leads;
 
-        // Filter real leads that fall in this month and year (by travelStartDate)
+        // Filter real leads that fall in this month and year (by travelStartDate / leadDate / createdAt)
         const monthRealLeads = (sourceList || []).filter(l => {
-            const rawDate = l.travelStartDate || l.leadDate || l.createdAt;
-            if (!rawDate) return false;
-            const d = new Date(rawDate);
-            return !isNaN(d.getTime()) && d.getFullYear() === year && d.getMonth() === monthIdx;
+            const p = parseLeadDateInfo(l.travelStartDate || l.leadDate || l.createdAt);
+            return p && p.year === year && p.monthIdx === monthIdx;
         });
 
         // If real leads exist for this month, calculate directly from them
@@ -1064,8 +1127,8 @@ export default function Leads() {
 
             for (let day = 1; day <= days; day++) {
                 const dayLeads = monthRealLeads.filter(l => {
-                    const d = new Date(l.travelStartDate || l.leadDate || l.createdAt);
-                    return d.getDate() === day;
+                    const p = parseLeadDateInfo(l.travelStartDate || l.leadDate || l.createdAt);
+                    return p && p.day === day;
                 });
 
                 const leadsCount = dayLeads.length;
@@ -1079,7 +1142,7 @@ export default function Leads() {
                 totalConversions += convCount;
                 totalConversionsAmt += convAmt;
 
-                dailyList.push({ day, leadsCount, leadsAmt, convCount, convAmt });
+                dailyList.push({ day, leadsCount, leadsAmt, convCount, convAmt, leads: dayLeads });
             }
 
             return {
@@ -1102,14 +1165,14 @@ export default function Leads() {
                 totalLeadsAmt,
                 totalConversions,
                 totalConversionsAmt,
-                dailyList: BASELINE_SEPTEMBER_DISTRIBUTION
+                dailyList: BASELINE_SEPTEMBER_DISTRIBUTION.map(d => ({ ...d, leads: [] }))
             };
         }
 
         // Generic empty month
         const dailyList = [];
         for (let day = 1; day <= days; day++) {
-            dailyList.push({ day, leadsCount: 0, leadsAmt: 0, convCount: 0, convAmt: 0 });
+            dailyList.push({ day, leadsCount: 0, leadsAmt: 0, convCount: 0, convAmt: 0, leads: [] });
         }
         return {
             totalLeads: 0,
@@ -2195,43 +2258,234 @@ export default function Leads() {
 
                                 {/* Day-wise Scrollable Table */}
                                 <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
-                                    {sidebarStats.dailyList.map(item => (
-                                        <div
-                                            key={item.day}
-                                            style={{
-                                                display: 'grid',
-                                                gridTemplateColumns: '50px 1fr 1fr',
-                                                padding: '9px 8px',
-                                                borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
-                                                alignItems: 'center'
-                                            }}
-                                        >
-                                            {/* Day Number */}
-                                            <div style={{ fontWeight: '800', fontSize: '13px', color: '#f8fafc' }}>
-                                                {item.day}
-                                            </div>
+                                    {sidebarStats.dailyList.map(item => {
+                                        const isExpanded = expandedBreakdownDay === item.day;
+                                        const hasLeads = (item.leads && item.leads.length > 0) || item.leadsCount > 0;
 
-                                            {/* Leads */}
-                                            <div style={{ textAlign: 'right' }}>
-                                                <div style={{ fontWeight: '800', fontSize: '13px', color: item.leadsCount > 0 ? 'white' : 'rgba(255,255,255,0.3)' }}>
-                                                    {item.leadsCount}
-                                                </div>
-                                                <div style={{ fontSize: '11px', fontWeight: '600', color: item.leadsCount > 0 ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)', marginTop: '1px' }}>
-                                                    ₹{item.leadsAmt.toLocaleString('en-IN')}
-                                                </div>
-                                            </div>
+                                        return (
+                                            <div key={item.day} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                                                {/* Day Row */}
+                                                <div
+                                                    onClick={() => {
+                                                        setExpandedBreakdownDay(isExpanded ? null : item.day);
+                                                    }}
+                                                    style={{
+                                                        display: 'grid',
+                                                        gridTemplateColumns: '60px 1fr 1fr',
+                                                        padding: '10px 8px',
+                                                        alignItems: 'center',
+                                                        cursor: 'pointer',
+                                                        background: isExpanded ? 'rgba(251, 191, 36, 0.08)' : (hasLeads ? 'rgba(255, 255, 255, 0.015)' : 'transparent'),
+                                                        borderLeft: isExpanded ? '3px solid #fbbf24' : '3px solid transparent',
+                                                        transition: 'all 0.2s ease',
+                                                    }}
+                                                    onMouseEnter={e => {
+                                                        if (!isExpanded) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                                                    }}
+                                                    onMouseLeave={e => {
+                                                        if (!isExpanded) e.currentTarget.style.background = hasLeads ? 'rgba(255, 255, 255, 0.015)' : 'transparent';
+                                                    }}
+                                                    title={hasLeads ? `Click to view ${item.leadsCount} lead entries for Day ${item.day}` : `Day ${item.day}`}
+                                                >
+                                                    {/* Day Number + Expand Indicator */}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <span style={{ fontWeight: '800', fontSize: '13px', color: isExpanded ? '#fbbf24' : '#f8fafc' }}>
+                                                            {item.day}
+                                                        </span>
+                                                        {hasLeads && (
+                                                            <span style={{ fontSize: '9px', color: isExpanded ? '#fbbf24' : 'rgba(255,255,255,0.4)', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'none' }}>
+                                                                ▼
+                                                            </span>
+                                                        )}
+                                                    </div>
 
-                                            {/* Conversion */}
-                                            <div style={{ textAlign: 'right' }}>
-                                                <div style={{ fontWeight: '800', fontSize: '13px', color: item.convCount > 0 ? '#4ade80' : 'rgba(255,255,255,0.3)' }}>
-                                                    {item.convCount}
+                                                    {/* Leads */}
+                                                    <div style={{ textAlign: 'right' }}>
+                                                        <div style={{ fontWeight: '800', fontSize: '13px', color: item.leadsCount > 0 ? 'white' : 'rgba(255,255,255,0.3)' }}>
+                                                            {item.leadsCount}
+                                                        </div>
+                                                        <div style={{ fontSize: '11px', fontWeight: '600', color: item.leadsCount > 0 ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)', marginTop: '1px' }}>
+                                                            ₹{item.leadsAmt.toLocaleString('en-IN')}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Conversion */}
+                                                    <div style={{ textAlign: 'right' }}>
+                                                        <div style={{ fontWeight: '800', fontSize: '13px', color: item.convCount > 0 ? '#4ade80' : 'rgba(255,255,255,0.3)' }}>
+                                                            {item.convCount}
+                                                        </div>
+                                                        <div style={{ fontSize: '11px', fontWeight: '600', color: item.convCount > 0 ? '#86efac' : 'rgba(255,255,255,0.25)', marginTop: '1px' }}>
+                                                            ₹{item.convAmt.toLocaleString('en-IN')}
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <div style={{ fontSize: '11px', fontWeight: '600', color: item.convCount > 0 ? '#86efac' : 'rgba(255,255,255,0.25)', marginTop: '1px' }}>
-                                                    ₹{item.convAmt.toLocaleString('en-IN')}
-                                                </div>
+
+                                                {/* Expanded Day Details (Showing multiple entries) */}
+                                                {isExpanded && (
+                                                    <div style={{
+                                                        background: 'rgba(0, 0, 0, 0.45)',
+                                                        padding: '10px 10px 14px 10px',
+                                                        borderTop: '1px solid rgba(251, 191, 36, 0.15)',
+                                                        borderBottom: '1px solid rgba(251, 191, 36, 0.15)',
+                                                    }}>
+                                                        <div style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'space-between',
+                                                            marginBottom: '8px',
+                                                            paddingBottom: '4px',
+                                                            borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
+                                                        }}>
+                                                            <span style={{ fontSize: '11px', fontWeight: '800', color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                                Day {item.day} Breakdown · {item.leads?.length || item.leadsCount} {item.leads?.length === 1 ? 'Entry' : 'Entries'}
+                                                            </span>
+                                                            <span style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.45)' }}>
+                                                                {selectedSidebarMonth}
+                                                            </span>
+                                                        </div>
+
+                                                        {item.leads && item.leads.length > 0 ? (
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                {item.leads.map((lead, idx) => (
+                                                                    <div
+                                                                        key={lead._id || lead.leadId || idx}
+                                                                        style={{
+                                                                            background: 'rgba(255, 255, 255, 0.03)',
+                                                                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                                                                            borderRadius: '8px',
+                                                                            padding: '10px 12px',
+                                                                            transition: 'all 0.2s ease',
+                                                                        }}
+                                                                    >
+                                                                        {/* Entry Header: Name + Status */}
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                                                                            <div>
+                                                                                <div style={{ fontSize: '13px', fontWeight: '800', color: 'white' }}>
+                                                                                    {lead.clientName || 'Guest'}
+                                                                                </div>
+                                                                                {lead.bookingReference === 'Travel Agent' && lead.travelAgentName ? (
+                                                                                    <div style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '600' }}>
+                                                                                        🏢 Agent: {lead.travelAgentName}
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.55)' }}>
+                                                                                        📞 {lead.mobileNumber || 'No Phone'}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+
+                                                                            <span style={{
+                                                                                fontSize: '10px',
+                                                                                fontWeight: '800',
+                                                                                padding: '2px 8px',
+                                                                                borderRadius: '4px',
+                                                                                background: (lead.status === 'Confirmed' || lead.status === 'Converted' || lead.bookingId)
+                                                                                    ? 'rgba(34, 197, 94, 0.15)'
+                                                                                    : 'rgba(251, 191, 36, 0.15)',
+                                                                                color: (lead.status === 'Confirmed' || lead.status === 'Converted' || lead.bookingId)
+                                                                                    ? '#4ade80'
+                                                                                    : '#fbbf24',
+                                                                                border: (lead.status === 'Confirmed' || lead.status === 'Converted' || lead.bookingId)
+                                                                                    ? '1px solid rgba(34, 197, 94, 0.3)'
+                                                                                    : '1px solid rgba(251, 191, 36, 0.3)',
+                                                                                textTransform: 'uppercase'
+                                                                            }}>
+                                                                                {lead.bookingId ? 'Confirmed' : (lead.status || 'Pending')}
+                                                                            </span>
+                                                                        </div>
+
+                                                                        {/* Entry Details: Route & Vehicle */}
+                                                                        <div style={{ marginTop: '6px', fontSize: '11.5px', color: 'rgba(255, 255, 255, 0.75)' }}>
+                                                                            <div>
+                                                                                🚗 <strong>{lead.numberOfCars || 1}x {lead.carType || 'Sedan'}</strong>
+                                                                            </div>
+                                                                            {lead.pickupCity && (
+                                                                                <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)', marginTop: '2px' }}>
+                                                                                    📍 {lead.pickupCity} {lead.dropCity ? `➔ ${lead.dropCity}` : ''}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+
+                                                                        {/* Entry Footer: Amount + Quick Actions */}
+                                                                        <div style={{
+                                                                            display: 'flex',
+                                                                            justifyContent: 'space-between',
+                                                                            alignItems: 'center',
+                                                                            marginTop: '8px',
+                                                                            paddingTop: '6px',
+                                                                            borderTop: '1px solid rgba(255, 255, 255, 0.05)'
+                                                                        }}>
+                                                                            <div style={{ fontSize: '13px', fontWeight: '900', color: '#fbbf24' }}>
+                                                                                ₹{(Number(lead.totalAmount) || 0).toLocaleString('en-IN')}
+                                                                            </div>
+
+                                                                            <div style={{ display: 'flex', gap: '6px' }}>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        setPreviewTourLead(lead);
+                                                                                    }}
+                                                                                    style={{
+                                                                                        padding: '4px 8px',
+                                                                                        fontSize: '10.5px',
+                                                                                        fontWeight: '700',
+                                                                                        background: 'rgba(251, 191, 36, 0.12)',
+                                                                                        border: '1px solid rgba(251, 191, 36, 0.3)',
+                                                                                        borderRadius: '6px',
+                                                                                        color: '#fbbf24',
+                                                                                        cursor: 'pointer'
+                                                                                    }}
+                                                                                    title="View Itinerary & Quotation"
+                                                                                >
+                                                                                    👁️ Quote
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        handleEditLead(lead);
+                                                                                    }}
+                                                                                    style={{
+                                                                                        padding: '4px 8px',
+                                                                                        fontSize: '10.5px',
+                                                                                        fontWeight: '700',
+                                                                                        background: 'rgba(255, 255, 255, 0.07)',
+                                                                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                                                                        borderRadius: '6px',
+                                                                                        color: '#e2e8f0',
+                                                                                        cursor: 'pointer'
+                                                                                    }}
+                                                                                    title="Edit Lead"
+                                                                                >
+                                                                                    ✏️ Edit
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <div style={{
+                                                                padding: '12px',
+                                                                textAlign: 'center',
+                                                                fontSize: '11.5px',
+                                                                color: 'rgba(255, 255, 255, 0.45)',
+                                                                background: 'rgba(255, 255, 255, 0.02)',
+                                                                borderRadius: '6px'
+                                                            }}>
+                                                                {item.leadsCount > 0 ? (
+                                                                    <span>No detailed lead records stored for baseline mockup data.</span>
+                                                                ) : (
+                                                                    <span>No lead entries recorded on Day {item.day}.</span>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
 
@@ -3607,10 +3861,55 @@ export default function Leads() {
                                 </div>
 
                                 {/* Header Actions */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                    {/* Amount Toggle */}
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        background: 'rgba(255, 255, 255, 0.06)',
+                                        borderRadius: '8px',
+                                        padding: '3px',
+                                        border: '1px solid rgba(255, 255, 255, 0.12)'
+                                    }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPriceInPreview(true)}
+                                            style={{
+                                                padding: '5px 10px',
+                                                borderRadius: '6px',
+                                                border: 'none',
+                                                fontSize: '11.5px',
+                                                fontWeight: '800',
+                                                cursor: 'pointer',
+                                                background: showPriceInPreview ? '#fbbf24' : 'transparent',
+                                                color: showPriceInPreview ? '#000' : 'rgba(255, 255, 255, 0.75)',
+                                                transition: 'all 0.2s ease'
+                                            }}
+                                        >
+                                            💰 With Amount
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPriceInPreview(false)}
+                                            style={{
+                                                padding: '5px 10px',
+                                                borderRadius: '6px',
+                                                border: 'none',
+                                                fontSize: '11.5px',
+                                                fontWeight: '800',
+                                                cursor: 'pointer',
+                                                background: !showPriceInPreview ? '#fbbf24' : 'transparent',
+                                                color: !showPriceInPreview ? '#000' : 'rgba(255, 255, 255, 0.75)',
+                                                transition: 'all 0.2s ease'
+                                            }}
+                                        >
+                                            📄 Without Amount
+                                        </button>
+                                    </div>
+
                                     <button
                                         type="button"
-                                        onClick={handleDownloadTourImage}
+                                        onClick={() => setDownloadOptionModal({ type: 'image', lead: previewTourLead })}
                                         disabled={isGeneratingImage}
                                         style={{
                                             padding: '8px 16px',
@@ -3627,7 +3926,7 @@ export default function Leads() {
                                             boxShadow: '0 2px 10px rgba(251, 191, 36, 0.35)',
                                             opacity: isGeneratingImage ? 0.7 : 1
                                         }}
-                                        title="Download as high-resolution PNG image to send on WhatsApp"
+                                        title="Download as high-resolution PNG image (with/without amount)"
                                     >
                                         <Download size={14} />
                                         <span>{isGeneratingImage ? 'Saving Image...' : 'Download as Image'}</span>
@@ -3635,7 +3934,7 @@ export default function Leads() {
 
                                     <button
                                         type="button"
-                                        onClick={() => generateQuotationPDF(previewTourLead)}
+                                        onClick={() => setDownloadOptionModal({ type: 'pdf', lead: previewTourLead })}
                                         style={{
                                             padding: '8px 14px',
                                             background: 'rgba(255, 255, 255, 0.07)',
@@ -3649,7 +3948,7 @@ export default function Leads() {
                                             gap: '5px',
                                             cursor: 'pointer'
                                         }}
-                                        title="Download PDF document"
+                                        title="Download PDF document (with/without amount)"
                                     >
                                         <FileText size={13} />
                                         <span>PDF</span>
@@ -3738,7 +4037,7 @@ export default function Leads() {
                                                 textAlign: 'right'
                                             }}>
                                                 <div style={{ fontSize: '10px', fontWeight: '800', color: '#fbbf24', letterSpacing: '0.5px' }}>
-                                                    TRAVEL QUOTATION / ITINERARY
+                                                    {showPriceInPreview ? 'TRAVEL QUOTATION / ITINERARY' : 'TOUR ITINERARY SCHEDULE'}
                                                 </div>
                                                 <div style={{ fontSize: '18px', fontWeight: '900', color: 'white', marginTop: '2px' }}>
                                                     Client Code: {previewTourLead.clientCode || previewTourLead.leadId || 'N/A'}
@@ -3818,7 +4117,9 @@ export default function Leads() {
                                                             <th style={{ padding: '8px 12px', width: '110px' }}>Pickup</th>
                                                             <th style={{ padding: '8px 12px' }}>Duty / Route Details</th>
                                                             <th style={{ padding: '8px 12px', width: '90px' }}>Vehicle</th>
-                                                            <th style={{ padding: '8px 12px', textAlign: 'right', width: '90px' }}>Amount</th>
+                                                            {showPriceInPreview && (
+                                                                <th style={{ padding: '8px 12px', textAlign: 'right', width: '90px' }}>Amount</th>
+                                                            )}
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -3845,9 +4146,11 @@ export default function Leads() {
                                                                 <td style={{ padding: '9px 12px', color: 'rgba(255, 255, 255, 0.75)' }}>
                                                                     {day.vehicleType || previewTourLead.carType || 'Sedan'}
                                                                 </td>
-                                                                <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: '800', color: 'white' }}>
-                                                                    ₹{(day.amount || 0).toLocaleString('en-IN')}
-                                                                </td>
+                                                                {showPriceInPreview && (
+                                                                    <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: '800', color: 'white' }}>
+                                                                        ₹{(day.amount || 0).toLocaleString('en-IN')}
+                                                                    </td>
+                                                                )}
                                                             </tr>
                                                         ))}
                                                     </tbody>
@@ -3918,7 +4221,7 @@ export default function Leads() {
                                                 )}
 
                                                 {/* Bank Details for Advance */}
-                                                {companyBanks && companyBanks.length > 0 && (
+                                                {showPriceInPreview && companyBanks && companyBanks.length > 0 && (
                                                     <div style={{
                                                         background: 'rgba(255, 255, 255, 0.025)',
                                                         border: '1px solid rgba(255, 255, 255, 0.08)',
@@ -3946,8 +4249,8 @@ export default function Leads() {
                                                 )}
                                             </div>
 
-                                            {/* Right: Total Package Fare Box */}
-                                            {(() => {
+                                            {/* Right: Total Package Fare Box OR Clean Itinerary Note */}
+                                            {showPriceInPreview ? (() => {
                                                 const isExtra = previewTourLead.gstMode === 'GST Extra';
                                                 const rPercent = previewTourLead.gstRate || 5;
                                                 const bAmt = previewTourLead.totalAmount || 0;
@@ -3996,7 +4299,32 @@ export default function Leads() {
                                                         </div>
                                                     </div>
                                                 );
-                                            })()}
+                                            })() : (
+                                                <div style={{
+                                                    background: 'rgba(255, 255, 255, 0.03)',
+                                                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                    borderRadius: '10px',
+                                                    padding: '16px',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    justifyContent: 'space-between'
+                                                }}>
+                                                    <div>
+                                                        <div style={{ fontSize: '11px', color: '#fbbf24', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                            Tour Program Overview
+                                                        </div>
+                                                        <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.75)', marginTop: '8px', lineHeight: '1.6' }}>
+                                                            <div>• <strong>Assigned Fleet:</strong> {previewTourLead.numberOfCars || 1}x {previewTourLead.carType || 'Sedan'}</div>
+                                                            <div>• <strong>Duration:</strong> {getDaysDifference(toLocalDateString(previewTourLead.travelStartDate), toLocalDateString(previewTourLead.travelEndDate))} Days Complete Tour</div>
+                                                            <div>• <strong>Quality Guarantee:</strong> Clean commercial fleet with verified chauffeur</div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ marginTop: '16px', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                                                        <span style={{ fontSize: '11px', color: '#4ade80', fontWeight: '800' }}>✓ Official Route & Schedule Verified</span>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Terms & Conditions Footer */}
@@ -4014,6 +4342,137 @@ export default function Leads() {
                                 </div>
                             </div>
                         </motion.div>
+                    </div>
+                )}
+
+                {/* 6. Export Options Modal (With Amount vs Without Amount) */}
+                {downloadOptionModal && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: 'rgba(3, 7, 18, 0.85)',
+                        backdropFilter: 'blur(8px)',
+                        zIndex: 100000,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '20px'
+                    }}>
+                        <div style={{
+                            width: '100%',
+                            maxWidth: '460px',
+                            background: '#0d1526',
+                            border: '1px solid rgba(251, 191, 36, 0.35)',
+                            borderRadius: '16px',
+                            padding: '24px',
+                            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.85)'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                                <h3 style={{ margin: 0, color: 'white', fontSize: '17px', fontWeight: '900' }}>
+                                    {downloadOptionModal.type === 'image' ? '🖼️ Download Image Options' : '📄 Download PDF Options'}
+                                </h3>
+                                <button
+                                    type="button"
+                                    onClick={() => setDownloadOptionModal(null)}
+                                    style={{
+                                        background: 'rgba(255, 255, 255, 0.06)',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        color: 'rgba(255,255,255,0.7)',
+                                        width: '28px',
+                                        height: '28px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+                            <p style={{ fontSize: '12.5px', color: 'rgba(255,255,255,0.65)', marginBottom: '18px', lineHeight: '1.4' }}>
+                                Select whether you want to display quotation prices or export itinerary without pricing figures for your client.
+                            </p>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {/* Option 1: With Amount */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (downloadOptionModal.type === 'image') {
+                                            handleDownloadTourImage(true);
+                                        } else {
+                                            generateQuotationPDF(downloadOptionModal.lead || previewTourLead, { withAmount: true });
+                                            setDownloadOptionModal(null);
+                                        }
+                                    }}
+                                    style={{
+                                        padding: '14px 16px',
+                                        background: 'rgba(251, 191, 36, 0.08)',
+                                        border: '1px solid rgba(251, 191, 36, 0.35)',
+                                        borderRadius: '12px',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(251, 191, 36, 0.15)'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(251, 191, 36, 0.08)'}
+                                >
+                                    <div>
+                                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#fbbf24' }}>
+                                            💰 With Amount (Full Quotation)
+                                        </div>
+                                        <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.6)', marginTop: '3px' }}>
+                                            Shows day-wise amount, base fare, GST & total payable price.
+                                        </div>
+                                    </div>
+                                    <span style={{ fontSize: '18px', color: '#fbbf24', fontWeight: '900' }}>➔</span>
+                                </button>
+
+                                {/* Option 2: Without Amount */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (downloadOptionModal.type === 'image') {
+                                            handleDownloadTourImage(false);
+                                        } else {
+                                            generateQuotationPDF(downloadOptionModal.lead || previewTourLead, { withAmount: false });
+                                            setDownloadOptionModal(null);
+                                        }
+                                    }}
+                                    style={{
+                                        padding: '14px 16px',
+                                        background: 'rgba(255, 255, 255, 0.04)',
+                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                        borderRadius: '12px',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'}
+                                >
+                                    <div>
+                                        <div style={{ fontSize: '14px', fontWeight: '800', color: 'white' }}>
+                                            📄 Without Amount (Itinerary Only)
+                                        </div>
+                                        <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.6)', marginTop: '3px' }}>
+                                            Hides all prices & amounts. Shows clean route itinerary only.
+                                        </div>
+                                    </div>
+                                    <span style={{ fontSize: '18px', color: 'white', fontWeight: '900' }}>➔</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
             </AnimatePresence>

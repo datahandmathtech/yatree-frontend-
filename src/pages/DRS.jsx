@@ -531,7 +531,7 @@ export default function DRS() {
 
     return (
         <div className="container-fluid" style={{ minHeight: '100vh', padding: '30px 24px', position: 'relative' }}>
-            <SEO title="Daily Routine Sheet (DRS) - LogKaro" />
+            <SEO title="Live DRS - Daily Routine Sheet - LogKaro" />
 
             {/* TOP HEADER MATCHING EXACT MOCKUP (media_1788861577474.png) */}
             <div style={{
@@ -559,7 +559,7 @@ export default function DRS() {
                     </div>
                     <div>
                         <h1 style={{ fontSize: '22px', fontWeight: '900', color: 'white', margin: 0, letterSpacing: '-0.3px' }}>
-                            Daily Routine Sheet <span style={{ color: '#fbbf24' }}>(DRS)</span>
+                            Live DRS <span style={{ color: '#fbbf24', fontSize: '16px', fontWeight: '700' }}>(Daily Routine Sheet)</span>
                         </h1>
                         <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '13px', margin: '3px 0 0 0' }}>
                             Day-wise vehicle schedule with confirmed bookings, leads and direct duties.

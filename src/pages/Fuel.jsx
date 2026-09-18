@@ -109,6 +109,11 @@ const FuelPage = () => {
 
     const [selectedPending, setSelectedPending] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
+    // Guest auto-fetch from DRS (for Payment by Guest)
+    const [guestDuties, setGuestDuties] = useState([]);
+    const [loadingGuests, setLoadingGuests] = useState(false);
+    // Outside car support
+    const [outsideVehicles, setOutsideVehicles] = useState([]);
     const [filterVehicle, setFilterVehicle] = useState('All');
     const [filterPaymentSource, setFilterPaymentSource] = useState('All');
     const [payerSearch, setPayerSearch] = useState('');
@@ -243,7 +248,7 @@ const FuelPage = () => {
             fetchPendingEntries();
             fetchDrivers();
             fetchClients();
-
+            fetchOutsideVehicles();
         }
     }, [selectedCompany, fromDate, toDate]);
 
@@ -309,6 +314,46 @@ const FuelPage = () => {
         } catch (err) { console.error(err); }
     };
 
+    // Fetch outside cars for vehicle selection
+    const fetchOutsideVehicles = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            const userInfoStr = localStorage.getItem('userInfo');
+            const userInfo = userInfoStr ? JSON.parse(userInfoStr) : null;
+            if (!userInfo?.token) return;
+            const { data } = await axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false&type=outside&includeBlocked=true`, {
+                headers: { Authorization: `Bearer ${userInfo.token}` }
+            });
+            // Outside cars have composite carNumber (PLATE#DATE#SUFFIX), extract base plate
+            const outsideCars = (data.vehicles || []).filter(v => v.isOutsideCar);
+            setOutsideVehicles(outsideCars);
+        } catch (err) { console.error(err); }
+    };
+
+    // Fetch DRS duties for a vehicle on a specific date (guest auto-fetch)
+    const fetchGuestForVehicle = async (carNumber, date) => {
+        if (!selectedCompany?._id || !carNumber || !date) {
+            setGuestDuties([]);
+            return;
+        }
+        setLoadingGuests(true);
+        try {
+            const userInfoStr = localStorage.getItem('userInfo');
+            const userInfo = userInfoStr ? JSON.parse(userInfoStr) : null;
+            if (!userInfo?.token) return;
+            const cleanNumber = carNumber.replace(/[\s\-#]/g, '').split('#')[0]; // Handle outside car composite numbers
+            const { data } = await axios.get(`/api/drs/${selectedCompany._id}/by-vehicle?vehicleNumber=${encodeURIComponent(cleanNumber)}&date=${date}`, {
+                headers: { Authorization: `Bearer ${userInfo.token}` }
+            });
+            setGuestDuties(data || []);
+        } catch (err) {
+            console.error('Error fetching guest duties:', err);
+            setGuestDuties([]);
+        } finally {
+            setLoadingGuests(false);
+        }
+    };
+
     const fetchDrivers = async (overrideDate = null, vehicleId = null) => {
         if (!selectedCompany?._id) return;
         try {
@@ -333,6 +378,16 @@ const FuelPage = () => {
             fetchVehicles(formData.date);
         }
     }, [formData.date, formData.vehicleId, showModal]);
+
+    // Auto-fetch guests for manual entry when Payment by Guest is selected
+    useEffect(() => {
+        if (showModal && formData.paymentSource?.toLowerCase().includes('guest') && formData.vehicleId && formData.date) {
+            const v = vehicles.find(x => x._id === formData.vehicleId) || outsideVehicles.find(x => x._id === formData.vehicleId);
+            if (v && v.carNumber) {
+                fetchGuestForVehicle(v.carNumber, formData.date);
+            }
+        }
+    }, [formData.paymentSource, formData.vehicleId, formData.date, showModal]);
 
     const handleCreate = async (e) => {
         e.preventDefault();
@@ -474,21 +529,34 @@ const FuelPage = () => {
 
     const openApprovalModal = (entry) => {
         setSelectedPending(entry);
+        const entryDate = toISTDateString(entry.date);
+        const ps = entry.paymentSource || 'Office';
         setFormData({
             ...formData,
             amount: entry.amount,
             odometer: entry.km,
-            date: toISTDateString(entry.date),
+            date: entryDate,
             driver: entry.driver || '',
             fuelType: entry.fuelType || 'Diesel',
-            paymentSource: entry.paymentSource || 'Office',
+            paymentSource: ps,
             paymentBy: entry.paymentBy || '',
             quantity: entry.quantity ? entry.quantity : '', // Pre-fill if driver submitted
             rate: (entry.quantity && entry.amount) ? (entry.amount / entry.quantity).toFixed(2) : '',
             slipPhoto: entry.slipPhoto || ''
         });
         setShowApprovalModal(true);
+        // Auto-fetch guest duties for this vehicle+date
+        if (entry.carNumber && entryDate) {
+            fetchGuestForVehicle(entry.carNumber, entryDate);
+        }
     };
+
+    // Auto-fetch guests when paymentSource changes to Guest in approval modal
+    useEffect(() => {
+        if (showApprovalModal && formData.paymentSource?.toLowerCase().includes('guest') && selectedPending?.carNumber) {
+            fetchGuestForVehicle(selectedPending.carNumber, formData.date || toISTDateString(selectedPending.date));
+        }
+    }, [formData.paymentSource, showApprovalModal]);
 
     const handleApproveReject = async (attendanceId, expenseId, status, extraData = {}) => {
         setSubmitting(true);
@@ -1290,14 +1358,27 @@ const FuelPage = () => {
                                         <div>
                                             <label style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Vehicle Number *</label>
                                             <SearchableSelect
-                                                options={vehicles.map(v => ({ value: v._id, label: `${v.carNumber} (${v.model})` }))}
+                                                options={[
+                                                    ...vehicles.map(v => ({ value: v._id, label: `${v.carNumber} (${v.model})` })),
+                                                    ...outsideVehicles.filter(ov => {
+                                                        const basePlate = ov.carNumber?.split('#')[0] || '';
+                                                        return !vehicles.some(v => v.carNumber === basePlate);
+                                                    }).reduce((unique, ov) => {
+                                                        const basePlate = ov.carNumber?.split('#')[0] || '';
+                                                        if (!unique.some(u => u.label.includes(basePlate))) {
+                                                            unique.push({ value: ov._id, label: `🔄 ${basePlate} (${ov.model || 'Outside'})` });
+                                                        }
+                                                        return unique;
+                                                    }, [])
+                                                ]}
                                                 value={formData.vehicleId}
                                                 onChange={(vid) => {
                                                     const selectedVehicle = vehicles.find(v => v._id === vid);
+                                                    const selectedOutside = outsideVehicles.find(v => v._id === vid);
                                                     const autoDriver = selectedVehicle?.currentDriver?.name || '';
                                                     setFormData({ ...formData, vehicleId: vid, driver: autoDriver });
                                                 }}
-                                                placeholder="Search Vehicle..."
+                                                placeholder="Search Vehicle (Fleet + Outside)..."
                                                 required={true}
                                             />
                                         </div>
@@ -1374,7 +1455,7 @@ const FuelPage = () => {
                                                     className="input-field"
                                                     value={formData.paymentBy}
                                                     onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value, client: '', drsDuty: '' })}
-                                                    placeholder="e.g. Rahul Sharma"
+                                                    placeholder={loadingGuests ? 'Fetching guests...' : 'e.g. Rahul Sharma'}
                                                     style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
                                                 />
                                             </div>
@@ -1398,6 +1479,83 @@ const FuelPage = () => {
                                             </div>
                                         )}
                                     </div>
+
+                                    {/* Guest Auto-Fetch from DRS for Manual Entry */}
+                                    {formData.paymentSource?.toLowerCase().includes('guest') && formData.vehicleId && (
+                                        <div style={{ marginTop: '5px', padding: '16px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '14px', border: '1px solid rgba(59, 130, 246, 0.15)', gridColumn: '1 / -1' }}>
+                                            <p style={{ color: '#60a5fa', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                🎯 DRS Guest Match — {(() => {
+                                                    const v = vehicles.find(x => x._id === formData.vehicleId) || outsideVehicles.find(x => x._id === formData.vehicleId);
+                                                    return (v?.carNumber?.split('#')[0]) || 'Selected Vehicle';
+                                                })()} on {formData.date || '—'}
+                                            </p>
+                                            {loadingGuests ? (
+                                                <div style={{ textAlign: 'center', padding: '15px', color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>
+                                                    <span style={{ animation: 'pulse 1.5s infinite' }}>⏳ Searching DRS for guests on this vehicle...</span>
+                                                </div>
+                                            ) : guestDuties.length > 0 ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                    {guestDuties.map((duty, idx) => {
+                                                        const isSelected = formData.drsDuty === duty._id;
+                                                        return (
+                                                            <div
+                                                                key={duty._id || idx}
+                                                                onClick={() => {
+                                                                    setFormData({
+                                                                        ...formData,
+                                                                        paymentBy: duty.clientName || '',
+                                                                        drsDuty: duty._id,
+                                                                        client: duty.bookingRef?.client || ''
+                                                                    });
+                                                                }}
+                                                                style={{
+                                                                    padding: '12px 14px',
+                                                                    borderRadius: '10px',
+                                                                    background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                                    border: isSelected ? '2px solid #3b82f6' : '1px solid rgba(255,255,255,0.08)',
+                                                                    cursor: 'pointer',
+                                                                    transition: 'all 0.2s',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'space-between'
+                                                                }}
+                                                            >
+                                                                <div>
+                                                                    <p style={{ color: 'white', fontWeight: '700', fontSize: '14px', margin: 0 }}>
+                                                                        {isSelected && '✅ '}{duty.clientName || 'Unknown Guest'}
+                                                                    </p>
+                                                                    <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', margin: '4px 0 0', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                                                        {duty.hotel && <span>🏨 {duty.hotel}</span>}
+                                                                        {duty.bookingId && <span>📋 {duty.bookingId}</span>}
+                                                                        {duty.duty && <span>🚗 {duty.duty}</span>}
+                                                                        {duty.mobileNumber && <span>📱 {duty.mobileNumber}</span>}
+                                                                    </p>
+                                                                </div>
+                                                                <span style={{
+                                                                    padding: '3px 8px',
+                                                                    borderRadius: '6px',
+                                                                    fontSize: '10px',
+                                                                    fontWeight: '800',
+                                                                    background: duty.status === 'Completed' ? 'rgba(16,185,129,0.15)' : duty.status === 'Assigned' || duty.status === 'Ongoing' ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.05)',
+                                                                    color: duty.status === 'Completed' ? '#10b981' : duty.status === 'Assigned' || duty.status === 'Ongoing' ? '#f59e0b' : 'rgba(255,255,255,0.5)',
+                                                                    textTransform: 'uppercase'
+                                                                }}>
+                                                                    {duty.status || 'N/A'}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '10px', margin: '4px 0 0', textAlign: 'center' }}>
+                                                        Click a guest to auto-fill • {guestDuties.length} duty found
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', margin: 0, textAlign: 'center', padding: '8px 0' }}>
+                                                    ⚠️ No DRS duty found for this vehicle on <strong>{formData.date}</strong> — type guest name manually above
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {/* Vendor and Personnel */}
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: '20px' }}>
@@ -1548,14 +1706,68 @@ const FuelPage = () => {
                             </div>
 
                             <div style={{ padding: '30px' }}>
-                                <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '12px' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '10px', background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '12px' }}>
                                     <div>
                                         <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800' }}>Driver</div>
                                         <div style={{ color: 'white', fontWeight: '700' }}>{selectedPending?.driver}</div>
                                     </div>
                                     <div>
                                         <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800' }}>Vehicle</div>
-                                        <div style={{ color: 'white', fontWeight: '700' }}>{selectedPending?.carNumber}</div>
+                                        <div style={{ color: 'white', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {selectedPending?.carNumber}
+                                            {selectedPending?.carNumber && (() => {
+                                                const cleanPending = selectedPending.carNumber.replace(/[\s\-]/g, '').toUpperCase();
+                                                const inFleet = vehicles.some(v => v.carNumber.replace(/[\s\-]/g, '').toUpperCase() === cleanPending);
+                                                const inOutside = outsideVehicles.some(v => (v.carNumber?.split('#')[0] || '').replace(/[\s\-]/g, '').toUpperCase() === cleanPending);
+                                                
+                                                if (!inFleet && !inOutside) {
+                                                    return (
+                                                        <span 
+                                                            style={{ 
+                                                                padding: '2px 6px', 
+                                                                background: 'rgba(244, 63, 94, 0.2)', 
+                                                                color: '#f43f5e', 
+                                                                borderRadius: '4px', 
+                                                                fontSize: '10px',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                            onClick={async () => {
+                                                                const owner = prompt(`Add ${selectedPending.carNumber} as Outside Car\n\nEnter Vendor/Owner Name:`);
+                                                                if (!owner) return;
+                                                                const model = prompt(`Enter Vehicle Model (e.g. Innova, Dzire):`) || 'Unknown';
+                                                                try {
+                                                                    setSubmitting(true);
+                                                                    const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+                                                                    const payload = new FormData();
+                                                                    payload.append('carNumber', `${selectedPending.carNumber}#${formData.date}#${Math.random().toString(36).substring(2,7)}`);
+                                                                    payload.append('isOutsideCar', 'true');
+                                                                    payload.append('ownerName', owner);
+                                                                    payload.append('model', model);
+                                                                    payload.append('companyId', selectedCompany._id);
+                                                                    payload.append('dutyAmount', '0');
+                                                                    
+                                                                    await axios.post('/api/admin/vehicles', payload, {
+                                                                        headers: { Authorization: `Bearer ${userInfo.token}` }
+                                                                    });
+                                                                    await fetchOutsideVehicles();
+                                                                    alert('Added as outside car successfully!');
+                                                                } catch (e) {
+                                                                    alert('Error adding outside car: ' + e.message);
+                                                                } finally {
+                                                                    setSubmitting(false);
+                                                                }
+                                                            }}
+                                                            title="Click to add to Outside Cars"
+                                                        >
+                                                            ⚠️ Unknown? Add Outside
+                                                        </span>
+                                                    );
+                                                } else if (inOutside) {
+                                                    return <span style={{ padding: '2px 6px', background: 'rgba(59, 130, 246, 0.2)', color: '#3b82f6', borderRadius: '4px', fontSize: '10px' }}>🔄 Outside Car</span>;
+                                                }
+                                                return null;
+                                            })()}
+                                        </div>
                                     </div>
                                     <div>
                                         <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800' }}>Date</div>
@@ -1590,7 +1802,7 @@ const FuelPage = () => {
                                         <select
                                             className="input-field"
                                             value={formData.paymentSource}
-                                            onChange={(e) => setFormData({ ...formData, paymentSource: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, paymentSource: e.target.value, paymentBy: '', client: '', drsDuty: '' })}
                                             style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
                                         >
                                             <option value="Office">Office</option>
@@ -1606,7 +1818,7 @@ const FuelPage = () => {
                                                 className="input-field"
                                                 value={formData.paymentBy}
                                                 onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value, client: '', drsDuty: '' })}
-                                                placeholder="e.g. Rahul Sharma"
+                                                placeholder={loadingGuests ? 'Fetching guests...' : 'e.g. Rahul Sharma'}
                                                 style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
                                             />
                                         </div>
@@ -1630,6 +1842,80 @@ const FuelPage = () => {
                                         </div>
                                     )}
                                 </div>
+
+                                {/* Guest Auto-Fetch from DRS — Shows when Payment by Guest is selected */}
+                                {formData.paymentSource?.toLowerCase().includes('guest') && (
+                                    <div style={{ marginTop: '12px', padding: '16px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '14px', border: '1px solid rgba(59, 130, 246, 0.15)' }}>
+                                        <p style={{ color: '#60a5fa', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            🎯 DRS Guest Match — {selectedPending?.carNumber} on {formData.date || '—'}
+                                        </p>
+                                        {loadingGuests ? (
+                                            <div style={{ textAlign: 'center', padding: '15px', color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>
+                                                <span style={{ animation: 'pulse 1.5s infinite' }}>⏳ Searching DRS for guests on this vehicle...</span>
+                                            </div>
+                                        ) : guestDuties.length > 0 ? (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {guestDuties.map((duty, idx) => {
+                                                    const isSelected = formData.drsDuty === duty._id;
+                                                    return (
+                                                        <div
+                                                            key={duty._id || idx}
+                                                            onClick={() => {
+                                                                setFormData({
+                                                                    ...formData,
+                                                                    paymentBy: duty.clientName || '',
+                                                                    drsDuty: duty._id,
+                                                                    client: duty.bookingRef?.client || ''
+                                                                });
+                                                            }}
+                                                            style={{
+                                                                padding: '12px 14px',
+                                                                borderRadius: '10px',
+                                                                background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                                border: isSelected ? '2px solid #3b82f6' : '1px solid rgba(255,255,255,0.08)',
+                                                                cursor: 'pointer',
+                                                                transition: 'all 0.2s',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'space-between'
+                                                            }}
+                                                        >
+                                                            <div>
+                                                                <p style={{ color: 'white', fontWeight: '700', fontSize: '14px', margin: 0 }}>
+                                                                    {isSelected && '✅ '}{duty.clientName || 'Unknown Guest'}
+                                                                </p>
+                                                                <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', margin: '4px 0 0', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                                                    {duty.hotel && <span>🏨 {duty.hotel}</span>}
+                                                                    {duty.bookingId && <span>📋 {duty.bookingId}</span>}
+                                                                    {duty.duty && <span>🚗 {duty.duty}</span>}
+                                                                    {duty.mobileNumber && <span>📱 {duty.mobileNumber}</span>}
+                                                                </p>
+                                                            </div>
+                                                            <span style={{
+                                                                padding: '3px 8px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '10px',
+                                                                fontWeight: '800',
+                                                                background: duty.status === 'Completed' ? 'rgba(16,185,129,0.15)' : duty.status === 'Assigned' || duty.status === 'Ongoing' ? 'rgba(245,158,11,0.15)' : 'rgba(255,255,255,0.05)',
+                                                                color: duty.status === 'Completed' ? '#10b981' : duty.status === 'Assigned' || duty.status === 'Ongoing' ? '#f59e0b' : 'rgba(255,255,255,0.5)',
+                                                                textTransform: 'uppercase'
+                                                            }}>
+                                                                {duty.status || 'N/A'}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '10px', margin: '4px 0 0', textAlign: 'center' }}>
+                                                    Click a guest to auto-fill • {guestDuties.length} duty found
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', margin: 0, textAlign: 'center', padding: '8px 0' }}>
+                                                ⚠️ No DRS duty found for <strong>{selectedPending?.carNumber}</strong> on <strong>{formData.date}</strong> — type guest name manually above
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
 
                                 <div style={{ padding: '20px', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.1)', marginTop: '20px' }}>
                                     <p style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '12px' }}>Slip Image Verification</p>
