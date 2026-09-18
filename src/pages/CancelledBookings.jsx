@@ -298,7 +298,7 @@ export default function CancelledBookings() {
             color: '#ffffff',
             fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
         }}>
-            <SEO title="Cancelled Bookings - LogKaro" />
+            <SEO title="Lost - LogKaro" />
 
             {/* 1. Header Bar */}
             <div style={{
@@ -331,7 +331,7 @@ export default function CancelledBookings() {
                                 margin: 0,
                                 letterSpacing: '-0.5px'
                             }}>
-                                Cancelled Bookings
+                                Lost
                             </h1>
                             <span style={{
                                 background: 'rgba(239, 68, 68, 0.2)',
@@ -678,7 +678,7 @@ export default function CancelledBookings() {
                 </div>
             </div>
 
-            {/* 4. Cancelled Bookings Table */}
+            {/* 4. Lost Table */}
             <div style={{
                 background: '#070d19',
                 border: '1px solid rgba(255, 255, 255, 0.08)',

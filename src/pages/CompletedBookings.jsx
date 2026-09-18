@@ -10,6 +10,9 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import SEO from '../components/SEO';
 import { generateTaxInvoicePDF } from '../utils/taxInvoicePdf';
+import ClientLedgerDrawer from '../components/common/ClientLedgerDrawer';
+import EditInvoiceModal from '../components/common/EditInvoiceModal';
+import { Edit } from 'lucide-react';
 
 const MONTH_TABS = [
     'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'
@@ -55,6 +58,8 @@ export default function CompletedBookings() {
 
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [ledgerModalBooking, setLedgerModalBooking] = useState(null);
+    const [invoiceModalBooking, setInvoiceModalBooking] = useState(null);
     const [selectedFy, setSelectedFy] = useState('FY 26-27');
     const [selectedMonth, setSelectedMonth] = useState('Sep');
     const [searchTerm, setSearchTerm] = useState('');
@@ -237,7 +242,7 @@ export default function CompletedBookings() {
             color: '#fff',
             fontFamily: 'system-ui, -apple-system, sans-serif'
         }}>
-            <SEO title="Completed Bookings - LogKaro" />
+            <SEO title="Completed - LogKaro" />
 
             {/* 1. Header Bar */}
             <div style={{
@@ -266,7 +271,7 @@ export default function CompletedBookings() {
                         margin: 0,
                         letterSpacing: '-0.5px'
                     }}>
-                        Completed Bookings
+                        Completed
                     </h1>
                     <p style={{
                         fontSize: '13px',
@@ -529,7 +534,7 @@ export default function CompletedBookings() {
                 </div>
             </div>
 
-            {/* 4. Completed Bookings Table */}
+            {/* 4. Completed Table */}
             <div style={{
                 background: 'rgba(13, 21, 38, 0.6)',
                 border: '1px solid rgba(255, 255, 255, 0.07)',
@@ -740,6 +745,26 @@ export default function CompletedBookings() {
                     </button>
                 </div>
             </div>
-        </div>
+        
+            {ledgerModalBooking && (
+                <ClientLedgerDrawer 
+                    booking={ledgerModalBooking} 
+                    onClose={() => setLedgerModalBooking(null)}
+                    // No onAddEntry because this is Completed bookings
+                />
+            )}
+
+            {invoiceModalBooking && (
+                <EditInvoiceModal 
+                    booking={invoiceModalBooking} 
+                    onClose={() => setInvoiceModalBooking(null)}
+                    onSuccess={() => {
+                        setInvoiceModalBooking(null);
+                        fetchBookings();
+                        alert('Invoice updated successfully!');
+                    }}
+                />
+            )}
+</div>
     );
 }

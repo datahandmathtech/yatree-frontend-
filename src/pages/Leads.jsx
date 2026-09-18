@@ -8,7 +8,7 @@ import {
     Clock, Phone, ShieldCheck, Share2, HelpCircle, User, Users,
     Globe, Building2, Repeat, CircleDot, XCircle, ChevronLeft, ChevronRight, ChevronDown,
     TrendingUp, BarChart2, BarChart3, Info, CheckSquare, Square, CreditCard,
-    Landmark, UploadCloud, Camera, Eye, Image as ImageIcon
+    Landmark, UploadCloud, Camera, Eye, Image as ImageIcon, MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
@@ -148,7 +148,16 @@ export default function Leads() {
     const [hoveredLeadId, setHoveredLeadId] = useState(null);
     // Right Analytics Sidebar state (Closed by default as requested)
     const [showRightSidebar, setShowRightSidebar] = useState(false);
-    const [selectedSidebarMonth, setSelectedSidebarMonth] = useState('September 2026');
+    const selectedSidebarMonth = useMemo(() => {
+        if (monthFilter === 'All') {
+            const currentMonthIdx = new Date().getMonth();
+            const opt = SIDEBAR_MONTH_OPTIONS.find(o => o.monthIdx === currentMonthIdx);
+            return opt ? opt.label : 'September 2026';
+        } else {
+            const opt = SIDEBAR_MONTH_OPTIONS.find(o => o.tab === monthFilter);
+            return opt ? opt.label : 'September 2026';
+        }
+    }, [monthFilter]);
     const [showMonthDropdown, setShowMonthDropdown] = useState(false);
     const [sidebarLeads, setSidebarLeads] = useState([]);
     const [loadingSidebarLeads, setLoadingSidebarLeads] = useState(false);
@@ -159,7 +168,22 @@ export default function Leads() {
     const itemsPerPage = 8;
 
     // Create / Edit Modal
+    
+    const [customSources, setCustomSources] = useState([]);
+    useEffect(() => {
+        if (selectedCompany?._id) {
+            try {
+                const saved = JSON.parse(localStorage.getItem('leadSources_' + selectedCompany._id));
+                if (saved) setCustomSources(saved);
+            } catch(e) {}
+        }
+    }, [selectedCompany]);
+    
+    const ALL_SOURCES = [...new Set([...LEAD_SOURCES, ...customSources])];
+
     const [showModal, setShowModal] = useState(false);
+    const [remarksModalLead, setRemarksModalLead] = useState(null);
+    const [expandedRemarks, setExpandedRemarks] = useState({});
     const [editingLead, setEditingLead] = useState(null);
     const [previewClientCode, setPreviewClientCode] = useState('');
 
@@ -167,6 +191,7 @@ export default function Leads() {
     const [showConvertModal, setShowConvertModal] = useState(false);
     const [convertingLead, setConvertingLead] = useState(null);
     const [advancePayment, setAdvancePayment] = useState('');
+    const [advancePaymentDate, setAdvancePaymentDate] = useState(new Date().toISOString().split('T')[0]);
     const [paymentMode, setPaymentMode] = useState('UPI / QR Code');
     const [paymentRef, setPaymentRef] = useState('');
     const [adminOverride, setAdminOverride] = useState(false);
@@ -200,6 +225,7 @@ export default function Leads() {
     const [showPriceInPreview, setShowPriceInPreview] = useState(true);
     const [downloadOptionModal, setDownloadOptionModal] = useState(null); // { type: 'pdf' | 'image', lead }
     const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+    const [viewingImage, setViewingImage] = useState(null);
     const tourCardRef = useRef(null);
 
     // Daily Breakdown Expanded Day
@@ -1012,6 +1038,7 @@ export default function Leads() {
 
             const { data } = await axios.post(`/api/leads/${convertingLead._id}/convert`, {
                 advancePayment: adv,
+                advancePaymentDate,
                 paymentMode,
                 paymentReference: paymentRef,
                 bankAccountId: selectedBankId || null,
@@ -1422,7 +1449,7 @@ export default function Leads() {
 
     return (
         <div className="container-fluid" style={{ padding: '24px', minHeight: '100vh', background: 'transparent' }}>
-            <SEO title="Sales God - Leads & Quotes" description="Manage taxi fleet sales leads, client codes, quotes and conversions." />
+            <SEO title="Open - Leads & Quotes" description="Manage taxi fleet sales leads, client codes, quotes and conversions." />
 
             {/* 1. Header with 'Sales God' Title & KPI Summary Cards */}
             <header style={{
@@ -1734,7 +1761,7 @@ export default function Leads() {
                             }}
                         >
                             <option value="All" style={{ background: '#0f172a' }}>Filter by Source</option>
-                            {LEAD_SOURCES.map(src => (
+                            {ALL_SOURCES.map(src => (
                                 <option key={src} value={src} style={{ background: '#0f172a' }}>{src}</option>
                             ))}
                         </select>
@@ -1763,7 +1790,7 @@ export default function Leads() {
                                 Price ↕
                             </th>
                             <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
-                                Status ↕
+                                Last Remark ↕
                             </th>
                             <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', textAlign: 'right' }}>
                                 Actions
@@ -1861,9 +1888,94 @@ export default function Leads() {
                                         </div>
                                     </td>
 
+                                    
                                     {/* 6. Status */}
-                                    <td style={{ padding: '16px 20px' }}>
-                                        {renderStatusPill(lead.status)}
+                                    <td style={{ padding: '16px 20px', maxWidth: '240px', verticalAlign: 'middle' }}>
+                                        {lead.remarksHistory && lead.remarksHistory.length > 0 ? (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                {/* Actual Remark Bubble */}
+                                                <div 
+                                                    style={{ 
+                                                        borderLeft: '2px solid rgba(59, 130, 246, 0.5)',
+                                                        paddingLeft: '10px',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '6px'
+                                                    }}
+                                                >
+                                                    <span style={{ 
+                                                        fontSize: '13px', 
+                                                        color: 'white', 
+                                                        lineHeight: '1.4',
+                                                        display: '-webkit-box',
+                                                        WebkitLineClamp: 2,
+                                                        WebkitBoxOrient: 'vertical',
+                                                        overflow: 'hidden'
+                                                    }}>
+                                                        {lead.remarksHistory[lead.remarksHistory.length - 1].text}
+                                                    </span>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                        <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
+                                                            {new Date(lead.remarksHistory[lead.remarksHistory.length - 1].date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                                                        </span>
+                                                        
+                                                        {lead.remarksHistory[lead.remarksHistory.length - 1].attachmentUrl && (
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    let url = lead.remarksHistory[lead.remarksHistory.length - 1].attachmentUrl;
+                                                                    if (url.includes('taxi-fleet-crm/documents')) {
+                                                                        const parts = url.split('taxi-fleet-crm/documents/');
+                                                                        url = 'https://res.cloudinary.com/doaymwjki/image/upload/v1/taxi-fleet-crm/documents/' + parts[1];
+                                                                    } else if (!url.startsWith('http')) {
+                                                                        url = `http://127.0.0.1:5005${url}`;
+                                                                    }
+                                                                    setViewingImage(url);
+                                                                }}
+                                                                style={{ 
+                                                                    display: 'inline-flex', alignItems: 'center', gap: '4px', 
+                                                                    background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.3)',
+                                                                    color: '#fbbf24', fontSize: '10px', fontWeight: '800', 
+                                                                    padding: '2px 8px', borderRadius: '12px', cursor: 'pointer'
+                                                                }}
+                                                                title="View Attachment"
+                                                            >
+                                                                <Eye size={12} /> View
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* Action to View All / Add More */}
+                                                <div>
+                                                    <button 
+                                                        onClick={() => setRemarksModalLead(lead)}
+                                                        style={{ 
+                                                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                                            background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)',
+                                                            fontSize: '11px', cursor: 'pointer', padding: '0 0 0 10px'
+                                                        }}
+                                                    >
+                                                        <MessageSquare size={12} /> View all / Add remark
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <button 
+                                                onClick={() => setRemarksModalLead(lead)}
+                                                style={{ 
+                                                    display: 'inline-flex', alignItems: 'center', gap: '6px', 
+                                                    background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.2)', 
+                                                    padding: '6px 14px', borderRadius: '8px',
+                                                    color: 'rgba(255,255,255,0.7)', fontSize: '12px', cursor: 'pointer',
+                                                    transition: 'all 0.2s ease'
+                                                }}
+                                                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.5)'; e.currentTarget.style.color = 'white'; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; }}
+                                            >
+                                                <Plus size={14} /> Add Remark
+                                            </button>
+                                        )}
                                     </td>
 
                                     {/* 7. Actions */}
@@ -2152,80 +2264,6 @@ export default function Leads() {
 
                             {/* Drawer Body (Scrollable) */}
                             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column' }}>
-                                {/* Month Dropdown Selector */}
-                                <div style={{ position: 'relative', marginBottom: '16px' }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowMonthDropdown(!showMonthDropdown)}
-                                        style={{
-                                            width: '100%',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'space-between',
-                                            background: 'rgba(255, 255, 255, 0.04)',
-                                            border: '1px solid rgba(255, 255, 255, 0.12)',
-                                            borderRadius: '10px',
-                                            padding: '11px 14px',
-                                            color: 'white',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s'
-                                        }}
-                                    >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '800', fontSize: '14px' }}>
-                                            <Calendar size={16} color="var(--primary)" />
-                                            <span>{selectedSidebarMonth}</span>
-                                        </div>
-                                        <ChevronDown size={16} color="rgba(255,255,255,0.6)" />
-                                    </button>
-
-                                    {showMonthDropdown && (
-                                        <div style={{
-                                            position: 'absolute',
-                                            top: '100%',
-                                            left: 0,
-                                            right: 0,
-                                            marginTop: '6px',
-                                            background: '#0b1329',
-                                            border: '1px solid rgba(255, 255, 255, 0.15)',
-                                            borderRadius: '12px',
-                                            padding: '6px',
-                                            zIndex: 100,
-                                            boxShadow: '0 10px 25px rgba(0,0,0,0.8)',
-                                            maxHeight: '220px',
-                                            overflowY: 'auto'
-                                        }}>
-                                            {SIDEBAR_MONTH_OPTIONS.map(opt => (
-                                                <button
-                                                    key={opt.label}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setSelectedSidebarMonth(opt.label);
-                                                        setShowMonthDropdown(false);
-                                                    }}
-                                                    style={{
-                                                        width: '100%',
-                                                        textAlign: 'left',
-                                                        padding: '8px 12px',
-                                                        background: selectedSidebarMonth === opt.label ? 'rgba(251, 191, 36, 0.15)' : 'transparent',
-                                                        color: selectedSidebarMonth === opt.label ? 'var(--primary)' : 'white',
-                                                        border: 'none',
-                                                        borderRadius: '8px',
-                                                        fontSize: '13px',
-                                                        fontWeight: '700',
-                                                        cursor: 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'space-between'
-                                                    }}
-                                                >
-                                                    <span>{opt.label}</span>
-                                                    {selectedSidebarMonth === opt.label && <span>✓</span>}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
                                 {/* Monthly Summary Card */}
                                 <div style={{
                                     border: '1px solid rgba(251, 191, 36, 0.35)',
@@ -2907,20 +2945,43 @@ export default function Leads() {
                                         </div>
                                         <div>
                                             <label style={labelStyle}>Enquiry Source</label>
-                                            <select
-                                                value={formData.source}
-                                                onChange={e => {
-                                                    const newSource = e.target.value;
-                                                    setFormData(prev => ({
-                                                        ...prev,
-                                                        source: newSource,
-                                                        bookingReference: newSource === 'Agent' ? 'Travel Agent' : prev.bookingReference
-                                                    }));
-                                                }}
-                                                style={{ ...darkInputStyle, cursor: 'pointer' }}
-                                            >
-                                                {LEAD_SOURCES.map(src => <option key={src} value={src} style={{ background: '#090f1d' }}>{src}</option>)}
-                                            </select>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <select
+                                                    value={formData.source}
+                                                    onChange={e => {
+                                                        const newSource = e.target.value;
+                                                        setFormData(prev => ({
+                                                            ...prev,
+                                                            source: newSource,
+                                                            bookingReference: newSource === 'Agent' ? 'Travel Agent' : prev.bookingReference
+                                                        }));
+                                                    }}
+                                                    style={{ ...darkInputStyle, cursor: 'pointer', flex: 1 }}
+                                                >
+                                                    {ALL_SOURCES.map(src => (
+                                                        <option key={src} value={src} style={{ background: '#090f1d' }}>{src}</option>
+                                                    ))}
+                                                </select>
+                                                <button type="button" onClick={() => {
+                                                    const src = prompt('Enter new source name:');
+                                                    if (src && !ALL_SOURCES.includes(src)) {
+                                                        const newSrcs = [...customSources, src];
+                                                        setCustomSources(newSrcs);
+                                                        localStorage.setItem('leadSources_' + selectedCompany?._id, JSON.stringify(newSrcs));
+                                                        setFormData(prev => ({ ...prev, source: src }));
+                                                    }
+                                                }} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '0 12px', borderRadius: '8px', cursor: 'pointer' }}>+</button>
+                                                {customSources.includes(formData.source) && (
+                                                    <button type="button" onClick={() => {
+                                                        if (window.confirm('Delete this custom source?')) {
+                                                            const newSrcs = customSources.filter(s => s !== formData.source);
+                                                            setCustomSources(newSrcs);
+                                                            localStorage.setItem('leadSources_' + selectedCompany?._id, JSON.stringify(newSrcs));
+                                                            setFormData(prev => ({ ...prev, source: 'Website' }));
+                                                        }
+                                                    }} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', padding: '0 12px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Trash2 size={14}/></button>
+                                                )}
+                                            </div>
                                         </div>
                                         <div>
                                             <label style={labelStyle}>GST Mode</label>
@@ -3094,7 +3155,14 @@ export default function Leads() {
                                             <label style={labelStyle}>Vehicle Model *</label>
                                             <select
                                                 value={formData.carType}
-                                                onChange={e => setFormData({ ...formData, carType: e.target.value })}
+                                                onChange={e => {
+                                                    const newCar = e.target.value;
+                                                    setFormData({
+                                                        ...formData,
+                                                        carType: newCar,
+                                                        itinerary: formData.itinerary.map(item => ({ ...item, vehicleType: newCar }))
+                                                    });
+                                                }}
                                                 style={{ ...darkInputStyle, cursor: 'pointer' }}
                                             >
                                                 {VEHICLE_OPTIONS.map(v => (
@@ -3639,16 +3707,27 @@ export default function Leads() {
                                     <span style={{ fontSize: '15px', fontWeight: '900', color: 'white' }}>₹{(convertingLead.totalAmount || 0).toLocaleString('en-IN')}</span>
                                 </div>
 
-                                <div>
-                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Advance Received (₹)</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        placeholder="e.g. 5000"
-                                        value={advancePayment}
-                                        onChange={e => setAdvancePayment(e.target.value)}
-                                        style={{ ...darkInputStyle, fontSize: '16px', fontWeight: 'bold' }}
-                                    />
+                                                                <div style={{ display: 'flex', gap: '16px' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Advance Received (₹)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            placeholder="e.g. 5000"
+                                            value={advancePayment}
+                                            onChange={e => setAdvancePayment(e.target.value)}
+                                            style={{ ...darkInputStyle, fontSize: '16px', fontWeight: 'bold' }}
+                                        />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Received Date</label>
+                                        <input
+                                            type="date"
+                                            value={advancePaymentDate}
+                                            onChange={e => setAdvancePaymentDate(e.target.value)}
+                                            style={{ ...darkInputStyle, fontSize: '16px', fontWeight: 'bold' }}
+                                        />
+                                    </div>
                                 </div>
 
                                 <div>
@@ -4499,6 +4578,153 @@ export default function Leads() {
                     </div>
                 )}
             </AnimatePresence>
-        </div>
+        
+            {/* Remarks Modal */}
+            <AnimatePresence>
+                {remarksModalLead && (
+                    <div style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+                    }}>
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            style={{
+                                background: '#111827', width: '90%', maxWidth: '600px',
+                                borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)',
+                                overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '85vh'
+                            }}
+                        >
+                            <div style={{ padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between' }}>
+                                <h3 style={{ margin: 0, color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <MessageSquare size={18} color="var(--primary)" />
+                                    Lead Remarks & Conversation
+                                </h3>
+                                <button onClick={() => setRemarksModalLead(null)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}><X size={20} /></button>
+                            </div>
+                            <div style={{ padding: '20px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                {(!remarksModalLead.remarksHistory || remarksModalLead.remarksHistory.length === 0) ? (
+                                    <div style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: '20px 0' }}>No remarks yet.</div>
+                                ) : (
+                                    remarksModalLead.remarksHistory.map((rem, idx) => {
+                                        return (
+                                            <div key={idx} style={{ background: 'rgba(255,255,255,0.03)', padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>
+                                                    {new Date(rem.date).toLocaleString()}
+                                                </div>
+                                                <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: '13px', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
+                                                    {rem.text}
+                                                </div>
+                                                {rem.attachmentUrl && (
+                                                    <a href={rem.attachmentUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '12px', padding: '6px 12px', background: 'rgba(251,191,36,0.1)', color: 'var(--primary)', textDecoration: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600' }}>
+                                                        <ImageIcon size={14} /> View Attachment
+                                                    </a>
+                                                )}
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                            <div style={{ padding: '20px', borderTop: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.2)' }}>
+                                <textarea
+                                    id="newRemarkText"
+                                    placeholder="Type a new remark..."
+                                    rows={3}
+                                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px', color: 'white', marginBottom: '12px', resize: 'vertical' }}
+                                />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <input type="file" id="newRemarkFile" accept="image/*,.pdf,.doc,.docx" style={{ display: 'none' }} onChange={(e) => { if (e.target.files.length > 0) document.getElementById('newRemarkFileName').innerText = e.target.files[0].name; else document.getElementById('newRemarkFileName').innerText = ''; }} />
+                                        <button onClick={() => document.getElementById('newRemarkFile').click()} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', padding: '8px 12px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                                            <UploadCloud size={14} /> Attach File / Photo
+                                        </button>
+                                        <span id="newRemarkFileName" style={{ marginLeft: '10px', fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}></span>
+                                    </div>
+                                    <button
+                                        onClick={async (e) => {
+                                            const btn = e.currentTarget;
+                                            const text = document.getElementById('newRemarkText').value;
+                                            const fileInput = document.getElementById('newRemarkFile');
+                                            if (!text.trim()) return alert('Please enter a remark');
+                                            
+                                            btn.disabled = true;
+                                            btn.innerText = 'Saving...';
+                                            
+                                            try {
+                                                let attachmentUrl = null;
+                                                if (fileInput.files.length > 0) {
+                                                    const formData = new FormData();
+                                                    formData.append('file', fileInput.files[0]);
+                                                    const uploadRes = await axios.post('/api/admin/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' }});
+                                                    attachmentUrl = uploadRes.data.url;
+                                                }
+                                                await axios.post(`/api/leads/${remarksModalLead._id}/remarks`, { text, attachmentUrl });
+                                                
+                                                fetchLeads();
+                                                const res = await axios.get(`/api/leads/single/${remarksModalLead._id}`);
+                                                setRemarksModalLead(res.data);
+                                                
+                                                document.getElementById('newRemarkText').value = '';
+                                                fileInput.value = '';
+                                                document.getElementById('newRemarkFileName').innerText = '';
+                                            } catch (err) {
+                                                console.error(err);
+                                                alert('Error adding remark');
+                                            } finally {
+                                                btn.disabled = false;
+                                                btn.innerText = 'Save Remark';
+                                            }
+                                        }}
+                                        style={{ background: 'var(--primary)', border: 'none', color: '#000', padding: '8px 16px', borderRadius: '6px', fontWeight: '700', cursor: 'pointer' }}
+                                    >
+                                        Save Remark
+                                    </button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* FULL SCREEN IMAGE VIEWER MODAL */}
+            <AnimatePresence>
+                {viewingImage && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        style={{
+                            position: 'fixed',
+                            inset: 0,
+                            background: 'rgba(0,0,0,0.85)',
+                            backdropFilter: 'blur(5px)',
+                            zIndex: 999999,
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            padding: '40px'
+                        }}
+                        onClick={() => setViewingImage(null)}
+                    >
+                        <button 
+                            onClick={() => setViewingImage(null)}
+                            style={{ position: 'absolute', top: '20px', right: '30px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '10px', borderRadius: '50%', cursor: 'pointer' }}
+                        >
+                            <X size={24} />
+                        </button>
+                        <motion.img 
+                            initial={{ scale: 0.9 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0.9 }}
+                            src={viewingImage} 
+                            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }} 
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </motion.div>
+                )}
+            </AnimatePresence>
+</div>
     );
 }
