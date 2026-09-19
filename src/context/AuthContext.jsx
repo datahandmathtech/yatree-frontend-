@@ -89,6 +89,10 @@ export const AuthProvider = ({ children }) => {
 
     const login = async (mobile, password) => {
         const { data } = await axios.post('/api/auth/login', { mobile, password });
+        if (data.redirectUrl) {
+            window.location.href = data.redirectUrl;
+            return null;
+        }
         localStorage.setItem('userInfo', JSON.stringify(data));
         sessionStorage.setItem('activeSession', 'true'); // Set session on login
         setUser(data);
