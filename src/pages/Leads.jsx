@@ -133,7 +133,7 @@ const getDaysDifference = (startStr, endStr) => {
 };
 
 
-const InlineRemarkEditor = ({ lead, fetchLeads, setViewingImage }) => {
+const InlineRemarkEditor = ({ lead, fetchLeads, setViewingImage, customRemarks, setCustomRemarks, selectedCompany }) => {
     const [text, setText] = React.useState('');
     const [uploading, setUploading] = React.useState(false);
     const lastRemark = lead.remarksHistory?.[lead.remarksHistory.length - 1];
@@ -2020,7 +2020,7 @@ export default function Leads() {
                                     
                                     {/* 6. Status */}
                                     <td style={{ padding: '16px 20px', maxWidth: '240px', verticalAlign: 'middle' }}>
-                                        <InlineRemarkEditor lead={lead} fetchLeads={fetchLeads} setViewingImage={setViewingImage} />
+                                        <InlineRemarkEditor lead={lead} fetchLeads={fetchLeads} setViewingImage={setViewingImage} customRemarks={customRemarks} setCustomRemarks={setCustomRemarks} selectedCompany={selectedCompany} />
                                     </td>
 
                                     {/* 7. Actions */}
