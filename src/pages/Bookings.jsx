@@ -514,6 +514,7 @@ export default function Bookings() {
 
     // Filter & Sort Bookings
     const processedBookings = useMemo(() => {
+          console.log('Bookings state:', bookings.length, bookings.map(b => b.bookingStatus));
         let list = bookings;
         if (list.length === 0) {
             list = BASELINE_SEPTEMBER_BOOKINGS;
@@ -560,7 +561,8 @@ export default function Bookings() {
         }
 
         // 3. Sorting
-        return [...list].sort((a, b) => {
+          console.log('Final list length before sort:', list.length, 'selectedMonth:', selectedMonth);
+          return [...list].sort((a, b) => {
             let valA = a[sortField];
             let valB = b[sortField];
 
