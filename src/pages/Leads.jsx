@@ -197,36 +197,7 @@ const InlineRemarkEditor = ({ lead, fetchLeads, setViewingImage, customRemarks, 
             )}
             
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center', background: 'rgba(0,0,0,0.3)', border: '1px dashed rgba(255,255,255,0.2)', padding: '4px 8px', borderRadius: '6px', transition: 'all 0.2s ease' }}>
-                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                      <select 
-                          onChange={e => {
-                              if (e.target.value) {
-                                  setText(e.target.value);
-                                  e.target.value = "";
-                              }
-                          }}
-                          style={{ background: 'transparent', border: 'none', color: '#fbbf24', fontSize: '10px', outline: 'none', cursor: 'pointer', maxWidth: '80px', textOverflow: 'ellipsis' }}
-                      >
-                          <option value="">Quick...</option>
-                          {customRemarks.map(r => <option key={r} value={r}>{r}</option>)}
-                      </select>
-                      <button type="button" onClick={() => {
-                          const r = prompt('Add new Quick Remark:');
-                          if (r && !customRemarks.includes(r)) {
-                              const newR = [...customRemarks, r];
-                              setCustomRemarks(newR);
-                              localStorage.setItem('leadRemarks_' + selectedCompany?._id, JSON.stringify(newR));
-                              setText(r);
-                          }
-                      }} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: 'white', padding: '2px 4px', borderRadius: '4px', cursor: 'pointer', fontSize: '10px' }}>+</button>
-                      <button type="button" onClick={() => {
-                          if (customRemarks.length > 0 && window.confirm('Clear all custom quick remarks?')) {
-                              setCustomRemarks([]);
-                              localStorage.removeItem('leadRemarks_' + selectedCompany?._id);
-                          }
-                      }} style={{ background: 'rgba(239,68,68,0.1)', border: 'none', color: '#ef4444', padding: '2px 4px', borderRadius: '4px', cursor: 'pointer', fontSize: '10px' }}>-</button>
-                  </div>
-                  <input 
+                <input 
                       type="text" 
                       value={text} 
                       onChange={e => setText(e.target.value)}
