@@ -1158,7 +1158,7 @@ export default function Bookings() {
                                 style={{ padding: '14px 16px', color: 'rgba(255,255,255,0.65)', fontWeight: '700', fontSize: '12px', cursor: 'pointer', userSelect: 'none' }}
                             >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    Status <ArrowUpDown size={12} color="rgba(255,255,255,0.4)" />
+                                    Driver <ArrowUpDown size={12} color="rgba(255,255,255,0.4)" />
                                 </div>
                             </th>
                             <th style={{ padding: '14px 16px', color: 'rgba(255,255,255,0.65)', fontWeight: '700', fontSize: '12px', textAlign: 'center' }}>
@@ -1305,38 +1305,62 @@ export default function Bookings() {
 
                                         {/* 9. Status Pill */}
                                         <td style={{ padding: '14px 16px' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                                                <span style={{
-                                                    padding: '4px 12px',
-                                                    borderRadius: '20px',
-                                                    fontSize: '11px',
-                                                    fontWeight: '800',
-                                                    background: isRunning ? 'rgba(30, 58, 138, 0.45)' : 'rgba(6, 95, 70, 0.45)',
-                                                    color: isRunning ? '#60a5fa' : '#34d399',
-                                                    border: isRunning ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(52, 211, 153, 0.4)',
-                                                    display: 'inline-block'
-                                                }}>
-                                                    {isRunning ? 'Running' : 'Confirmed'}
-                                                </span>
-                                                {isDatePassedBooking(bkg) && (
-                                                    <span style={{
-                                                        padding: '2px 8px',
-                                                        borderRadius: '6px',
-                                                        fontSize: '10px',
-                                                        fontWeight: '800',
-                                                        background: 'rgba(239, 68, 68, 0.2)',
-                                                        color: '#fca5a5',
-                                                        border: '1px solid rgba(239, 68, 68, 0.4)',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '3px',
-                                                        whiteSpace: 'nowrap'
-                                                    }}>
-                                                        <AlertTriangle size={10} /> Date Passed
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </td>
+                                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                                  {(() => {
+                                                      let drvName = null;
+                                                      if (bkg.itinerary && bkg.itinerary.length > 0) {
+                                                          const firstAssigned = bkg.itinerary.find(d => d.driverId || d.driverName);
+                                                          if (firstAssigned) {
+                                                              if (firstAssigned.driverName) drvName = firstAssigned.driverName;
+                                                              else if (firstAssigned.driverId) {
+                                                                  const foundDrv = driversList.find(d => String(d._id) === String(firstAssigned.driverId));
+                                                                  if (foundDrv) drvName = foundDrv.name;
+                                                              }
+                                                          }
+                                                      }
+                                                      
+                                                      if (drvName) {
+                                                          return (
+                                                              <span style={{
+                                                                  padding: '4px 12px',
+                                                                  borderRadius: '20px',
+                                                                  fontSize: '11px',
+                                                                  fontWeight: '800',
+                                                                  background: 'rgba(6, 95, 70, 0.45)',
+                                                                  color: '#34d399',
+                                                                  border: '1px solid rgba(52, 211, 153, 0.4)',
+                                                                  display: 'inline-block'
+                                                              }}>
+                                                                  👤 {drvName}
+                                                              </span>
+                                                          );
+                                                      } else {
+                                                          return (
+                                                              <span style={{
+                                                                  padding: '4px 12px',
+                                                                  borderRadius: '20px',
+                                                                  fontSize: '11px',
+                                                                  fontWeight: '800',
+                                                                  background: 'rgba(255, 255, 255, 0.05)',
+                                                                  color: 'rgba(255,255,255,0.5)',
+                                                                  border: '1px dashed rgba(255, 255, 255, 0.2)',
+                                                                  display: 'inline-block'
+                                                              }}>
+                                                                  Unassigned
+                                                              </span>
+                                                          );
+                                                      }
+                                                  })()}
+                                                  {isDatePassedBooking(bkg) && (
+                                                      <span style={{
+                                                          padding: '2px 8px', borderRadius: '4px', fontSize: '10px', 
+                                                          background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)'
+                                                      }}>
+                                                          ⚠️ Date Passed
+                                                      </span>
+                                                  )}
+                                              </div>
+                                          </td>
 
                                         {/* 10. Actions (PDF, Pay, Assign Driver, ⋮) matching media_1788929159044.png */}
                                         <td style={{ padding: '14px 16px', textAlign: 'center' }}>

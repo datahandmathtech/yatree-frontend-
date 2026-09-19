@@ -185,36 +185,57 @@ export const generateBookingConfirmationPDF = (booking, company, { withAmount = 
 
     currentY += 46;
 
-    // 5. Terms & Conditions
-    if (currentY > pageHeight - 40) {
+    // 5. Remarks & Advance Info
+    if (currentY > pageHeight - 60) {
         doc.addPage();
         currentY = 20;
     }
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
+    doc.setFontSize(9);
     doc.setTextColor(...primaryColor);
-    doc.text('IMPORTANT TERMS & OPERATIONAL CONDITIONS', 14, currentY);
+    doc.text('ADVANCE PAYMENT DETAILS', 14, currentY);
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
+    doc.setFontSize(8.5);
+    doc.setTextColor(...darkColor);
+    let advanceY = currentY + 7;
+    const aDate = booking.advanceDate ? new Date(booking.advanceDate).toLocaleDateString('en-IN') : 'N/A';
+    doc.text(`Amount Received: Rs. ${(booking.advancePaid || 0).toLocaleString('en-IN')}`, 14, advanceY);
+    doc.text(`Payment Date: ${aDate}`, 70, advanceY);
+    doc.text(`Payment Mode: ${booking.paymentMode || 'Cash / Transfer'}`, 130, advanceY);
+
+    currentY = advanceY + 12;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...primaryColor);
+    doc.text('GUEST CONVERSATION / REMARKS', 14, currentY);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
     doc.setTextColor(...textMuted);
-
-    const defaultTerms = (booking.termsAndConditions && booking.termsAndConditions.length > 0)
-        ? booking.termsAndConditions
-        : [
-            'All rates are subject to vehicle availability at the time of final confirmation.',
-            'Toll, State Border Tax, and Parking charges will be on actuals unless explicitly specified as included.',
-            'AC will be switched off in hills / ghats or when vehicle is parked/stationary.',
-            'Night driving charge (10:00 PM to 06:00 AM) applies as per company standard tariff.'
-        ];
-
-    let termY = currentY + 5;
-    defaultTerms.forEach((term, i) => {
-        const split = doc.splitTextToSize(`${i + 1}. ${term}`, pageWidth - 28);
-        doc.text(split, 14, termY);
-        termY += split.length * 3.5;
-    });
+    
+    let remarkY = currentY + 7;
+    const allRemarks = [];
+    if (booking.lead?.specialRemarks) allRemarks.push('Special Note: ' + booking.lead.specialRemarks);
+    if (booking.lead?.remarksHistory && Array.isArray(booking.lead.remarksHistory)) {
+        booking.lead.remarksHistory.forEach(r => {
+            const rd = r.date ? new Date(r.date).toLocaleDateString('en-IN') : '';
+            allRemarks.push(`[${rd}] ${r.text}`);
+        });
+    }
+    
+    if (allRemarks.length === 0) {
+        doc.text('No special remarks recorded.', 14, remarkY);
+        remarkY += 5;
+    } else {
+        allRemarks.forEach(rm => {
+            const split = doc.splitTextToSize(rm, pageWidth - 28);
+            doc.text(split, 14, remarkY);
+            remarkY += split.length * 3.5;
+        });
+    }
 
     // 6. Footer Block
     doc.setFillColor(248, 250, 252);
