@@ -80,11 +80,11 @@ const ProtectedRoute = ({ children, role }) => {
   const isAdminOrExecutive = userRole === 'admin' || userRole === 'executive' || userRole === 'superadmin' || userRole.includes('admin');
 
   if (role === 'Admin') {
-    if (!isAdminOrExecutive) return <Navigate to="/driver" replace />;
+    if (!isAdminOrExecutive) return <Navigate to="/login" replace />;
   } else if (role === 'Driver') {
-    if (user.role !== 'Driver') return <Navigate to="/admin" replace />;
+    if (userRole !== 'driver') return <Navigate to="/login" replace />;
   } else if (role === 'Staff') {
-    if (user.role !== 'Staff') return <Navigate to="/admin" replace />;
+    if (userRole !== 'staff') return <Navigate to="/login" replace />;
   }
 
   return children;

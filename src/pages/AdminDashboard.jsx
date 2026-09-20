@@ -149,7 +149,7 @@ const AdminDashboard = () => {
 
     const fetchStats = async () => {
         const userInfoRaw = localStorage.getItem('userInfo');
-        if (!userInfoRaw || !selectedCompany) return;
+        if (!userInfoRaw || !selectedCompany) { setLoading(false); return; }
 
         setLoading(true);
         try {
