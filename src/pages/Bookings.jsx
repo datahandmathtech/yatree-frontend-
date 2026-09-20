@@ -27,153 +27,7 @@ const BASELINE_DRIVERS = [
     { _id: 'drv-5', name: 'Dinesh Yadav', mobile: '+91 98333 55667', vehicleNumber: 'RJ14 PA 7890', vehicleModel: 'Tempo Traveller' }
 ];
 
-// Baseline Mockup Data matching media_1788927832202.png (8 bookings, Total: ₹4,92,000 / Rec: ₹2,91,500 / Bal: ₹2,00,500)
-const BASELINE_SEPTEMBER_BOOKINGS = [
-    {
-        _id: 'bkg-mock-1',
-        bookingCode: '09/01',
-        clientCode: '09/01',
-        bookingId: '09/01',
-        clientName: 'Mr. Rakesh Malhotra',
-        mobileNumber: '+91 98765 43210',
-        totalAmount: 50000,
-        advancePaid: 30000,
-        balanceDue: 20000,
-        travelStartDate: '2025-09-12',
-        travelEndDate: '2025-09-18',
-        tripStartFormatted: '12 Sep 25',
-        tripEndFormatted: '18 Sep 25',
-        vehicleType: 'Innova Crysta',
-        bookingStatus: 'Confirmed',
-        month: 'Sep'
-    },
-    {
-        _id: 'bkg-mock-2',
-        bookingCode: '09/02',
-        clientCode: '09/02',
-        bookingId: '09/02',
-        clientName: 'Mr. Hemant Gandhi - VVIP',
-        mobileNumber: '+91 98101 95448',
-        totalAmount: 80000,
-        advancePaid: 40000,
-        balanceDue: 40000,
-        travelStartDate: '2025-09-20',
-        travelEndDate: '2025-09-24',
-        tripStartFormatted: '20 Sep 25',
-        tripEndFormatted: '24 Sep 25',
-        vehicleType: 'Innova',
-        bookingStatus: 'Running',
-        month: 'Sep'
-    },
-    {
-        _id: 'bkg-mock-3',
-        bookingCode: '09/03',
-        clientCode: '09/03',
-        bookingId: '09/03',
-        clientName: 'Mr. Ayush Malhotra',
-        mobileNumber: '+91 84029 91917',
-        totalAmount: 60000,
-        advancePaid: 40000,
-        balanceDue: 20000,
-        travelStartDate: '2025-09-25',
-        travelEndDate: '2025-09-28',
-        tripStartFormatted: '25 Sep 25',
-        tripEndFormatted: '28 Sep 25',
-        vehicleType: 'Ertiga',
-        bookingStatus: 'Running',
-        month: 'Sep'
-    },
-    {
-        _id: 'bkg-mock-4',
-        bookingCode: '09/04',
-        clientCode: '09/04',
-        bookingId: '09/04',
-        clientName: 'Ms. Collen Arena',
-        mobileNumber: '+91 61930 98797',
-        totalAmount: 110000,
-        advancePaid: 110000,
-        balanceDue: 0,
-        travelStartDate: '2025-10-02',
-        travelEndDate: '2025-10-06',
-        tripStartFormatted: '02 Oct 25',
-        tripEndFormatted: '06 Oct 25',
-        vehicleType: 'Swift',
-        bookingStatus: 'Confirmed',
-        month: 'Sep'
-    },
-    {
-        _id: 'bkg-mock-5',
-        bookingCode: '09/05',
-        clientCode: '09/05',
-        bookingId: '09/05',
-        clientName: 'Mr. Ghosh Nikhil',
-        mobileNumber: '+91 99281 12345',
-        totalAmount: 90000,
-        advancePaid: 60000,
-        balanceDue: 30000,
-        travelStartDate: '2025-10-10',
-        travelEndDate: '2025-10-14',
-        tripStartFormatted: '10 Oct 25',
-        tripEndFormatted: '14 Oct 25',
-        vehicleType: 'Dzire',
-        bookingStatus: 'Running',
-        month: 'Sep'
-    },
-    {
-        _id: 'bkg-mock-6',
-        bookingCode: '09/06',
-        clientCode: '09/06',
-        bookingId: '09/06',
-        clientName: 'Mudit',
-        mobileNumber: '+91 77270 90788',
-        totalAmount: 70000,
-        advancePaid: 50000,
-        balanceDue: 20000,
-        travelStartDate: '2025-10-15',
-        travelEndDate: '2025-10-19',
-        tripStartFormatted: '15 Oct 25',
-        tripEndFormatted: '19 Oct 25',
-        vehicleType: 'Innova',
-        bookingStatus: 'Confirmed',
-        month: 'Sep'
-    },
-    {
-        _id: 'bkg-mock-7',
-        bookingCode: '09/07',
-        clientCode: '09/07',
-        bookingId: '09/07',
-        clientName: 'Ankur Aggarwal',
-        mobileNumber: '+91 98919 11897',
-        totalAmount: 90000,
-        advancePaid: 60000,
-        balanceDue: 30000,
-        travelStartDate: '2025-10-20',
-        travelEndDate: '2025-10-24',
-        tripStartFormatted: '20 Oct 25',
-        tripEndFormatted: '24 Oct 25',
-        vehicleType: 'TT',
-        bookingStatus: 'Confirmed',
-        month: 'Sep'
-    },
-    {
-        _id: 'bkg-mock-8',
-        bookingCode: '09/08',
-        clientCode: '09/08',
-        bookingId: '09/08',
-        clientName: 'Mr. Suresh',
-        mobileNumber: '+91 98101 95448',
-        totalAmount: 50000,
-        advancePaid: 40000,
-        balanceDue: 10000,
-        travelStartDate: '2025-10-28',
-        travelEndDate: '2025-10-31',
-        tripStartFormatted: '28 Oct 25',
-        tripEndFormatted: '31 Oct 25',
-        vehicleType: 'Bolero',
-        bookingStatus: 'Running',
-        month: 'Sep'
-    }
-];
+
 
 const formatTripDate = (dateVal) => {
     if (!dateVal) return '-';
@@ -271,7 +125,7 @@ export default function Bookings() {
             fetchBookings();
             fetchDriversAndVehicles();
         } else {
-            setBookings(BASELINE_SEPTEMBER_BOOKINGS);
+            setBookings([]);
         }
     }, [selectedCompany]);
 
@@ -502,11 +356,11 @@ export default function Bookings() {
                 setBookings(data);
             } else {
                 // If company has no bookings yet, provide the baseline mockup matching the screenshot
-                setBookings(BASELINE_SEPTEMBER_BOOKINGS);
+                setBookings([]);
             }
         } catch (error) {
             console.error('Error fetching bookings:', error);
-            setBookings(BASELINE_SEPTEMBER_BOOKINGS);
+            setBookings([]);
         } finally {
             setLoading(false);
         }
@@ -516,9 +370,7 @@ export default function Bookings() {
     const processedBookings = useMemo(() => {
           console.log('Bookings state:', bookings.length, bookings.map(b => b.bookingStatus));
         let list = bookings;
-        if (list.length === 0) {
-            list = BASELINE_SEPTEMBER_BOOKINGS;
-        }
+        
 
         // ONLY show Confirmed and Ongoing bookings in the Bookings page
         list = list.filter(b => b.bookingStatus === 'Confirmed' || b.bookingStatus === 'Ongoing' || b.status === 'Confirmed' || b.status === 'Ongoing');
