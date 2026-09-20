@@ -1224,10 +1224,13 @@ export default function Leads() {
         // If real leads exist for this month, calculate directly from them
         if (monthRealLeads.length > 0) {
             const dailyList = [];
-            let totalLeads = 0;
-            let totalLeadsAmt = 0;
-            let totalConversions = 0;
-            let totalConversionsAmt = 0;
+            
+            let totalLeads = monthRealLeads.length;
+            let totalLeadsAmt = monthRealLeads.reduce((s, l) => s + (Number(l.totalAmount) || 0), 0);
+            
+            const convs = monthRealLeads.filter(l => l.status === 'Confirmed' || l.status === 'Converted' || l.bookingId);
+            let totalConversions = convs.length;
+            let totalConversionsAmt = convs.reduce((s, l) => s + (Number(l.totalAmount) || 0), 0);
 
             for (let day = 1; day <= days; day++) {
                 const dayLeads = monthRealLeads.filter(l => {
@@ -1255,10 +1258,7 @@ export default function Leads() {
                 const convCount = convLeads.length;
                 const convAmt = convLeads.reduce((sum, l) => sum + (Number(l.totalAmount) || 0), 0);
 
-                totalLeads += leadsCount;
-                totalLeadsAmt += leadsAmt;
-                totalConversions += convCount;
-                totalConversionsAmt += convAmt;
+                // Removed incorrect daily accumulation to avoid double counting
 
                 dailyList.push({ day, leadsCount, leadsAmt, convCount, convAmt, leads: dayLeads });
             }
