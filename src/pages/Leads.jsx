@@ -58,39 +58,7 @@ const SIDEBAR_MONTH_OPTIONS = [
     { label: 'March 2027', tab: 'Mar', monthIdx: 2, year: 2027, days: 31 }
 ];
 
-// Baseline mockup distribution matching reference screenshot
-const BASELINE_SEPTEMBER_DISTRIBUTION = [
-    { day: 1, leadsCount: 3, leadsAmt: 95000, convCount: 1, convAmt: 25000 },
-    { day: 2, leadsCount: 2, leadsAmt: 60000, convCount: 1, convAmt: 45000 },
-    { day: 3, leadsCount: 1, leadsAmt: 25000, convCount: 0, convAmt: 0 },
-    { day: 4, leadsCount: 4, leadsAmt: 120000, convCount: 2, convAmt: 76000 },
-    { day: 5, leadsCount: 3, leadsAmt: 72500, convCount: 1, convAmt: 32000 },
-    { day: 6, leadsCount: 2, leadsAmt: 48000, convCount: 1, convAmt: 27500 },
-    { day: 7, leadsCount: 1, leadsAmt: 15000, convCount: 0, convAmt: 0 },
-    { day: 8, leadsCount: 3, leadsAmt: 110000, convCount: 2, convAmt: 62500 },
-    { day: 9, leadsCount: 2, leadsAmt: 40000, convCount: 1, convAmt: 18000 },
-    { day: 10, leadsCount: 1, leadsAmt: 22500, convCount: 0, convAmt: 0 },
-    { day: 11, leadsCount: 0, leadsAmt: 0, convCount: 0, convAmt: 0 },
-    { day: 12, leadsCount: 1, leadsAmt: 18000, convCount: 0, convAmt: 0 },
-    { day: 13, leadsCount: 2, leadsAmt: 35000, convCount: 1, convAmt: 15000 },
-    { day: 14, leadsCount: 1, leadsAmt: 24000, convCount: 0, convAmt: 0 },
-    { day: 15, leadsCount: 2, leadsAmt: 52000, convCount: 1, convAmt: 28000 },
-    { day: 16, leadsCount: 0, leadsAmt: 0, convCount: 0, convAmt: 0 },
-    { day: 17, leadsCount: 1, leadsAmt: 16000, convCount: 0, convAmt: 0 },
-    { day: 18, leadsCount: 2, leadsAmt: 44000, convCount: 1, convAmt: 22000 },
-    { day: 19, leadsCount: 1, leadsAmt: 28000, convCount: 0, convAmt: 0 },
-    { day: 20, leadsCount: 0, leadsAmt: 0, convCount: 0, convAmt: 0 },
-    { day: 21, leadsCount: 1, leadsAmt: 19500, convCount: 0, convAmt: 0 },
-    { day: 22, leadsCount: 2, leadsAmt: 42000, convCount: 1, convAmt: 21000 },
-    { day: 23, leadsCount: 1, leadsAmt: 15000, convCount: 0, convAmt: 0 },
-    { day: 24, leadsCount: 0, leadsAmt: 0, convCount: 0, convAmt: 0 },
-    { day: 25, leadsCount: 2, leadsAmt: 38000, convCount: 1, convAmt: 18000 },
-    { day: 26, leadsCount: 1, leadsAmt: 25000, convCount: 0, convAmt: 0 },
-    { day: 27, leadsCount: 0, leadsAmt: 0, convCount: 0, convAmt: 0 },
-    { day: 28, leadsCount: 1, leadsAmt: 20000, convCount: 0, convAmt: 0 },
-    { day: 29, leadsCount: 1, leadsAmt: 30000, convCount: 0, convAmt: 0 },
-    { day: 30, leadsCount: 0, leadsAmt: 0, convCount: 0, convAmt: 0 }
-];
+
 
 // Robust local date helpers without UTC offset shifts
 const toLocalDateString = (val) => {
@@ -1304,20 +1272,7 @@ export default function Leads() {
             };
         }
 
-        // Otherwise, for demonstration of September 2026, use baseline distribution matching UI mockup
-        if (activeOption.tab === 'Sep') {
-            const totalLeads = 28;
-            const totalLeadsAmt = 875000;
-            const totalConversions = 12;
-            const totalConversionsAmt = 462500;
-            return {
-                totalLeads,
-                totalLeadsAmt,
-                totalConversions,
-                totalConversionsAmt,
-                dailyList: BASELINE_SEPTEMBER_DISTRIBUTION.map(d => ({ ...d, leads: [] }))
-            };
-        }
+        
 
         // Generic empty month
         const dailyList = [];
@@ -2398,6 +2353,14 @@ export default function Leads() {
                                                                         {/* Entry Header: Name + Status */}
                                                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                                                                             <div>
+                                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '4px' }}>
+                                                                                    <div style={{ fontSize: '13px', fontWeight: '900', color: '#fbbf24' }}>
+                                                                                        {lead.clientCode || lead.leadId || 'N/A'}
+                                                                                    </div>
+                                                                                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#4ade80' }}>
+                                                                                        ₹{(Number(lead.totalAmount) || 0).toLocaleString('en-IN')}
+                                                                                    </div>
+                                                                                </div>
                                                                                 <div style={{ fontSize: '13px', fontWeight: '800', color: 'white' }}>
                                                                                     {lead.clientName || 'Guest'}
                                                                                 </div>
