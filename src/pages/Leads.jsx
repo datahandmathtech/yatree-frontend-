@@ -1134,10 +1134,10 @@ export default function Leads() {
     // Filter leads on client side: Confirmed leads move to Confirmed Bookings page, so exclude from this active leads grid
     const filteredLeads = useMemo(() => {
         return (leads || []).filter(lead => {
-            // Confirmed leads are moved to Confirmed Bookings page, so do not display them in Sales Leads table!
-            if (lead.status === 'Confirmed' || lead.bookingId) {
-                return false;
-            }
+            // User requested to show Confirmed leads in the Leads table too!
+            // if (lead.status === 'Confirmed' || lead.bookingId) {
+            //     return false;
+            // }
 
             if (sourceFilter !== 'All' && lead.source !== sourceFilter) return false;
             if (salesPersonFilter !== 'All' && lead.salesPerson !== salesPersonFilter) return false;
