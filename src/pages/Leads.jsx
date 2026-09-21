@@ -227,7 +227,7 @@ export default function Leads() {
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 8;
+    const itemsPerPage = 500;
 
     // Create / Edit Modal
     
@@ -1208,6 +1208,7 @@ export default function Leads() {
 
         // Filter real leads that overlap with this month and year
         const monthRealLeads = (sourceList || []).filter(l => {
+            if (l.status === 'Lost' || l.status === 'Cancelled' || l.status === 'Confirmed' || l.bookingId) return false;
             const pStart = parseLeadDateInfo(l.travelStartDate || l.leadDate || l.createdAt);
             if (!pStart) return false;
             
@@ -2191,10 +2192,7 @@ export default function Leads() {
             <div style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.6)', fontWeight: '700' }}>Total Leads</div>
             <div style={{ fontSize: '15px', fontWeight: '900', color: 'white' }}>{sidebarStats.totalLeads}</div>
         </div>
-        <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '10px', color: '#86efac', fontWeight: '700' }}>Total Conversions</div>
-            <div style={{ fontSize: '15px', fontWeight: '900', color: '#4ade80' }}>{sidebarStats.convertedCount || sidebarStats.totalConversions}</div>
-        </div>
+        
     </div>
 </div>
                                 </div>
@@ -2237,7 +2235,7 @@ export default function Leads() {
                                                     }}
                                                     style={{
                                                         display: 'grid',
-                                                        gridTemplateColumns: '60px 1fr 1fr',
+                                                        gridTemplateColumns: '60px 1fr',
                                                         padding: '10px 8px',
                                                         alignItems: 'center',
                                                         cursor: 'pointer',
@@ -2275,15 +2273,7 @@ export default function Leads() {
                                                         </div>
                                                     </div>
 
-                                                    {/* Conversion */}
-                                                    <div style={{ textAlign: 'right' }}>
-                                                        <div style={{ fontWeight: '800', fontSize: '13px', color: item.convCount > 0 ? '#4ade80' : 'rgba(255,255,255,0.3)' }}>
-                                                            {item.convCount}
-                                                        </div>
-                                                        <div style={{ fontSize: '11px', fontWeight: '600', color: item.convCount > 0 ? '#86efac' : 'rgba(255,255,255,0.25)', marginTop: '1px' }}>
-                                                            ₹{item.convAmt.toLocaleString('en-IN')}
-                                                        </div>
-                                                    </div>
+                                                    
                                                 </div>
 
                                                 {/* Expanded Day Details (Showing multiple entries) */}
@@ -2315,126 +2305,28 @@ export default function Leads() {
                                                                 {item.leads.map((lead, idx) => (
                                                                     <div
                                                                         key={lead._id || lead.leadId || idx}
+                                                                        onClick={() => setPreviewTourLead(lead)}
+                                                                        title="Click to view full details"
                                                                         style={{
                                                                             background: 'rgba(255, 255, 255, 0.03)',
                                                                             border: '1px solid rgba(255, 255, 255, 0.08)',
                                                                             borderRadius: '8px',
-                                                                            padding: '10px 12px',
-                                                                            transition: 'all 0.2s ease',
-                                                                        }}
-                                                                    >
-                                                                        {/* Entry Header: Name + Status */}
-                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                                                                            <div>
-                                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '4px' }}>
-                                                                                    <div style={{ fontSize: '13px', fontWeight: '900', color: '#fbbf24' }}>
-                                                                                        {lead.clientCode || lead.leadId || 'N/A'}
-                                                                                    </div>
-                                                                                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#4ade80' }}>
-                                                                                        ₹{(Number(lead.totalAmount) || 0).toLocaleString('en-IN')}
-                                                                                    </div>
-                                                                                </div>
-                                                                                <div style={{ fontSize: '13px', fontWeight: '800', color: 'white' }}>
-                                                                                    {lead.clientName || 'Guest'}
-                                                                                </div>
-                                                                                {lead.bookingReference === 'Travel Agent' && lead.travelAgentName ? (
-                                                                                    <div style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '600' }}>
-                                                                                        🏢 Agent: {lead.travelAgentName}
-                                                                                    </div>
-                                                                                ) : (
-                                                                                    <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.55)' }}>
-                                                                                        📞 {lead.mobileNumber || 'No Phone'}
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-
-                                                                            <span style={{
-                                                                                fontSize: '10px',
-                                                                                fontWeight: '800',
-                                                                                padding: '2px 8px',
-                                                                                borderRadius: '4px',
-                                                                                background: (lead.status === 'Confirmed' || lead.status === 'Converted' || lead.bookingId)
-                                                                                    ? 'rgba(34, 197, 94, 0.15)'
-                                                                                    : 'rgba(251, 191, 36, 0.15)',
-                                                                                color: (lead.status === 'Confirmed' || lead.status === 'Converted' || lead.bookingId)
-                                                                                    ? '#4ade80'
-                                                                                    : '#fbbf24',
-                                                                                border: (lead.status === 'Confirmed' || lead.status === 'Converted' || lead.bookingId)
-                                                                                    ? '1px solid rgba(34, 197, 94, 0.3)'
-                                                                                    : '1px solid rgba(251, 191, 36, 0.3)',
-                                                                                textTransform: 'uppercase'
-                                                                            }}>
-                                                                                {lead.bookingId ? 'Confirmed' : (lead.status || 'Pending')}
-                                                                            </span>
-                                                                        </div>
-
-                                                                        {/* Entry Details: Route & Vehicle */}
-                                                                        <div style={{ marginTop: '6px', fontSize: '11.5px', color: 'rgba(255, 255, 255, 0.75)' }}>
-                                                                            <div>
-                                                                                🚗 <strong>{lead.numberOfCars || 1}x {lead.carType || 'Sedan'}</strong>
-                                                                            </div>
-                                                                            {lead.pickupCity && (
-                                                                                <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)', marginTop: '2px' }}>
-                                                                                    📍 {lead.pickupCity} {lead.dropCity ? `➔ ${lead.dropCity}` : ''}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-
-                                                                        {/* Entry Footer: Amount + Quick Actions */}
-                                                                        <div style={{
+                                                                            padding: '12px',
                                                                             display: 'flex',
                                                                             justifyContent: 'space-between',
                                                                             alignItems: 'center',
-                                                                            marginTop: '8px',
-                                                                            paddingTop: '6px',
-                                                                            borderTop: '1px solid rgba(255, 255, 255, 0.05)'
-                                                                        }}>
+                                                                            marginBottom: '8px',
+                                                                            cursor: 'pointer'
+                                                                        }}
+                                                                    >
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                                             <div style={{ fontSize: '13px', fontWeight: '900', color: '#fbbf24' }}>
-                                                                                ₹{(Number(lead.totalAmount) || 0).toLocaleString('en-IN')}
+                                                                                Code: {lead.clientCode || lead.leadId || 'N/A'}
                                                                             </div>
-
-                                                                            <div style={{ display: 'flex', gap: '6px' }}>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        setPreviewTourLead(lead);
-                                                                                    }}
-                                                                                    style={{
-                                                                                        padding: '4px 8px',
-                                                                                        fontSize: '10.5px',
-                                                                                        fontWeight: '700',
-                                                                                        background: 'rgba(251, 191, 36, 0.12)',
-                                                                                        border: '1px solid rgba(251, 191, 36, 0.3)',
-                                                                                        borderRadius: '6px',
-                                                                                        color: '#fbbf24',
-                                                                                        cursor: 'pointer'
-                                                                                    }}
-                                                                                    title="View Itinerary & Quotation"
-                                                                                >
-                                                                                    👁️ Quote
-                                                                                </button>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        handleEditLead(lead);
-                                                                                    }}
-                                                                                    style={{
-                                                                                        padding: '4px 8px',
-                                                                                        fontSize: '10.5px',
-                                                                                        fontWeight: '700',
-                                                                                        background: 'rgba(255, 255, 255, 0.07)',
-                                                                                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                                                                                        borderRadius: '6px',
-                                                                                        color: '#e2e8f0',
-                                                                                        cursor: 'pointer'
-                                                                                    }}
-                                                                                    title="Edit Lead"
-                                                                                >
-                                                                                    ✏️ Edit
-                                                                                </button>
-                                                                            </div>
+                                                                            <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', border: '1px solid rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>Details 👁️</span>
+                                                                        </div>
+                                                                        <div style={{ fontSize: '13px', fontWeight: '900', color: '#4ade80' }}>
+                                                                            ₹{(Number(lead.totalAmount) || 0).toLocaleString('en-IN')}
                                                                         </div>
                                                                     </div>
                                                                 ))}

@@ -71,7 +71,7 @@ export default function CompletedBookings() {
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 8;
+    const itemsPerPage = 500;
 
     useEffect(() => {
         if (selectedCompany?._id) {

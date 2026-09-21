@@ -50,7 +50,7 @@ export default function Invoices() {
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 9;
+    const itemsPerPage = 500;
 
     // ==========================================
     // CREATE INVOICE FORM STATE (media_1788930405888.png)
