@@ -1134,10 +1134,10 @@ export default function Leads() {
     // Filter leads on client side: Confirmed leads move to Confirmed Bookings page, so exclude from this active leads grid
     const filteredLeads = useMemo(() => {
         return (leads || []).filter(lead => {
-            // User requested to show Confirmed leads in the Leads table too!
-            // if (lead.status === 'Confirmed' || lead.bookingId) {
-            //     return false;
-            // }
+            // Confirmed leads are moved to Confirmed Bookings page, so do not display them in Sales Leads table!
+            if (lead.status === 'Confirmed' || lead.bookingId) {
+                return false;
+            }
 
             if (sourceFilter !== 'All' && lead.source !== sourceFilter) return false;
             if (salesPersonFilter !== 'All' && lead.salesPerson !== salesPersonFilter) return false;
@@ -1303,25 +1303,17 @@ export default function Leads() {
     // KPI Summary Calculations
     const kpiData = useMemo(() => {
         let totalQuote = 0;
-        let convertedQuote = 0;
-        let convertedCount = 0;
 
-        leads.forEach(l => {
+        filteredLeads.forEach(l => {
             const amt = Number(l.totalAmount) || 0;
             totalQuote += amt;
-            if (l.status === 'Confirmed' || l.bookingId) {
-                convertedQuote += amt;
-                convertedCount += 1;
-            }
         });
 
         return {
             totalQuote,
-            totalLeadsCount: leads.length,
-            convertedQuote,
-            convertedCount
+            totalLeadsCount: filteredLeads.length
         };
-    }, [leads]);
+    }, [filteredLeads]);
 
     // Pagination calculations
     const totalPages = Math.ceil(filteredLeads.length / itemsPerPage) || 1;
@@ -1583,37 +1575,6 @@ export default function Leads() {
                         </div>
                     </div>
 
-                    {/* Converted Quote Card */}
-                    <div style={{
-                        background: 'rgba(6, 78, 59, 0.35)',
-                        border: '1px solid rgba(16, 185, 129, 0.3)',
-                        borderRadius: '14px',
-                        padding: '10px 18px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        minWidth: '170px'
-                    }}>
-                        <div style={{
-                            width: '36px',
-                            height: '36px',
-                            borderRadius: '10px',
-                            background: 'rgba(16, 185, 129, 0.2)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: '#34d399'
-                        }}>
-                            <TrendingUp size={18} />
-                        </div>
-                        <div>
-                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>Converted Quote</div>
-                            <div style={{ fontSize: '18px', fontWeight: '900', color: '#4ade80' }}>₹{kpiData.convertedQuote.toLocaleString('en-IN')}</div>
-                            <div style={{ fontSize: '10px', color: '#86efac' }}>From {kpiData.convertedCount} bookings</div>
-                        </div>
-                    </div>
-
-                    
                     {/* Tally-Style Daily Breakdown Drawer Button */}
                     <motion.button
                         whileHover={{ scale: 1.03 }}
