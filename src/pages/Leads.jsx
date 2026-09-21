@@ -1263,6 +1263,12 @@ export default function Leads() {
                 dailyList.push({ day, leadsCount, leadsAmt, convCount, convAmt, leads: dayLeads });
             }
 
+            const today = new Date().getDate();
+            dailyList.sort((a, b) => {
+                if (a.day === today) return -1;
+                if (b.day === today) return 1;
+                return a.day - b.day;
+            });
             return {
                 totalLeads,
                 totalLeadsAmt,
@@ -1279,6 +1285,12 @@ export default function Leads() {
         for (let day = 1; day <= days; day++) {
             dailyList.push({ day, leadsCount: 0, leadsAmt: 0, convCount: 0, convAmt: 0, leads: [] });
         }
+        const today = new Date().getDate();
+        dailyList.sort((a, b) => {
+            if (a.day === today) return -1;
+            if (b.day === today) return 1;
+            return a.day - b.day;
+        });
         return {
             totalLeads: 0,
             totalLeadsAmt: 0,
