@@ -66,8 +66,8 @@ export default function Bookings() {
     const [searchTerm, setSearchTerm] = useState('');
 
     // Sorting state
-    const [sortField, setSortField] = useState('bookingCode');
-    const [sortAsc, setSortAsc] = useState(true);
+    const [sortField, setSortField] = useState('createdAt');
+    const [sortAsc, setSortAsc] = useState(false);
 
     // Hover tooltip state for Booking Code
     const [hoveredBookingId, setHoveredBookingId] = useState(null);
@@ -611,40 +611,216 @@ export default function Bookings() {
         <div className="container-fluid" style={{ minHeight: '100vh', padding: '30px 24px', position: 'relative' }}>
             <SEO title="Confirmed - LogKaro" />
 
-            {/* TOP HEADER MATCHING EXACT MOCKUP (media_1788927832202.png) */}
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px',
-                marginBottom: '20px'
-            }}>
-                <div style={{
-                    width: '46px',
-                    height: '46px',
-                    border: '2px solid #fbbf24',
-                    borderRadius: '12px',
-                    background: 'rgba(251, 191, 36, 0.08)',
-                    color: '#fbbf24',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center'
-                }}>
-                    <Calendar size={22} />
-                </div>
-                <div>
-                    <h1 style={{ fontSize: '22px', fontWeight: '900', color: 'white', margin: 0, letterSpacing: '-0.3px' }}>
-                        Confirmed Bookings
-                    </h1>
-                    <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '13px', margin: '3px 0 0 0' }}>
-                        All your live bookings in one place. Track, manage and stay ahead.
-                    </p>
-                </div>
-            </div>
-
-            {/* MONTH FILTER PILLS + SEARCH BAR */}
+            {/* TOP HEADER MATCHING EXACT MOCKUP */}
             <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                flexWrap: 'wrap',
+                gap: '16px',
+                marginBottom: '20px'
+            }}>
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px'
+                }}>
+                    <div style={{
+                        width: '46px',
+                        height: '46px',
+                        border: '2px solid #fbbf24',
+                        borderRadius: '12px',
+                        background: 'rgba(251, 191, 36, 0.08)',
+                        color: '#fbbf24',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center'
+                    }}>
+                        <Calendar size={22} />
+                    </div>
+                    <div>
+                        <h1 style={{ fontSize: '22px', fontWeight: '900', color: 'white', margin: 0, letterSpacing: '-0.3px' }}>
+                            Confirmed Bookings
+                        </h1>
+                        <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '13px', margin: '3px 0 0 0' }}>
+                            All your live bookings in one place. Track, manage and handle accounts.
+                        </p>
+                    </div>
+            {/* 4 KPI METRIC CARDS (Exact match with media_1788927832202.png) */}
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: '12px', marginBottom: '0', flex: 1
+            }}>
+                {/* 1. Total Bookings */}
+                <div style={{
+                    background: '#070d19',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '14px',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                }}>
+                    <div style={{
+                        width: '36px', height: '36px',
+                        borderRadius: '10px',
+                        background: 'rgba(2, 132, 199, 0.15)',
+                        border: '1px solid rgba(2, 132, 199, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#38bdf8'
+                    }}>
+                        <FileText size={18} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)', fontWeight: '600' }}>
+                            Total Bookings
+                        </div>
+                        <div style={{ fontSize: '18px', fontWeight: '950', color: 'white', marginTop: '2px', lineHeight: '1.2' }}>
+                            {kpiStats.totalBookings}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 2. Package Value */}
+                <div style={{
+                    background: '#070d19',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '14px',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                }}>
+                    <div style={{
+                        width: '36px', height: '36px',
+                        borderRadius: '50%',
+                        background: '#fbbf24',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#000',
+                        fontWeight: '900'
+                    }}>
+                        <IndianRupee size={20} strokeWidth={2.5} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)', fontWeight: '600' }}>
+                            Package Value
+                        </div>
+                        <div style={{ fontSize: '18px', fontWeight: '950', color: 'white', marginTop: '2px', lineHeight: '1.2' }}>
+                            ₹{kpiStats.packageValue.toLocaleString('en-IN')}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. Received Amount */}
+                <div style={{
+                    background: '#070d19',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '14px',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                }}>
+                    <div style={{
+                        width: '36px', height: '36px',
+                        borderRadius: '10px',
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#34d399'
+                    }}>
+                        <CreditCard size={18} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)', fontWeight: '600' }}>
+                            Received Amount
+                        </div>
+                        <div style={{ fontSize: '18px', fontWeight: '950', color: 'white', marginTop: '2px', lineHeight: '1.2' }}>
+                            ₹{kpiStats.receivedAmount.toLocaleString('en-IN')}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 4. Balance Due */}
+                <div style={{
+                    background: '#070d19',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '14px',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                }}>
+                    <div style={{
+                        width: '36px', height: '36px',
+                        borderRadius: '10px',
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#f87171'
+                    }}>
+                        <Hourglass size={18} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)', fontWeight: '600' }}>
+                            Balance Due
+                        </div>
+                        <div style={{ fontSize: '18px', fontWeight: '950', color: 'white', marginTop: '2px', lineHeight: '1.2' }}>
+                            ₹{kpiStats.balanceDue.toLocaleString('en-IN')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+                </div>
+                
+                {/* Search Bar MOVED TO TOP ROW */}
+                <div style={{
+                    position: 'relative',
+                    width: '320px',
+                    maxWidth: '100%',
+                    marginTop: '6px'
+                }}>
+                    <Search
+                        size={15}
+                        color="rgba(255,255,255,0.4)"
+                        style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }}
+                    />
+                    <input
+                        type="text"
+                        placeholder="Search by booking code or mobile number..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        style={{
+                            width: '100%',
+                            padding: '10px 14px 10px 38px',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            borderRadius: '24px',
+                            color: 'white',
+                            fontSize: '13px',
+                            outline: 'none',
+                            transition: 'all 0.2s'
+                        }}
+                    />
+                </div>
+            </div>
+
+            {/* MONTH FILTER PILLS */}
+            <div style={{
+                display: 'flex',
                 alignItems: 'center',
                 flexWrap: 'wrap',
                 gap: '16px',
@@ -682,250 +858,11 @@ export default function Bookings() {
                         );
                     })}
                 </div>
-
-                {/* Search Bar */}
-                <div style={{
-                    position: 'relative',
-                    width: '320px',
-                    maxWidth: '100%'
-                }}>
-                    <Search
-                        size={15}
-                        style={{
-                            position: 'absolute',
-                            left: '12px',
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            color: 'rgba(255,255,255,0.4)'
-                        }}
-                    />
-                    <input
-                        type="text"
-                        placeholder="Search by booking code or mobile number..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        style={{
-                            width: '100%',
-                            padding: '9px 12px 9px 36px',
-                            background: 'rgba(255, 255, 255, 0.03)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            borderRadius: '10px',
-                            color: 'white',
-                            outline: 'none',
-                            fontSize: '13px'
-                        }}
-                    />
-                    {searchTerm && (
-                        <button
-                            onClick={() => setSearchTerm('')}
-                            style={{
-                                position: 'absolute',
-                                right: '10px',
-                                top: '50%',
-                                transform: 'translateY(-50%)',
-                                background: 'transparent',
-                                border: 'none',
-                                color: 'rgba(255,255,255,0.4)',
-                                cursor: 'pointer',
-                                padding: 0
-                            }}
-                        >
-                            <X size={14} />
-                        </button>
-                    )}
-                </div>
             </div>
 
             {/* DATE PASSED / NO-SHOW WARNING BANNER */}
-            {overdueBookings.length > 0 && (
-                <div style={{
-                    background: 'rgba(239, 68, 68, 0.12)',
-                    border: '1px solid rgba(239, 68, 68, 0.35)',
-                    borderRadius: '12px',
-                    padding: '12px 18px',
-                    marginBottom: '20px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '12px',
-                    flexWrap: 'wrap'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <AlertTriangle size={20} color="#f87171" />
-                        <div>
-                            <div style={{ color: '#ffffff', fontWeight: '700', fontSize: '13px' }}>
-                                {overdueBookings.length} booking{overdueBookings.length > 1 ? 's have' : ' has'} passed scheduled travel date without guest contact (No-Show).
-                            </div>
-                            <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '11.5px', marginTop: '2px' }}>
-                                Date has passed and guest did not call. You can move these rides to Cancelled Bookings.
-                            </div>
-                        </div>
-                    </div>
-                    <button
-                        onClick={handleAutoCancelAllOverdue}
-                        style={{
-                            padding: '7px 14px',
-                            background: '#ef4444',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            fontSize: '12px',
-                            fontWeight: '700',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
-                        }}
-                    >
-                        <XCircle size={14} /> Move All ({overdueBookings.length}) to Cancelled Bookings
-                    </button>
-                </div>
-            )}
+            
 
-            {/* 4 KPI METRIC CARDS (Exact match with media_1788927832202.png) */}
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                gap: '16px',
-                marginBottom: '22px'
-            }}>
-                {/* 1. Total Bookings */}
-                <div style={{
-                    background: '#070d19',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '14px',
-                    padding: '16px 20px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '16px',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-                }}>
-                    <div style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '10px',
-                        background: 'rgba(2, 132, 199, 0.15)',
-                        border: '1px solid rgba(2, 132, 199, 0.3)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#38bdf8'
-                    }}>
-                        <FileText size={22} />
-                    </div>
-                    <div>
-                        <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)', fontWeight: '600' }}>
-                            Total Bookings
-                        </div>
-                        <div style={{ fontSize: '24px', fontWeight: '950', color: 'white', marginTop: '2px', lineHeight: '1.2' }}>
-                            {kpiStats.totalBookings}
-                        </div>
-                    </div>
-                </div>
-
-                {/* 2. Package Value */}
-                <div style={{
-                    background: '#070d19',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '14px',
-                    padding: '16px 20px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '16px',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-                }}>
-                    <div style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '50%',
-                        background: '#fbbf24',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#000',
-                        fontWeight: '900'
-                    }}>
-                        <IndianRupee size={20} strokeWidth={2.5} />
-                    </div>
-                    <div>
-                        <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)', fontWeight: '600' }}>
-                            Package Value
-                        </div>
-                        <div style={{ fontSize: '24px', fontWeight: '950', color: 'white', marginTop: '2px', lineHeight: '1.2' }}>
-                            ₹{kpiStats.packageValue.toLocaleString('en-IN')}
-                        </div>
-                    </div>
-                </div>
-
-                {/* 3. Received Amount */}
-                <div style={{
-                    background: '#070d19',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '14px',
-                    padding: '16px 20px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '16px',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-                }}>
-                    <div style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '10px',
-                        background: 'rgba(16, 185, 129, 0.15)',
-                        border: '1px solid rgba(16, 185, 129, 0.3)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#34d399'
-                    }}>
-                        <CreditCard size={22} />
-                    </div>
-                    <div>
-                        <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)', fontWeight: '600' }}>
-                            Received Amount
-                        </div>
-                        <div style={{ fontSize: '24px', fontWeight: '950', color: 'white', marginTop: '2px', lineHeight: '1.2' }}>
-                            ₹{kpiStats.receivedAmount.toLocaleString('en-IN')}
-                        </div>
-                    </div>
-                </div>
-
-                {/* 4. Balance Due */}
-                <div style={{
-                    background: '#070d19',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '14px',
-                    padding: '16px 20px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '16px',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-                }}>
-                    <div style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '10px',
-                        background: 'rgba(239, 68, 68, 0.15)',
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#f87171'
-                    }}>
-                        <Hourglass size={22} />
-                    </div>
-                    <div>
-                        <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)', fontWeight: '600' }}>
-                            Balance Due
-                        </div>
-                        <div style={{ fontSize: '24px', fontWeight: '950', color: 'white', marginTop: '2px', lineHeight: '1.2' }}>
-                            ₹{kpiStats.balanceDue.toLocaleString('en-IN')}
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             {/* FULL-WIDTH TABLE MATCHING SCREENSHOT (media_1788927832202.png) */}
             <div style={{
@@ -1005,6 +942,9 @@ export default function Bookings() {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                     Driver <ArrowUpDown size={12} color="rgba(255,255,255,0.4)" />
                                 </div>
+                            </th>
+                            <th style={{ padding: '14px 16px', color: 'rgba(255,255,255,0.65)', fontWeight: '700', fontSize: '12px', textAlign: 'center' }}>
+                                Client Ledger
                             </th>
                             <th style={{ padding: '14px 16px', color: 'rgba(255,255,255,0.65)', fontWeight: '700', fontSize: '12px', textAlign: 'center' }}>
                                 Actions
@@ -1207,221 +1147,78 @@ export default function Bookings() {
                                               </div>
                                           </td>
 
-                                        {/* 10. Actions (PDF, Pay, Assign Driver, ⋮) matching media_1788929159044.png */}
-                                        <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                                {/* PDF Button */}
+                                        {/* Client Ledger & Actions */}
+                                        <td style={{ padding: '16px', textAlign: 'center' }}>
+                                            <button
+                                                onClick={() => handleOpenLedger(bkg)}
+                                                style={{
+                                                    padding: '6px 14px',
+                                                    background: '#2563eb',
+                                                    border: 'none',
+                                                    borderRadius: '20px',
+                                                    color: 'white',
+                                                    fontSize: '11.5px',
+                                                    fontWeight: '700',
+                                                    cursor: 'pointer',
+                                                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)'
+                                                }}
+                                            >
+                                                Accounts
+                                            </button>
+                                        </td>
+                                        <td style={{ padding: '16px', textAlign: 'center' }}>
+                                            <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
                                                 <button
-                                                    onClick={() => setDownloadOptionModal(bkg)}
-                                                    title="Download Confirmation PDF"
+                                                    onClick={() => setActiveActionMenu(activeActionMenu === (bkg._id || index) ? null : (bkg._id || index))}
                                                     style={{
-                                                        padding: '6px 14px',
-                                                        background: 'rgba(255, 255, 255, 0.08)',
-                                                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                                                        borderRadius: '20px',
-                                                        color: '#ffffff',
-                                                        fontSize: '11.5px',
-                                                        fontWeight: '700',
+                                                        width: '28px',
+                                                        height: '28px',
+                                                        borderRadius: '6px',
+                                                        background: 'transparent',
+                                                        border: '1px solid rgba(255,255,255,0.1)',
+                                                        color: 'rgba(255,255,255,0.8)',
                                                         cursor: 'pointer',
-                                                        display: 'inline-flex',
+                                                        display: 'flex',
                                                         alignItems: 'center',
-                                                        gap: '5px',
-                                                        transition: 'all 0.2s',
-                                                        whiteSpace: 'nowrap'
+                                                        justifyContent: 'center'
                                                     }}
                                                 >
-                                                    <FileText size={13} /> PDF
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
                                                 </button>
 
-                                                
-
-                                                {/* Assign Driver / Assigned Button */}
-                                                {((bkg.itinerary && bkg.itinerary.some(d => d.driverId || d.driverName)) || bkg.driverAssigned || bkg.driver || bkg.assignedDriver) ? (
-                                                    <button
-                                                        onClick={() => handleOpenAssignDriver(bkg)}
-                                                        title="Driver Assigned - Click to View or Reassign"
-                                                        style={{
-                                                            padding: '6px 14px',
-                                                            background: 'rgba(34, 197, 94, 0.2)',
-                                                            border: '1px solid rgba(34, 197, 94, 0.6)',
-                                                            borderRadius: '20px',
-                                                            color: '#4ade80',
-                                                            fontSize: '11.5px',
-                                                            fontWeight: '800',
-                                                            cursor: 'pointer',
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '5px',
-                                                            transition: 'all 0.2s',
-                                                            whiteSpace: 'nowrap',
-                                                            boxShadow: '0 0 10px rgba(34, 197, 94, 0.25)'
-                                                        }}
-                                                    >
-                                                        <CheckCircle size={13} /> Assigned
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => handleOpenAssignDriver(bkg)}
-                                                        title="Assign Driver & Vehicle"
-                                                        style={{
-                                                            padding: '6px 14px',
-                                                            background: 'rgba(29, 78, 216, 0.85)',
-                                                            border: '1px solid rgba(96, 165, 250, 0.4)',
-                                                            borderRadius: '20px',
-                                                            color: '#ffffff',
-                                                            fontSize: '11.5px',
-                                                            fontWeight: '700',
-                                                            cursor: 'pointer',
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '5px',
-                                                            transition: 'all 0.2s',
-                                                            whiteSpace: 'nowrap'
-                                                        }}
-                                                    >
-                                                        <Car size={13} /> Assign Driver
-                                                    </button>
+                                                {activeActionMenu === (bkg._id || index) && (
+                                                    <div style={{
+                                                        position: 'absolute',
+                                                        right: 0,
+                                                        top: '100%',
+                                                        marginTop: '4px',
+                                                        background: '#0B1121',
+                                                        border: '1px solid rgba(255,255,255,0.1)',
+                                                        borderRadius: '12px',
+                                                        padding: '6px',
+                                                        width: '200px',
+                                                        zIndex: 100,
+                                                        boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+                                                        textAlign: 'left'
+                                                    }}>
+                                                        <button onClick={() => { setActiveActionMenu(null); handleOpenAssignDriver(bkg); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> Assign Driver
+                                                        </button>
+                                                        <button onClick={() => { setActiveActionMenu(null); setDownloadOptionModal(bkg); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg> Generate PDF
+                                                        </button>
+                                                        <button onClick={() => { setActiveActionMenu(null); setSelectedBooking(bkg); setShowPaymentModal(true); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Record Payment
+                                                        </button>
+                                                        <button onClick={() => { setActiveActionMenu(null); shareOnWhatsApp(bkg); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg> WhatsApp Share
+                                                        </button>
+                                                        <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '4px 0' }}></div>
+                                                        <button onClick={() => { setActiveActionMenu(null); setSelectedBooking(bkg); setCancelReason('Customer request'); setShowCancelModal(true); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: '#f87171', fontSize: '12.5px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Cancel Booking
+                                                        </button>
+                                                    </div>
                                                 )}
-
-                                                {/* Quick Cancel Button if Date Passed & Guest did not call */}
-                                                {isDatePassedBooking(bkg) && (
-                                                    <button
-                                                        onClick={() => {
-                                                            setSelectedBooking(bkg);
-                                                            setCancelReason('Date Passed & Guest did not call (No-Show)');
-                                                            setShowCancelModal(true);
-                                                        }}
-                                                        title="Date passed without guest contact - Mark Cancelled"
-                                                        style={{
-                                                            padding: '6px 12px',
-                                                            background: 'rgba(239, 68, 68, 0.2)',
-                                                            border: '1px solid rgba(239, 68, 68, 0.45)',
-                                                            borderRadius: '20px',
-                                                            color: '#fca5a5',
-                                                            fontSize: '11.5px',
-                                                            fontWeight: '700',
-                                                            cursor: 'pointer',
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '4px',
-                                                            transition: 'all 0.2s',
-                                                            whiteSpace: 'nowrap'
-                                                        }}
-                                                    >
-                                                        <XCircle size={12} color="#f87171" /> Cancel (No-Show)
-                                                    </button>
-                                                )}
-
-                                                {/* More Options Dropdown */}
-                                                <div style={{ position: 'relative' }}>
-                                                    <button
-                                                        onClick={() => setActiveActionMenu(activeActionMenu === (bkg._id || index) ? null : (bkg._id || index))}
-                                                        style={{
-                                                            width: '28px',
-                                                            height: '28px',
-                                                            borderRadius: '6px',
-                                                            background: 'transparent',
-                                                            border: 'none',
-                                                            color: 'rgba(255,255,255,0.6)',
-                                                            cursor: 'pointer',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center'
-                                                        }}
-                                                    >
-                                                        <MoreVertical size={14} />
-                                                    </button>
-
-                                                    {activeActionMenu === (bkg._id || index) && (
-                                                        <div style={{
-                                                            position: 'absolute',
-                                                            right: 0,
-                                                            top: '100%',
-                                                            marginTop: '4px',
-                                                            background: '#0c162d',
-                                                            border: '1px solid rgba(255,255,255,0.15)',
-                                                            borderRadius: '8px',
-                                                            padding: '6px',
-                                                            zIndex: 100,
-                                                            boxShadow: '0 10px 25px rgba(0,0,0,0.8)',
-                                                            minWidth: '170px',
-                                                            textAlign: 'left'
-                                                        }}>
-                                                            <button
-                                                                onClick={() => {
-                                                                    setActiveActionMenu(null);
-                                                                    setSelectedBooking(bkg);
-                                                                    setShowEditModal(true);
-                                                                }}
-                                                                style={{
-                                                                    width: '100%',
-                                                                    padding: '7px 10px',
-                                                                    background: 'transparent',
-                                                                    border: 'none',
-                                                                    color: '#60a5fa',
-                                                                    fontSize: '12px',
-                                                                    fontWeight: '600',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '8px',
-                                                                    cursor: 'pointer',
-                                                                    borderRadius: '6px'
-                                                                }}
-                                                            >
-                                                                <Edit size={13} /> Edit Booking
-                                                            </button>
-
-
-                                                            <button
-                                                                onClick={() => {
-                                                                    setActiveActionMenu(null);
-                                                                    shareOnWhatsApp(bkg);
-                                                                }}
-                                                                style={{
-                                                                    width: '100%',
-                                                                    padding: '7px 10px',
-                                                                    background: 'transparent',
-                                                                    border: 'none',
-                                                                    color: '#4ade80',
-                                                                    fontSize: '12px',
-                                                                    fontWeight: '600',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '8px',
-                                                                    cursor: 'pointer',
-                                                                    borderRadius: '6px'
-                                                                }}
-                                                            >
-                                                                <MessageSquare size={13} /> WhatsApp Guest
-                                                            </button>
-
-                                                            <button
-                                                                onClick={() => {
-                                                                    setActiveActionMenu(null);
-                                                                    setSelectedBooking(bkg);
-                                                                    setCancelReason(isDatePassedBooking(bkg) ? 'Date Passed & Guest did not call (No-Show)' : 'Customer request');
-                                                                    setShowCancelModal(true);
-                                                                }}
-                                                                style={{
-                                                                    width: '100%',
-                                                                    padding: '7px 10px',
-                                                                    background: 'transparent',
-                                                                    border: 'none',
-                                                                    color: '#f87171',
-                                                                    fontSize: '12px',
-                                                                    fontWeight: '600',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '8px',
-                                                                    cursor: 'pointer',
-                                                                    borderRadius: '6px'
-                                                                }}
-                                                            >
-                                                                <AlertCircle size={13} /> {isDatePassedBooking(bkg) ? 'Cancel (Date Passed / No-Show)' : 'Cancel Booking'}
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
                                             </div>
                                         </td>
                                     </tr>
@@ -1499,9 +1296,9 @@ export default function Bookings() {
             </div>
 
             {/* RECORD PAYMENT MODAL */}
-            <AnimatePresence>
-                {showPaymentModal && selectedBooking && (
-                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '20px' }}>
+              <AnimatePresence>
+                  {showPaymentModal && selectedBooking && (
+                      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999999, padding: '20px' }}>
                         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} style={{ width: '100%', maxWidth: '480px', background: '#0b1120', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '24px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                                 <h2 style={{ color: 'white', margin: 0, fontSize: '18px', fontWeight: '800' }}>Record Payment</h2>

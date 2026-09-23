@@ -103,13 +103,13 @@ const getDaysDifference = (startStr, endStr) => {
 
 const InlineRemarkEditor = ({ lead, fetchLeads, setViewingImage, customRemarks, setCustomRemarks, selectedCompany }) => {
     const [text, setText] = React.useState('');
-    const [uploading, setUploading] = React.useState(false);
+    const [isHovered, setIsHovered] = React.useState(false);
     const lastRemark = lead.remarksHistory?.[lead.remarksHistory.length - 1];
 
-    const handleSave = async (attachmentUrl = null) => {
-        if (!text.trim() && !attachmentUrl) return;
+    const handleSave = async () => {
+        if (!text.trim()) return;
         try {
-            await axios.post(`/api/leads/${lead._id}/remarks`, { text: text || 'File Attached', attachmentUrl });
+            await axios.post(`/api/leads/${lead._id}/remarks`, { text: text.trim(), attachmentUrl: null });
             setText('');
             fetchLeads();
         } catch (e) {
@@ -117,78 +117,88 @@ const InlineRemarkEditor = ({ lead, fetchLeads, setViewingImage, customRemarks, 
         }
     };
 
-    const handleFileUpload = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        setUploading(true);
-        const formData = new FormData();
-        formData.append('file', file);
-        try {
-            const { data } = await axios.post('/api/admin/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-            await handleSave(data.url);
-        } catch (e) {
-            alert('Upload failed');
-        } finally {
-            setUploading(false);
-        }
-    };
-
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '240px' }} onClick={e => e.stopPropagation()}>
+        <div style={{ width: '100%', minWidth: '220px', position: 'relative' }}>
             {lastRemark ? (
-                <div style={{ borderLeft: '2px solid rgba(59, 130, 246, 0.5)', paddingLeft: '8px', marginBottom: '4px' }}>
+                <div 
+                    onMouseEnter={() => setIsHovered(true)}
+                    onMouseLeave={() => setIsHovered(false)}
+                    style={{ 
+                        borderLeft: '2px solid rgba(59, 130, 246, 0.5)', 
+                        paddingLeft: '8px', 
+                        marginBottom: '6px',
+                        cursor: lead.remarksHistory.length > 1 ? 'pointer' : 'default',
+                        position: 'relative'
+                    }}
+                >
                     <div style={{ fontSize: '12px', color: 'white', lineHeight: '1.4', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{lastRemark.text}</div>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
                         <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>{new Date(lastRemark.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</span>
-                        {lastRemark.attachmentUrl && (
-                             <button 
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    let url = lastRemark.attachmentUrl;
-                                    if (url.includes('taxi-fleet-crm/documents')) {
-                                        const parts = url.split('taxi-fleet-crm/documents/');
-                                        url = 'https://res.cloudinary.com/doaymwjki/image/upload/v1/taxi-fleet-crm/documents/' + parts[1];
-                                    } else if (!url.startsWith('http')) {
-                                        url = `http://127.0.0.1:5005${url}`;
-                                    }
-                                    setViewingImage(url);
-                                }}
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.3)', color: '#fbbf24', fontSize: '10px', fontWeight: '800', padding: '2px 8px', borderRadius: '12px', cursor: 'pointer' }}
-                             >
-                                <Eye size={10} /> View
-                             </button>
+                        {lead.remarksHistory.length > 1 && (
+                            <span style={{ fontSize: '9px', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '2px 6px', borderRadius: '10px', fontWeight: '800' }}>
+                                +{lead.remarksHistory.length - 1} More
+                            </span>
                         )}
                     </div>
+
+                    {/* History Dropdown / Tooltip */}
+                    {isHovered && lead.remarksHistory.length > 1 && (
+                        <div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: '0',
+                            marginTop: '8px',
+                            background: '#0a0f1d',
+                            border: '1px solid rgba(59, 130, 246, 0.4)',
+                            borderRadius: '8px',
+                            padding: '8px',
+                            boxShadow: '0 10px 25px rgba(0,0,0,0.8)',
+                            zIndex: 100,
+                            minWidth: '240px',
+                            maxHeight: '200px',
+                            overflowY: 'auto'
+                        }}>
+                            <div style={{ fontSize: '10px', fontWeight: '900', color: '#60a5fa', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Remark History</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                {[...lead.remarksHistory].reverse().map((rmk, idx) => (
+                                    <div key={idx} style={{ background: 'rgba(255,255,255,0.03)', padding: '6px 8px', borderRadius: '6px', borderLeft: idx === 0 ? '2px solid #fbbf24' : '2px solid rgba(255,255,255,0.1)' }}>
+                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.9)', marginBottom: '2px' }}>{rmk.text}</div>
+                                        <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)' }}>{new Date(rmk.date).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             ) : (
-                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic', marginBottom: '4px' }}>No remarks yet</div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic', marginBottom: '6px' }}>No remarks yet</div>
             )}
             
-            <div style={{ display: 'flex', gap: '4px', alignItems: 'center', background: 'rgba(0,0,0,0.3)', border: '1px dashed rgba(255,255,255,0.2)', padding: '4px 8px', borderRadius: '6px', transition: 'all 0.2s ease' }}>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '6px', transition: 'all 0.2s ease' }}>
                 <input 
                       type="text" 
                       value={text} 
                       onChange={e => setText(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleSave()}
                       placeholder="Type remark & press Enter..." 
-                      style={{ flex: 1, background: 'transparent', border: 'none', color: 'white', fontSize: '11px', outline: 'none' }}
+                      style={{ flex: 1, background: 'transparent', border: 'none', color: 'white', fontSize: '11px', outline: 'none', padding: '6px 0' }}
                   />
-                
-                {uploading ? (
-                    <span style={{ fontSize: '10px', color: '#38bdf8', padding: '4px' }}>Wait...</span>
-                ) : (
-                    <>
-                        <label style={{ cursor: 'pointer', display: 'flex', color: 'rgba(255,255,255,0.6)', padding: '2px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }} title="Attach Photo/Camera">
-                            <Camera size={14} />
-                            <input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
-                        </label>
-                        
-                        <label style={{ cursor: 'pointer', display: 'flex', color: 'rgba(255,255,255,0.6)', padding: '2px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }} title="Attach Document">
-                            <FileText size={14} />
-                            <input type="file" accept=".pdf,.doc,.docx" onChange={handleFileUpload} style={{ display: 'none' }} />
-                        </label>
-                    </>
-                )}
+                  <button 
+                      onClick={handleSave} 
+                      disabled={!text.trim()}
+                      style={{ 
+                          background: text.trim() ? '#fbbf24' : 'rgba(255,255,255,0.1)', 
+                          color: text.trim() ? '#000' : 'rgba(255,255,255,0.3)', 
+                          border: 'none', 
+                          padding: '3px 8px', 
+                          borderRadius: '4px', 
+                          fontSize: '10px', 
+                          fontWeight: '800', 
+                          cursor: text.trim() ? 'pointer' : 'default',
+                          transition: 'all 0.2s'
+                      }}>
+                      Save
+                  </button>
             </div>
         </div>
     );
@@ -204,6 +214,7 @@ export default function Leads() {
     const [statusFilter, setStatusFilter] = useState('All');
     const [monthFilter, setMonthFilter] = useState('All');
     const [sourceFilter, setSourceFilter] = useState('All');
+    const [priorityFilter, setPriorityFilter] = useState('All');
     const [salesPersonFilter, setSalesPersonFilter] = useState('All');
 
     // Hover tooltip state
@@ -321,6 +332,7 @@ export default function Leads() {
         gstMode: 'GST Inclusive',
         gstRate: 5,
         status: 'New',
+          priority: 'Unassigned',
         notes: '',
         specialRemarks: '',
         inclusions: {
@@ -390,14 +402,13 @@ export default function Leads() {
         if (!selectedCompany?._id) return;
         try {
             setLoadingSidebarLeads(true);
+            // Always fetch ALL leads for the sidebar so it can correctly count conversions
+            // for trips that might happen in future months, but were confirmed THIS month.
             let url = `/api/leads/${selectedCompany._id}?status=All`;
-            if (monthTab && monthTab !== 'All') {
-                url += `&month=${monthTab}`;
-            }
             const { data } = await axios.get(url);
             setSidebarLeads(data || []);
         } catch (err) {
-            console.error('Error fetching sidebar leads:', err);
+            console.error("Error fetching sidebar leads:", err);
         } finally {
             setLoadingSidebarLeads(false);
         }
@@ -644,6 +655,7 @@ export default function Leads() {
                 gstMode: lead.gstMode || 'GST Inclusive',
                 gstRate: lead.gstRate || 5,
                 status: lead.status || 'New',
+                  priority: lead.priority || 'Unassigned',
                 notes: lead.notes || '',
                 specialRemarks: lead.specialRemarks || '',
                 inclusions: {
@@ -1142,6 +1154,11 @@ export default function Leads() {
             if (sourceFilter !== 'All' && lead.source !== sourceFilter) return false;
             if (salesPersonFilter !== 'All' && lead.salesPerson !== salesPersonFilter) return false;
 
+            if (priorityFilter !== 'All') {
+                const leadPriority = lead.priority || 'Unassigned';
+                if (leadPriority !== priorityFilter) return false;
+            }
+
             // Instant Live Search by Name / Phone / Agent / Code / Salesperson
             if (searchTerm && searchTerm.trim()) {
                 const q = searchTerm.trim().toLowerCase();
@@ -1166,7 +1183,7 @@ export default function Leads() {
 
             return true;
         });
-    }, [leads, sourceFilter, salesPersonFilter, searchTerm]);
+    }, [leads, sourceFilter, salesPersonFilter, searchTerm, priorityFilter]);
 
     // Unique sales persons
     const salesPersonsList = useMemo(() => {
@@ -1200,103 +1217,58 @@ export default function Leads() {
 
     // Calculate Right Sidebar daily breakdown and totals
     const sidebarStats = useMemo(() => {
-        const activeOption = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5]; // default September
+        const activeOption = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5];
         const { monthIdx, year, days } = activeOption;
-
-        // Use dedicated sidebarLeads fetched independently for this month, or fallback to leads
         const sourceList = (sidebarLeads && sidebarLeads.length > 0) ? sidebarLeads : leads;
 
-        // Filter real leads that overlap with this month and year
-        const monthRealLeads = (sourceList || []).filter(l => {
-            if (l.status === 'Lost' || l.status === 'Cancelled' || l.status === 'Confirmed' || l.bookingId) return false;
-            const pStart = parseLeadDateInfo(l.travelStartDate || l.leadDate || l.createdAt);
-            if (!pStart) return false;
-            
-            const startD = new Date(pStart.year, pStart.monthIdx, pStart.day);
-            const pEnd = parseLeadDateInfo(l.travelEndDate);
-            const endD = pEnd ? new Date(pEnd.year, pEnd.monthIdx, pEnd.day) : startD;
-            
-            const monthStart = new Date(year, monthIdx, 1);
-            const monthEnd = new Date(year, monthIdx, days);
-            
-            return startD <= monthEnd && endD >= monthStart;
-        });
-
-        // If real leads exist for this month, calculate directly from them
-        if (monthRealLeads.length > 0) {
-            const dailyList = [];
-            
-            let totalLeads = monthRealLeads.length;
-            let totalLeadsAmt = monthRealLeads.reduce((s, l) => s + (Number(l.totalAmount) || 0), 0);
-            
-            const convs = monthRealLeads.filter(l => l.status === 'Confirmed' || l.status === 'Converted' || l.bookingId);
-            let totalConversions = convs.length;
-            let totalConversionsAmt = convs.reduce((s, l) => s + (Number(l.totalAmount) || 0), 0);
-
-            for (let day = 1; day <= days; day++) {
-                const dayLeads = monthRealLeads.filter(l => {
-                    // Check if this 'day' falls within the lead's travel dates
-                    const pStart = parseLeadDateInfo(l.travelStartDate || l.leadDate || l.createdAt);
-                    if (!pStart) return false;
-                    
-                    // If no end date, just check the start date
-                    if (!l.travelEndDate) {
-                        return pStart.year === year && pStart.monthIdx === monthIdx && pStart.day === day;
-                    }
-                    
-                    // If there's an end date, check the range
-                    const startD = new Date(pStart.year, pStart.monthIdx, pStart.day);
-                    const pEnd = parseLeadDateInfo(l.travelEndDate);
-                    const endD = pEnd ? new Date(pEnd.year, pEnd.monthIdx, pEnd.day) : startD;
-                    
-                    const currentD = new Date(year, monthIdx, day);
-                    return currentD >= startD && currentD <= endD;
-                });
-
-                const leadsCount = dayLeads.length;
-                const leadsAmt = dayLeads.reduce((sum, l) => sum + (Number(l.totalAmount) || 0), 0);
-                const convLeads = dayLeads.filter(l => l.status === 'Confirmed' || l.status === 'Converted' || l.bookingId);
-                const convCount = convLeads.length;
-                const convAmt = convLeads.reduce((sum, l) => sum + (Number(l.totalAmount) || 0), 0);
-
-                // Removed incorrect daily accumulation to avoid double counting
-
-                dailyList.push({ day, leadsCount, leadsAmt, convCount, convAmt, leads: dayLeads });
-            }
-
-            const today = new Date().getDate();
-            dailyList.sort((a, b) => {
-                if (a.day === today) return -1;
-                if (b.day === today) return 1;
-                return a.day - b.day;
-            });
-            return {
-                totalLeads,
-                totalLeadsAmt,
-                totalConversions,
-                totalConversionsAmt,
-                dailyList
-            };
-        }
-
-        
-
-        // Generic empty month
+        let totalLeads = 0;
+        let totalLeadsAmt = 0;
+        let totalConversions = 0;
+        let totalConversionsAmt = 0;
         const dailyList = [];
+
+        // Pre-process leads to avoid redundant filtering
+        const allLeadsInMonth = (sourceList || []).filter(l => l.status !== 'Lost' && l.status !== 'Cancelled');
+
         for (let day = 1; day <= days; day++) {
-            dailyList.push({ day, leadsCount: 0, leadsAmt: 0, convCount: 0, convAmt: 0, leads: [] });
+            const dayLeads = allLeadsInMonth.filter(l => {
+                const d = parseLeadDateInfo(l.leadDate || l.createdAt);
+                return d && d.year === year && d.monthIdx === monthIdx && d.day === day;
+            });
+            const convLeads = allLeadsInMonth.filter(l => {
+                // MUST BE CONFIRMED TO COUNT AS A CONVERSION
+                if (l.status !== 'Confirmed' && l.status !== 'Converted' && !l.bookingId) return false;
+                
+                // Use advanceDate if available, otherwise updatedAt
+                const d = parseLeadDateInfo(l.advanceDate || l.updatedAt || l.createdAt);
+                return d && d.year === year && d.monthIdx === monthIdx && d.day === day;
+            });
+
+            const leadsCount = dayLeads.length;
+            const leadsAmt = dayLeads.reduce((s, l) => s + (Number(l.totalAmount) || 0), 0);
+            const convCount = convLeads.length;
+            const convAmt = convLeads.reduce((s, l) => s + (Number(l.totalAmount) || 0), 0);
+
+            totalLeads += leadsCount;
+            totalLeadsAmt += leadsAmt;
+            totalConversions += convCount;
+            totalConversionsAmt += convAmt;
+
+            dailyList.push({ day, leadsCount, leadsAmt, convCount, convAmt, leads: dayLeads, convLeads: convLeads });
         }
+
         const today = new Date().getDate();
         dailyList.sort((a, b) => {
             if (a.day === today) return -1;
             if (b.day === today) return 1;
             return a.day - b.day;
         });
+
         return {
-            totalLeads: 0,
-            totalLeadsAmt: 0,
-            totalConversions: 0,
-            totalConversionsAmt: 0,
+            totalLeads,
+            totalLeadsAmt,
+            totalConversions,
+            totalConversionsAmt,
             dailyList
         };
     }, [sidebarLeads, leads, selectedSidebarMonth]);
@@ -1798,6 +1770,30 @@ export default function Leads() {
                 </div>
             </div>
 
+            {/* Priority / Interest Level Filter */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '18px', flexWrap: 'wrap', padding: '0 4px' }}>
+                <button 
+                    onClick={() => { setPriorityFilter('All'); setCurrentPage(1); }}
+                    style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800', border: priorityFilter === 'All' ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)', background: priorityFilter === 'All' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.05)', color: priorityFilter === 'All' ? '#38bdf8' : 'white', cursor: 'pointer', transition: 'all 0.2s' }}>
+                    All Levels
+                </button>
+                <button 
+                    onClick={() => { setPriorityFilter('Hot'); setCurrentPage(1); }}
+                    style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800', border: priorityFilter === 'Hot' ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)', background: priorityFilter === 'Hot' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(255,255,255,0.05)', color: priorityFilter === 'Hot' ? '#fbbf24' : 'white', cursor: 'pointer', transition: 'all 0.2s' }}>
+                    🔥 Hot (High)
+                </button>
+                <button 
+                    onClick={() => { setPriorityFilter('Warm'); setCurrentPage(1); }}
+                    style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800', border: priorityFilter === 'Warm' ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)', background: priorityFilter === 'Warm' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.05)', color: priorityFilter === 'Warm' ? '#38bdf8' : 'white', cursor: 'pointer', transition: 'all 0.2s' }}>
+                    ☀️ Warm (Average)
+                </button>
+                <button 
+                    onClick={() => { setPriorityFilter('Cold'); setCurrentPage(1); }}
+                    style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800', border: priorityFilter === 'Cold' ? '1px solid #94a3b8' : '1px solid rgba(255,255,255,0.1)', background: priorityFilter === 'Cold' ? 'rgba(148, 163, 184, 0.15)' : 'rgba(255,255,255,0.05)', color: priorityFilter === 'Cold' ? '#94a3b8' : 'white', cursor: 'pointer', transition: 'all 0.2s' }}>
+                    ❄️ Cold (Low)
+                </button>
+            </div>
+
             {/* 4. Leads Table Matching Reference Design */}
             <div className="glass-card" style={{ padding: '0', overflowX: 'auto', borderRadius: '14px' }}>
                 <table style={{ width: '100%', color: 'white', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -1869,6 +1865,13 @@ export default function Leads() {
                                                 <User size={15} color="#38bdf8" />
                                                 <span>{lead.clientCode || lead.leadId || 'N/A'}</span>
                                             </div>
+                                            {lead.priority && lead.priority !== 'Unassigned' && (
+                                                <div style={{ marginTop: '4px', display: 'flex' }}>
+                                                    <div style={{ fontSize: '9px', fontWeight: '800', display: 'inline-block', padding: '2px 6px', borderRadius: '10px', background: lead.priority === 'Hot' ? 'rgba(251, 191, 36, 0.15)' : lead.priority === 'Warm' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.15)', color: lead.priority === 'Hot' ? '#fbbf24' : lead.priority === 'Warm' ? '#38bdf8' : '#94a3b8', border: lead.priority === 'Hot' ? '1px solid rgba(251, 191, 36, 0.3)' : lead.priority === 'Warm' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(148, 163, 184, 0.3)' }}>
+                                                        {lead.priority === 'Hot' ? '🔥 High' : lead.priority === 'Warm' ? '☀️ Avg' : '❄️ Low'}
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             {/* Hover Tooltip matching Image 1 */}
                                             {hoveredLeadId === lead._id && (
@@ -1941,19 +1944,19 @@ export default function Leads() {
                                                         background: 'rgba(34, 197, 94, 0.2)',
                                                         color: '#4ade80',
                                                         border: '1px solid rgba(34, 197, 94, 0.4)',
-                                                        padding: '6px 12px',
-                                                        borderRadius: '8px',
+                                                        padding: '5px 8px',
+                                                        borderRadius: '6px',
                                                         cursor: 'pointer',
                                                         display: 'inline-flex',
                                                         alignItems: 'center',
-                                                        gap: '5px',
+                                                        gap: '4px',
                                                         fontWeight: '800',
-                                                        fontSize: '11.5px',
+                                                        fontSize: '10.5px',
                                                         transition: 'all 0.2s',
                                                         whiteSpace: 'nowrap'
                                                     }}
                                                 >
-                                                    <CheckCircle size={13} /> Confirm / Record Advance
+                                                    <CheckCircle size={12} /> Confirm Lead
                                                 </button>
                                             ) : (
                                                 <a
@@ -2168,40 +2171,25 @@ export default function Leads() {
                             {/* Drawer Top Header */}
                             <div style={{
                                 padding: '18px 20px',
-                                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
-                                background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 100%)'
                             }}>
-                                <div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between', width: '100%', paddingRight: '15px' }}>
-    <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <BarChart3 size={18} color="#fbbf24" />
-            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '900', color: '#f8fafc', letterSpacing: '0.3px' }}>
-                Daily Lead Breakdown
-            </h3>
-        </div>
-        <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)', marginTop: '2px' }}>
-            Tally-style analytics
-        </div>
-    </div>
-    <div style={{ display: 'flex', gap: '16px' }}>
-        <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.6)', fontWeight: '700' }}>Total Leads</div>
-            <div style={{ fontSize: '15px', fontWeight: '900', color: 'white' }}>{sidebarStats.totalLeads}</div>
-        </div>
-        
-    </div>
-</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <div style={{ padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+                                        <Calendar size={18} color="#94a3b8" />
+                                    </div>
+                                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: 'white', letterSpacing: '0.3px' }}>
+                                        {selectedSidebarMonth}
+                                    </h3>
+                                    <ChevronDown size={16} color="#94a3b8" style={{ cursor: 'pointer' }} />
                                 </div>
                                 <button
                                     type="button"
                                     onClick={() => setShowRightSidebar(false)}
                                     style={{
-                                        width: '34px',
-                                        height: '34px',
+                                        width: '32px',
+                                        height: '32px',
                                         borderRadius: '10px',
                                         background: 'rgba(255, 255, 255, 0.06)',
                                         border: '1px solid rgba(255, 255, 255, 0.12)',
@@ -2214,148 +2202,93 @@ export default function Leads() {
                                     }}
                                     title="Close Drawer"
                                 >
-                                    <X size={18} />
+                                    <X size={16} />
                                 </button>
                             </div>
 
-                            {/* Drawer Body (Scrollable) */}
-                            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column' }}>
-                                {/* Day-wise Scrollable Table */}
-                                <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
-                                    {sidebarStats.dailyList.map(item => {
-                                        const isExpanded = expandedBreakdownDay === item.day;
-                                        const hasLeads = (item.leads && item.leads.length > 0) || item.leadsCount > 0;
-
-                                        return (
-                                            <div key={item.day} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                                                {/* Day Row */}
-                                                <div
-                                                    onClick={() => {
-                                                        setExpandedBreakdownDay(isExpanded ? null : item.day);
-                                                    }}
-                                                    style={{
-                                                        display: 'grid',
-                                                        gridTemplateColumns: '60px 1fr',
-                                                        padding: '10px 8px',
-                                                        alignItems: 'center',
-                                                        cursor: 'pointer',
-                                                        background: isExpanded ? 'rgba(251, 191, 36, 0.08)' : (new Date().getDate() === item.day && selectedSidebarMonth === new Date().toLocaleString('en-US', { month: 'short' }) + ' ' + new Date().getFullYear() ? 'rgba(34, 197, 94, 0.2)' : (hasLeads ? 'rgba(255, 255, 255, 0.015)' : 'transparent')),
-                                                        borderLeft: isExpanded ? '3px solid #fbbf24' : '3px solid transparent',
-                                                        transition: 'all 0.2s ease',
-                                                    }}
-                                                    onMouseEnter={e => {
-                                                        if (!isExpanded) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
-                                                    }}
-                                                    onMouseLeave={e => {
-                                                        if (!isExpanded) e.currentTarget.style.background = hasLeads ? 'rgba(255, 255, 255, 0.015)' : 'transparent';
-                                                    }}
-                                                    title={hasLeads ? `Click to view ${item.leadsCount} lead entries for Day ${item.day}` : `Day ${item.day}`}
-                                                >
-                                                    {/* Day Number + Expand Indicator */}
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <span style={{ fontWeight: '800', fontSize: '13px', color: isExpanded ? '#fbbf24' : '#f8fafc' }}>
-                                                            {item.day}
-                                                        </span>
-                                                        {hasLeads && (
-                                                            <span style={{ fontSize: '9px', color: isExpanded ? '#fbbf24' : 'rgba(255,255,255,0.4)', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'none' }}>
-                                                                ▼
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Leads */}
-                                                    <div style={{ textAlign: 'right' }}>
-                                                        <div style={{ fontWeight: '800', fontSize: '13px', color: item.leadsCount > 0 ? 'white' : 'rgba(255,255,255,0.3)' }}>
-                                                            {item.leadsCount}
-                                                        </div>
-                                                        <div style={{ fontSize: '11px', fontWeight: '600', color: item.leadsCount > 0 ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)', marginTop: '1px' }}>
-                                                            ₹{item.leadsAmt.toLocaleString('en-IN')}
-                                                        </div>
-                                                    </div>
-
-                                                    
-                                                </div>
-
-                                                {/* Expanded Day Details (Showing multiple entries) */}
-                                                {isExpanded && (
-                                                    <div style={{
-                                                        background: 'rgba(0, 0, 0, 0.45)',
-                                                        padding: '10px 10px 14px 10px',
-                                                        borderTop: '1px solid rgba(251, 191, 36, 0.15)',
-                                                        borderBottom: '1px solid rgba(251, 191, 36, 0.15)',
-                                                    }}>
-                                                        <div style={{
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'space-between',
-                                                            marginBottom: '8px',
-                                                            paddingBottom: '4px',
-                                                            borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
-                                                        }}>
-                                                            <span style={{ fontSize: '11px', fontWeight: '800', color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                                                Day {item.day} Breakdown · {item.leads?.length || item.leadsCount} {item.leads?.length === 1 ? 'Entry' : 'Entries'}
-                                                            </span>
-                                                            <span style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.45)' }}>
-                                                                {selectedSidebarMonth}
-                                                            </span>
-                                                        </div>
-
-                                                        {item.leads && item.leads.length > 0 ? (
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                                {item.leads.map((lead, idx) => (
-                                                                    <div
-                                                                        key={lead._id || lead.leadId || idx}
-                                                                        onClick={() => setPreviewTourLead(lead)}
-                                                                        title="Click to view full details"
-                                                                        style={{
-                                                                            background: 'rgba(255, 255, 255, 0.03)',
-                                                                            border: '1px solid rgba(255, 255, 255, 0.08)',
-                                                                            borderRadius: '8px',
-                                                                            padding: '12px',
-                                                                            display: 'flex',
-                                                                            justifyContent: 'space-between',
-                                                                            alignItems: 'center',
-                                                                            marginBottom: '8px',
-                                                                            cursor: 'pointer'
-                                                                        }}
-                                                                    >
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                                            <div style={{ fontSize: '13px', fontWeight: '900', color: '#fbbf24' }}>
-                                                                                Code: {lead.clientCode || lead.leadId || 'N/A'}
-                                                                            </div>
-                                                                            <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', border: '1px solid rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>Details 👁️</span>
-                                                                        </div>
-                                                                        <div style={{ fontSize: '13px', fontWeight: '900', color: '#4ade80' }}>
-                                                                            ₹{(Number(lead.totalAmount) || 0).toLocaleString('en-IN')}
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        ) : (
-                                                            <div style={{
-                                                                padding: '12px',
-                                                                textAlign: 'center',
-                                                                fontSize: '11.5px',
-                                                                color: 'rgba(255, 255, 255, 0.45)',
-                                                                background: 'rgba(255, 255, 255, 0.02)',
-                                                                borderRadius: '6px'
-                                                            }}>
-                                                                {item.leadsCount > 0 ? (
-                                                                    <span>No detailed lead records stored for baseline mockup data.</span>
-                                                                ) : (
-                                                                    <span>No lead entries recorded on Day {item.day}.</span>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
+                            {/* Summary Box */}
+                            <div style={{ padding: '0 20px', marginBottom: '20px' }}>
+                                <div style={{
+                                    border: '1px solid rgba(251, 191, 36, 0.4)',
+                                    borderRadius: '12px',
+                                    padding: '16px 20px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    background: 'rgba(251, 191, 36, 0.02)'
+                                }}>
+                                    <div style={{ flex: 1, paddingRight: '15px', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                                        <div style={{ fontSize: '12.5px', color: '#94a3b8', marginBottom: '6px' }}>Total Leads</div>
+                                        <div style={{ fontSize: '24px', fontWeight: '900', color: 'white', lineHeight: '1' }}>{sidebarStats.totalLeads}</div>
+                                        <div style={{ fontSize: '15px', color: '#f8fafc', marginTop: '6px', fontWeight: '600' }}>₹{sidebarStats.totalLeadsAmt.toLocaleString('en-IN')}</div>
+                                    </div>
+                                    <div style={{ flex: 1, paddingLeft: '20px' }}>
+                                        <div style={{ fontSize: '12.5px', color: '#94a3b8', marginBottom: '6px' }}>Total Conversions</div>
+                                        <div style={{ fontSize: '24px', fontWeight: '900', color: 'white', lineHeight: '1' }}>{sidebarStats.totalConversions}</div>
+                                        <div style={{ fontSize: '15px', color: '#f8fafc', marginTop: '6px', fontWeight: '600' }}>₹{sidebarStats.totalConversionsAmt.toLocaleString('en-IN')}</div>
+                                    </div>
                                 </div>
                             </div>
 
-                            
+                            {/* Table Header */}
+                            <div style={{
+                                padding: '0 20px 12px 20px',
+                                display: 'grid',
+                                gridTemplateColumns: '60px 1fr 1fr',
+                                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                                gap: '15px'
+                            }}>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Date</div>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Leads</div>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Conversion</div>
+                            </div>
+
+                            {/* Drawer Body (Scrollable Table) */}
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px', display: 'flex', flexDirection: 'column' }}>
+                                <div style={{ flex: 1, overflowY: 'auto', paddingRight: '5px' }}>
+                                    {sidebarStats.dailyList.map(item => {
+                                        return (
+                                            <div key={item.day} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                <div
+                                                    style={{
+                                                        display: 'grid',
+                                                        gridTemplateColumns: '60px 1fr 1fr',
+                                                        padding: '12px 0',
+                                                        alignItems: 'center',
+                                                        gap: '15px'
+                                                    }}
+                                                >
+                                                    {/* Date */}
+                                                    <div style={{ fontWeight: '600', fontSize: '16px', color: 'white' }}>
+                                                        {item.day}
+                                                    </div>
+                                                    {/* Leads */}
+                                                    <div>
+                                                        <div style={{ fontSize: '15px', color: 'white', fontWeight: '600', marginBottom: '2px' }}>
+                                                            {item.leadsCount}
+                                                        </div>
+                                                        <div style={{ fontSize: '13px', color: '#94a3b8' }}>
+                                                            ₹{item.leadsAmt.toLocaleString('en-IN')}
+                                                        </div>
+                                                    </div>
+                                                    {/* Conversions */}
+                                                    <div>
+                                                        <div style={{ fontSize: '15px', color: 'white', fontWeight: '600', marginBottom: '2px' }}>
+                                                            {item.convCount}
+                                                        </div>
+                                                        <div style={{ fontSize: '13px', color: '#94a3b8' }}>
+                                                            ₹{item.convAmt.toLocaleString('en-IN')}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    
+                                    {/* Extra padding at bottom for scroll visibility */}
+                                    <div style={{ height: '40px' }}></div>
+                                </div>
+                            </div>
                         </motion.aside>
                     </>
                 )}
@@ -2807,6 +2740,19 @@ export default function Leads() {
                                                     </div>
                                                 )}
                                             </div>
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Client Interest Level</label>
+                                            <select
+                                                value={formData.priority || 'Unassigned'}
+                                                onChange={e => setFormData({ ...formData, priority: e.target.value })}
+                                                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '13px', outline: 'none', cursor: 'pointer' }}
+                                            >
+                                                <option value="Unassigned" style={{ background: '#090f1d' }}>Not Set</option>
+                                                <option value="Hot" style={{ background: '#090f1d', color: '#fbbf24' }}>🔥 High (Hot)</option>
+                                                <option value="Warm" style={{ background: '#090f1d', color: '#38bdf8' }}>☀️ Average (Warm)</option>
+                                                <option value="Cold" style={{ background: '#090f1d', color: '#94a3b8' }}>❄️ Low (Cold)</option>
+                                            </select>
                                         </div>
                                     </div>
                                 </div>
