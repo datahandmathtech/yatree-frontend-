@@ -19,38 +19,7 @@ const MONTH_TABS = [
 ];
 
 // Baseline Mockup Data matching media_1788928571880.png (Total 28 rides, Package Value: ₹14,56,000, Invoices: 28)
-const BASELINE_COMPLETED_BOOKINGS = [
-    { _id: 'cmp-1', bookingId: '09/01', bookingCode: '09/01', guestName: 'Mr. Rakesh Malhotra', clientName: 'Mr. Rakesh Malhotra', mobileNumber: '+91 98765 43210', packagePrice: 75000, totalAmount: 75000, vehicleType: 'Innova Crysta', month: 'Sep' },
-    { _id: 'cmp-2', bookingId: '09/02', bookingCode: '09/02', guestName: 'Ms. Priya Sharma', clientName: 'Ms. Priya Sharma', mobileNumber: '+91 98234 56789', packagePrice: 42000, totalAmount: 42000, vehicleType: 'Swift Dzire', month: 'Sep' },
-    { _id: 'cmp-3', bookingId: '09/03', bookingCode: '09/03', guestName: 'Corporate Solutions Ltd.', clientName: 'Corporate Solutions Ltd.', mobileNumber: '+91 98111 22233', packagePrice: 120000, totalAmount: 120000, vehicleType: 'Tempo Traveller (17 Seater)', month: 'Sep' },
-    { _id: 'cmp-4', bookingId: '09/04', bookingCode: '09/04', guestName: 'Dr. Amit Verma', clientName: 'Dr. Amit Verma', mobileNumber: '+91 97654 32109', packagePrice: 98000, totalAmount: 98000, vehicleType: 'Toyota Fortuner', month: 'Sep' },
-    { _id: 'cmp-5', bookingId: '09/05', bookingCode: '09/05', guestName: 'Mrs. Sunita Iyer', clientName: 'Mrs. Sunita Iyer', mobileNumber: '+91 98333 44455', packagePrice: 56000, totalAmount: 56000, vehicleType: 'Ertiga', month: 'Sep' },
-    { _id: 'cmp-6', bookingId: '09/06', bookingCode: '09/06', guestName: 'Mr. Karan Mehta', clientName: 'Mr. Karan Mehta', mobileNumber: '+91 99887 76655', packagePrice: 84000, totalAmount: 84000, vehicleType: 'Innova Crysta', month: 'Sep' },
-    { _id: 'cmp-7', bookingId: '09/07', bookingCode: '09/07', guestName: 'Global Tech Pvt. Ltd.', clientName: 'Global Tech Pvt. Ltd.', mobileNumber: '+91 91234 56780', packagePrice: 110000, totalAmount: 110000, vehicleType: 'Tempo Traveller (12 Seater)', month: 'Sep' },
-    { _id: 'cmp-8', bookingId: '09/08', bookingCode: '09/08', guestName: 'Ms. Neha Kapoor', clientName: 'Ms. Neha Kapoor', mobileNumber: '+91 97777 88899', packagePrice: 62000, totalAmount: 62000, vehicleType: 'Innova Crysta', month: 'Sep' },
-
-    // Additional 20 records completing the 28 total and exact ₹14,56,000 package value
-    { _id: 'cmp-9', bookingId: '09/09', bookingCode: '09/09', guestName: 'Apex Logistics Inc.', clientName: 'Apex Logistics Inc.', mobileNumber: '+91 98450 11223', packagePrice: 55000, totalAmount: 55000, vehicleType: 'Innova Crysta', month: 'Sep' },
-    { _id: 'cmp-10', bookingId: '09/10', bookingCode: '09/10', guestName: 'Mr. Vikram Singhania', clientName: 'Mr. Vikram Singhania', mobileNumber: '+91 98760 33445', packagePrice: 48000, totalAmount: 48000, vehicleType: 'Ertiga', month: 'Sep' },
-    { _id: 'cmp-11', bookingId: '09/11', bookingCode: '09/11', guestName: 'Zenith Hospitality', clientName: 'Zenith Hospitality', mobileNumber: '+91 98200 44556', packagePrice: 72000, totalAmount: 72000, vehicleType: 'Tempo Traveller (12 Seater)', month: 'Sep' },
-    { _id: 'cmp-12', bookingId: '09/12', bookingCode: '09/12', guestName: 'Mrs. Ananya Roy', clientName: 'Mrs. Ananya Roy', mobileNumber: '+91 98310 55667', packagePrice: 38000, totalAmount: 38000, vehicleType: 'Swift Dzire', month: 'Sep' },
-    { _id: 'cmp-13', bookingId: '09/13', bookingCode: '09/13', guestName: 'Mr. Rajesh Khurana', clientName: 'Mr. Rajesh Khurana', mobileNumber: '+91 98100 66778', packagePrice: 65000, totalAmount: 65000, vehicleType: 'Innova Crysta', month: 'Sep' },
-    { _id: 'cmp-14', bookingId: '09/14', bookingCode: '09/14', guestName: 'Silverline Media', clientName: 'Silverline Media', mobileNumber: '+91 98220 77889', packagePrice: 45000, totalAmount: 45000, vehicleType: 'Ertiga', month: 'Sep' },
-    { _id: 'cmp-15', bookingId: '09/15', bookingCode: '09/15', guestName: 'Dr. Sneha Patil', clientName: 'Dr. Sneha Patil', mobileNumber: '+91 98500 88990', packagePrice: 52000, totalAmount: 52000, vehicleType: 'Innova Crysta', month: 'Sep' },
-    { _id: 'cmp-16', bookingId: '09/16', bookingCode: '09/16', guestName: 'Mr. Devendra Joshi', clientName: 'Mr. Devendra Joshi', mobileNumber: '+91 98600 99001', packagePrice: 35000, totalAmount: 35000, vehicleType: 'Swift Dzire', month: 'Sep' },
-    { _id: 'cmp-17', bookingId: '09/17', bookingCode: '09/17', guestName: 'Omega Pharma Ltd.', clientName: 'Omega Pharma Ltd.', mobileNumber: '+91 98700 00112', packagePrice: 68000, totalAmount: 68000, vehicleType: 'Toyota Fortuner', month: 'Sep' },
-    { _id: 'cmp-18', bookingId: '09/18', bookingCode: '09/18', guestName: 'Mr. Sanjay Bansal', clientName: 'Mr. Sanjay Bansal', mobileNumber: '+91 98800 11223', packagePrice: 42000, totalAmount: 42000, vehicleType: 'Ertiga', month: 'Sep' },
-    { _id: 'cmp-19', bookingId: '09/19', bookingCode: '09/19', guestName: 'Blue Ocean Ventures', clientName: 'Blue Ocean Ventures', mobileNumber: '+91 98900 22334', packagePrice: 58000, totalAmount: 58000, vehicleType: 'Innova Crysta', month: 'Sep' },
-    { _id: 'cmp-20', bookingId: '09/20', bookingCode: '09/20', guestName: 'Ms. Pooja Nair', clientName: 'Ms. Pooja Nair', mobileNumber: '+91 99000 33445', packagePrice: 32000, totalAmount: 32000, vehicleType: 'Swift Dzire', month: 'Sep' },
-    { _id: 'cmp-21', bookingId: '09/21', bookingCode: '09/21', guestName: 'Mr. Ashok Chawla', clientName: 'Mr. Ashok Chawla', mobileNumber: '+91 99100 44556', packagePrice: 46000, totalAmount: 46000, vehicleType: 'Ertiga', month: 'Sep' },
-    { _id: 'cmp-22', bookingId: '09/22', bookingCode: '09/22', guestName: 'Titanium Infotech', clientName: 'Titanium Infotech', mobileNumber: '+91 99200 55667', packagePrice: 54000, totalAmount: 54000, vehicleType: 'Innova Crysta', month: 'Sep' },
-    { _id: 'cmp-23', bookingId: '09/23', bookingCode: '09/23', guestName: 'Mrs. Kavita Saxena', clientName: 'Mrs. Kavita Saxena', mobileNumber: '+91 99300 66778', packagePrice: 36000, totalAmount: 36000, vehicleType: 'Swift Dzire', month: 'Sep' },
-    { _id: 'cmp-24', bookingId: '09/24', bookingCode: '09/24', guestName: 'Mr. Harish Grover', clientName: 'Mr. Harish Grover', mobileNumber: '+91 99400 77889', packagePrice: 41000, totalAmount: 41000, vehicleType: 'Ertiga', month: 'Sep' },
-    { _id: 'cmp-25', bookingId: '09/25', bookingCode: '09/25', guestName: 'Pioneer Exports', clientName: 'Pioneer Exports', mobileNumber: '+91 99500 88990', packagePrice: 37000, totalAmount: 37000, vehicleType: 'Swift Dzire', month: 'Sep' },
-    { _id: 'cmp-26', bookingId: '09/26', bookingCode: '09/26', guestName: 'Mr. Manish Agarwal', clientName: 'Mr. Manish Agarwal', mobileNumber: '+91 99600 99001', packagePrice: 28000, totalAmount: 28000, vehicleType: 'Swift Dzire', month: 'Sep' },
-    { _id: 'cmp-27', bookingId: '09/27', bookingCode: '09/27', guestName: 'Summit Travels Group', clientName: 'Summit Travels Group', mobileNumber: '+91 99700 00112', packagePrice: 30000, totalAmount: 30000, vehicleType: 'Ertiga', month: 'Sep' },
-    { _id: 'cmp-28', bookingId: '09/28', bookingCode: '09/28', guestName: 'Mr. Tarun Bhatia', clientName: 'Mr. Tarun Bhatia', mobileNumber: '+91 99800 11223', packagePrice: 20000, totalAmount: 20000, vehicleType: 'Swift Dzire', month: 'Sep' }
-];
+const BASELINE_COMPLETED_BOOKINGS = [];
 
 export default function CompletedBookings() {
     const { selectedCompany } = useCompany();
@@ -77,7 +46,7 @@ export default function CompletedBookings() {
         if (selectedCompany?._id) {
             fetchCompletedBookings();
         } else {
-            setBookings(BASELINE_COMPLETED_BOOKINGS);
+            setBookings([]);
         }
     }, [selectedCompany]);
 
@@ -104,11 +73,11 @@ export default function CompletedBookings() {
                 }));
                 setBookings(formatted);
             } else {
-                setBookings(BASELINE_COMPLETED_BOOKINGS);
+                setBookings([]);
             }
         } catch (error) {
             console.error('Error fetching completed bookings:', error);
-            setBookings(BASELINE_COMPLETED_BOOKINGS);
+            setBookings([]);
         } finally {
             setLoading(false);
         }
@@ -116,7 +85,7 @@ export default function CompletedBookings() {
 
     // Filter & Sort
     const processedBookings = useMemo(() => {
-        let list = bookings.length > 0 ? bookings : BASELINE_COMPLETED_BOOKINGS;
+        let list = bookings;
 
         // Month filter
         if (selectedMonth) {

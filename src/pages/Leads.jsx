@@ -17,6 +17,7 @@ import html2canvas from 'html2canvas';
 import SEO from '../components/SEO';
 import { generateBookingConfirmationPDF } from '../utils/bookingConfirmationPdf';
 import ImageUploader from '../components/common/ImageUploader';
+import { formatDateIST, todayIST, toISTDateString } from '../utils/istUtils';
 
 const LEAD_SOURCES = [
     'Website', 'Google Ads', 'Repeat Guest', 'Hotel', 'Referral',
@@ -75,6 +76,18 @@ const toLocalDateString = (val) => {
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
+};
+
+const formatTourDate = (dateVal) => {
+    if (!dateVal) return '--';
+    const cleanStr = toLocalDateString(dateVal);
+    if (!cleanStr) return '--';
+    const parts = cleanStr.split('-');
+    if (parts.length !== 3) return cleanStr;
+    const [y, m, d] = parts;
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthName = months[parseInt(m, 10) - 1] || m;
+    return `${d} ${monthName} ${y}`;
 };
 
 const addDaysToDateString = (dateStr, days) => {
@@ -262,6 +275,7 @@ export default function Leads() {
     const ALL_VEHICLES = [...new Set([...VEHICLE_OPTIONS, ...customVehicles])];
 
     const [showModal, setShowModal] = useState(false);
+    const [showDetailedItinerary, setShowDetailedItinerary] = useState(false);
     const [remarksModalLead, setRemarksModalLead] = useState(null);
     const [expandedRemarks, setExpandedRemarks] = useState({});
     const [editingLead, setEditingLead] = useState(null);
@@ -631,6 +645,7 @@ export default function Leads() {
         setPhoneCheckResult(null);
         if (lead) {
             setEditingLead(lead);
+            setShowDetailedItinerary(true);
             setPreviewClientCode(lead.clientCode || lead.leadId || '');
             const sDate = toLocalDateString(lead.travelStartDate);
             const eDate = toLocalDateString(lead.travelEndDate);
@@ -685,6 +700,7 @@ export default function Leads() {
             });
         } else {
             setEditingLead(null);
+            setShowDetailedItinerary(false);
             const today = toLocalDateString(new Date());
             fetchNextClientCodePreview(today);
 
@@ -1809,7 +1825,7 @@ export default function Leads() {
                                 Source ↕
                             </th>
                             <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
-                                Travel Month ↕
+                                Travel Dates ↕
                             </th>
                             <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
                                 Price ↕
@@ -1903,14 +1919,26 @@ export default function Leads() {
                                         {renderSourceIcon(lead.source)}
                                     </td>
 
-                                    {/* 4. Travel Month */}
+                                    {/* 4. Travel Dates */}
                                     <td style={{ padding: '16px 20px' }}>
-                                        <div style={{ fontSize: '13px', color: 'white', fontWeight: '700' }}>
-                                            {travelInfo.month}
-                                        </div>
-                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
-                                            Days: {travelInfo.days}
-                                        </div>
+                                        {lead.travelStartDate ? (
+                                            <div>
+                                                <div style={{ fontSize: '13px', color: 'white', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                    <Calendar size={13} color="#fbbf24" />
+                                                    <span>
+                                                        {formatTourDate(lead.travelStartDate)}
+                                                        {lead.travelEndDate && toLocalDateString(lead.travelEndDate) !== toLocalDateString(lead.travelStartDate) && (
+                                                            ` ➔ ${formatTourDate(lead.travelEndDate)}`
+                                                        )}
+                                                    </span>
+                                                </div>
+                                                <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px', fontWeight: '600' }}>
+                                                    {getDaysDifference(toLocalDateString(lead.travelStartDate), toLocalDateString(lead.travelEndDate || lead.travelStartDate))} Days Tour • {travelInfo.month}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>TBA</span>
+                                        )}
                                     </td>
 
                                     {/* 5. Price */}
@@ -2949,303 +2977,371 @@ export default function Leads() {
                                                             ...prev,
                                                             numberOfCars: cars,
                                                             itinerary: updatedItin,
-                                                            totalAmount: total
+                                                            totalAmount: total > 0 ? total : prev.totalAmount
                                                         };
                                                     });
                                                 }}
                                                 style={darkInputStyle}
                                             />
                                         </div>
+                                        <div>
+                                            <label style={labelStyle}>Quoted Package Total Fare (₹) *</label>
+                                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                                <span style={{ position: 'absolute', left: '12px', color: '#fbbf24', fontWeight: '900', fontSize: '15px' }}>₹</span>
+                                                <input
+                                                    required
+                                                    type="number"
+                                                    min="0"
+                                                    placeholder="e.g. 15000"
+                                                    value={formData.totalAmount || ''}
+                                                    onChange={e => {
+                                                        const val = Math.max(0, parseFloat(e.target.value) || 0);
+                                                        setFormData(prev => {
+                                                            const days = prev.itinerary?.length || 1;
+                                                            const ratePerDay = Math.round(val / Math.max(1, days));
+                                                            const updatedItin = (prev.itinerary || []).map(day => ({
+                                                                ...day,
+                                                                rate: ratePerDay,
+                                                                amount: ratePerDay * (day.quantity || 1)
+                                                            }));
+                                                            return {
+                                                                ...prev,
+                                                                totalAmount: val,
+                                                                itinerary: updatedItin
+                                                            };
+                                                        });
+                                                    }}
+                                                    style={{
+                                                        ...darkInputStyle,
+                                                        paddingLeft: '28px',
+                                                        fontSize: '15px',
+                                                        fontWeight: '800',
+                                                        color: '#fbbf24'
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Optional Toggle for Day-wise Itinerary */}
+                                    <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '8px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '8px' }}>
+                                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
+                                            {showDetailedItinerary 
+                                                ? `Configuring ${formData.itinerary?.length || 1} Days Tour Schedule & Pricing` 
+                                                : `Tour duration: ${formData.itinerary?.length || 1} Day(s). Day-wise itinerary details can be configured when confirming advance payment.`}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowDetailedItinerary(!showDetailedItinerary)}
+                                            style={{
+                                                background: showDetailedItinerary ? 'rgba(251, 191, 36, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+                                                border: showDetailedItinerary ? '1px solid #fbbf24' : '1px solid rgba(255, 255, 255, 0.15)',
+                                                color: showDetailedItinerary ? '#fbbf24' : 'rgba(255, 255, 255, 0.85)',
+                                                padding: '6px 14px',
+                                                borderRadius: '8px',
+                                                fontSize: '12px',
+                                                fontWeight: '800',
+                                                cursor: 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                transition: 'all 0.2s ease'
+                                            }}
+                                        >
+                                            {showDetailedItinerary ? '▲ Hide Day-wise Schedule' : '+ View / Customize Day-wise Schedule (Optional) ▼'}
+                                        </button>
                                     </div>
                                 </div>
 
                                 {/* ========================================== */}
                                 {/* SECTION 3: DAY-WISE ITINERARY & PRICING    */}
                                 {/* ========================================== */}
-                                <div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                                        <span style={{
-                                            width: '20px',
-                                            height: '20px',
-                                            borderRadius: '50%',
-                                            background: '#fbbf24',
-                                            color: '#000',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontWeight: '900',
-                                            fontSize: '11px'
+                                {showDetailedItinerary && (
+                                    <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                            <span style={{
+                                                width: '20px',
+                                                height: '20px',
+                                                borderRadius: '50%',
+                                                background: '#fbbf24',
+                                                color: '#000',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                fontWeight: '900',
+                                                fontSize: '11px'
+                                            }}>
+                                                3
+                                            </span>
+                                            <span style={{ color: '#fbbf24', fontSize: '12px', fontWeight: '800', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                                                Day-wise Itinerary & Pricing
+                                            </span>
+                                        </div>
+
+                                        {/* Day-wise Table */}
+                                        <div style={{
+                                            background: 'rgba(0,0,0,0.2)',
+                                            borderRadius: '12px',
+                                            border: '1px solid rgba(255,255,255,0.08)',
+                                            overflowX: 'auto'
                                         }}>
-                                            3
-                                        </span>
-                                        <span style={{ color: '#fbbf24', fontSize: '12px', fontWeight: '800', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
-                                            Day-wise Itinerary & Pricing
-                                        </span>
-                                    </div>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1050px' }}>
+                                                <thead style={{ background: '#0a101d', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                                                    <tr>
+                                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '60px' }}>DAY</th>
+                                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '160px', minWidth: '160px' }}>DATE</th>
+                                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '110px' }}>TIME (Optional) ⓘ</th>
+                                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center', width: '55px' }}>APG ⓘ</th>
+                                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)' }}>ROUTE / ITINERARY</th>
+                                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '140px' }}>VEHICLE</th>
+                                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center', width: '70px' }}>QTY</th>
+                                                        <th style={{ padding: '12px 10px', fontSize: '12px', fontWeight: '800', color: '#f8fafc', textAlign: 'right', width: '140px', minWidth: '140px' }}>RATE (₹)</th>
+                                                        <th style={{ padding: '12px 10px', fontSize: '12px', fontWeight: '800', color: '#fbbf24', textAlign: 'right', width: '150px', minWidth: '150px' }}>AMOUNT (₹)</th>
+                                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center', width: '60px' }}>ACTION</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {formData.itinerary.map((day, idx) => (
+                                                        <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                            {/* DAY Badge */}
+                                                            <td style={{ padding: '10px' }}>
+                                                                <span style={{
+                                                                    background: '#fbbf24',
+                                                                    color: '#000',
+                                                                    fontWeight: '900',
+                                                                    fontSize: '11px',
+                                                                    padding: '4px 8px',
+                                                                    borderRadius: '6px',
+                                                                    display: 'inline-block'
+                                                                }}>
+                                                                    D{day.dayNo || idx + 1}
+                                                                </span>
+                                                            </td>
 
-                                    {/* Day-wise Table */}
-                                    <div style={{
-                                        background: 'rgba(0,0,0,0.2)',
-                                        borderRadius: '12px',
-                                        border: '1px solid rgba(255,255,255,0.08)',
-                                        overflowX: 'auto'
-                                    }}>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1050px' }}>
-                                            <thead style={{ background: '#0a101d', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                                                <tr>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '60px' }}>DAY</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '160px', minWidth: '160px' }}>DATE</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '110px' }}>TIME (Optional) ⓘ</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center', width: '55px' }}>APG ⓘ</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)' }}>ROUTE / ITINERARY</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '140px' }}>VEHICLE</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center', width: '70px' }}>QTY</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '12px', fontWeight: '800', color: '#f8fafc', textAlign: 'right', width: '140px', minWidth: '140px' }}>RATE (₹)</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '12px', fontWeight: '800', color: '#fbbf24', textAlign: 'right', width: '150px', minWidth: '150px' }}>AMOUNT (₹)</th>
-                                                    <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center', width: '60px' }}>ACTION</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {formData.itinerary.map((day, idx) => (
-                                                    <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                                        {/* DAY Badge */}
-                                                        <td style={{ padding: '10px' }}>
-                                                            <span style={{
-                                                                background: '#fbbf24',
-                                                                color: '#000',
-                                                                fontWeight: '900',
-                                                                fontSize: '11px',
-                                                                padding: '4px 8px',
-                                                                borderRadius: '6px',
-                                                                display: 'inline-block'
-                                                            }}>
-                                                                D{day.dayNo || idx + 1}
-                                                            </span>
-                                                        </td>
+                                                            {/* DATE */}
+                                                            <td style={{ padding: '10px', width: '160px', minWidth: '160px' }}>
+                                                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                                                    <input
+                                                                        type="date"
+                                                                        value={toLocalDateString(day.date)}
+                                                                        onChange={e => handleItineraryRowChange(idx, 'date', e.target.value)}
+                                                                        onClick={e => { try { if (e.target.showPicker) e.target.showPicker(); } catch(err){} }}
+                                                                        style={{
+                                                                            ...darkInputStyle,
+                                                                            colorScheme: 'dark',
+                                                                            padding: '7px 32px 7px 10px',
+                                                                            fontSize: '13px',
+                                                                            fontWeight: '600',
+                                                                            cursor: 'pointer'
+                                                                        }}
+                                                                    />
+                                                                    <Calendar
+                                                                        size={15}
+                                                                        color="#fbbf24"
+                                                                        style={{ position: 'absolute', right: '10px', pointerEvents: 'none' }}
+                                                                    />
+                                                                </div>
+                                                            </td>
 
-                                                        {/* DATE */}
-                                                        <td style={{ padding: '10px', width: '160px', minWidth: '160px' }}>
-                                                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                                            {/* TIME */}
+                                                            <td style={{ padding: '10px', minWidth: '110px' }}>
                                                                 <input
-                                                                    type="date"
-                                                                    value={toLocalDateString(day.date)}
-                                                                    onChange={e => handleItineraryRowChange(idx, 'date', e.target.value)}
-                                                                    onClick={e => { try { if (e.target.showPicker) e.target.showPicker(); } catch(err){} }}
+                                                                    type="text"
+                                                                    placeholder="09:00 AM"
+                                                                    value={day.isApg ? 'APG' : (day.time || '')}
+                                                                    disabled={day.isApg}
+                                                                    onChange={e => handleItineraryRowChange(idx, 'time', e.target.value)}
                                                                     style={{
                                                                         ...darkInputStyle,
-                                                                        colorScheme: 'dark',
-                                                                        padding: '7px 32px 7px 10px',
-                                                                        fontSize: '13px',
-                                                                        fontWeight: '600',
+                                                                        padding: '6px 8px',
+                                                                        fontSize: '12px',
+                                                                        color: day.isApg ? '#fbbf24' : 'white',
+                                                                        fontWeight: day.isApg ? '800' : 'normal'
+                                                                    }}
+                                                                />
+                                                            </td>
+
+                                                            {/* APG Checkbox */}
+                                                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={!!day.isApg}
+                                                                    onChange={e => handleItineraryRowChange(idx, 'isApg', e.target.checked)}
+                                                                    style={{
+                                                                        width: '16px',
+                                                                        height: '16px',
+                                                                        accentColor: '#fbbf24',
                                                                         cursor: 'pointer'
                                                                     }}
                                                                 />
-                                                                <Calendar
-                                                                    size={15}
-                                                                    color="#fbbf24"
-                                                                    style={{ position: 'absolute', right: '10px', pointerEvents: 'none' }}
+                                                            </td>
+
+                                                            {/* ROUTE / ITINERARY */}
+                                                            <td style={{ padding: '10px', minWidth: '220px' }}>
+                                                                <input
+                                                                    required
+                                                                    type="text"
+                                                                    placeholder="e.g. Airport Pickup & Local Sightseeing"
+                                                                    value={day.duty || day.description || ''}
+                                                                    onChange={e => handleItineraryRowChange(idx, 'duty', e.target.value)}
+                                                                    style={{ ...darkInputStyle, padding: '6px 10px', fontSize: '12px' }}
                                                                 />
-                                                            </div>
-                                                        </td>
+                                                            </td>
 
-                                                        {/* TIME */}
-                                                        <td style={{ padding: '10px', minWidth: '110px' }}>
-                                                            <input
-                                                                type="text"
-                                                                placeholder="09:00 AM"
-                                                                value={day.isApg ? 'APG' : (day.time || '')}
-                                                                disabled={day.isApg}
-                                                                onChange={e => handleItineraryRowChange(idx, 'time', e.target.value)}
-                                                                style={{
-                                                                    ...darkInputStyle,
-                                                                    padding: '6px 8px',
-                                                                    fontSize: '12px',
-                                                                    color: day.isApg ? '#fbbf24' : 'white',
-                                                                    fontWeight: day.isApg ? '800' : 'normal'
-                                                                }}
-                                                            />
-                                                        </td>
+                                                            {/* VEHICLE */}
+                                                            <td style={{ padding: '10px', minWidth: '140px' }}>
+                                                                <select
+                                                                    value={day.vehicleType || formData.carType}
+                                                                    onChange={e => handleItineraryRowChange(idx, 'vehicleType', e.target.value)}
+                                                                    style={{ ...darkInputStyle, padding: '6px 8px', fontSize: '12px', cursor: 'pointer' }}
+                                                                >
+                                                                    {ALL_VEHICLES.map(v => (
+                                                                        <option key={v} value={v} style={{ background: '#090f1d' }}>{v}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </td>
 
-                                                        {/* APG Checkbox */}
-                                                        <td style={{ padding: '10px', textAlign: 'center' }}>
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={!!day.isApg}
-                                                                onChange={e => handleItineraryRowChange(idx, 'isApg', e.target.checked)}
-                                                                style={{
-                                                                    width: '16px',
-                                                                    height: '16px',
-                                                                    accentColor: '#fbbf24',
-                                                                    cursor: 'pointer'
-                                                                }}
-                                                            />
-                                                        </td>
+                                                            {/* QTY */}
+                                                            <td style={{ padding: '10px', width: '70px', textAlign: 'center' }}>
+                                                                <input
+                                                                    required
+                                                                    type="number"
+                                                                    min="1"
+                                                                    className="no-spinner"
+                                                                    value={day.quantity !== undefined && day.quantity !== null && day.quantity !== '' ? day.quantity : (day.vehicleCount || 1)}
+                                                                    onChange={e => handleItineraryRowChange(idx, 'quantity', e.target.value)}
+                                                                    style={{
+                                                                        ...darkInputStyle,
+                                                                        padding: '6px 4px',
+                                                                        fontSize: '13px',
+                                                                        fontWeight: '700',
+                                                                        color: '#ffffff',
+                                                                        textAlign: 'center',
+                                                                        width: '60px',
+                                                                        margin: '0 auto',
+                                                                        display: 'block'
+                                                                    }}
+                                                                />
+                                                            </td>
 
-                                                        {/* ROUTE / ITINERARY */}
-                                                        <td style={{ padding: '10px', minWidth: '220px' }}>
-                                                            <input
-                                                                required
-                                                                type="text"
-                                                                placeholder="e.g. Airport Pickup & Local Sightseeing"
-                                                                value={day.duty || day.description || ''}
-                                                                onChange={e => handleItineraryRowChange(idx, 'duty', e.target.value)}
-                                                                style={{ ...darkInputStyle, padding: '6px 10px', fontSize: '12px' }}
-                                                            />
-                                                        </td>
+                                                            {/* RATE (₹) */}
+                                                            <td style={{ padding: '10px', width: '140px', minWidth: '140px' }}>
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    placeholder="0"
+                                                                    className="no-spinner"
+                                                                    value={day.rate !== undefined && day.rate !== null ? day.rate : 0}
+                                                                    onChange={e => handleItineraryRowChange(idx, 'rate', e.target.value)}
+                                                                    style={{
+                                                                        ...darkInputStyle,
+                                                                        padding: '8px 12px',
+                                                                        fontSize: '14px',
+                                                                        fontWeight: '700',
+                                                                        textAlign: 'right',
+                                                                        color: '#ffffff',
+                                                                        width: '100%'
+                                                                    }}
+                                                                />
+                                                            </td>
 
-                                                        {/* VEHICLE */}
-                                                        <td style={{ padding: '10px', minWidth: '140px' }}>
-                                                            <select
-                                                                value={day.vehicleType || formData.carType}
-                                                                onChange={e => handleItineraryRowChange(idx, 'vehicleType', e.target.value)}
-                                                                style={{ ...darkInputStyle, padding: '6px 8px', fontSize: '12px', cursor: 'pointer' }}
-                                                            >
-                                                                {ALL_VEHICLES.map(v => (
-                                                                    <option key={v} value={v} style={{ background: '#090f1d' }}>{v}</option>
-                                                                ))}
-                                                            </select>
-                                                        </td>
+                                                            {/* AMOUNT (₹) */}
+                                                            <td style={{ padding: '10px', width: '150px', minWidth: '150px' }}>
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    className="no-spinner"
+                                                                    value={day.amount !== undefined && day.amount !== null ? day.amount : 0}
+                                                                    onChange={e => handleItineraryRowChange(idx, 'amount', e.target.value)}
+                                                                    style={{
+                                                                        ...darkInputStyle,
+                                                                        padding: '8px 12px',
+                                                                        fontSize: '15px',
+                                                                        fontWeight: '900',
+                                                                        textAlign: 'right',
+                                                                        color: '#fbbf24',
+                                                                        width: '100%'
+                                                                    }}
+                                                                />
+                                                            </td>
 
-                                                        {/* QTY */}
-                                                        <td style={{ padding: '10px', width: '70px', textAlign: 'center' }}>
-                                                            <input
-                                                                required
-                                                                type="number"
-                                                                min="1"
-                                                                className="no-spinner"
-                                                                value={day.quantity !== undefined && day.quantity !== null && day.quantity !== '' ? day.quantity : (day.vehicleCount || 1)}
-                                                                onChange={e => handleItineraryRowChange(idx, 'quantity', e.target.value)}
-                                                                style={{
-                                                                    ...darkInputStyle,
-                                                                    padding: '6px 4px',
-                                                                    fontSize: '13px',
-                                                                    fontWeight: '700',
-                                                                    color: '#ffffff',
-                                                                    textAlign: 'center',
-                                                                    width: '60px',
-                                                                    margin: '0 auto',
-                                                                    display: 'block'
-                                                                }}
-                                                            />
-                                                        </td>
+                                                            {/* ACTION */}
+                                                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => removeItineraryDay(idx)}
+                                                                    style={{
+                                                                        background: 'transparent',
+                                                                        border: 'none',
+                                                                        color: '#ef4444',
+                                                                        cursor: 'pointer',
+                                                                        padding: '4px'
+                                                                    }}
+                                                                >
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
 
-                                                        {/* RATE (₹) */}
-                                                        <td style={{ padding: '10px', width: '140px', minWidth: '140px' }}>
-                                                            <input
-                                                                type="number"
-                                                                min="0"
-                                                                placeholder="0"
-                                                                className="no-spinner"
-                                                                value={day.rate !== undefined && day.rate !== null ? day.rate : 0}
-                                                                onChange={e => handleItineraryRowChange(idx, 'rate', e.target.value)}
-                                                                style={{
-                                                                    ...darkInputStyle,
-                                                                    padding: '8px 12px',
-                                                                    fontSize: '14px',
-                                                                    fontWeight: '700',
-                                                                    textAlign: 'right',
-                                                                    color: '#ffffff',
-                                                                    width: '100%'
-                                                                }}
-                                                            />
-                                                        </td>
-
-                                                        {/* AMOUNT (₹) */}
-                                                        <td style={{ padding: '10px', width: '150px', minWidth: '150px' }}>
-                                                            <input
-                                                                type="number"
-                                                                min="0"
-                                                                className="no-spinner"
-                                                                value={day.amount !== undefined && day.amount !== null ? day.amount : 0}
-                                                                onChange={e => handleItineraryRowChange(idx, 'amount', e.target.value)}
-                                                                style={{
-                                                                    ...darkInputStyle,
-                                                                    padding: '8px 12px',
-                                                                    fontSize: '15px',
-                                                                    fontWeight: '900',
-                                                                    textAlign: 'right',
-                                                                    color: '#fbbf24',
-                                                                    width: '100%'
-                                                                }}
-                                                            />
-                                                        </td>
-
-                                                        {/* ACTION */}
-                                                        <td style={{ padding: '10px', textAlign: 'center' }}>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => removeItineraryDay(idx)}
-                                                                style={{
-                                                                    background: 'transparent',
-                                                                    border: 'none',
-                                                                    color: '#ef4444',
-                                                                    cursor: 'pointer',
-                                                                    padding: '4px'
-                                                                }}
-                                                            >
-                                                                <Trash2 size={16} />
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-
-                                    {/* Bottom Sub-bar: + Add Another Day & Total */}
-                                    <div style={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        marginTop: '12px',
-                                        flexWrap: 'wrap',
-                                        gap: '12px'
-                                    }}>
-                                        <button
-                                            type="button"
-                                            onClick={addAnotherDay}
-                                            style={{
-                                                background: 'rgba(245, 158, 11, 0.08)',
-                                                border: '1px solid rgba(245, 158, 11, 0.35)',
-                                                color: 'var(--primary)',
-                                                borderRadius: '8px',
-                                                padding: '8px 18px',
-                                                fontSize: '13px',
-                                                fontWeight: '800',
-                                                cursor: 'pointer',
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: '6px'
-                                            }}
-                                        >
-                                            <Plus size={16} /> Add Another Day
-                                        </button>
-
+                                        {/* Bottom Sub-bar: + Add Another Day & Total */}
                                         <div style={{
                                             display: 'flex',
+                                            justifyContent: 'space-between',
                                             alignItems: 'center',
-                                            gap: '16px',
-                                            background: '#0a101d',
-                                            border: '1px solid rgba(255,255,255,0.1)',
-                                            borderRadius: '10px',
-                                            padding: '8px 20px'
+                                            marginTop: '12px',
+                                            flexWrap: 'wrap',
+                                            gap: '12px'
                                         }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '600' }}>
-                                                    Total Quoted Fare ({formData.gstMode === 'GST Extra' ? `${formData.gstRate || 5}% GST Extra` : formData.gstMode})
-                                                </span>
-                                                {formData.gstMode === 'GST Extra' && (
-                                                    <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '700' }}>
-                                                        (+ ₹{Math.round((formData.totalAmount * (formData.gstRate || 5)) / 100).toLocaleString('en-IN')} GST = ₹{Math.round(formData.totalAmount * (1 + (formData.gstRate || 5) / 100)).toLocaleString('en-IN')} Net)
+                                            <button
+                                                type="button"
+                                                onClick={addAnotherDay}
+                                                style={{
+                                                    background: 'rgba(245, 158, 11, 0.08)',
+                                                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                                                    color: 'var(--primary)',
+                                                    borderRadius: '8px',
+                                                    padding: '8px 18px',
+                                                    fontSize: '13px',
+                                                    fontWeight: '800',
+                                                    cursor: 'pointer',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px'
+                                                }}
+                                            >
+                                                <Plus size={16} /> Add Another Day
+                                            </button>
+
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '16px',
+                                                background: '#0a101d',
+                                                border: '1px solid rgba(255,255,255,0.1)',
+                                                borderRadius: '10px',
+                                                padding: '8px 20px'
+                                            }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '600' }}>
+                                                        Total Quoted Fare ({formData.gstMode === 'GST Extra' ? `${formData.gstRate || 5}% GST Extra` : formData.gstMode})
                                                     </span>
-                                                )}
+                                                    {formData.gstMode === 'GST Extra' && (
+                                                        <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '700' }}>
+                                                            (+ ₹{Math.round((formData.totalAmount * (formData.gstRate || 5)) / 100).toLocaleString('en-IN')} GST = ₹{Math.round(formData.totalAmount * (1 + (formData.gstRate || 5) / 100)).toLocaleString('en-IN')} Net)
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <span style={{ fontSize: '22px', fontWeight: '900', color: '#fbbf24' }}>
+                                                    ₹{formData.totalAmount.toLocaleString('en-IN')}
+                                                </span>
                                             </div>
-                                            <span style={{ fontSize: '22px', fontWeight: '900', color: '#fbbf24' }}>
-                                                ₹{formData.totalAmount.toLocaleString('en-IN')}
-                                            </span>
                                         </div>
                                     </div>
-                                </div>
+                                )}
 
                                 {/* ========================================== */}
                                 {/* SECTION 4: REMARKS & INCLUSIONS (2-COL)   */}
@@ -3445,7 +3541,7 @@ export default function Leads() {
             <AnimatePresence>
                 {showConvertModal && convertingLead && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 200005 }}>
-                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '480px', background: '#0f172a', padding: '30px', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '480px', maxHeight: '90vh', overflowY: 'auto', background: '#0f172a', padding: '20px', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
                             <div style={{ textAlign: 'center', marginBottom: '20px' }}>
                                 <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px auto' }}>
                                     <ShieldCheck size={26} />
@@ -3459,10 +3555,32 @@ export default function Leads() {
                             <form onSubmit={handleConvertSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                                 <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between' }}>
                                     <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>Total Package Amount:</span>
-                                    <span style={{ fontSize: '15px', fontWeight: '900', color: 'white' }}>₹{(convertingLead.totalAmount || 0).toLocaleString('en-IN')}</span>
+                                    <span style={{ fontSize: '15px', fontWeight: '900', color: '#fbbf24' }}>₹{(convertingLead.totalAmount || 0).toLocaleString('en-IN')}</span>
                                 </div>
 
-                                                                <div style={{ display: 'flex', gap: '16px' }}>
+                                {/* Tour Itinerary Schedule Breakdown */}
+                                {convertingLead.itinerary && convertingLead.itinerary.length > 0 && (
+                                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(251, 191, 36, 0.25)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                            <span style={{ fontSize: '11px', fontWeight: '900', color: '#fbbf24', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                <Calendar size={13} /> {convertingLead.itinerary.length} Day(s) Tour Itinerary
+                                            </span>
+                                            <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '700' }}>
+                                                {formatTourDate(convertingLead.travelStartDate)} ➔ {formatTourDate(convertingLead.travelEndDate)}
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '110px', overflowY: 'auto', paddingRight: '4px' }}>
+                                            {convertingLead.itinerary.map((d, i) => (
+                                                <div key={i} style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.85)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '4px 8px', borderRadius: '6px' }}>
+                                                    <span><strong style={{ color: '#fbbf24' }}>Day {d.dayNo || i + 1}:</strong> {d.duty || d.description || 'Duty'} <em style={{ color: 'rgba(255,255,255,0.5)', fontSize: '10px' }}>({d.vehicleType || convertingLead.carType})</em></span>
+                                                    <span style={{ color: 'white', fontWeight: '800' }}>₹{(d.amount || 0).toLocaleString('en-IN')}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', gap: '16px' }}>
                                     <div style={{ flex: 1 }}>
                                         <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Advance Received (₹)</label>
                                         <input
@@ -3565,7 +3683,7 @@ export default function Leads() {
             <AnimatePresence>
                 {showAddAgentModal && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 200010 }}>
-                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '480px', background: '#0f172a', padding: '24px', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '480px', maxHeight: '90vh', overflowY: 'auto', background: '#0f172a', padding: '24px', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <Briefcase size={20} color="#f59e0b" />

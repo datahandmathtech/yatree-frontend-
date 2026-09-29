@@ -15,88 +15,7 @@ const MONTH_TABS = [
     'All Months', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'
 ];
 
-const BASELINE_CANCELLED_BOOKINGS = [
-    {
-        _id: 'cnl-mock-1',
-        bookingId: '09/05',
-        bookingCode: '09/05',
-        clientCode: '09/05',
-        clientName: 'Dr. Vivek Singhania',
-        mobileNumber: '+91 98290 12345',
-        travelStartDate: '2025-09-08',
-        travelEndDate: '2025-09-11',
-        tripStartFormatted: '08 Sep 25',
-        tripEndFormatted: '11 Sep 25',
-        vehicleType: 'Innova Crysta',
-        totalAmount: 65000,
-        advancePaid: 20000,
-        balanceDue: 45000,
-        cancellationReason: 'Date Passed & Guest did not call (No-Show)',
-        isNoShow: true,
-        cancelledAt: '2025-09-09',
-        month: 'Sep'
-    },
-    {
-        _id: 'cnl-mock-2',
-        bookingId: '09/06',
-        bookingCode: '09/06',
-        clientCode: '09/06',
-        clientName: 'Mr. Arvind Kejriwal (Corporate)',
-        mobileNumber: '+91 98110 99887',
-        travelStartDate: '2025-09-10',
-        travelEndDate: '2025-09-12',
-        tripStartFormatted: '10 Sep 25',
-        tripEndFormatted: '12 Sep 25',
-        vehicleType: 'Swift Dzire',
-        totalAmount: 32000,
-        advancePaid: 10000,
-        balanceDue: 22000,
-        cancellationReason: 'Date Passed & Guest did not call (No-Show)',
-        isNoShow: true,
-        cancelledAt: '2025-09-11',
-        month: 'Sep'
-    },
-    {
-        _id: 'cnl-mock-3',
-        bookingId: '09/09',
-        bookingCode: '09/09',
-        clientCode: '09/09',
-        clientName: 'Rajasthan Tours & Travels (Agent)',
-        mobileNumber: '+91 94140 55667',
-        travelStartDate: '2025-09-14',
-        travelEndDate: '2025-09-16',
-        tripStartFormatted: '14 Sep 25',
-        tripEndFormatted: '16 Sep 25',
-        vehicleType: 'Tempo Traveller',
-        totalAmount: 95000,
-        advancePaid: 30000,
-        balanceDue: 65000,
-        cancellationReason: 'Flight Cancelled / Customer Request',
-        isNoShow: false,
-        cancelledAt: '2025-09-13',
-        month: 'Sep'
-    },
-    {
-        _id: 'cnl-mock-4',
-        bookingId: '09/10',
-        bookingCode: '09/10',
-        clientCode: '09/10',
-        clientName: 'Mr. Sanjay Kothari',
-        mobileNumber: '+91 98200 44332',
-        travelStartDate: '2025-09-15',
-        travelEndDate: '2025-09-17',
-        tripStartFormatted: '15 Sep 25',
-        tripEndFormatted: '17 Sep 25',
-        vehicleType: 'Innova',
-        totalAmount: 48000,
-        advancePaid: 15000,
-        balanceDue: 33000,
-        cancellationReason: 'Date Passed & Guest did not call (No-Show)',
-        isNoShow: true,
-        cancelledAt: '2025-09-16',
-        month: 'Sep'
-    }
-];
+const BASELINE_CANCELLED_BOOKINGS = [];
 
 const formatTripDate = (dateVal) => {
     if (!dateVal) return '-';
@@ -137,7 +56,7 @@ export default function CancelledBookings() {
         if (selectedCompany?._id) {
             fetchCancelledBookings();
         } else {
-            setBookings(BASELINE_CANCELLED_BOOKINGS);
+            setBookings([]);
         }
     }, [selectedCompany]);
 
@@ -168,11 +87,11 @@ export default function CancelledBookings() {
                 });
                 setBookings(formatted);
             } else {
-                setBookings(BASELINE_CANCELLED_BOOKINGS);
+                setBookings([]);
             }
         } catch (error) {
             console.error('Error fetching cancelled bookings:', error);
-            setBookings(BASELINE_CANCELLED_BOOKINGS);
+            setBookings([]);
         } finally {
             setLoading(false);
         }
@@ -208,7 +127,7 @@ export default function CancelledBookings() {
 
     // Filter & Sort
     const processedBookings = useMemo(() => {
-        let list = bookings.length > 0 ? bookings : BASELINE_CANCELLED_BOOKINGS;
+        let list = bookings;
 
         // Month filter
         if (selectedMonth !== 'All Months') {

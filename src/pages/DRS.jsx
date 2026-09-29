@@ -64,116 +64,6 @@ const formatDateDDMMYYYY = (isoDateStr) => {
 };
 
 // Baseline Mockup Data matching media_1788861577474.png (Total: ₹16,850)
-const BASELINE_MOCKUP_DUTIES = [
-    {
-        _id: 'mock-1',
-        hotel: 'Yatree ADs',
-        clientName: 'Mr. Suresh',
-        mobileNumber: '9810195448',
-        time: '11:00',
-        duty: 'Sawariya Seth + Chittor Drop',
-        revenue: 7000,
-        carType: '2 x Sedan',
-        customCarNumber: '9836/6113',
-        customDriverName: 'Kailash/Shailendra'
-    },
-    {
-        _id: 'mock-2',
-        hotel: 'Marriott',
-        clientName: 'Mr. Hemant Gandhi - VVIP',
-        mobileNumber: 'PLACARD',
-        time: '12:00',
-        duty: 'Station Pickup',
-        revenue: 2000,
-        carType: 'Water Bottles',
-        customCarNumber: '2 x Crysta - 9821/9822',
-        customDriverName: 'Manish/Arjun'
-    },
-    {
-        _id: 'mock-3',
-        hotel: 'Marriott',
-        clientName: 'Mr. Ayush Malhotra',
-        mobileNumber: '8402991917',
-        time: '13:00',
-        duty: 'Airport Drop',
-        revenue: 1600,
-        carType: 'Crysta',
-        customCarNumber: 'Crysta - 9053',
-        customDriverName: 'Shantilal'
-    },
-    {
-        _id: 'mock-4',
-        hotel: 'Marriott',
-        clientName: 'Ms. Collen Arena',
-        mobileNumber: '6193098797',
-        time: '14:00',
-        duty: 'AP Drop',
-        revenue: 1050,
-        carType: 'Crysta',
-        customCarNumber: 'Crysta - 9821',
-        customDriverName: 'Manish'
-    },
-    {
-        _id: 'mock-5',
-        hotel: 'Marriott',
-        clientName: 'Mr. Ghosh Nikhil',
-        mobileNumber: 'Room no. 417',
-        time: '16:20',
-        duty: 'Bus Stand Drop',
-        revenue: 700,
-        carType: 'Sedan',
-        customCarNumber: 'Sedan - 9822',
-        customDriverName: 'Arjun'
-    },
-    {
-        _id: 'mock-6',
-        hotel: 'Kavish - Smokey jo',
-        clientName: 'NA',
-        mobileNumber: 'NA',
-        time: '17:30',
-        duty: 'Hotel Divine inn to Smokey jo drop',
-        revenue: 0,
-        carType: 'Sedan',
-        customCarNumber: 'Sedan - 8946',
-        customDriverName: 'Gopal'
-    },
-    {
-        _id: 'mock-7',
-        hotel: 'Kavish Ref.',
-        clientName: 'Mudit',
-        mobileNumber: '77270 90788',
-        time: '21:15',
-        duty: 'Lenskart Sec 3 to Keshav Nagar to Shohbagpure Drop',
-        revenue: 500,
-        carType: 'Sedan',
-        customCarNumber: 'Sedan - 9836',
-        customDriverName: 'Kailash'
-    },
-    {
-        _id: 'mock-8',
-        hotel: 'Kavish - Smokey jo',
-        clientName: 'NA',
-        mobileNumber: 'NA',
-        time: '23:59',
-        duty: 'Smokey to Divine inn drop',
-        revenue: 0,
-        carType: 'Sedan',
-        customCarNumber: 'Sedan - 8946',
-        customDriverName: 'Gopal'
-    },
-    {
-        _id: 'mock-9',
-        hotel: 'Yatree Ads',
-        clientName: 'Ankur Aggarwal',
-        mobileNumber: '9891911897',
-        time: 'APG',
-        duty: 'AP Drop by 12 Pm',
-        revenue: 4000,
-        carType: 'Crysta',
-        customCarNumber: 'Crysta - 1370',
-        customDriverName: 'Heeralal'
-    }
-];
 
 export default function DRS() {
     const { selectedCompany } = useCompany();
@@ -186,7 +76,13 @@ export default function DRS() {
     const [clients, setClients] = useState([]);
 
     // Default to the exact date in the reference image: 08-09-2026
-    const [selectedDate, setSelectedDate] = useState('2026-09-08');
+    const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+});
     const [loading, setLoading] = useState(false);
     
     // Modal states
@@ -200,6 +96,7 @@ export default function DRS() {
         mobileNumber: '',
         hotel: '',
         date: selectedDate,
+        endDate: '',
         time: '11:00',
         duty: '',
         revenue: '',
@@ -223,7 +120,7 @@ export default function DRS() {
             fetchDropdownData();
         } else {
             // Preload mockup duties for instant visual fidelity matching the screenshot
-            setDuties(BASELINE_MOCKUP_DUTIES);
+            setDuties([]);
         }
     }, [selectedCompany, selectedDate]);
 
@@ -236,14 +133,14 @@ export default function DRS() {
                 setDuties(data);
             } else if (selectedDate === '2026-09-08') {
                 // Keep the baseline mockup for 08-09-2026 if empty
-                setDuties(BASELINE_MOCKUP_DUTIES);
+                setDuties([]);
             } else {
                 setDuties([]);
             }
         } catch (error) {
             console.error('Error fetching DRS duties:', error);
             if (selectedDate === '2026-09-08') {
-                setDuties(BASELINE_MOCKUP_DUTIES);
+                setDuties([]);
             }
         } finally {
             setLoading(false);
@@ -309,6 +206,7 @@ export default function DRS() {
         if (opt.type === 'booking') {
             const b = opt.data;
             const bDate = b.travelStartDate ? new Date(b.travelStartDate).toISOString().split('T')[0] : selectedDate;
+            const bEndDate = b.travelEndDate ? new Date(b.travelEndDate).toISOString().split('T')[0] : bDate;
             const itin = b.itinerary?.length > 0 
                 ? (b.itinerary[0].duty || b.itinerary[0].description || b.notes || 'Tour Package')
                 : (b.notes || `${b.vehicleType || 'Car'} Rental Duty`);
@@ -323,6 +221,7 @@ export default function DRS() {
                 duty: itin,
                 revenue: b.totalAmount || 0,
                 date: bDate,
+                endDate: bEndDate,
                 time: time,
                 bookingId: b.bookingId,
                 bookingRef: b._id,
@@ -332,6 +231,7 @@ export default function DRS() {
         } else if (opt.type === 'lead') {
             const l = opt.data;
             const lDate = l.travelStartDate ? new Date(l.travelStartDate).toISOString().split('T')[0] : selectedDate;
+            const lEndDate = l.travelEndDate ? new Date(l.travelEndDate).toISOString().split('T')[0] : lDate;
             const itin = l.itinerary?.length > 0 
                 ? (l.itinerary[0].duty || l.itinerary[0].description || '')
                 : (l.pickupPoint ? `${l.pickupPoint} -> ${l.dropPoint || 'Destination'}` : 'Scheduled Itinerary');
@@ -346,6 +246,7 @@ export default function DRS() {
                 duty: itin,
                 revenue: l.totalAmount || 0,
                 date: lDate,
+                endDate: lEndDate,
                 time: time,
                 leadId: l._id,
                 bookingId: l.bookingId || null,
@@ -375,9 +276,7 @@ export default function DRS() {
     // Filter and Sort duties chronologically (Time ascending)
     const processedDuties = useMemo(() => {
         let list = duties;
-        if (list.length === 0 && selectedDate === '2026-09-08') {
-            list = BASELINE_MOCKUP_DUTIES;
-        }
+        
 
         // Chronological sort: Time ascending
         return [...list].sort((a, b) => {
@@ -414,7 +313,8 @@ export default function DRS() {
         setShowSystemLinkAccordion(false);
         setFormData({
             ...initialFormData,
-            date: selectedDate
+            date: selectedDate,
+            endDate: ''
         });
         setShowModal(true);
     };
@@ -428,6 +328,7 @@ export default function DRS() {
             mobileNumber: duty.mobileNumber || '',
             hotel: duty.hotel || '',
             date: duty.date ? (duty.date.includes('T') ? duty.date.split('T')[0] : duty.date) : selectedDate,
+            endDate: duty.endDate ? (duty.endDate.includes('T') ? duty.endDate.split('T')[0] : duty.endDate) : '',
             time: duty.time || '11:00',
             duty: duty.duty || duty.itinerary || '',
             revenue: duty.revenue !== undefined ? duty.revenue : '',
@@ -460,13 +361,13 @@ export default function DRS() {
             if (editingDutyId && String(editingDutyId).startsWith('mock-')) {
                 setDuties(prev => prev.map(d => d._id === editingDutyId ? { ...d, ...payload, _id: editingDutyId } : d));
             } else if (editingDutyId) {
-                const res = await axios.put(`/api/drs/${editingDutyId}`, payload);
-                setDuties(prev => prev.map(d => d._id === editingDutyId ? res.data : d));
+                await axios.put(`/api/drs/${editingDutyId}`, payload);
+                fetchDuties();
             } else {
                 if (selectedCompany?._id) {
                     try {
-                        const res = await axios.post('/api/drs', payload);
-                        setDuties(prev => [...prev, res.data]);
+                        await axios.post('/api/drs', payload);
+                        fetchDuties();
                     } catch (err) {
                         const localDuty = { ...payload, _id: 'local-' + Date.now() };
                         setDuties(prev => [...prev, localDuty]);
@@ -753,8 +654,38 @@ export default function DRS() {
                                         </td>
 
                                         {/* 3. Guest */}
-                                        <td style={{ padding: '13px 16px', color: 'white', fontSize: '13px', fontWeight: '700' }}>
-                                            {duty.clientName || '-'}
+                                        <td style={{ padding: '13px 16px' }}>
+                                            <div style={{ color: 'white', fontSize: '13px', fontWeight: '700' }}>
+                                                {duty.clientName || '-'}
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
+                                                {(duty.bookingRef?.clientCode || duty.bookingId) && (
+                                                    <span style={{
+                                                        fontSize: '10px',
+                                                        fontWeight: '800',
+                                                        color: '#fbbf24',
+                                                        background: 'rgba(251, 191, 36, 0.12)',
+                                                        border: '1px solid rgba(251, 191, 36, 0.25)',
+                                                        padding: '1px 6px',
+                                                        borderRadius: '4px'
+                                                    }}>
+                                                        {duty.bookingRef?.clientCode || duty.bookingId}
+                                                    </span>
+                                                )}
+                                                {(duty.dayNo || (duty.bookingRef?.travelStartDate && duty.bookingRef?.travelEndDate)) && (
+                                                    <span style={{
+                                                        fontSize: '10px',
+                                                        fontWeight: '800',
+                                                        color: '#38bdf8',
+                                                        background: 'rgba(56, 189, 248, 0.12)',
+                                                        border: '1px solid rgba(56, 189, 248, 0.25)',
+                                                        padding: '1px 6px',
+                                                        borderRadius: '4px'
+                                                    }}>
+                                                        🗓️ Day {duty.dayNo || 1}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
 
                                         {/* 4. Guest Mob */}
@@ -774,8 +705,15 @@ export default function DRS() {
                                         </td>
 
                                         {/* 6. Duty */}
-                                        <td style={{ padding: '13px 16px', color: 'rgba(255,255,255,0.9)', fontSize: '13px', fontWeight: '600' }}>
-                                            {duty.duty || duty.itinerary || '-'}
+                                        <td style={{ padding: '13px 16px' }}>
+                                            <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: '13px', fontWeight: '600' }}>
+                                                {duty.duty || duty.itinerary || '-'}
+                                            </div>
+                                            {duty.bookingRef?.travelStartDate && duty.bookingRef?.travelEndDate && (
+                                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '2px', fontWeight: '600' }}>
+                                                    {formatDateDDMMYYYY(duty.bookingRef.travelStartDate.split('T')[0])} to {formatDateDDMMYYYY(duty.bookingRef.travelEndDate.split('T')[0])}
+                                                </div>
+                                            )}
                                         </td>
 
                                         {/* 7. Amount (₹) */}
@@ -974,10 +912,10 @@ export default function DRS() {
 
                             {/* Main Form Fields */}
                             <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                                {/* 1. Date */}
+                                {/* 1. Date & Tour End Date (Multi-Day Tour) */}
                                 <div>
                                     <label style={{ color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '5px', fontSize: '12px', fontWeight: '700' }}>
-                                        Duty Date <span style={{ color: '#fbbf24' }}>*</span>
+                                        Duty Date (Start Date) <span style={{ color: '#fbbf24' }}>*</span>
                                     </label>
                                     <input 
                                         required 
@@ -988,6 +926,42 @@ export default function DRS() {
                                         style={{ ...inputStyle, cursor: 'pointer' }} 
                                     />
                                 </div>
+
+                                <div>
+                                    <label style={{ color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '5px', fontSize: '12px', fontWeight: '700' }}>
+                                        Tour End Date <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px' }}>(Optional Multi-Day)</span>
+                                    </label>
+                                    <input 
+                                        type="date" 
+                                        min={formData.date}
+                                        value={formData.endDate || ''} 
+                                        onChange={e => setFormData({ ...formData, endDate: e.target.value })} 
+                                        onClick={e => e.target.showPicker && e.target.showPicker()} 
+                                        style={{ ...inputStyle, cursor: 'pointer' }} 
+                                    />
+                                </div>
+
+                                {/* Multi-day Tour helper badge */}
+                                {formData.endDate && formData.endDate > formData.date && (
+                                    <div style={{
+                                        gridColumn: '1 / -1',
+                                        background: 'rgba(251, 191, 36, 0.1)',
+                                        border: '1px solid rgba(251, 191, 36, 0.25)',
+                                        borderRadius: '10px',
+                                        padding: '10px 14px',
+                                        color: '#fbbf24',
+                                        fontSize: '12px',
+                                        fontWeight: '700',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                    }}>
+                                        <Calendar size={16} />
+                                        <span>
+                                            ✨ Multi-Day Tour: Will create {Math.max(1, Math.round((new Date(formData.endDate) - new Date(formData.date)) / (1000 * 60 * 60 * 24)) + 1)} daily DRS duties from {formatDateDDMMYYYY(formData.date)} to {formatDateDDMMYYYY(formData.endDate)}!
+                                        </span>
+                                    </div>
+                                )}
 
                                 {/* 2. Time */}
                                 <div>

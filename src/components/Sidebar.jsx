@@ -311,6 +311,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                     <NavItem item={{ path: '/admin/client-ledgers?tab=agents', label: 'Travel Agents', labelKey: 'travel_agents' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/client-ledgers', label: 'Client Ledgers', labelKey: 'client_ledgers' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/bank-book', label: 'Bank Book / Ledger', labelKey: 'bank_book' }} onClick={onClose} isSubItem />
+                    <NavItem item={{ path: '/admin/cash-book', label: 'Cash Book / Ledger', labelKey: 'cash_book' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/invoices', label: 'Tax Invoices', labelKey: 'tax_invoices' }} onClick={onClose} isSubItem />
                 </NavGroup>
 
@@ -394,7 +395,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                                     overflow: 'hidden',
                                     border: selectedCompany?.logoUrl ? `2px solid ${theme.primary}` : 'none'
                                 }}>
-                                    {selectedCompany?.logoUrl ? (
+                                    {selectedCompany?.logoUrl && !selectedCompany.logoUrl.includes('superadmin.yatreedestination.com') ? (
                                         <img
                                             src={selectedCompany.logoUrl}
                                             alt="Logo"

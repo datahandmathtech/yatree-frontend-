@@ -164,6 +164,8 @@ export const translations = {
         drs: 'Live DRS',
         client_ledgers: 'Client Ledgers',
         travel_agents: 'Travel Agents',
+        bank_book: 'Bank Book / Ledger',
+        cash_book: 'Cash Book / Ledger',
         tax_invoices: 'Tax Invoices',
         drivers_services: 'Drivers Services',
         drivers: 'Drivers',

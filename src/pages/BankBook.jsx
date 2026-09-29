@@ -3,34 +3,56 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Landmark, Plus, Search, Calendar, ArrowDownLeft, ArrowUpRight, 
     Wallet, CreditCard, Building2, CheckCircle, X, ExternalLink,
-    Filter, RefreshCw, Trash2, Eye, Download, Image as ImageIcon
+    Filter, RefreshCw, Trash2, Eye, Download, Image as ImageIcon,
+    Banknote, ArrowRightLeft, ShieldCheck, FileText, ArrowLeftRight
 } from 'lucide-react';
 import axios from '../api/axios';
 import { useCompany } from '../context/CompanyContext';
 import ImageUploader from '../components/common/ImageUploader';
-import { todayIST } from '../utils/istUtils';
+import { todayIST, formatDateIST } from '../utils/istUtils';
+import SEO from '../components/SEO';
 
 const MONTH_NAMES = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-const BankBook = () => {
+const CASH_CATEGORIES = [
+    'All',
+    'General Cash',
+    'Bank Deposit',
+    'Bank Withdrawal',
+    'Advance Payment',
+    'Guest Cash Collection',
+    'Driver Cash Settlement',
+    'Driver Advance',
+    'Fuel / Vehicle Utility',
+    'Office Expense',
+    'Staff Salary Cash',
+    'Other Expense'
+];
+
+const BankBook = ({ initialTab = 'bank' }) => {
     const { selectedCompany } = useCompany();
+    const [activeTab, setActiveTab] = useState(initialTab); // 'bank' or 'cash'
+
+    // ==========================================
+    // 1. BANK BOOK STATE
+    // ==========================================
     const [bankAccounts, setBankAccounts] = useState([]);
     const [selectedBankId, setSelectedBankId] = useState('all');
     const [transactions, setTransactions] = useState([]);
-    const [stats, setStats] = useState({ totalIn: 0, totalOut: 0, periodBalance: 0, currentBalance: 0 });
-    const [loading, setLoading] = useState(true);
+    const [bankStats, setBankStats] = useState({ totalIn: 0, totalOut: 0, periodBalance: 0, currentBalance: 0 });
+    const [bankLoading, setBankLoading] = useState(true);
 
-    // Filters
+    // Filters for Bank Book
     const [periodType, setPeriodType] = useState('monthly'); // 'daily' or 'monthly'
     const [filterDate, setFilterDate] = useState(todayIST());
     const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
     const [filterYear, setFilterYear] = useState(new Date().getFullYear());
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Modals
+    // Bank Modals
     const [showAddBankModal, setShowAddBankModal] = useState(false);
     const [bankFormData, setBankFormData] = useState({
         bankName: '',
@@ -57,11 +79,6 @@ const BankBook = () => {
     const [txScreenshotFile, setTxScreenshotFile] = useState(null);
     const [submittingTx, setSubmittingTx] = useState(false);
 
-    // Receipt preview modal
-
-    const [previewImageUrl, setPreviewImageUrl] = useState(null);
-
-    // NEW FEATURES STATE
     const [showEditTxModal, setShowEditTxModal] = useState(false);
     const [editingTx, setEditingTx] = useState(null);
     const [editTxFormData, setEditTxFormData] = useState({ amount: '', date: '', description: '', category: '', paymentMode: '', reference: '' });
@@ -70,22 +87,88 @@ const BankBook = () => {
     const [showRevertModal, setShowRevertModal] = useState(false);
     const [txToDelete, setTxToDelete] = useState(null);
 
+    // Image preview modal
+    const [previewImageUrl, setPreviewImageUrl] = useState(null);
 
-    // Fetch Bank Accounts
+    // ==========================================
+    // 2. CASH BOOK STATE
+    // ==========================================
+    const [cashTransactions, setCashTransactions] = useState([]);
+    const [cashStats, setCashStats] = useState({ totalIn: 0, totalOut: 0, periodBalance: 0, currentBalance: 0 });
+    const [cashLoading, setCashLoading] = useState(true);
+    const [cashCategoryFilter, setCashCategoryFilter] = useState('All');
+
+    // Cash Modals
+    const [showDepositModal, setShowDepositModal] = useState(false);
+    const [depositFormData, setDepositFormData] = useState({
+        bankAccountId: '',
+        amount: '',
+        date: todayIST(),
+        reference: '',
+        description: ''
+    });
+    const [depositReceiptFile, setDepositReceiptFile] = useState(null);
+    const [submittingDeposit, setSubmittingDeposit] = useState(false);
+
+    const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+    const [withdrawFormData, setWithdrawFormData] = useState({
+        bankAccountId: '',
+        amount: '',
+        date: todayIST(),
+        reference: '',
+        description: ''
+    });
+    const [withdrawReceiptFile, setWithdrawReceiptFile] = useState(null);
+    const [submittingWithdraw, setSubmittingWithdraw] = useState(false);
+
+    const [showAddCashModal, setShowAddCashModal] = useState(false);
+    const [cashFormData, setCashFormData] = useState({
+        type: 'IN',
+        amount: '',
+        category: 'General Cash',
+        date: todayIST(),
+        reference: '',
+        description: '',
+        guestName: '',
+        driverName: ''
+    });
+    const [cashReceiptFile, setCashReceiptFile] = useState(null);
+    const [submittingCash, setSubmittingCash] = useState(false);
+
+    const [showEditCashModal, setShowEditCashModal] = useState(false);
+    const [editingCashTx, setEditingCashTx] = useState(null);
+    const [editCashFormData, setEditCashFormData] = useState({ amount: '', date: '', description: '', category: '', reference: '' });
+    const [submittingEditCash, setSubmittingEditCash] = useState(false);
+
+    // Sync tab when initialTab prop changes
+    useEffect(() => {
+        if (initialTab) {
+            setActiveTab(initialTab);
+        }
+    }, [initialTab]);
+
+    // ==========================================
+    // DATA FETCHING: BANK BOOK
+    // ==========================================
     const fetchBankAccounts = async () => {
         if (!selectedCompany?._id) return;
         try {
             const { data } = await axios.get(`/api/banks/company/${selectedCompany._id}`);
             setBankAccounts(data || []);
+            if (data?.length > 0 && !depositFormData.bankAccountId) {
+                setDepositFormData(prev => ({ ...prev, bankAccountId: data[0]._id }));
+            }
+            if (data?.length > 0 && !withdrawFormData.bankAccountId) {
+                setWithdrawFormData(prev => ({ ...prev, bankAccountId: data[0]._id }));
+            }
         } catch (err) {
             console.error('Error fetching bank accounts:', err);
         }
     };
 
-    // Fetch Transactions
-    const fetchTransactions = async () => {
+    const fetchBankTransactions = async () => {
         if (!selectedCompany?._id) return;
-        setLoading(true);
+        setBankLoading(true);
         try {
             let url = `/api/banks/transactions/company/${selectedCompany._id}?bankAccountId=${selectedBankId}`;
             if (periodType === 'daily') {
@@ -98,11 +181,45 @@ const BankBook = () => {
             }
             const { data } = await axios.get(url);
             setTransactions(data.transactions || []);
-            setStats(data.stats || { totalIn: 0, totalOut: 0, periodBalance: 0, currentBalance: 0 });
+            setBankStats(data.stats || { totalIn: 0, totalOut: 0, periodBalance: 0, currentBalance: 0 });
         } catch (err) {
-            console.error('Error fetching transactions:', err);
+            console.error('Error fetching bank transactions:', err);
         } finally {
-            setLoading(false);
+            setBankLoading(false);
+        }
+    };
+
+    // ==========================================
+    // DATA FETCHING: CASH BOOK
+    // ==========================================
+    const fetchCashTransactions = async () => {
+        if (!selectedCompany?._id) return;
+        setCashLoading(true);
+        try {
+            let url = `/api/cash/company/${selectedCompany._id}`;
+            const params = [];
+            if (periodType === 'daily') {
+                params.push(`date=${filterDate}`);
+            } else {
+                params.push(`month=${filterMonth}&year=${filterYear}`);
+            }
+            if (cashCategoryFilter && cashCategoryFilter !== 'All') {
+                params.push(`category=${encodeURIComponent(cashCategoryFilter)}`);
+            }
+            if (searchTerm) {
+                params.push(`search=${encodeURIComponent(searchTerm)}`);
+            }
+            if (params.length > 0) {
+                url += `?${params.join('&')}`;
+            }
+
+            const { data } = await axios.get(url);
+            setCashTransactions(data.transactions || []);
+            setCashStats(data.stats || { totalIn: 0, totalOut: 0, periodBalance: 0, currentBalance: 0 });
+        } catch (err) {
+            console.error('Error fetching cash transactions:', err);
+        } finally {
+            setCashLoading(false);
         }
     };
 
@@ -114,11 +231,17 @@ const BankBook = () => {
 
     useEffect(() => {
         if (selectedCompany?._id) {
-            fetchTransactions();
+            if (activeTab === 'bank') {
+                fetchBankTransactions();
+            } else {
+                fetchCashTransactions();
+            }
         }
-    }, [selectedCompany, selectedBankId, periodType, filterDate, filterMonth, filterYear, searchTerm]);
+    }, [selectedCompany, activeTab, selectedBankId, periodType, filterDate, filterMonth, filterYear, searchTerm, cashCategoryFilter]);
 
-    // Create Bank Account
+    // ==========================================
+    // HANDLERS: BANK BOOK
+    // ==========================================
     const handleCreateBank = async (e) => {
         e.preventDefault();
         if (!bankFormData.bankName) {
@@ -152,7 +275,6 @@ const BankBook = () => {
         }
     };
 
-    // Create Transaction
     const handleCreateTx = async (e) => {
         e.preventDefault();
         const targetBankId = txFormData.bankAccountId || (bankAccounts.length > 0 ? bankAccounts[0]._id : '');
@@ -203,7 +325,7 @@ const BankBook = () => {
             });
             setTxScreenshotFile(null);
             await fetchBankAccounts();
-            await fetchTransactions();
+            await fetchBankTransactions();
         } catch (err) {
             console.error('Error recording transaction:', err);
             alert(err.response?.data?.message || 'Failed to record transaction');
@@ -212,7 +334,6 @@ const BankBook = () => {
         }
     };
 
-    // Edit Transaction Setup
     const openEditTxModal = (tx) => {
         setEditingTx(tx);
         setEditTxFormData({
@@ -234,7 +355,7 @@ const BankBook = () => {
             setShowEditTxModal(false);
             setEditingTx(null);
             await fetchBankAccounts();
-            await fetchTransactions();
+            await fetchBankTransactions();
         } catch (err) {
             console.error('Error editing tx:', err);
             alert('Failed to edit transaction');
@@ -243,7 +364,6 @@ const BankBook = () => {
         }
     };
 
-    // Delete Transaction Logic
     const handleDeleteClick = (tx) => {
         if (tx.bookingRef) {
             setTxToDelete(tx);
@@ -261,10 +381,215 @@ const BankBook = () => {
             setShowRevertModal(false);
             setTxToDelete(null);
             await fetchBankAccounts();
-            await fetchTransactions();
+            await fetchBankTransactions();
         } catch (err) {
             console.error('Error deleting transaction:', err);
             alert(err.response?.data?.message || 'Failed to delete transaction');
+        }
+    };
+
+    // ==========================================
+    // HANDLERS: CASH BOOK
+    // ==========================================
+    const handleDepositSubmit = async (e) => {
+        e.preventDefault();
+        if (!depositFormData.bankAccountId) {
+            alert('Please select a target Bank Account');
+            return;
+        }
+        if (!depositFormData.amount || Number(depositFormData.amount) <= 0) {
+            alert('Please enter a valid deposit amount');
+            return;
+        }
+
+        setSubmittingDeposit(true);
+        try {
+            let receiptPhotoUrl = '';
+            if (depositReceiptFile) {
+                const uploadFormData = new FormData();
+                uploadFormData.append('file', depositReceiptFile);
+                const uploadRes = await axios.post('/api/admin/upload', uploadFormData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                receiptPhotoUrl = uploadRes.data?.url || '';
+            }
+
+            const { data } = await axios.post('/api/cash/deposit-to-bank', {
+                company: selectedCompany._id,
+                bankAccountId: depositFormData.bankAccountId,
+                amount: Number(depositFormData.amount),
+                date: depositFormData.date || todayIST(),
+                reference: depositFormData.reference,
+                description: depositFormData.description,
+                receiptPhoto: receiptPhotoUrl
+            });
+
+            alert(data.message || 'Cash deposited into bank successfully!');
+            setShowDepositModal(false);
+            setDepositFormData({
+                bankAccountId: bankAccounts[0]?._id || '',
+                amount: '',
+                date: todayIST(),
+                reference: '',
+                description: ''
+            });
+            setDepositReceiptFile(null);
+            await fetchBankAccounts();
+            await fetchCashTransactions();
+        } catch (err) {
+            console.error('Error depositing cash:', err);
+            alert(err.response?.data?.message || 'Failed to deposit cash into bank');
+        } finally {
+            setSubmittingDeposit(false);
+        }
+    };
+
+    const handleWithdrawSubmit = async (e) => {
+        e.preventDefault();
+        if (!withdrawFormData.bankAccountId) {
+            alert('Please select a source Bank Account');
+            return;
+        }
+        if (!withdrawFormData.amount || Number(withdrawFormData.amount) <= 0) {
+            alert('Please enter a valid withdrawal amount');
+            return;
+        }
+
+        setSubmittingWithdraw(true);
+        try {
+            let receiptPhotoUrl = '';
+            if (withdrawReceiptFile) {
+                const uploadFormData = new FormData();
+                uploadFormData.append('file', withdrawReceiptFile);
+                const uploadRes = await axios.post('/api/admin/upload', uploadFormData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                receiptPhotoUrl = uploadRes.data?.url || '';
+            }
+
+            const { data } = await axios.post('/api/cash/withdraw-from-bank', {
+                company: selectedCompany._id,
+                bankAccountId: withdrawFormData.bankAccountId,
+                amount: Number(withdrawFormData.amount),
+                date: withdrawFormData.date || todayIST(),
+                reference: withdrawFormData.reference,
+                description: withdrawFormData.description,
+                receiptPhoto: receiptPhotoUrl
+            });
+
+            alert(data.message || 'Cash withdrawn from bank successfully!');
+            setShowWithdrawModal(false);
+            setWithdrawFormData({
+                bankAccountId: bankAccounts[0]?._id || '',
+                amount: '',
+                date: todayIST(),
+                reference: '',
+                description: ''
+            });
+            setWithdrawReceiptFile(null);
+            await fetchBankAccounts();
+            await fetchCashTransactions();
+        } catch (err) {
+            console.error('Error withdrawing cash:', err);
+            alert(err.response?.data?.message || 'Failed to withdraw cash from bank');
+        } finally {
+            setSubmittingWithdraw(false);
+        }
+    };
+
+    const handleAddCashSubmit = async (e) => {
+        e.preventDefault();
+        if (!cashFormData.amount || Number(cashFormData.amount) <= 0) {
+            alert('Please enter a valid cash amount');
+            return;
+        }
+
+        setSubmittingCash(true);
+        try {
+            let receiptPhotoUrl = '';
+            if (cashReceiptFile) {
+                const uploadFormData = new FormData();
+                uploadFormData.append('file', cashReceiptFile);
+                const uploadRes = await axios.post('/api/admin/upload', uploadFormData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                receiptPhotoUrl = uploadRes.data?.url || '';
+            }
+
+            await axios.post('/api/cash/transactions', {
+                company: selectedCompany._id,
+                type: cashFormData.type,
+                amount: Number(cashFormData.amount),
+                category: cashFormData.category,
+                date: cashFormData.date || todayIST(),
+                reference: cashFormData.reference,
+                description: cashFormData.description,
+                guestName: cashFormData.guestName,
+                driverName: cashFormData.driverName,
+                receiptPhoto: receiptPhotoUrl
+            });
+
+            setShowAddCashModal(false);
+            setCashFormData({
+                type: 'IN',
+                amount: '',
+                category: 'General Cash',
+                date: todayIST(),
+                reference: '',
+                description: '',
+                guestName: '',
+                driverName: ''
+            });
+            setCashReceiptFile(null);
+            await fetchCashTransactions();
+        } catch (err) {
+            console.error('Error adding cash transaction:', err);
+            alert(err.response?.data?.message || 'Failed to record cash transaction');
+        } finally {
+            setSubmittingCash(false);
+        }
+    };
+
+    const openEditCashModal = (tx) => {
+        setEditingCashTx(tx);
+        setEditCashFormData({
+            amount: tx.amount || '',
+            date: tx.date ? tx.date.substring(0, 10) : todayIST(),
+            description: tx.description || '',
+            category: tx.category || 'General Cash',
+            reference: tx.reference || ''
+        });
+        setShowEditCashModal(true);
+    };
+
+    const submitEditCash = async (e) => {
+        e.preventDefault();
+        setSubmittingEditCash(true);
+        try {
+            await axios.put(`/api/cash/transactions/${editingCashTx._id}`, editCashFormData);
+            setShowEditCashModal(false);
+            setEditingCashTx(null);
+            await fetchCashTransactions();
+        } catch (err) {
+            console.error('Error editing cash tx:', err);
+            alert('Failed to edit cash transaction');
+        } finally {
+            setSubmittingEditCash(false);
+        }
+    };
+
+    const handleDeleteCashClick = async (tx) => {
+        if (window.confirm(`Are you sure you want to delete this cash entry (${tx.type === 'IN' ? '+' : '-'}₹${tx.amount})? This will revert its impact on Company Cash Balance.`)) {
+            try {
+                await axios.delete(`/api/cash/transactions/${tx._id}`);
+                await fetchCashTransactions();
+                if (tx.bankAccount) {
+                    await fetchBankAccounts();
+                }
+            } catch (err) {
+                console.error('Error deleting cash transaction:', err);
+                alert(err.response?.data?.message || 'Failed to delete cash transaction');
+            }
         }
     };
 
@@ -279,440 +604,972 @@ const BankBook = () => {
         outline: 'none'
     };
 
-    return (
-        <div style={{ padding: '30px', maxWidth: '1600px', margin: '0 auto', color: 'white' }}>
-            {/* Page Header */}
-            <header style={{ marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
-                <div>
-                    <h1 style={{ fontSize: '32px', fontWeight: '900', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '15px' }}>
-                        <div style={{ padding: '12px', background: '#3b82f6', borderRadius: '16px', color: '#fff' }}>
-                            <Landmark size={28} />
-                        </div>
-                        Bank Book & Multi-Account Ledger
-                    </h1>
-                    <p style={{ color: 'rgba(255,255,255,0.6)', margin: 0, fontSize: '15px' }}>
-                        Manage company bank accounts (HDFC, IDFC, etc.), track credits & debits, and verify sales payment receipts.
-                    </p>
-                </div>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <button
-                        onClick={() => setShowAddBankModal(true)}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            background: 'rgba(255,255,255,0.06)',
-                            color: 'white',
-                            fontWeight: '700',
-                            padding: '12px 18px',
-                            borderRadius: '12px',
-                            border: '1px solid rgba(255,255,255,0.12)',
-                            cursor: 'pointer',
-                            fontSize: '13px'
-                        }}
-                    >
-                        <Building2 size={16} /> + Add Bank Account
-                    </button>
-                    <button
-                        onClick={() => {
-                            if (bankAccounts.length === 0) {
-                                alert('Please create at least one Bank Account first!');
-                                setShowAddBankModal(true);
-                                return;
-                            }
-                            setTxFormData(prev => ({
-                                ...prev,
-                                bankAccountId: selectedBankId !== 'all' ? selectedBankId : bankAccounts[0]._id
-                            }));
-                            setShowAddTxModal(true);
-                        }}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            background: '#22c55e',
-                            color: '#000',
-                            fontWeight: '800',
-                            padding: '12px 20px',
-                            borderRadius: '12px',
-                            border: 'none',
-                            cursor: 'pointer',
-                            fontSize: '14px'
-                        }}
-                    >
-                        <Plus size={18} /> + Record Bank Entry
-                    </button>
-                </div>
-            </header>
+    const selectedDepositBank = bankAccounts.find(b => b._id === depositFormData.bankAccountId) || bankAccounts[0];
+    const selectedWithdrawBank = bankAccounts.find(b => b._id === withdrawFormData.bankAccountId) || bankAccounts[0];
 
-            {/* Bank Accounts Tabs */}
-            <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '12px', marginBottom: '24px' }}>
+    return (
+        <div style={{ padding: '15px', maxWidth: '1600px', margin: '0 auto', color: 'white' }}>
+            <SEO title={activeTab === 'bank' ? 'Bank Book & Ledger' : 'Cash Book & Cash Ledger'} description="Track multi-bank accounts and cash in hand ledger." />
+
+            {/* TOP NAVIGATION TABS: BANK BOOK vs CASH BOOK */}
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                marginBottom: '15px',
+                background: 'rgba(0,0,0,0.4)',
+                padding: '6px',
+                borderRadius: '16px',
+                width: 'fit-content',
+                border: '1px solid rgba(255,255,255,0.08)'
+            }}>
                 <button
-                    onClick={() => setSelectedBankId('all')}
+                    type="button"
+                    onClick={() => setActiveTab('bank')}
                     style={{
-                        padding: '12px 20px',
-                        borderRadius: '14px',
-                        border: selectedBankId === 'all' ? '2px solid #3b82f6' : '1px solid rgba(255,255,255,0.06)',
-                        background: selectedBankId === 'all' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.03)',
-                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '10px 22px',
+                        borderRadius: '12px',
+                        border: 'none',
+                        background: activeTab === 'bank' ? '#3b82f6' : 'transparent',
+                        color: activeTab === 'bank' ? '#ffffff' : 'rgba(255,255,255,0.6)',
+                        fontWeight: '800',
+                        fontSize: '14px',
                         cursor: 'pointer',
-                        textAlign: 'left',
-                        minWidth: '170px',
-                        transition: 'all 0.2s'
+                        transition: 'all 0.2s',
+                        boxShadow: activeTab === 'bank' ? '0 4px 14px rgba(59, 130, 246, 0.4)' : 'none'
                     }}
                 >
-                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Consolidated</div>
-                    <div style={{ fontSize: '16px', fontWeight: '800', margin: '4px 0' }}>All Bank Accounts</div>
-                    <div style={{ fontSize: '12px', color: '#60a5fa', fontWeight: '700' }}>
-                        {bankAccounts.length} Active Accounts
-                    </div>
+                    <Landmark size={18} />
+                    <span>🏦 Bank Book / Ledger</span>
                 </button>
 
-                {bankAccounts.map(b => (
-                    <button
-                        key={b._id}
-                        onClick={() => setSelectedBankId(b._id)}
-                        style={{
-                            padding: '12px 20px',
-                            borderRadius: '14px',
-                            border: selectedBankId === b._id ? '2px solid #22c55e' : '1px solid rgba(255,255,255,0.06)',
-                            background: selectedBankId === b._id ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255,255,255,0.03)',
-                            color: 'white',
-                            cursor: 'pointer',
-                            textAlign: 'left',
-                            minWidth: '200px',
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700' }}>
-                                {b.accountNumber ? `A/C: •••• ${b.accountNumber.slice(-4)}` : 'Bank A/C'}
-                            </span>
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e' }} />
-                        </div>
-                        <div style={{ fontSize: '16px', fontWeight: '800', margin: '4px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {b.bankName}
-                        </div>
-                        <div style={{ fontSize: '13px', color: '#4ade80', fontWeight: '800' }}>
-                            ₹{(b.currentBalance || 0).toLocaleString('en-IN')}
-                        </div>
-                    </button>
-                ))}
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('cash')}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '10px 22px',
+                        borderRadius: '12px',
+                        border: 'none',
+                        background: activeTab === 'cash' ? '#10b981' : 'transparent',
+                        color: activeTab === 'cash' ? '#000000' : 'rgba(255,255,255,0.6)',
+                        fontWeight: '900',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        boxShadow: activeTab === 'cash' ? '0 4px 14px rgba(16, 185, 129, 0.4)' : 'none'
+                    }}
+                >
+                    <Banknote size={18} />
+                    <span>💵 Cash Book / Cash Ledger</span>
+                </button>
             </div>
 
-            {/* Stats KPI Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '18px', marginBottom: '28px' }}>
-                <div className="premium-glass" style={{ padding: '20px', borderRadius: '20px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>TOTAL RECEIVED (CREDIT)</span>
-                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <ArrowDownLeft size={18} />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '26px', fontWeight: '900', color: '#4ade80' }}>
-                        +₹{(stats.totalIn || 0).toLocaleString('en-IN')}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                        Inflows for selected period
-                    </div>
-                </div>
-
-                <div className="premium-glass" style={{ padding: '20px', borderRadius: '20px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>TOTAL PAID (DEBIT)</span>
-                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <ArrowUpRight size={18} />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '26px', fontWeight: '900', color: '#f87171' }}>
-                        -₹{(stats.totalOut || 0).toLocaleString('en-IN')}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                        Outflows for selected period
-                    </div>
-                </div>
-
-                <div className="premium-glass" style={{ padding: '20px', borderRadius: '20px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>NET PERIOD FLOW</span>
-                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Wallet size={18} />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '26px', fontWeight: '900', color: stats.periodBalance >= 0 ? '#60a5fa' : '#fb923c' }}>
-                        ₹{(stats.periodBalance || 0).toLocaleString('en-IN')}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                        Inflow minus Outflow
-                    </div>
-                </div>
-
-                <div className="premium-glass" style={{ padding: '20px', borderRadius: '20px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>CLOSING BALANCE</span>
-                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(168, 85, 247, 0.1)', color: '#c084fc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <CreditCard size={18} />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '26px', fontWeight: '900', color: '#c084fc' }}>
-                        ₹{(stats.currentBalance || 0).toLocaleString('en-IN')}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                        {selectedBankId === 'all' ? 'All active accounts combined' : 'Selected bank balance'}
-                    </div>
-                </div>
-            </div>
-
-            {/* Controls Bar: Daily / Monthly & Search */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    {/* Period Switch */}
-                    <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '3px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                        <button
-                            onClick={() => setPeriodType('monthly')}
-                            style={{
-                                padding: '8px 16px',
-                                borderRadius: '9px',
-                                border: 'none',
-                                background: periodType === 'monthly' ? '#3b82f6' : 'transparent',
-                                color: periodType === 'monthly' ? '#fff' : 'rgba(255,255,255,0.7)',
-                                fontWeight: '700',
-                                fontSize: '12px',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            Monthly View
-                        </button>
-                        <button
-                            onClick={() => setPeriodType('daily')}
-                            style={{
-                                padding: '8px 16px',
-                                borderRadius: '9px',
-                                border: 'none',
-                                background: periodType === 'daily' ? '#3b82f6' : 'transparent',
-                                color: periodType === 'daily' ? '#fff' : 'rgba(255,255,255,0.7)',
-                                fontWeight: '700',
-                                fontSize: '12px',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            Daily View
-                        </button>
-                    </div>
-
-                    {periodType === 'monthly' ? (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <select
-                                value={filterMonth}
-                                onChange={e => setFilterMonth(Number(e.target.value))}
-                                className="premium-compact-input"
-                                style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', color: 'white', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}
-                            >
-                                {MONTH_NAMES.map((m, idx) => (
-                                    <option key={m} value={idx + 1}>{m}</option>
-                                ))}
-                            </select>
-                            <select
-                                value={filterYear}
-                                onChange={e => setFilterYear(Number(e.target.value))}
-                                className="premium-compact-input"
-                                style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', color: 'white', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}
-                            >
-                                <option value={2025}>2025</option>
-                                <option value={2026}>2026</option>
-                                <option value={2027}>2027</option>
-                            </select>
-                        </div>
-                    ) : (
+            {/* ========================================================================= */}
+            {/* TAB 1: BANK BOOK                                                          */}
+            {/* ========================================================================= */}
+            {activeTab === 'bank' && (
+                <div>
+                    {/* Header */}
+                    <header style={{ marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
                         <div>
-                            <input
-                                type="date"
-                                value={filterDate}
-                                onChange={e => setFilterDate(e.target.value)}
-                                onClick={e => e.target.showPicker?.()}
+                            <h1 style={{ fontSize: '30px', fontWeight: '900', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                <div style={{ padding: '10px', background: '#3b82f6', borderRadius: '14px', color: '#fff' }}>
+                                    <Landmark size={26} />
+                                </div>
+                                Bank Book & Multi-Account Ledger
+                            </h1>
+                            <p style={{ color: 'rgba(255,255,255,0.6)', margin: 0, fontSize: '14px' }}>
+                                Manage company bank accounts (HDFC, IDFC, ICICI, etc.), track credits & debits, and verify sales payment receipts.
+                            </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <button
+                                onClick={() => setShowAddBankModal(true)}
                                 style={{
-                                    padding: '8px 12px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    background: 'rgba(255,255,255,0.06)',
+                                    color: 'white',
+                                    fontWeight: '700',
+                                    padding: '12px 18px',
+                                    borderRadius: '12px',
+                                    border: '1px solid rgba(255,255,255,0.12)',
+                                    cursor: 'pointer',
+                                    fontSize: '13px'
+                                }}
+                            >
+                                <Building2 size={16} /> + Add Bank Account
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (bankAccounts.length === 0) {
+                                        alert('Please create at least one Bank Account first!');
+                                        setShowAddBankModal(true);
+                                        return;
+                                    }
+                                    setTxFormData(prev => ({
+                                        ...prev,
+                                        bankAccountId: selectedBankId !== 'all' ? selectedBankId : bankAccounts[0]._id
+                                    }));
+                                    setShowAddTxModal(true);
+                                }}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    background: '#22c55e',
+                                    color: '#000',
+                                    fontWeight: '800',
+                                    padding: '12px 20px',
+                                    borderRadius: '12px',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '14px'
+                                }}
+                            >
+                                <Plus size={18} /> + Record Bank Entry
+                            </button>
+                        </div>
+                    </header>
+
+                    {/* Bank Accounts Sub-tabs */}
+                    <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '12px', marginBottom: '15px' }}>
+                        <button
+                            onClick={() => setSelectedBankId('all')}
+                            style={{
+                                padding: '12px 20px',
+                                borderRadius: '14px',
+                                border: selectedBankId === 'all' ? '2px solid #3b82f6' : '1px solid rgba(255,255,255,0.06)',
+                                background: selectedBankId === 'all' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                                color: 'white',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                minWidth: '170px',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Consolidated</div>
+                            <div style={{ fontSize: '16px', fontWeight: '800', margin: '4px 0' }}>All Bank Accounts</div>
+                            <div style={{ fontSize: '12px', color: '#60a5fa', fontWeight: '700' }}>
+                                {bankAccounts.length} Active Accounts
+                            </div>
+                        </button>
+
+                        {bankAccounts.map(b => (
+                            <button
+                                key={b._id}
+                                onClick={() => setSelectedBankId(b._id)}
+                                style={{
+                                    padding: '12px 20px',
+                                    borderRadius: '14px',
+                                    border: selectedBankId === b._id ? '2px solid #22c55e' : '1px solid rgba(255,255,255,0.06)',
+                                    background: selectedBankId === b._id ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255,255,255,0.03)',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                    minWidth: '200px',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700' }}>
+                                        {b.accountNumber ? `A/C: •••• ${b.accountNumber.slice(-4)}` : 'Bank A/C'}
+                                    </span>
+                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e' }} />
+                                </div>
+                                <div style={{ fontSize: '16px', fontWeight: '800', margin: '4px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {b.bankName}
+                                </div>
+                                <div style={{ fontSize: '13px', color: '#4ade80', fontWeight: '800' }}>
+                                    ₹{(b.currentBalance || 0).toLocaleString('en-IN')}
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Stats KPI Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '15px', marginBottom: '15px' }}>
+                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>TOTAL RECEIVED (CREDIT)</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <ArrowDownLeft size={18} />
+                                </div>
+                            </div>
+                            <div style={{ fontSize: '26px', fontWeight: '900', color: '#4ade80' }}>
+                                +₹{(bankStats.totalIn || 0).toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                                Inflows for selected period
+                            </div>
+                        </div>
+
+                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>TOTAL PAID (DEBIT)</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <ArrowUpRight size={18} />
+                                </div>
+                            </div>
+                            <div style={{ fontSize: '26px', fontWeight: '900', color: '#f87171' }}>
+                                -₹{(bankStats.totalOut || 0).toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                                Outflows for selected period
+                            </div>
+                        </div>
+
+                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>NET PERIOD FLOW</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Wallet size={18} />
+                                </div>
+                            </div>
+                            <div style={{ fontSize: '26px', fontWeight: '900', color: bankStats.periodBalance >= 0 ? '#60a5fa' : '#fb923c' }}>
+                                ₹{(bankStats.periodBalance || 0).toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                                Inflow minus Outflow
+                            </div>
+                        </div>
+
+                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>CLOSING BALANCE</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(168, 85, 247, 0.1)', color: '#c084fc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <CreditCard size={18} />
+                                </div>
+                            </div>
+                            <div style={{ fontSize: '26px', fontWeight: '900', color: '#c084fc' }}>
+                                ₹{(bankStats.currentBalance || 0).toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                                {selectedBankId === 'all' ? 'All active accounts combined' : 'Selected bank balance'}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Controls Bar: Daily / Monthly & Search */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '3px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                <button
+                                    onClick={() => setPeriodType('monthly')}
+                                    style={{
+                                        padding: '8px 16px',
+                                        borderRadius: '9px',
+                                        border: 'none',
+                                        background: periodType === 'monthly' ? '#3b82f6' : 'transparent',
+                                        color: periodType === 'monthly' ? '#fff' : 'rgba(255,255,255,0.7)',
+                                        fontWeight: '700',
+                                        fontSize: '12px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Monthly View
+                                </button>
+                                <button
+                                    onClick={() => setPeriodType('daily')}
+                                    style={{
+                                        padding: '8px 16px',
+                                        borderRadius: '9px',
+                                        border: 'none',
+                                        background: periodType === 'daily' ? '#3b82f6' : 'transparent',
+                                        color: periodType === 'daily' ? '#fff' : 'rgba(255,255,255,0.7)',
+                                        fontWeight: '700',
+                                        fontSize: '12px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Daily View
+                                </button>
+                            </div>
+
+                            {periodType === 'monthly' ? (
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <select
+                                        value={filterMonth}
+                                        onChange={e => setFilterMonth(Number(e.target.value))}
+                                        className="premium-compact-input"
+                                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', color: 'white', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}
+                                    >
+                                        {MONTH_NAMES.map((m, idx) => (
+                                            <option key={m} value={idx + 1}>{m}</option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={filterYear}
+                                        onChange={e => setFilterYear(Number(e.target.value))}
+                                        className="premium-compact-input"
+                                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', color: 'white', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}
+                                    >
+                                        <option value={2025}>2025</option>
+                                        <option value={2026}>2026</option>
+                                        <option value={2027}>2027</option>
+                                    </select>
+                                </div>
+                            ) : (
+                                <div>
+                                    <input
+                                        type="date"
+                                        value={filterDate}
+                                        onChange={e => setFilterDate(e.target.value)}
+                                        onClick={e => e.target.showPicker?.()}
+                                        style={{
+                                            padding: '8px 12px',
+                                            background: 'rgba(0,0,0,0.3)',
+                                            color: 'white',
+                                            borderRadius: '10px',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            outline: 'none'
+                                        }}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Search */}
+                        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '0 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <Search size={16} color="rgba(255,255,255,0.5)" />
+                            <input
+                                type="text"
+                                placeholder="Search UTR, remark, category..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                style={{ background: 'transparent', border: 'none', color: 'white', padding: '10px 10px', outline: 'none', width: '220px', fontSize: '13px' }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Bank Transactions Table */}
+                    <div className="premium-glass" style={{ borderRadius: '20px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                            <thead>
+                                <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Date</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Bank Account</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Type</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Particulars / Description</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Mode & Category</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>UTR / Ref</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'center' }}>Receipt</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'right' }}>Credit (In)</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'right' }}>Debit (Out)</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'center' }}>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {bankLoading ? (
+                                    <tr>
+                                        <td colSpan="10" style={{ padding: '50px', textAlign: 'center', color: 'rgba(255,255,255,0.5)' }}>
+                                            Loading bank entries...
+                                        </td>
+                                    </tr>
+                                ) : transactions.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="10" style={{ padding: '50px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
+                                            No bank transactions found for this period. Click "+ Record Bank Entry" to log a credit or debit.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    transactions.map(tx => {
+                                        const isIn = tx.type === 'IN';
+                                        return (
+                                            <tr key={tx._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                                <td style={{ padding: '16px 20px', fontSize: '13px', whiteSpace: 'nowrap' }}>
+                                                    {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                </td>
+                                                <td style={{ padding: '16px 20px', fontSize: '13px', fontWeight: '700' }}>
+                                                    {tx.bankAccount?.bankName || tx.bankName || 'Bank'}
+                                                    {tx.bankAccount?.accountNumber && (
+                                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)' }}>
+                                                            •••• {tx.bankAccount.accountNumber.slice(-4)}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td style={{ padding: '16px 20px' }}>
+                                                    <span style={{
+                                                        padding: '4px 8px',
+                                                        borderRadius: '6px',
+                                                        fontSize: '11px',
+                                                        fontWeight: '800',
+                                                        background: isIn ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                                        color: isIn ? '#4ade80' : '#f87171'
+                                                    }}>
+                                                        {isIn ? 'CREDIT (IN)' : 'DEBIT (OUT)'}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '16px 20px', fontSize: '13px' }}>
+                                                    <div style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>
+                                                        {tx.description}
+                                                    </div>
+                                                    {tx.bookingRef && (
+                                                        <div style={{ fontSize: '11px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                            <span style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '2px 8px', borderRadius: '6px', fontWeight: '800', letterSpacing: '0.3px' }}>
+                                                                {tx.bookingRef.bookingId}
+                                                            </span>
+                                                            {tx.bookingRef.clientCode && (
+                                                                <span style={{ color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
+                                                                    Client Code: <span style={{ color: '#e2e8f0', fontWeight: '800' }}>{tx.bookingRef.clientCode}</span>
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td style={{ padding: '16px 20px', fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>
+                                                    <div>{tx.category || 'General'}</div>
+                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>{tx.paymentMode}</div>
+                                                </td>
+                                                <td style={{ padding: '16px 20px', fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontFamily: 'monospace' }}>
+                                                    {tx.reference || '-'}
+                                                </td>
+                                                <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                                                    {tx.paymentScreenshot ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPreviewImageUrl(tx.paymentScreenshot)}
+                                                            style={{
+                                                                background: 'rgba(34, 197, 94, 0.1)',
+                                                                border: '1px solid rgba(34, 197, 94, 0.3)',
+                                                                color: '#4ade80',
+                                                                padding: '4px 8px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: '700',
+                                                                cursor: 'pointer',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '4px'
+                                                            }}
+                                                        >
+                                                            <ImageIcon size={12} /> View Receipt
+                                                        </button>
+                                                    ) : (
+                                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>No Receipt</span>
+                                                    )}
+                                                </td>
+                                                <td style={{ padding: '16px 20px', fontSize: '14px', fontWeight: '800', textAlign: 'right', color: '#4ade80' }}>
+                                                    {isIn ? `₹${(tx.amount || 0).toLocaleString('en-IN')}` : '-'}
+                                                </td>
+                                                <td style={{ padding: '16px 20px', fontSize: '14px', fontWeight: '800', textAlign: 'right', color: '#f87171' }}>
+                                                    {!isIn ? `₹${(tx.amount || 0).toLocaleString('en-IN')}` : '-'}
+                                                </td>
+                                                <td style={{ padding: '16px 20px', textAlign: 'center', display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openEditTxModal(tx)}
+                                                        style={{
+                                                            background: 'transparent',
+                                                            border: 'none',
+                                                            color: 'rgba(255,255,255,0.7)',
+                                                            cursor: 'pointer',
+                                                            padding: '4px',
+                                                            borderRadius: '4px'
+                                                        }}
+                                                        title="Edit Entry"
+                                                    >
+                                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteClick(tx)}
+                                                        style={{
+                                                            background: 'transparent',
+                                                            border: 'none',
+                                                            color: 'rgba(255,255,255,0.3)',
+                                                            cursor: 'pointer',
+                                                            padding: '4px',
+                                                            borderRadius: '4px'
+                                                        }}
+                                                        title="Delete Entry"
+                                                    >
+                                                        <Trash2 size={15} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* TAB 2: CASH BOOK / CASH IN HAND LEDGER                                    */}
+            {/* ========================================================================= */}
+            {activeTab === 'cash' && (
+                <div>
+                    {/* Header */}
+                    <header style={{ marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
+                        <div>
+                            <h1 style={{ fontSize: '30px', fontWeight: '900', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                <div style={{ padding: '10px', background: '#10b981', borderRadius: '14px', color: '#000' }}>
+                                    <Banknote size={26} />
+                                </div>
+                                Cash Book & Cash in Hand Ledger
+                            </h1>
+                            <p style={{ color: 'rgba(255,255,255,0.6)', margin: 0, fontSize: '14px' }}>
+                                Real-time cash tracking: physical cash in hand, collections from guests/drivers, daily cash expenditures, and bank deposits.
+                            </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (bankAccounts.length === 0) {
+                                        alert('Please create at least one Bank Account first before depositing cash into bank!');
+                                        setShowAddBankModal(true);
+                                        return;
+                                    }
+                                    setDepositFormData(prev => ({
+                                        ...prev,
+                                        bankAccountId: bankAccounts[0]._id,
+                                        date: todayIST()
+                                    }));
+                                    setShowDepositModal(true);
+                                }}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    background: 'rgba(56, 189, 248, 0.15)',
+                                    color: '#38bdf8',
+                                    fontWeight: '800',
+                                    padding: '12px 18px',
+                                    borderRadius: '12px',
+                                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                                    cursor: 'pointer',
+                                    fontSize: '13px'
+                                }}
+                            >
+                                <ArrowRightLeft size={16} /> 🏦 Deposit Cash to Bank
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (bankAccounts.length === 0) {
+                                        alert('Please create at least one Bank Account first before withdrawing cash!');
+                                        setShowAddBankModal(true);
+                                        return;
+                                    }
+                                    setWithdrawFormData(prev => ({
+                                        ...prev,
+                                        bankAccountId: bankAccounts[0]._id,
+                                        date: todayIST()
+                                    }));
+                                    setShowWithdrawModal(true);
+                                }}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    background: 'rgba(251, 191, 36, 0.15)',
+                                    color: '#fbbf24',
+                                    fontWeight: '800',
+                                    padding: '12px 18px',
+                                    borderRadius: '12px',
+                                    border: '1px solid rgba(251, 191, 36, 0.3)',
+                                    cursor: 'pointer',
+                                    fontSize: '13px'
+                                }}
+                            >
+                                <ArrowLeftRight size={16} /> 🏧 Withdraw Cash from Bank
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setCashFormData({
+                                        type: 'IN',
+                                        amount: '',
+                                        category: 'General Cash',
+                                        date: todayIST(),
+                                        reference: '',
+                                        description: '',
+                                        guestName: '',
+                                        driverName: ''
+                                    });
+                                    setShowAddCashModal(true);
+                                }}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    background: '#10b981',
+                                    color: '#000',
+                                    fontWeight: '900',
+                                    padding: '12px 20px',
+                                    borderRadius: '12px',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '14px',
+                                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)'
+                                }}
+                            >
+                                <Plus size={18} /> + Record Cash Entry
+                            </button>
+                        </div>
+                    </header>
+
+                    {/* Stats KPI Grid for Cash Book */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '18px', marginBottom: '28px' }}>
+                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>TOTAL CASH RECEIVED (IN)</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <ArrowDownLeft size={18} />
+                                </div>
+                            </div>
+                            <div style={{ fontSize: '26px', fontWeight: '900', color: '#10b981' }}>
+                                +₹{(cashStats.totalIn || 0).toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                                Cash inflows for selected period
+                            </div>
+                        </div>
+
+                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>TOTAL CASH PAID (OUT)</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <ArrowUpRight size={18} />
+                                </div>
+                            </div>
+                            <div style={{ fontSize: '26px', fontWeight: '900', color: '#f87171' }}>
+                                -₹{(cashStats.totalOut || 0).toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                                Cash outflows & bank deposits
+                            </div>
+                        </div>
+
+                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>NET PERIOD CASH FLOW</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Wallet size={18} />
+                                </div>
+                            </div>
+                            <div style={{ fontSize: '26px', fontWeight: '900', color: cashStats.periodBalance >= 0 ? '#38bdf8' : '#fb923c' }}>
+                                ₹{(cashStats.periodBalance || 0).toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                                Net Cash Movement
+                            </div>
+                        </div>
+
+                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(251, 191, 36, 0.4)', background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(15, 23, 42, 0.7) 100%)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '12px', color: '#fbbf24', fontWeight: '900', letterSpacing: '0.5px' }}>💵 CASH IN HAND BALANCE</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(251, 191, 36, 0.2)', color: '#fbbf24', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Banknote size={18} />
+                                </div>
+                            </div>
+                            <div style={{ fontSize: '28px', fontWeight: '950', color: '#fbbf24' }}>
+                                ₹{(cashStats.currentBalance || 0).toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '4px' }}>
+                                Physical cash available in office / company
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Controls Bar: Daily / Monthly & Search & Category */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '3px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                <button
+                                    onClick={() => setPeriodType('monthly')}
+                                    style={{
+                                        padding: '8px 16px',
+                                        borderRadius: '9px',
+                                        border: 'none',
+                                        background: periodType === 'monthly' ? '#10b981' : 'transparent',
+                                        color: periodType === 'monthly' ? '#000' : 'rgba(255,255,255,0.7)',
+                                        fontWeight: '800',
+                                        fontSize: '12px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Monthly View
+                                </button>
+                                <button
+                                    onClick={() => setPeriodType('daily')}
+                                    style={{
+                                        padding: '8px 16px',
+                                        borderRadius: '9px',
+                                        border: 'none',
+                                        background: periodType === 'daily' ? '#10b981' : 'transparent',
+                                        color: periodType === 'daily' ? '#000' : 'rgba(255,255,255,0.7)',
+                                        fontWeight: '800',
+                                        fontSize: '12px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Daily View
+                                </button>
+                            </div>
+
+                            {periodType === 'monthly' ? (
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <select
+                                        value={filterMonth}
+                                        onChange={e => setFilterMonth(Number(e.target.value))}
+                                        className="premium-compact-input"
+                                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', color: 'white', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}
+                                    >
+                                        {MONTH_NAMES.map((m, idx) => (
+                                            <option key={m} value={idx + 1}>{m}</option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={filterYear}
+                                        onChange={e => setFilterYear(Number(e.target.value))}
+                                        className="premium-compact-input"
+                                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', color: 'white', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}
+                                    >
+                                        <option value={2025}>2025</option>
+                                        <option value={2026}>2026</option>
+                                        <option value={2027}>2027</option>
+                                    </select>
+                                </div>
+                            ) : (
+                                <div>
+                                    <input
+                                        type="date"
+                                        value={filterDate}
+                                        onChange={e => setFilterDate(e.target.value)}
+                                        onClick={e => e.target.showPicker?.()}
+                                        style={{
+                                            padding: '8px 12px',
+                                            background: 'rgba(0,0,0,0.3)',
+                                            color: 'white',
+                                            borderRadius: '10px',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            outline: 'none'
+                                        }}
+                                    />
+                                </div>
+                            )}
+
+                            {/* Category Filter */}
+                            <select
+                                value={cashCategoryFilter}
+                                onChange={e => setCashCategoryFilter(e.target.value)}
+                                style={{
+                                    padding: '8px 14px',
                                     background: 'rgba(0,0,0,0.3)',
                                     color: 'white',
                                     borderRadius: '10px',
                                     border: '1px solid rgba(255,255,255,0.1)',
-                                    outline: 'none'
+                                    fontSize: '12px',
+                                    fontWeight: '700'
                                 }}
+                            >
+                                {CASH_CATEGORIES.map(cat => (
+                                    <option key={cat} value={cat} style={{ background: '#090f1d' }}>Category: {cat}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Search */}
+                        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '0 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <Search size={16} color="rgba(255,255,255,0.5)" />
+                            <input
+                                type="text"
+                                placeholder="Search cash remarks, ref, guest, driver..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                style={{ background: 'transparent', border: 'none', color: 'white', padding: '10px 10px', outline: 'none', width: '240px', fontSize: '13px' }}
                             />
                         </div>
-                    )}
-                </div>
+                    </div>
 
-                {/* Search */}
-                <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '0 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <Search size={16} color="rgba(255,255,255,0.5)" />
-                    <input
-                        type="text"
-                        placeholder="Search UTR, remark, category..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        style={{ background: 'transparent', border: 'none', color: 'white', padding: '10px 10px', outline: 'none', width: '220px', fontSize: '13px' }}
-                    />
-                </div>
-            </div>
-
-            {/* Transactions Table */}
-            <div className="premium-glass" style={{ borderRadius: '20px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                    <thead>
-                        <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                            <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Date</th>
-                            <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Bank Account</th>
-                            <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Type</th>
-                            <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Particulars / Description</th>
-                            <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Mode & Category</th>
-                            <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>UTR / Ref</th>
-                            <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'center' }}>Receipt</th>
-                            <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'right' }}>Credit (In)</th>
-                            <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'right' }}>Debit (Out)</th>
-                            <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'center' }}>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading ? (
-                            <tr>
-                                <td colSpan="10" style={{ padding: '50px', textAlign: 'center', color: 'rgba(255,255,255,0.5)' }}>
-                                    Loading bank entries...
-                                </td>
-                            </tr>
-                        ) : transactions.length === 0 ? (
-                            <tr>
-                                <td colSpan="10" style={{ padding: '50px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
-                                    No bank transactions found for this period. Click "+ Record Bank Entry" to log a credit or debit.
-                                </td>
-                            </tr>
-                        ) : (
-                            transactions.map(tx => {
-                                const isIn = tx.type === 'IN';
-                                return (
-                                    <tr key={tx._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                        <td style={{ padding: '16px 20px', fontSize: '13px', whiteSpace: 'nowrap' }}>
-                                            {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                        </td>
-                                        <td style={{ padding: '16px 20px', fontSize: '13px', fontWeight: '700' }}>
-                                            {tx.bankAccount?.bankName || tx.bankName || 'Bank'}
-                                            {tx.bankAccount?.accountNumber && (
-                                                <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)' }}>
-                                                    •••• {tx.bankAccount.accountNumber.slice(-4)}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '16px 20px' }}>
-                                            <span style={{
-                                                padding: '4px 8px',
-                                                borderRadius: '6px',
-                                                fontSize: '11px',
-                                                fontWeight: '800',
-                                                background: isIn ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                                                color: isIn ? '#4ade80' : '#f87171'
-                                            }}>
-                                                {isIn ? 'CREDIT (IN)' : 'DEBIT (OUT)'}
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: '16px 20px', fontSize: '13px' }}>
-                                            <div style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>
-                                                {tx.description}
-                                            </div>
-                                            {tx.bookingRef && (
-                                                <div style={{ fontSize: '11px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                    <span style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '2px 8px', borderRadius: '6px', fontWeight: '800', letterSpacing: '0.3px' }}>
-                                                        {tx.bookingRef.bookingId}
-                                                    </span>
-                                                    {tx.bookingRef.clientCode && (
-                                                        <span style={{ color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
-                                                            Client Code: <span style={{ color: '#e2e8f0', fontWeight: '800' }}>{tx.bookingRef.clientCode}</span>
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '16px 20px', fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>
-                                            <div>{tx.category || 'General'}</div>
-                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>{tx.paymentMode}</div>
-                                        </td>
-                                        <td style={{ padding: '16px 20px', fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontFamily: 'monospace' }}>
-                                            {tx.reference || '-'}
-                                        </td>
-                                        <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                                            {tx.paymentScreenshot ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setPreviewImageUrl(tx.paymentScreenshot)}
-                                                    style={{
-                                                        background: 'rgba(34, 197, 94, 0.1)',
-                                                        border: '1px solid rgba(34, 197, 94, 0.3)',
-                                                        color: '#4ade80',
-                                                        padding: '4px 8px',
-                                                        borderRadius: '6px',
-                                                        fontSize: '11px',
-                                                        fontWeight: '700',
-                                                        cursor: 'pointer',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px'
-                                                    }}
-                                                >
-                                                    <ImageIcon size={12} /> View Receipt
-                                                </button>
-                                            ) : (
-                                                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>No Receipt</span>
-                                            )}
-                                        </td>
-                                        <td style={{ padding: '16px 20px', fontSize: '14px', fontWeight: '800', textAlign: 'right', color: '#4ade80' }}>
-                                            {isIn ? `₹${(tx.amount || 0).toLocaleString('en-IN')}` : '-'}
-                                        </td>
-                                        <td style={{ padding: '16px 20px', fontSize: '14px', fontWeight: '800', textAlign: 'right', color: '#f87171' }}>
-                                            {!isIn ? `₹${(tx.amount || 0).toLocaleString('en-IN')}` : '-'}
-                                        </td>
-                                        <td style={{ padding: '16px 20px', textAlign: 'center', display: 'flex', gap: '10px', justifyContent: 'center' }}>
-                                            <button
-                                                type="button"
-                                                onClick={() => openEditTxModal(tx)}
-                                                style={{
-                                                    background: 'transparent',
-                                                    border: 'none',
-                                                    color: 'rgba(255,255,255,0.7)',
-                                                    cursor: 'pointer',
-                                                    padding: '4px',
-                                                    borderRadius: '4px'
-                                                }}
-                                                title="Edit Entry"
-                                            >
-                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleDeleteClick(tx)}
-                                                style={{
-                                                    background: 'transparent',
-                                                    border: 'none',
-                                                    color: 'rgba(255,255,255,0.3)',
-                                                    cursor: 'pointer',
-                                                    padding: '4px',
-                                                    borderRadius: '4px'
-                                                }}
-                                                title="Delete Entry"
-                                            >
-                                                <Trash2 size={15} />
-                                            </button>
+                    {/* Cash Transactions Table */}
+                    <div className="premium-glass" style={{ borderRadius: '20px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                            <thead>
+                                <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Date</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Type</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Category</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Particulars / Description</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Voucher / Slip Ref</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'center' }}>Receipt</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'right' }}>Cash Received (IN)</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'right' }}>Cash Paid (OUT)</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'center' }}>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {cashLoading ? (
+                                    <tr>
+                                        <td colSpan="9" style={{ padding: '50px', textAlign: 'center', color: 'rgba(255,255,255,0.5)' }}>
+                                            Loading cash entries...
                                         </td>
                                     </tr>
-                                );
-                            })
-                        )}
-                    </tbody>
-                </table>
-            </div>
+                                ) : cashTransactions.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="9" style={{ padding: '50px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
+                                            No cash transactions recorded for this period. Click "+ Record Cash Entry" or "Deposit Cash to Bank" to log cash movement.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    cashTransactions.map(tx => {
+                                        const isIn = tx.type === 'IN';
+                                        return (
+                                            <tr key={tx._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                                <td style={{ padding: '16px 20px', fontSize: '13px', whiteSpace: 'nowrap' }}>
+                                                    {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                </td>
+                                                <td style={{ padding: '16px 20px' }}>
+                                                    <span style={{
+                                                        padding: '4px 10px',
+                                                        borderRadius: '6px',
+                                                        fontSize: '11px',
+                                                        fontWeight: '900',
+                                                        background: isIn ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                                        color: isIn ? '#10b981' : '#f87171',
+                                                        border: `1px solid ${isIn ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                                                    }}>
+                                                        {isIn ? 'CASH IN' : 'CASH OUT'}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '16px 20px' }}>
+                                                    <span style={{
+                                                        fontSize: '11px',
+                                                        fontWeight: '800',
+                                                        padding: '3px 8px',
+                                                        borderRadius: '6px',
+                                                        background: tx.category === 'Bank Deposit' ? 'rgba(56, 189, 248, 0.15)' : tx.category === 'Bank Withdrawal' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(255,255,255,0.06)',
+                                                        color: tx.category === 'Bank Deposit' ? '#38bdf8' : tx.category === 'Bank Withdrawal' ? '#fbbf24' : 'rgba(255,255,255,0.85)',
+                                                        border: `1px solid ${tx.category === 'Bank Deposit' ? 'rgba(56, 189, 248, 0.3)' : tx.category === 'Bank Withdrawal' ? 'rgba(251, 191, 36, 0.3)' : 'rgba(255,255,255,0.1)'}`
+                                                    }}>
+                                                        {tx.category || 'General Cash'}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '16px 20px', fontSize: '13px' }}>
+                                                    <div style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>
+                                                        {tx.description || '-'}
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
+                                                        {tx.bankAccount && (
+                                                            <span style={{ fontSize: '11px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', padding: '2px 6px', borderRadius: '4px' }}>
+                                                                🏦 {tx.bankAccount.bankName || tx.bankName}
+                                                            </span>
+                                                        )}
+                                                        {tx.guestName && (
+                                                            <span style={{ fontSize: '11px', background: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24', padding: '2px 6px', borderRadius: '4px' }}>
+                                                                👤 Guest: {tx.guestName}
+                                                            </span>
+                                                        )}
+                                                        {tx.driverName && (
+                                                            <span style={{ fontSize: '11px', background: 'rgba(168, 85, 247, 0.1)', color: '#c084fc', padding: '2px 6px', borderRadius: '4px' }}>
+                                                                🚖 Driver: {tx.driverName}
+                                                            </span>
+                                                        )}
+                                                        {tx.bookingRef && (
+                                                            <span style={{ fontSize: '11px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', padding: '2px 6px', borderRadius: '4px' }}>
+                                                                Booking: {tx.bookingRef.clientCode || tx.bookingRef.bookingId}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td style={{ padding: '16px 20px', fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontFamily: 'monospace' }}>
+                                                    {tx.reference || '-'}
+                                                </td>
+                                                <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                                                    {tx.receiptPhoto ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setPreviewImageUrl(tx.receiptPhoto)}
+                                                            style={{
+                                                                background: 'rgba(16, 185, 129, 0.1)',
+                                                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                                                color: '#10b981',
+                                                                padding: '4px 8px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: '700',
+                                                                cursor: 'pointer',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '4px'
+                                                            }}
+                                                        >
+                                                            <ImageIcon size={12} /> View Photo
+                                                        </button>
+                                                    ) : (
+                                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>No Photo</span>
+                                                    )}
+                                                </td>
+                                                <td style={{ padding: '16px 20px', fontSize: '14px', fontWeight: '800', textAlign: 'right', color: '#10b981' }}>
+                                                    {isIn ? `+₹${(tx.amount || 0).toLocaleString('en-IN')}` : '-'}
+                                                </td>
+                                                <td style={{ padding: '16px 20px', fontSize: '14px', fontWeight: '800', textAlign: 'right', color: '#f87171' }}>
+                                                    {!isIn ? `-₹${(tx.amount || 0).toLocaleString('en-IN')}` : '-'}
+                                                </td>
+                                                <td style={{ padding: '16px 20px', textAlign: 'center', display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openEditCashModal(tx)}
+                                                        style={{
+                                                            background: 'transparent',
+                                                            border: 'none',
+                                                            color: 'rgba(255,255,255,0.7)',
+                                                            cursor: 'pointer',
+                                                            padding: '4px',
+                                                            borderRadius: '4px'
+                                                        }}
+                                                        title="Edit Cash Entry"
+                                                    >
+                                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteCashClick(tx)}
+                                                        style={{
+                                                            background: 'transparent',
+                                                            border: 'none',
+                                                            color: 'rgba(255,255,255,0.3)',
+                                                            cursor: 'pointer',
+                                                            padding: '4px',
+                                                            borderRadius: '4px'
+                                                        }}
+                                                        title="Delete Cash Entry"
+                                                    >
+                                                        <Trash2 size={15} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* MODALS: BANK & CASH BOOK                                                  */}
+            {/* ========================================================================= */}
 
             {/* Modal: Add Bank Account */}
             <AnimatePresence>
                 {showAddBankModal && (
-                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000 }}>
                         <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '480px', background: '#0f172a', padding: '26px', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -750,7 +1607,7 @@ const BankBook = () => {
                                         <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Account Holder Name</label>
                                         <input
                                             type="text"
-                                            placeholder="e.g. Yatree Destination"
+                                            placeholder="e.g. Yatree Travels Pvt Ltd"
                                             value={bankFormData.accountHolder}
                                             onChange={e => setBankFormData({ ...bankFormData, accountHolder: e.target.value })}
                                             style={darkInputStyle}
@@ -769,42 +1626,30 @@ const BankBook = () => {
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Branch Name</label>
-                                        <input
-                                            type="text"
-                                            placeholder="e.g. Jaipur Main Branch"
-                                            value={bankFormData.branch}
-                                            onChange={e => setBankFormData({ ...bankFormData, branch: e.target.value })}
-                                            style={darkInputStyle}
-                                        />
-                                    </div>
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                    <div>
                                         <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>UPI ID (Optional)</label>
                                         <input
                                             type="text"
-                                            placeholder="e.g. yatree@hdfcbank"
+                                            placeholder="e.g. company@hdfcbank"
                                             value={bankFormData.upiId}
                                             onChange={e => setBankFormData({ ...bankFormData, upiId: e.target.value })}
                                             style={darkInputStyle}
                                         />
                                     </div>
-                                    <div>
-                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Opening Balance (₹)</label>
-                                        <input
-                                            type="number"
-                                            placeholder="e.g. 50000"
-                                            value={bankFormData.openingBalance}
-                                            onChange={e => setBankFormData({ ...bankFormData, openingBalance: e.target.value })}
-                                            style={darkInputStyle}
-                                        />
-                                    </div>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Opening Balance (₹)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0"
+                                        value={bankFormData.openingBalance}
+                                        onChange={e => setBankFormData({ ...bankFormData, openingBalance: e.target.value })}
+                                        style={darkInputStyle}
+                                    />
                                 </div>
                                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                                     <button type="button" onClick={() => setShowAddBankModal(false)} style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
                                     <button type="submit" disabled={submittingBank} style={{ flex: 1, padding: '12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: submittingBank ? 'not-allowed' : 'pointer', fontWeight: '800' }}>
-                                        {submittingBank ? 'Creating...' : 'Save Bank Account'}
+                                        {submittingBank ? 'Saving...' : 'Save Bank Account'}
                                     </button>
                                 </div>
                             </form>
@@ -813,78 +1658,180 @@ const BankBook = () => {
                 )}
             </AnimatePresence>
 
-            {/* Modal: Record Bank Transaction */}
+            {/* Modal: Add Bank Transaction */}
             <AnimatePresence>
                 {showAddTxModal && (
-                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
-                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '520px', background: '#0f172a', padding: '26px', border: '1px solid rgba(34, 197, 94, 0.4)', maxHeight: '90vh', overflowY: 'auto' }}>
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000 }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '500px', background: '#0f172a', padding: '26px', border: '1px solid rgba(34, 197, 94, 0.4)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Wallet size={22} color="#22c55e" />
-                                    <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Record Bank Transaction</h3>
+                                    <Landmark size={22} color="#4ade80" />
+                                    <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Record Bank Entry</h3>
                                 </div>
                                 <button type="button" onClick={() => setShowAddTxModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
                                     <X size={20} />
                                 </button>
                             </div>
                             <form onSubmit={handleCreateTx} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                                {/* Type Toggle: IN vs OUT */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => setTxFormData({ ...txFormData, type: 'IN' })}
-                                        style={{
-                                            padding: '12px',
-                                            borderRadius: '10px',
-                                            border: 'none',
-                                            background: txFormData.type === 'IN' ? '#22c55e' : 'rgba(255,255,255,0.05)',
-                                            color: txFormData.type === 'IN' ? '#000' : 'rgba(255,255,255,0.7)',
-                                            fontWeight: '800',
-                                            fontSize: '13px',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            gap: '6px'
-                                        }}
-                                    >
-                                        <ArrowDownLeft size={16} /> Credit (Money In)
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setTxFormData({ ...txFormData, type: 'OUT' })}
-                                        style={{
-                                            padding: '12px',
-                                            borderRadius: '10px',
-                                            border: 'none',
-                                            background: txFormData.type === 'OUT' ? '#ef4444' : 'rgba(255,255,255,0.05)',
-                                            color: txFormData.type === 'OUT' ? '#fff' : 'rgba(255,255,255,0.7)',
-                                            fontWeight: '800',
-                                            fontSize: '13px',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            gap: '6px'
-                                        }}
-                                    >
-                                        <ArrowUpRight size={16} /> Debit (Money Out)
-                                    </button>
-                                </div>
-
-                                {/* Bank Account Select */}
                                 <div>
-                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Bank Account *</label>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Select Bank Account *</label>
                                     <select
                                         value={txFormData.bankAccountId}
                                         onChange={e => setTxFormData({ ...txFormData, bankAccountId: e.target.value })}
-                                        className="premium-compact-input"
-                                        style={{ width: '100%', height: '40px', background: 'rgba(0,0,0,0.35)', color: 'white', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}
+                                        style={darkInputStyle}
                                         required
                                     >
                                         {bankAccounts.map(b => (
-                                            <option key={b._id} value={b._id}>
-                                                {b.bankName} {b.accountNumber ? `(•••• ${b.accountNumber.slice(-4)})` : ''} - Bal: ₹{(b.currentBalance || 0).toLocaleString('en-IN')}
+                                            <option key={b._id} value={b._id} style={{ background: '#090f1d' }}>
+                                                {b.bankName} {b.accountNumber ? `(•••• ${b.accountNumber.slice(-4)})` : ''} - Bal: ₹{(b.currentBalance || 0).toLocaleString()}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Entry Type</label>
+                                        <select
+                                            value={txFormData.type}
+                                            onChange={e => setTxFormData({ ...txFormData, type: e.target.value })}
+                                            style={darkInputStyle}
+                                        >
+                                            <option value="IN" style={{ background: '#090f1d' }}>🟢 CREDIT (Money IN)</option>
+                                            <option value="OUT" style={{ background: '#090f1d' }}>🔴 DEBIT (Money OUT)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Amount (₹) *</label>
+                                        <input
+                                            type="number"
+                                            placeholder="0"
+                                            value={txFormData.amount}
+                                            onChange={e => setTxFormData({ ...txFormData, amount: e.target.value })}
+                                            style={{ ...darkInputStyle, fontWeight: '800', color: txFormData.type === 'IN' ? '#4ade80' : '#f87171' }}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Payment Mode</label>
+                                        <select
+                                            value={txFormData.paymentMode}
+                                            onChange={e => setTxFormData({ ...txFormData, paymentMode: e.target.value })}
+                                            style={darkInputStyle}
+                                        >
+                                            <option value="UPI / QR Code" style={{ background: '#090f1d' }}>UPI / QR Code</option>
+                                            <option value="Bank Transfer / NEFT" style={{ background: '#090f1d' }}>NEFT / RTGS / IMPS</option>
+                                            <option value="Cheque" style={{ background: '#090f1d' }}>Cheque</option>
+                                            <option value="Cash" style={{ background: '#090f1d' }}>Cash Deposit</option>
+                                            <option value="Other" style={{ background: '#090f1d' }}>Other</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Date</label>
+                                        <input
+                                            type="date"
+                                            value={txFormData.date}
+                                            onChange={e => setTxFormData({ ...txFormData, date: e.target.value })}
+                                            style={darkInputStyle}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Category</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Advance Payment, Final Tour Settlement, Office Expense..."
+                                        value={txFormData.category}
+                                        onChange={e => setTxFormData({ ...txFormData, category: e.target.value })}
+                                        style={darkInputStyle}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Transaction Ref / UTR / Cheque No</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. UTR12345678"
+                                        value={txFormData.reference}
+                                        onChange={e => setTxFormData({ ...txFormData, reference: e.target.value })}
+                                        style={darkInputStyle}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Particulars / Description</label>
+                                    <textarea
+                                        rows={2}
+                                        placeholder="Notes about this transaction..."
+                                        value={txFormData.description}
+                                        onChange={e => setTxFormData({ ...txFormData, description: e.target.value })}
+                                        style={{ ...darkInputStyle, resize: 'none' }}
+                                    />
+                                </div>
+                                <div>
+                                    <ImageUploader
+                                        file={txScreenshotFile}
+                                        onChange={setTxScreenshotFile}
+                                        label="Bank Slip / Receipt Screenshot (Optional)"
+                                        color="#22c55e"
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                    <button type="button" onClick={() => setShowAddTxModal(false)} style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                                    <button type="submit" disabled={submittingTx} style={{ flex: 1, padding: '12px', background: '#22c55e', color: '#000', border: 'none', borderRadius: '8px', cursor: submittingTx ? 'not-allowed' : 'pointer', fontWeight: '900' }}>
+                                        {submittingTx ? 'Recording...' : 'Record Transaction'}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Modal: Deposit Cash into Bank (Cash ➔ Bank Transfer) */}
+            <AnimatePresence>
+                {showDepositModal && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000 }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '520px', background: '#0f172a', padding: '26px', border: '1px solid rgba(56, 189, 248, 0.4)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ padding: '8px', background: 'rgba(56, 189, 248, 0.15)', borderRadius: '10px', color: '#38bdf8' }}>
+                                        <ArrowRightLeft size={20} />
+                                    </div>
+                                    <div>
+                                        <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '900' }}>Deposit Cash into Bank</h3>
+                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>Cash in Hand ➔ Bank Account Transfer</span>
+                                    </div>
+                                </div>
+                                <button type="button" onClick={() => setShowDepositModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            {/* Current Balances Header */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                <div>
+                                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontWeight: '800', textTransform: 'uppercase' }}>Available Cash in Hand</div>
+                                    <div style={{ fontSize: '17px', fontWeight: '950', color: '#fbbf24', marginTop: '2px' }}>₹{(cashStats.currentBalance || 0).toLocaleString()}</div>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontWeight: '800', textTransform: 'uppercase' }}>Target Bank Balance</div>
+                                    <div style={{ fontSize: '17px', fontWeight: '950', color: '#38bdf8', marginTop: '2px' }}>₹{(selectedDepositBank?.currentBalance || 0).toLocaleString()}</div>
+                                </div>
+                            </div>
+
+                            <form onSubmit={handleDepositSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Target Bank Account *</label>
+                                    <select
+                                        value={depositFormData.bankAccountId}
+                                        onChange={e => setDepositFormData({ ...depositFormData, bankAccountId: e.target.value })}
+                                        style={darkInputStyle}
+                                        required
+                                    >
+                                        {bankAccounts.map(b => (
+                                            <option key={b._id} value={b._id} style={{ background: '#090f1d' }}>
+                                                {b.bankName} {b.accountNumber ? `(A/C •••• ${b.accountNumber.slice(-4)})` : ''} - Current: ₹{(b.currentBalance || 0).toLocaleString()}
                                             </option>
                                         ))}
                                     </select>
@@ -892,24 +1839,251 @@ const BankBook = () => {
 
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                                     <div>
-                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Amount (₹) *</label>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Deposit Amount (₹) *</label>
                                         <input
                                             type="number"
-                                            placeholder="e.g. 5000"
-                                            value={txFormData.amount}
-                                            onChange={e => setTxFormData({ ...txFormData, amount: e.target.value })}
-                                            style={{ ...darkInputStyle, fontWeight: 'bold', fontSize: '15px' }}
+                                            min="1"
+                                            placeholder="e.g. 20000"
+                                            value={depositFormData.amount}
+                                            onChange={e => setDepositFormData({ ...depositFormData, amount: e.target.value })}
+                                            style={{ ...darkInputStyle, fontSize: '16px', fontWeight: '800', color: '#38bdf8' }}
                                             required
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Date *</label>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Deposit Date *</label>
                                         <input
                                             type="date"
-                                            value={txFormData.date}
-                                            onChange={e => setTxFormData({ ...txFormData, date: e.target.value })}
-                                            onClick={e => e.target.showPicker?.()}
+                                            value={depositFormData.date}
+                                            onChange={e => setDepositFormData({ ...depositFormData, date: e.target.value })}
                                             style={darkInputStyle}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Dynamic Live Balance Impact */}
+                                {Number(depositFormData.amount) > 0 && (
+                                    <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '10px', padding: '10px 14px', fontSize: '12px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Cash in Hand:</span>
+                                            <span style={{ fontWeight: '800', color: '#fbbf24' }}>
+                                                ₹{(cashStats.currentBalance || 0).toLocaleString()} ➔ ₹{((cashStats.currentBalance || 0) - Number(depositFormData.amount)).toLocaleString()}
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>{selectedDepositBank?.bankName || 'Bank'} A/C:</span>
+                                            <span style={{ fontWeight: '800', color: '#38bdf8' }}>
+                                                ₹{(selectedDepositBank?.currentBalance || 0).toLocaleString()} ➔ ₹{((selectedDepositBank?.currentBalance || 0) + Number(depositFormData.amount)).toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Bank Deposit Slip No / Reference</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. SLIP-8849 / CDM-REF"
+                                        value={depositFormData.reference}
+                                        onChange={e => setDepositFormData({ ...depositFormData, reference: e.target.value })}
+                                        style={darkInputStyle}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Description / Remarks</label>
+                                    <textarea
+                                        rows={2}
+                                        placeholder="e.g. Deposited tour cash collection into HDFC Bank account..."
+                                        value={depositFormData.description}
+                                        onChange={e => setDepositFormData({ ...depositFormData, description: e.target.value })}
+                                        style={{ ...darkInputStyle, resize: 'none' }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <ImageUploader
+                                        file={depositReceiptFile}
+                                        onChange={setDepositReceiptFile}
+                                        label="Bank Deposit Slip / Stamped Challan Photo"
+                                        color="#38bdf8"
+                                    />
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                    <button type="button" onClick={() => setShowDepositModal(false)} style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                                    <button type="submit" disabled={submittingDeposit} style={{ flex: 1, padding: '12px', background: '#38bdf8', color: '#000', border: 'none', borderRadius: '8px', cursor: submittingDeposit ? 'not-allowed' : 'pointer', fontWeight: '900' }}>
+                                        {submittingDeposit ? 'Processing Deposit...' : 'Confirm Deposit to Bank'}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Modal: Withdraw Cash from Bank (Bank ➔ Cash Transfer) */}
+            <AnimatePresence>
+                {showWithdrawModal && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000 }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '520px', background: '#0f172a', padding: '26px', border: '1px solid rgba(251, 191, 36, 0.4)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ padding: '8px', background: 'rgba(251, 191, 36, 0.15)', borderRadius: '10px', color: '#fbbf24' }}>
+                                        <ArrowLeftRight size={20} />
+                                    </div>
+                                    <div>
+                                        <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '900' }}>Withdraw Cash from Bank</h3>
+                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>Bank Account ➔ Cash in Hand Transfer</span>
+                                    </div>
+                                </div>
+                                <button type="button" onClick={() => setShowWithdrawModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleWithdrawSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Source Bank Account *</label>
+                                    <select
+                                        value={withdrawFormData.bankAccountId}
+                                        onChange={e => setWithdrawFormData({ ...withdrawFormData, bankAccountId: e.target.value })}
+                                        style={darkInputStyle}
+                                        required
+                                    >
+                                        {bankAccounts.map(b => (
+                                            <option key={b._id} value={b._id} style={{ background: '#090f1d' }}>
+                                                {b.bankName} {b.accountNumber ? `(A/C •••• ${b.accountNumber.slice(-4)})` : ''} - Available: ₹{(b.currentBalance || 0).toLocaleString()}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Withdrawal Amount (₹) *</label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            placeholder="e.g. 15000"
+                                            value={withdrawFormData.amount}
+                                            onChange={e => setWithdrawFormData({ ...withdrawFormData, amount: e.target.value })}
+                                            style={{ ...darkInputStyle, fontSize: '16px', fontWeight: '800', color: '#fbbf24' }}
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Withdrawal Date *</label>
+                                        <input
+                                            type="date"
+                                            value={withdrawFormData.date}
+                                            onChange={e => setWithdrawFormData({ ...withdrawFormData, date: e.target.value })}
+                                            style={darkInputStyle}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Dynamic Live Balance Impact */}
+                                {Number(withdrawFormData.amount) > 0 && (
+                                    <div style={{ background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.25)', borderRadius: '10px', padding: '10px 14px', fontSize: '12px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>{selectedWithdrawBank?.bankName || 'Bank'} A/C:</span>
+                                            <span style={{ fontWeight: '800', color: '#f87171' }}>
+                                                ₹{(selectedWithdrawBank?.currentBalance || 0).toLocaleString()} ➔ ₹{((selectedWithdrawBank?.currentBalance || 0) - Number(withdrawFormData.amount)).toLocaleString()}
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Cash in Hand:</span>
+                                            <span style={{ fontWeight: '800', color: '#10b981' }}>
+                                                ₹{(cashStats.currentBalance || 0).toLocaleString()} ➔ ₹{((cashStats.currentBalance || 0) + Number(withdrawFormData.amount)).toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Cheque No / Self Withdrawal Ref / ATM</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. CHEQUE-102948 / ATM-WDL"
+                                        value={withdrawFormData.reference}
+                                        onChange={e => setWithdrawFormData({ ...withdrawFormData, reference: e.target.value })}
+                                        style={darkInputStyle}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Description / Remarks</label>
+                                    <textarea
+                                        rows={2}
+                                        placeholder="e.g. Cash self-withdrawal for driver advances and office petty cash..."
+                                        value={withdrawFormData.description}
+                                        onChange={e => setWithdrawFormData({ ...withdrawFormData, description: e.target.value })}
+                                        style={{ ...darkInputStyle, resize: 'none' }}
+                                    />
+                                </div>
+
+                                <div>
+                                    <ImageUploader
+                                        file={withdrawReceiptFile}
+                                        onChange={setWithdrawReceiptFile}
+                                        label="ATM Slip / Cheque Leaf Photo (Optional)"
+                                        color="#fbbf24"
+                                    />
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                    <button type="button" onClick={() => setShowWithdrawModal(false)} style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                                    <button type="submit" disabled={submittingWithdraw} style={{ flex: 1, padding: '12px', background: '#fbbf24', color: '#000', border: 'none', borderRadius: '8px', cursor: submittingWithdraw ? 'not-allowed' : 'pointer', fontWeight: '900' }}>
+                                        {submittingWithdraw ? 'Processing Withdrawal...' : 'Confirm Withdrawal to Cash'}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Modal: Add General Cash Entry (Cash IN / Cash OUT) */}
+            <AnimatePresence>
+                {showAddCashModal && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000 }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '520px', background: '#0f172a', padding: '26px', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ padding: '8px', background: 'rgba(16, 185, 129, 0.15)', borderRadius: '10px', color: '#10b981' }}>
+                                        <Banknote size={20} />
+                                    </div>
+                                    <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Record Cash Entry</h3>
+                                </div>
+                                <button type="button" onClick={() => setShowAddCashModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <form onSubmit={handleAddCashSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Cash Flow Type *</label>
+                                        <select
+                                            value={cashFormData.type}
+                                            onChange={e => setCashFormData({ ...cashFormData, type: e.target.value })}
+                                            style={{ ...darkInputStyle, fontWeight: '800' }}
+                                        >
+                                            <option value="IN" style={{ background: '#090f1d', color: '#10b981' }}>🟢 CASH IN (Receipt)</option>
+                                            <option value="OUT" style={{ background: '#090f1d', color: '#f87171' }}>🔴 CASH OUT (Payment)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Amount (₹) *</label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            placeholder="0"
+                                            value={cashFormData.amount}
+                                            onChange={e => setCashFormData({ ...cashFormData, amount: e.target.value })}
+                                            style={{ ...darkInputStyle, fontSize: '16px', fontWeight: '800', color: cashFormData.type === 'IN' ? '#10b981' : '#f87171' }}
                                             required
                                         />
                                     </div>
@@ -919,75 +2093,91 @@ const BankBook = () => {
                                     <div>
                                         <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Category</label>
                                         <select
-                                            value={txFormData.category}
-                                            onChange={e => setTxFormData({ ...txFormData, category: e.target.value })}
-                                            className="premium-compact-input"
-                                            style={{ width: '100%', height: '40px', background: 'rgba(0,0,0,0.35)', color: 'white', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}
+                                            value={cashFormData.category}
+                                            onChange={e => setCashFormData({ ...cashFormData, category: e.target.value })}
+                                            style={darkInputStyle}
                                         >
-                                            <option value="Advance Payment">Advance Payment</option>
-                                            <option value="Full Settlement">Full Settlement</option>
-                                            <option value="Fuel & Toll Expense">Fuel & Toll Expense</option>
-                                            <option value="Driver Salary">Driver Salary</option>
-                                            <option value="Fleet Maintenance">Fleet Maintenance</option>
-                                            <option value="Office & Admin">Office & Admin</option>
-                                            <option value="Tax & GST">Tax & GST</option>
-                                            <option value="Other">Other</option>
+                                            <option value="General Cash" style={{ background: '#090f1d' }}>General Cash</option>
+                                            <option value="Guest Cash Collection" style={{ background: '#090f1d' }}>Guest Cash Collection</option>
+                                            <option value="Advance Payment" style={{ background: '#090f1d' }}>Advance Payment</option>
+                                            <option value="Driver Cash Settlement" style={{ background: '#090f1d' }}>Driver Cash Settlement</option>
+                                            <option value="Driver Advance" style={{ background: '#090f1d' }}>Driver Advance</option>
+                                            <option value="Fuel / Vehicle Utility" style={{ background: '#090f1d' }}>Fuel / Utility Expense</option>
+                                            <option value="Office Expense" style={{ background: '#090f1d' }}>Office Expense</option>
+                                            <option value="Staff Salary Cash" style={{ background: '#090f1d' }}>Staff Salary Cash</option>
+                                            <option value="Other Expense" style={{ background: '#090f1d' }}>Other Expense</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Payment Mode</label>
-                                        <select
-                                            value={txFormData.paymentMode}
-                                            onChange={e => setTxFormData({ ...txFormData, paymentMode: e.target.value })}
-                                            className="premium-compact-input"
-                                            style={{ width: '100%', height: '40px', background: 'rgba(0,0,0,0.35)', color: 'white', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}
-                                        >
-                                            <option value="UPI / QR Code">UPI / QR Code</option>
-                                            <option value="Bank Transfer / NEFT">Bank Transfer / NEFT</option>
-                                            <option value="IMPS">IMPS</option>
-                                            <option value="Cheque">Cheque</option>
-                                            <option value="Cash Deposit">Cash Deposit</option>
-                                        </select>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Date *</label>
+                                        <input
+                                            type="date"
+                                            value={cashFormData.date}
+                                            onChange={e => setCashFormData({ ...cashFormData, date: e.target.value })}
+                                            style={darkInputStyle}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Guest Name (Optional)</label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. Ramesh Sharma"
+                                            value={cashFormData.guestName}
+                                            onChange={e => setCashFormData({ ...cashFormData, guestName: e.target.value })}
+                                            style={darkInputStyle}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Driver Name (Optional)</label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. Sanjay Kumar"
+                                            value={cashFormData.driverName}
+                                            onChange={e => setCashFormData({ ...cashFormData, driverName: e.target.value })}
+                                            style={darkInputStyle}
+                                        />
                                     </div>
                                 </div>
 
                                 <div>
-                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Transaction Reference / UTR Number</label>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Voucher / Receipt No (Optional)</label>
                                     <input
                                         type="text"
-                                        placeholder="e.g. UTR1234567890"
-                                        value={txFormData.reference}
-                                        onChange={e => setTxFormData({ ...txFormData, reference: e.target.value })}
+                                        placeholder="e.g. VCH-00492"
+                                        value={cashFormData.reference}
+                                        onChange={e => setCashFormData({ ...cashFormData, reference: e.target.value })}
                                         style={darkInputStyle}
                                     />
                                 </div>
 
                                 <div>
-                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Particulars / Description *</label>
-                                    <input
-                                        type="text"
-                                        placeholder="e.g. Advance for Jaipur tour booking"
-                                        value={txFormData.description}
-                                        onChange={e => setTxFormData({ ...txFormData, description: e.target.value })}
-                                        style={darkInputStyle}
-                                        required
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Description / Remarks</label>
+                                    <textarea
+                                        rows={2}
+                                        placeholder="Details of cash payment or collection..."
+                                        value={cashFormData.description}
+                                        onChange={e => setCashFormData({ ...cashFormData, description: e.target.value })}
+                                        style={{ ...darkInputStyle, resize: 'none' }}
                                     />
                                 </div>
 
-                                {/* Payment Receipt Screenshot */}
                                 <div>
                                     <ImageUploader
-                                        file={txScreenshotFile}
-                                        onChange={setTxScreenshotFile}
-                                        label="Payment Screenshot / Receipt"
-                                        color="#22c55e"
+                                        file={cashReceiptFile}
+                                        onChange={setCashReceiptFile}
+                                        label="Cash Receipt / Voucher Bill Photo"
+                                        color="#10b981"
                                     />
                                 </div>
 
                                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                                    <button type="button" onClick={() => setShowAddTxModal(false)} style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
-                                    <button type="submit" disabled={submittingTx} style={{ flex: 1, padding: '12px', background: txFormData.type === 'IN' ? '#22c55e' : '#ef4444', color: txFormData.type === 'IN' ? '#000' : '#fff', border: 'none', borderRadius: '8px', cursor: submittingTx ? 'not-allowed' : 'pointer', fontWeight: '800' }}>
-                                        {submittingTx ? 'Saving Entry...' : 'Save Bank Entry'}
+                                    <button type="button" onClick={() => setShowAddCashModal(false)} style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                                    <button type="submit" disabled={submittingCash} style={{ flex: 1, padding: '12px', background: '#10b981', color: '#000', border: 'none', borderRadius: '8px', cursor: submittingCash ? 'not-allowed' : 'pointer', fontWeight: '900' }}>
+                                        {submittingCash ? 'Recording...' : 'Record Cash Entry'}
                                     </button>
                                 </div>
                             </form>
@@ -996,96 +2186,262 @@ const BankBook = () => {
                 )}
             </AnimatePresence>
 
-            {/* Modal: Preview Screenshot / Receipt */}
+            {/* Modal: Edit Cash Transaction */}
             <AnimatePresence>
-                {/* Edit Transaction Modal */}
-            {showEditTxModal && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-                    <div style={{ background: '#0B1121', borderRadius: '24px', padding: '32px', width: '100%', maxWidth: '500px', border: '1px solid rgba(255,255,255,0.05)', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
-                        <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#fff', marginBottom: '24px' }}>Edit Transaction</h2>
-                        <form onSubmit={submitEditTx} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>AMOUNT</label>
-                                    <input type="number" required style={{ background: '#131C31', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '12px 16px', color: '#fff', fontSize: '14px', outline: 'none' }} value={editTxFormData.amount} onChange={e => setEditTxFormData({ ...editTxFormData, amount: e.target.value })} />
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>DATE</label>
-                                    <input type="date" required style={{ background: '#131C31', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '12px 16px', color: '#fff', fontSize: '14px', outline: 'none' }} value={editTxFormData.date} onChange={e => setEditTxFormData({ ...editTxFormData, date: e.target.value })} />
-                                </div>
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>DESCRIPTION</label>
-                                <input type="text" style={{ background: '#131C31', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '12px 16px', color: '#fff', fontSize: '14px', outline: 'none' }} value={editTxFormData.description} onChange={e => setEditTxFormData({ ...editTxFormData, description: e.target.value })} />
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
-                                <button type="button" onClick={() => setShowEditTxModal(false)} style={{ padding: '12px 24px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '14px', fontWeight: '600', border: 'none', cursor: 'pointer' }}>Cancel</button>
-                                <button type="submit" disabled={submittingEditTx} style={{ padding: '12px 24px', borderRadius: '12px', background: '#3b82f6', color: '#fff', fontSize: '14px', fontWeight: '600', border: 'none', cursor: submittingEditTx ? 'not-allowed' : 'pointer', opacity: submittingEditTx ? 0.7 : 1 }}>
-                                    {submittingEditTx ? 'Saving...' : 'Save Changes'}
+                {showEditCashModal && editingCashTx && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000 }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '480px', background: '#0f172a', padding: '26px', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Edit Cash Transaction</h3>
+                                <button type="button" onClick={() => setShowEditCashModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                                    <X size={20} />
                                 </button>
                             </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Revert Booking Modal */}
-            {showRevertModal && txToDelete && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}>
-                    <div style={{ background: '#0B1121', borderRadius: '24px', padding: '32px', width: '100%', maxWidth: '500px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '24px', background: 'rgba(245, 158, 11, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px' }}>
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                        </div>
-                        <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#fff', marginBottom: '12px' }}>Delete Booking Payment</h2>
-                        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '14px', lineHeight: '1.6', marginBottom: '24px' }}>
-                            This payment is linked to a Confirmed Booking (<strong>{txToDelete.bookingRef?.clientName}</strong>). When you delete this payment, what would you like to do with the Booking?
-                        </p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            <button onClick={() => executeDeleteTx(txToDelete._id, false)} style={{ width: '100%', padding: '16px', borderRadius: '16px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.2)', textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <span style={{ fontWeight: '700', fontSize: '15px' }}>Keep Booking Confirmed</span>
-                                <span style={{ fontSize: '13px', opacity: 0.8 }}>Just remove this payment, leave booking intact.</span>
-                            </button>
-                            <button onClick={() => executeDeleteTx(txToDelete._id, true)} style={{ width: '100%', padding: '16px', borderRadius: '16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <span style={{ fontWeight: '700', fontSize: '15px' }}>Revert to Open Lead</span>
-                                <span style={{ fontSize: '13px', opacity: 0.8 }}>Delete this booking and move it back to Open Leads.</span>
-                            </button>
-                            <button onClick={() => { setShowRevertModal(false); setTxToDelete(null); }} style={{ width: '100%', padding: '16px', borderRadius: '16px', background: 'transparent', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.1)', textAlign: 'center', cursor: 'pointer', fontWeight: '600', marginTop: '8px' }}>
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {previewImageUrl && (
-                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200000 }}>
-                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} style={{ maxWidth: '90vw', maxHeight: '90vh', background: '#0f172a', padding: '16px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                                <span style={{ fontSize: '14px', fontWeight: '700', color: 'white' }}>Payment Receipt / Screenshot</span>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <a
-                                        href={previewImageUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        style={{ background: 'rgba(255,255,255,0.1)', color: 'white', padding: '6px 12px', borderRadius: '8px', textDecoration: 'none', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                    >
-                                        <ExternalLink size={14} /> Open Full
-                                    </a>
-                                    <button
-                                        type="button"
-                                        onClick={() => setPreviewImageUrl(null)}
-                                        style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer' }}
-                                    >
-                                        <X size={16} />
+                            <form onSubmit={submitEditCash} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Amount (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={editCashFormData.amount}
+                                        onChange={e => setEditCashFormData({ ...editCashFormData, amount: e.target.value })}
+                                        style={darkInputStyle}
+                                        required
+                                    />
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Date</label>
+                                        <input
+                                            type="date"
+                                            value={editCashFormData.date}
+                                            onChange={e => setEditCashFormData({ ...editCashFormData, date: e.target.value })}
+                                            style={darkInputStyle}
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Category</label>
+                                        <input
+                                            type="text"
+                                            value={editCashFormData.category}
+                                            onChange={e => setEditCashFormData({ ...editCashFormData, category: e.target.value })}
+                                            style={darkInputStyle}
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Voucher / Slip Reference</label>
+                                    <input
+                                        type="text"
+                                        value={editCashFormData.reference}
+                                        onChange={e => setEditCashFormData({ ...editCashFormData, reference: e.target.value })}
+                                        style={darkInputStyle}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Description</label>
+                                    <textarea
+                                        rows={2}
+                                        value={editCashFormData.description}
+                                        onChange={e => setEditCashFormData({ ...editCashFormData, description: e.target.value })}
+                                        style={{ ...darkInputStyle, resize: 'none' }}
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                    <button type="button" onClick={() => setShowEditCashModal(false)} style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                                    <button type="submit" disabled={submittingEditCash} style={{ flex: 1, padding: '12px', background: '#10b981', color: '#000', border: 'none', borderRadius: '8px', cursor: submittingEditCash ? 'not-allowed' : 'pointer', fontWeight: '800' }}>
+                                        {submittingEditCash ? 'Saving...' : 'Save Changes'}
                                     </button>
                                 </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Modal: Edit Bank Transaction */}
+            <AnimatePresence>
+                {showEditTxModal && editingTx && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000 }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '480px', background: '#0f172a', padding: '26px', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Edit Bank Transaction</h3>
+                                <button type="button" onClick={() => setShowEditTxModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                                    <X size={20} />
+                                </button>
                             </div>
+                            <form onSubmit={submitEditTx} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Amount (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={editTxFormData.amount}
+                                        onChange={e => setEditTxFormData({ ...editTxFormData, amount: e.target.value })}
+                                        style={darkInputStyle}
+                                        required
+                                    />
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Date</label>
+                                        <input
+                                            type="date"
+                                            value={editTxFormData.date}
+                                            onChange={e => setEditTxFormData({ ...editTxFormData, date: e.target.value })}
+                                            style={darkInputStyle}
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Payment Mode</label>
+                                        <input
+                                            type="text"
+                                            value={editTxFormData.paymentMode}
+                                            onChange={e => setEditTxFormData({ ...editTxFormData, paymentMode: e.target.value })}
+                                            style={darkInputStyle}
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Category</label>
+                                    <input
+                                        type="text"
+                                        value={editTxFormData.category}
+                                        onChange={e => setEditTxFormData({ ...editTxFormData, category: e.target.value })}
+                                        style={darkInputStyle}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>UTR / Reference No</label>
+                                    <input
+                                        type="text"
+                                        value={editTxFormData.reference}
+                                        onChange={e => setEditTxFormData({ ...editTxFormData, reference: e.target.value })}
+                                        style={darkInputStyle}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Description</label>
+                                    <textarea
+                                        rows={2}
+                                        value={editTxFormData.description}
+                                        onChange={e => setEditTxFormData({ ...editTxFormData, description: e.target.value })}
+                                        style={{ ...darkInputStyle, resize: 'none' }}
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                    <button type="button" onClick={() => setShowEditTxModal(false)} style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                                    <button type="submit" disabled={submittingEditTx} style={{ flex: 1, padding: '12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: submittingEditTx ? 'not-allowed' : 'pointer', fontWeight: '800' }}>
+                                        {submittingEditTx ? 'Saving...' : 'Save Changes'}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Modal: Delete/Revert Confirmation for Linked Booking Entry */}
+            <AnimatePresence>
+                {showRevertModal && txToDelete && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000 }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '480px', background: '#0f172a', padding: '26px', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+                            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px auto' }}>
+                                    <Trash2 size={24} />
+                                </div>
+                                <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Delete Linked Transaction</h3>
+                                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', marginTop: '6px', lineHeight: '1.5' }}>
+                                    This entry is linked to confirmed booking <strong>{txToDelete.bookingRef?.bookingId || 'Tour'}</strong> (Amount: ₹{txToDelete.amount?.toLocaleString()}).
+                                    Would you like to also revert the advance on the booking?
+                                </p>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => executeDeleteTx(txToDelete._id, true)}
+                                    style={{
+                                        padding: '12px',
+                                        background: '#ef4444',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontWeight: '800',
+                                        fontSize: '13px'
+                                    }}
+                                >
+                                    Delete & Revert Booking Advance
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => executeDeleteTx(txToDelete._id, false)}
+                                    style={{
+                                        padding: '12px',
+                                        background: 'rgba(255,255,255,0.08)',
+                                        color: 'white',
+                                        border: '1px solid rgba(255,255,255,0.15)',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontWeight: '700',
+                                        fontSize: '13px'
+                                    }}
+                                >
+                                    Delete Bank Entry Only (Keep Booking)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowRevertModal(false); setTxToDelete(null); }}
+                                    style={{
+                                        padding: '10px',
+                                        background: 'transparent',
+                                        color: 'rgba(255,255,255,0.5)',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '12px'
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Modal: Receipt Image Preview */}
+            <AnimatePresence>
+                {previewImageUrl && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200000, padding: '20px' }}>
+                        <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+                            <button
+                                type="button"
+                                onClick={() => setPreviewImageUrl(null)}
+                                style={{
+                                    position: 'absolute',
+                                    top: '-15px',
+                                    right: '-15px',
+                                    width: '36px',
+                                    height: '36px',
+                                    borderRadius: '50%',
+                                    background: '#ef4444',
+                                    color: 'white',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    zIndex: 10
+                                }}
+                            >
+                                <X size={20} />
+                            </button>
                             <img
                                 src={previewImageUrl}
-                                alt="Receipt Preview"
-                                style={{ maxWidth: '80vw', maxHeight: '75vh', objectFit: 'contain', borderRadius: '8px', display: 'block', margin: '0 auto' }}
+                                alt="Payment Receipt"
+                                style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: '12px', objectFit: 'contain', boxShadow: '0 25px 50px rgba(0,0,0,0.8)' }}
                             />
-                        </motion.div>
+                        </div>
                     </div>
                 )}
             </AnimatePresence>

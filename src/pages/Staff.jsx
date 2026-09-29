@@ -19,6 +19,7 @@ import * as XLSX from 'xlsx';
 import OfficeGeofencePicker from '../components/OfficeGeofencePicker';
 import { todayIST, toISTDateString, formatDateIST, formatTimeIST, nowIST } from '../utils/istUtils';
 import PremiumDateInput from '../components/common/PremiumDateInput';
+import BankSelector from '../components/common/BankSelector';
 import { DateTime } from 'luxon';
 
 const Staff = () => {
@@ -133,14 +134,30 @@ const Staff = () => {
     const [monthlyReport, setMonthlyReport] = useState([]);
     const [salaryPayments, setSalaryPayments] = useState([]);
     const [advances, setAdvances] = useState([]);
+    const [bankAccounts, setBankAccounts] = useState([]);
     const [showAdvanceModal, setShowAdvanceModal] = useState(false);
     const [paymentModal, setPaymentModal] = useState({ show: false, report: null, amount: '', paymentId: null, isPaid: false });
     const [advanceFormData, setAdvanceFormData] = useState({
-        staffId: '', amount: '', date: todayIST(), remark: '', givenBy: 'Office'
+        staffId: '', amount: '', date: todayIST(), remark: '', givenBy: 'Office', paidBy: 'Company', paymentMode: 'Cash', bankAccountId: ''
     });
     const [editingAdvance, setEditingAdvance] = useState(null);
     const [submittingAdvance, setSubmittingAdvance] = useState(false);
     const [isFetching, setIsFetching] = useState(false);
+
+    useEffect(() => {
+        if (!selectedCompany?._id) return;
+        const fetchBanks = async () => {
+            try {
+                const res = await axios.get(`/api/banks/company/${selectedCompany._id}`)
+                    .catch(() => axios.get(`/api/admin/bank-accounts/${selectedCompany._id}`))
+                    .catch(() => ({ data: [] }));
+                setBankAccounts(Array.isArray(res.data) ? res.data : (res.data?.bankAccounts || []));
+            } catch (err) {
+                console.error('Error fetching banks in Staff:', err);
+            }
+        };
+        fetchBanks();
+    }, [selectedCompany]);
 
     useEffect(() => {
         if (selectedStaffReport && monthlyReport.length > 0) {
@@ -327,7 +344,7 @@ const Staff = () => {
             }
             setShowAdvanceModal(false);
             setEditingAdvance(null);
-            setAdvanceFormData({ staffId: '', amount: '', date: todayIST(), remark: '', givenBy: 'Office' });
+            setAdvanceFormData({ staffId: '', amount: '', date: todayIST(), remark: '', givenBy: 'Office', paidBy: 'Company', paymentMode: 'Cash', bankAccountId: '' });
             fetchMonthlyReport();
         } catch (err) {
             console.error('Advance error:', err);
@@ -355,7 +372,10 @@ const Staff = () => {
             amount: adv.amount,
             date: toISTDateString(adv.date),
             remark: adv.remark || '',
-            givenBy: adv.givenBy || 'Office'
+            givenBy: adv.givenBy || 'Office',
+            paidBy: adv.paidBy || 'Company',
+            paymentMode: adv.paymentMode || (adv.bankAccount ? 'Bank Transfer' : 'Cash'),
+            bankAccountId: adv.bankAccount?._id || adv.bankAccount || adv.bankAccountId || ''
         });
         setShowAdvanceModal(true);
     };
@@ -3162,6 +3182,92 @@ const Staff = () => {
                                                 required
                                             />
                                         </div>
+                                    </div>
+
+                                    {/* Payment Account / Method Selection */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                            Payment Account / Method
+                                        </label>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setAdvanceFormData({ ...advanceFormData, paymentMode: 'Cash', bankAccountId: '' })}
+                                                style={{
+                                                    padding: '10px 12px',
+                                                    borderRadius: '10px',
+                                                    border: (!advanceFormData.bankAccountId && (advanceFormData.paymentMode === 'Cash' || !advanceFormData.paymentMode)) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                    background: (!advanceFormData.bankAccountId && (advanceFormData.paymentMode === 'Cash' || !advanceFormData.paymentMode)) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                    color: (!advanceFormData.bankAccountId && (advanceFormData.paymentMode === 'Cash' || !advanceFormData.paymentMode)) ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                                    fontWeight: '800',
+                                                    fontSize: '12px',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '6px'
+                                                }}
+                                            >
+                                                💵 Cash in Hand
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setAdvanceFormData({ ...advanceFormData, paymentMode: 'Bank Transfer', bankAccountId: advanceFormData.bankAccountId || (bankAccounts[0]?._id || '') })}
+                                                style={{
+                                                    padding: '10px 12px',
+                                                    borderRadius: '10px',
+                                                    border: (advanceFormData.bankAccountId || advanceFormData.paymentMode === 'Bank Transfer' || advanceFormData.paymentMode === 'UPI') ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                    background: (advanceFormData.bankAccountId || advanceFormData.paymentMode === 'Bank Transfer' || advanceFormData.paymentMode === 'UPI') ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                    color: (advanceFormData.bankAccountId || advanceFormData.paymentMode === 'Bank Transfer' || advanceFormData.paymentMode === 'UPI') ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                    fontWeight: '800',
+                                                    fontSize: '12px',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '6px'
+                                                }}
+                                            >
+                                                🏦 Bank Account
+                                            </button>
+                                        </div>
+
+                                        {/* If Cash is chosen: Live Cash in Hand Balance Impact */}
+                                        {(!advanceFormData.bankAccountId && (advanceFormData.paymentMode === 'Cash' || !advanceFormData.paymentMode)) ? (
+                                            <div style={{
+                                                background: 'rgba(16, 185, 129, 0.08)',
+                                                border: '1px solid rgba(16, 185, 129, 0.25)',
+                                                borderRadius: '12px',
+                                                padding: '12px 14px',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '8px'
+                                            }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Current Cash in Hand:</span>
+                                                    <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '900' }}>₹{(selectedCompany?.cashBalance || 0).toLocaleString('en-IN')}</span>
+                                                </div>
+                                                {Number(advanceFormData.amount) > 0 && (
+                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(16, 185, 129, 0.2)', paddingTop: '6px' }}>
+                                                         <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Cash Balance After:</span>
+                                                         <span style={{
+                                                             fontSize: '14px',
+                                                             fontWeight: '950',
+                                                             color: ((selectedCompany?.cashBalance || 0) - Number(advanceFormData.amount)) < 0 ? '#f43f5e' : '#10b981'
+                                                         }}>
+                                                             ₹{((selectedCompany?.cashBalance || 0) - Number(advanceFormData.amount)).toLocaleString('en-IN')}
+                                                         </span>
+                                                     </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <BankSelector
+                                                bankAccounts={bankAccounts}
+                                                value={advanceFormData.bankAccountId}
+                                                amount={advanceFormData.amount}
+                                                onChange={(bId) => setAdvanceFormData({ ...advanceFormData, bankAccountId: bId, paymentMode: 'Bank Transfer' })}
+                                            />
+                                        )}
                                     </div>
 
                                     <div className="premium-input-group">

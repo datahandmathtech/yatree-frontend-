@@ -14,6 +14,7 @@ import SEO from '../components/SEO';
 import { generateBookingConfirmationPDF } from '../utils/bookingConfirmationPdf';
 import { generateTaxInvoicePDF } from '../utils/taxInvoicePdf';
 import EditBookingModal from '../components/common/EditBookingModal';
+import BankSelector from '../components/common/BankSelector';
 
 const MONTH_TABS = [
     'All Months', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'
@@ -100,8 +101,10 @@ export default function Bookings() {
     // Payment Form
     const [paymentAmount, setPaymentAmount] = useState('');
     const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
-    const [paymentMode, setPaymentMode] = useState('Bank Transfer / NEFT');
+    const [paymentMode, setPaymentMode] = useState('Cash');
     const [paymentRef, setPaymentRef] = useState('');
+    const [bankAccounts, setBankAccounts] = useState([]);
+    const [bankAccountId, setBankAccountId] = useState('');
 
     // Cancel Form
     const [cancelReason, setCancelReason] = useState('');
@@ -124,10 +127,25 @@ export default function Bookings() {
         if (selectedCompany?._id) {
             fetchBookings();
             fetchDriversAndVehicles();
+            fetchBankAccounts();
         } else {
             setBookings([]);
         }
     }, [selectedCompany]);
+
+    const fetchBankAccounts = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            const { data } = await axios.get(`/api/banks/company/${selectedCompany._id}`);
+            setBankAccounts(data || []);
+            if (data && data.length > 0) {
+                const def = data.find(b => b.isDefault) || data[0];
+                setBankAccountId(def._id);
+            }
+        } catch (err) {
+            console.error('Error fetching bank accounts:', err);
+        }
+    };
 
     const fetchDriversAndVehicles = async () => {
         if (!selectedCompany?._id) return;
@@ -460,12 +478,17 @@ export default function Bookings() {
         setLedgerEntries([]);
         if (bkg.client) {
             try {
-                // Fetch the client's ledger
                 const clientId = typeof bkg.client === 'object' ? bkg.client._id : bkg.client;
                 const { data } = await axios.get(`/api/clients/${clientId}/ledger`);
-                
-                // Filter for this booking's payments
-                const bkgLedger = data.filter(entry => entry.referenceId === bkg._id && entry.type === 'Payment').sort((a,b) => new Date(a.date) - new Date(b.date));
+                const bkgCode = bkg.bookingCode || bkg.bookingId;
+                const bkgLedger = (data || []).filter(entry => {
+                    if (['Payment', 'Advance', 'Fuel'].includes(entry.type)) {
+                        if (entry.referenceId === bkg._id) return true;
+                        if (bkgCode && entry.description && (entry.description.includes(bkgCode) || (bkg.bookingId && entry.description.includes(bkg.bookingId)))) return true;
+                        if (entry.type === 'Fuel' || entry.type === 'Payment' || entry.type === 'Advance') return true;
+                    }
+                    return false;
+                }).sort((a,b) => new Date(a.date) - new Date(b.date));
                 setLedgerEntries(bkgLedger);
             } catch (err) {
                 console.error('Error fetching ledger', err);
@@ -485,11 +508,13 @@ export default function Bookings() {
         e.preventDefault();
         try {
             if (selectedBooking._id && !String(selectedBooking._id).startsWith('bkg-mock')) {
+                const isCash = paymentMode === 'Cash' || paymentMode === 'Driver Cash';
                 await axios.post(`/api/bookings/${selectedBooking._id}/payment`, {
                     amount: Number(paymentAmount),
-                      paymentMode,
-                      paymentReference: paymentRef,
-                      paymentDate
+                    paymentMode,
+                    paymentReference: paymentRef,
+                    paymentDate,
+                    bankAccountId: !isCash ? bankAccountId : undefined
                 });
                 fetchBookings();
             } else {
@@ -1106,33 +1131,52 @@ export default function Bookings() {
                                                       
                                                       if (drvName) {
                                                           return (
-                                                              <span style={{
-                                                                  padding: '4px 12px',
-                                                                  borderRadius: '20px',
-                                                                  fontSize: '11px',
-                                                                  fontWeight: '800',
-                                                                  background: 'rgba(6, 95, 70, 0.45)',
-                                                                  color: '#34d399',
-                                                                  border: '1px solid rgba(52, 211, 153, 0.4)',
-                                                                  display: 'inline-block'
-                                                              }}>
-                                                                  👤 {drvName}
-                                                              </span>
+                                                              <button
+                                                                  type="button"
+                                                                  onClick={() => handleOpenAssignDriver(bkg)}
+                                                                  style={{
+                                                                      padding: '5px 12px',
+                                                                      borderRadius: '20px',
+                                                                      fontSize: '11.5px',
+                                                                      fontWeight: '800',
+                                                                      background: 'rgba(6, 95, 70, 0.45)',
+                                                                      color: '#34d399',
+                                                                      border: '1px solid rgba(52, 211, 153, 0.4)',
+                                                                      display: 'flex',
+                                                                      alignItems: 'center',
+                                                                      gap: '6px',
+                                                                      cursor: 'pointer'
+                                                                  }}
+                                                                  title="Click to edit/view assigned vehicle & driver"
+                                                              >
+                                                                  <span>👤 {drvName}</span>
+                                                                  <Edit size={11} color="#34d399" />
+                                                              </button>
                                                           );
                                                       } else {
                                                           return (
-                                                              <span style={{
-                                                                  padding: '4px 12px',
-                                                                  borderRadius: '20px',
-                                                                  fontSize: '11px',
-                                                                  fontWeight: '800',
-                                                                  background: 'rgba(255, 255, 255, 0.05)',
-                                                                  color: 'rgba(255,255,255,0.5)',
-                                                                  border: '1px dashed rgba(255, 255, 255, 0.2)',
-                                                                  display: 'inline-block'
-                                                              }}>
-                                                                  Unassigned
-                                                              </span>
+                                                              <button
+                                                                  type="button"
+                                                                  onClick={() => handleOpenAssignDriver(bkg)}
+                                                                  style={{
+                                                                      padding: '6px 14px',
+                                                                      borderRadius: '20px',
+                                                                      fontSize: '11px',
+                                                                      fontWeight: '900',
+                                                                      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15))',
+                                                                      color: '#fbbf24',
+                                                                      border: '1.5px solid rgba(245, 158, 11, 0.6)',
+                                                                      display: 'flex',
+                                                                      alignItems: 'center',
+                                                                      gap: '6px',
+                                                                      cursor: 'pointer',
+                                                                      boxShadow: '0 2px 10px rgba(245, 158, 11, 0.2)'
+                                                                  }}
+                                                                  title="Click to Assign Vehicle & Driver to this booking"
+                                                                >
+                                                                  <Car size={13} color="#fbbf24" />
+                                                                  <span>+ Assign Car & Driver</span>
+                                                              </button>
                                                           );
                                                       }
                                                   })()}
@@ -1312,12 +1356,26 @@ export default function Bookings() {
                                 <div>
                                     <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Payment Mode</label>
                                     <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} className="premium-compact-input" style={{ width: '100%', height: '40px' }}>
-                                        <option value="UPI / QR Code">UPI / QR Code</option>
-                                        <option value="Bank Transfer / NEFT">Bank Transfer / NEFT</option>
-                                        <option value="Cash">Cash to Company</option>
-                                        <option value="Driver Cash">Driver Cash in Hand</option>
+                                        <option value="Cash">💵 Cash to Company (Cash Book)</option>
+                                        <option value="Driver Cash">💵 Driver Cash in Hand (Cash Book)</option>
+                                        <option value="UPI / QR Code">📱 UPI / QR Code (Bank Account)</option>
+                                        <option value="Bank Transfer / NEFT">🏦 Bank Transfer / NEFT</option>
                                     </select>
                                 </div>
+                                {(paymentMode === 'Cash' || paymentMode === 'Driver Cash') ? (
+                                    <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.25)', color: '#4ade80', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span>💵 <strong>Synced to Cash Book:</strong> Amount will be credited to physical Cash in Hand.</span>
+                                    </div>
+                                ) : (
+                                    <BankSelector
+                                        bankAccounts={bankAccounts}
+                                        value={bankAccountId}
+                                        onChange={setBankAccountId}
+                                        amount={paymentAmount}
+                                        label="Credit to Bank Account"
+                                        required
+                                    />
+                                )}
                                 <div>
                                     <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Reference / UTR (Optional)</label>
                                     <input type="text" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} style={inputStyle} placeholder="UTR or Transaction ID" />
@@ -2006,6 +2064,7 @@ export default function Bookings() {
                 {ledgerModalBooking && (
                     <>
                         <motion.div
+                            key="bkg-ledger-backdrop"
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
@@ -2019,6 +2078,7 @@ export default function Bookings() {
                             }}
                         />
                         <motion.aside
+                            key="bkg-ledger-panel"
                             initial={{ x: '100%' }}
                             animate={{ x: 0 }}
                             exit={{ x: '100%' }}
@@ -2142,19 +2202,40 @@ export default function Bookings() {
                                                 <td style={{ padding: '12px 8px', color: 'white' }}>{(ledgerModalBooking.totalAmount || 0).toLocaleString()}</td>
                                                 <td style={{ padding: '12px 8px', color: 'white' }}>System</td>
                                             </tr>
-                                            {/* Payment Rows */}
+                                            {/* Payment & Fuel Rows */}
                                             {(() => {
                                                 let runBal = ledgerModalBooking.totalAmount || 0;
                                                 return ledgerEntries.map((entry, idx) => {
                                                     runBal -= (entry.amount || 0);
+                                                    const isFuel = entry.type === 'Fuel';
+                                                    const isAdv = entry.type === 'Advance';
                                                     return (
-                                                        <tr key={entry._id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                                        <tr key={entry._id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: isFuel ? 'rgba(245, 158, 11, 0.05)' : 'transparent' }}>
                                                             <td style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.8)' }}>{new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
-                                                            <td style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.8)' }}>{idx === 0 ? 'Advance Received' : 'Payment Received'}</td>
-                                                            <td style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.8)' }}>-</td>
-                                                            <td style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.8)' }}>{(entry.amount || 0).toLocaleString()}</td>
-                                                            <td style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.8)' }}>{runBal.toLocaleString()}</td>
-                                                            <td style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.8)' }}>{entry.description.split('via ')[1]?.split(' (')[0] || 'Unknown'}</td>
+                                                            <td style={{ padding: '12px 8px', color: isFuel ? '#fbbf24' : 'rgba(255,255,255,0.9)', fontWeight: isFuel ? '700' : 'normal' }}>
+                                                                {isFuel ? (
+                                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                                        <Fuel size={13} color="#fbbf24" />
+                                                                        <span>Fuel Paid by Guest {entry.description ? `(${entry.description.replace(/^Fuel paid by guest\s*/i, '')})` : ''}</span>
+                                                                    </span>
+                                                                ) : isAdv ? (
+                                                                    <span>Advance Received</span>
+                                                                ) : (
+                                                                    <span>Payment Received</span>
+                                                                )}
+                                                            </td>
+                                                            <td style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.4)' }}>-</td>
+                                                            <td style={{ padding: '12px 8px', color: isFuel ? '#fbbf24' : '#4ade80', fontWeight: '800' }}>
+                                                                {isFuel ? `-₹${(entry.amount || 0).toLocaleString()}` : `₹${(entry.amount || 0).toLocaleString()}`}
+                                                            </td>
+                                                            <td style={{ padding: '12px 8px', color: 'white', fontWeight: '700' }}>₹{Math.max(0, runBal).toLocaleString()}</td>
+                                                            <td style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.8)' }}>
+                                                                {isFuel ? (
+                                                                    <span style={{ padding: '2px 8px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', borderRadius: '6px', fontSize: '11px', fontWeight: '800' }}>Guest Fuel</span>
+                                                                ) : (
+                                                                    entry.description?.split('via ')[1]?.split(' (')[0] || (isAdv ? 'Advance' : 'Payment')
+                                                                )}
+                                                            </td>
                                                         </tr>
                                                     );
                                                 });

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import axios from '../api/axios';
 import { useCompany } from '../context/CompanyContext';
+import BankSelector from '../components/common/BankSelector';
 
 const MONTH_TABS = [
     'All Months', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'
@@ -40,7 +41,15 @@ const ClientLedgers = () => {
     const [ledgerLoading, setLedgerLoading] = useState(false);
     
     const [showPaymentModal, setShowPaymentModal] = useState(false);
-    const [paymentData, setPaymentData] = useState({ amount: '', description: '', date: '' });
+    const [bankAccounts, setBankAccounts] = useState([]);
+    const [paymentData, setPaymentData] = useState({ 
+        amount: '', 
+        description: '', 
+        date: new Date().toISOString().split('T')[0],
+        paymentMode: 'Cash',
+        bankAccountId: '',
+        reference: ''
+    });
 
     // Enlist Travel Agent Modal
     const [showAddAgentModal, setShowAddAgentModal] = useState(false);
@@ -53,6 +62,20 @@ const ClientLedgers = () => {
         gstNumber: ''
     });
     const [addingAgent, setAddingAgent] = useState(false);
+
+    const fetchBankAccounts = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            const { data } = await axios.get(`/api/banks/company/${selectedCompany._id}`);
+            setBankAccounts(data || []);
+            if (data && data.length > 0) {
+                const def = data.find(b => b.isDefault) || data[0];
+                setPaymentData(prev => ({ ...prev, bankAccountId: def._id }));
+            }
+        } catch (err) {
+            console.error('Failed to fetch bank accounts:', err);
+        }
+    };
 
     const fetchClients = async (year = selectedYear, month = selectedMonth) => {
         if (!selectedCompany?._id) return;
@@ -91,6 +114,7 @@ const ClientLedgers = () => {
 
     useEffect(() => {
         fetchClients(selectedYear, selectedMonth);
+        fetchBankAccounts();
     }, [selectedCompany, selectedYear, selectedMonth, isAgentView]);
 
     useEffect(() => {
@@ -107,15 +131,34 @@ const ClientLedgers = () => {
 
     const handleOpenPayment = (client) => {
         setSelectedClient(client);
+        setPaymentData(prev => ({
+            amount: '',
+            description: '',
+            date: new Date().toISOString().split('T')[0],
+            paymentMode: 'Cash',
+            bankAccountId: bankAccounts.length > 0 ? (bankAccounts.find(b => b.isDefault)?._id || bankAccounts[0]._id) : '',
+            reference: ''
+        }));
         setShowPaymentModal(true);
     };
 
     const handleAddPayment = async (e) => {
         e.preventDefault();
         try {
-            await axios.post(`/api/clients/${selectedClient._id}/payment`, paymentData);
+            const payload = {
+                ...paymentData,
+                bankAccountId: paymentData.paymentMode !== 'Cash' ? paymentData.bankAccountId : undefined
+            };
+            await axios.post(`/api/clients/${selectedClient._id}/payment`, payload);
             setShowPaymentModal(false);
-            setPaymentData({ amount: '', description: '', date: '' });
+            setPaymentData({ 
+                amount: '', 
+                description: '', 
+                date: new Date().toISOString().split('T')[0],
+                paymentMode: 'Cash',
+                bankAccountId: '',
+                reference: ''
+            });
             fetchLedger(selectedClient._id, selectedYear, selectedMonth);
             fetchClients(selectedYear, selectedMonth);
             alert('Payment recorded successfully!');
@@ -712,8 +755,8 @@ const ClientLedgers = () => {
                                                         <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '700', textAlign: 'right' }}>
                                                             {entry.type === 'Bill' ? `₹${(entry.amount || 0).toLocaleString('en-IN')}` : '-'}
                                                         </td>
-                                                        <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '700', textAlign: 'right', color: '#4ade80' }}>
-                                                            {entry.type !== 'Bill' ? `₹${(entry.amount || 0).toLocaleString('en-IN')}` : '-'}
+                                                        <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '700', textAlign: 'right', color: entry.type === 'Fuel' ? '#fbbf24' : '#4ade80' }}>
+                                                            {entry.type !== 'Bill' ? `${entry.type === 'Fuel' ? '-' : ''}₹${(entry.amount || 0).toLocaleString('en-IN')}` : '-'}
                                                         </td>
                                                     </tr>
                                                 ))
@@ -745,12 +788,39 @@ const ClientLedgers = () => {
                                     <input required type="number" value={paymentData.amount} onChange={e => setPaymentData({...paymentData, amount: e.target.value})} style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white' }} />
                                 </div>
                                 <div>
+                                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>Payment Mode</label>
+                                    <select 
+                                        value={paymentData.paymentMode || 'Cash'} 
+                                        onChange={e => setPaymentData({...paymentData, paymentMode: e.target.value})} 
+                                        style={{ width: '100%', padding: '12px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white' }}
+                                    >
+                                        <option value="Cash">💵 Cash to Company (Cash Book)</option>
+                                        <option value="UPI / QR Code">📱 UPI / QR Code (Bank Account)</option>
+                                        <option value="Bank Transfer / NEFT">🏦 Bank Transfer / NEFT</option>
+                                        <option value="Cheque">📄 Cheque</option>
+                                    </select>
+                                </div>
+                                {(paymentData.paymentMode === 'Cash' || !paymentData.paymentMode) ? (
+                                    <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.25)', color: '#4ade80', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span>💵 <strong>Synced to Cash Book:</strong> Amount will be credited to physical Cash in Hand.</span>
+                                    </div>
+                                ) : (
+                                    <BankSelector
+                                        bankAccounts={bankAccounts}
+                                        value={paymentData.bankAccountId}
+                                        onChange={(val) => setPaymentData({...paymentData, bankAccountId: val})}
+                                        amount={paymentData.amount}
+                                        label="Credit to Bank Account"
+                                        required
+                                    />
+                                )}
+                                <div>
                                     <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>Date</label>
                                     <input required type="date" value={paymentData.date} onChange={e => setPaymentData({...paymentData, date: e.target.value})} onClick={e=>e.target.showPicker()} style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white' }} />
                                 </div>
                                 <div>
                                     <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>Description / Reference</label>
-                                    <input required type="text" placeholder="e.g. Bank Transfer Ref: 123456" value={paymentData.description} onChange={e => setPaymentData({...paymentData, description: e.target.value})} style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white' }} />
+                                    <input required type="text" placeholder="e.g. Received via Cash / UTR: 123456" value={paymentData.description} onChange={e => setPaymentData({...paymentData, description: e.target.value})} style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white' }} />
                                 </div>
                                 <button type="submit" className="btn-primary" style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', fontWeight: '800', fontSize: '15px', cursor: 'pointer', marginTop: '5px' }}>Save Payment</button>
                             </form>

@@ -17,17 +17,7 @@ const MONTH_TABS = [
 ];
 
 // Baseline Data exactly matching media_1788930365517.png with payment received (credit) tracking
-const BASELINE_INVOICES = [
-    { _id: 'inv-117', date: '03-Aug-26', rawDate: '2026-08-03', particulars: 'Nishta Mehta', vchType: 'Sales', vchNo: '117', debitAmount: 900.00, creditAmount: 900.00, taxableValue: 857.00, cgst: 21.43, sgst: 21.43, roundOff: 0.14, bookingId: '08/23', mobile: '+91 98765 43210', status: 'Paid' },
-    { _id: 'inv-118', date: '10-Aug-26', rawDate: '2026-08-10', particulars: 'Shivsham Bhagat', vchType: 'Sales', vchNo: '118', debitAmount: 5000.00, creditAmount: 3000.00, taxableValue: 4237.29, cgst: 381.36, sgst: 381.36, roundOff: 0.00, bookingId: '08/24', mobile: '+91 98234 56789', status: 'Partial' },
-    { _id: 'inv-119', date: '12-Aug-26', rawDate: '2026-08-12', particulars: 'Shubham Verma', vchType: 'Sales', vchNo: '119', debitAmount: 7500.00, creditAmount: 7500.00, taxableValue: 6355.93, cgst: 572.04, sgst: 572.04, roundOff: -0.01, bookingId: '08/25', mobile: '+91 98111 22233', status: 'Paid' },
-    { _id: 'inv-120', date: '12-Aug-26', rawDate: '2026-08-12', particulars: 'Ramesh Jain', vchType: 'Sales', vchNo: '120', debitAmount: 2500.00, creditAmount: 2500.00, taxableValue: 2118.64, cgst: 190.68, sgst: 190.68, roundOff: 0.00, bookingId: '08/26', mobile: '+91 97654 32109', status: 'Paid' },
-    { _id: 'inv-121', date: '20-Aug-26', rawDate: '2026-08-20', particulars: 'Rakesh Mehta', vchType: 'Sales', vchNo: '121', debitAmount: 10500.00, creditAmount: 5000.00, taxableValue: 8898.31, cgst: 800.85, sgst: 800.85, roundOff: -0.01, bookingId: '08/27', mobile: '+91 98333 44455', status: 'Partial' },
-    { _id: 'inv-122', date: '26-Aug-26', rawDate: '2026-08-26', particulars: 'Tulsidas Mange', vchType: 'Sales', vchNo: '122', debitAmount: 12500.00, creditAmount: 12500.00, taxableValue: 10593.22, cgst: 953.39, sgst: 953.39, roundOff: 0.00, bookingId: '08/28', mobile: '+91 99887 76655', status: 'Paid' },
-    { _id: 'inv-123', date: '31-Aug-26', rawDate: '2026-08-31', particulars: 'Avi Garg', vchType: 'Sales', vchNo: '123', debitAmount: 3000.00, creditAmount: 3000.00, taxableValue: 2542.37, cgst: 228.82, sgst: 228.82, roundOff: -0.01, bookingId: '08/29', mobile: '+91 91234 56780', status: 'Paid' },
-    { _id: 'inv-124', date: '31-Aug-26', rawDate: '2026-08-31', particulars: 'Rahul Jaiswal', vchType: 'Sales', vchNo: '124', debitAmount: 11000.00, creditAmount: 6000.00, taxableValue: 9322.03, cgst: 838.99, sgst: 838.99, roundOff: -0.01, bookingId: '08/30', mobile: '+91 97777 88899', status: 'Partial' },
-    { _id: 'inv-125', date: '31-Aug-26', rawDate: '2026-08-31', particulars: 'Vikram Singh', vchType: 'Sales', vchNo: '125', debitAmount: 2000.00, creditAmount: 2000.00, taxableValue: 1694.92, cgst: 152.54, sgst: 152.54, roundOff: 0.00, bookingId: '08/31', mobile: '+91 98450 11223', status: 'Paid' }
-];
+const BASELINE_INVOICES = [];
 
 export default function Invoices() {
     const { selectedCompany } = useCompany();
@@ -53,29 +43,26 @@ export default function Invoices() {
     const itemsPerPage = 500;
 
     // ==========================================
-    // CREATE INVOICE FORM STATE (media_1788930405888.png)
+    // CREATE INVOICE FORM STATE
     // ==========================================
     const [formDetails, setFormDetails] = useState({
         voucherType: 'Sales',
-        invoiceNo: '117',
-        invoiceDate: '2026-08-03',
-        guestName: 'Nishta Mehta',
-        bookingId: '08/23',
-        mobile: '+91 98765 43210'
+        invoiceNo: '',
+        invoiceDate: new Date().toISOString().split('T')[0],
+        guestName: '',
+        bookingId: '',
+        mobile: ''
     });
 
     const [formPartyBalance, setFormPartyBalance] = useState({
         balance: 0.00,
         status: 'Settled',
-        lastInvoice: 'INV-104',
-        lastInvoiceDate: '12-Aug-2026'
+        lastInvoice: '',
+        lastInvoiceDate: ''
     });
 
     const [formItems, setFormItems] = useState([
-        { id: 1, particulars: 'Logistics Service', gstRate: '', rate: 857.00, amount: 857.00 },
-        { id: 2, particulars: 'CGST (2.5%)', gstRate: '2.5', rate: 21.43, amount: 21.43 },
-        { id: 3, particulars: 'SGST (2.5%)', gstRate: '2.5', rate: 21.43, amount: 21.43 },
-        { id: 4, particulars: 'Round Off', gstRate: '', rate: 0.14, amount: 0.14 }
+        { id: 1, particulars: 'Logistics Service', gstRate: '', rate: 0, amount: 0 }
     ]);
 
     const [formNotes, setFormNotes] = useState('');
@@ -85,7 +72,7 @@ export default function Invoices() {
         if (selectedCompany?._id) {
             fetchInvoices();
         } else {
-            setInvoices(BASELINE_INVOICES);
+            setInvoices([]);
         }
     }, [selectedCompany]);
 
@@ -118,11 +105,11 @@ export default function Invoices() {
                 });
                 setInvoices(mapped);
             } else {
-                setInvoices(BASELINE_INVOICES);
+                setInvoices([]);
             }
         } catch (err) {
             console.error('Error fetching invoices:', err);
-            setInvoices(BASELINE_INVOICES);
+            setInvoices([]);
         } finally {
             setLoading(false);
         }

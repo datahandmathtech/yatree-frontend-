@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from '../api/axios';
-import { Search, Plus, X, CheckCircle, AlertCircle, IndianRupee, Calendar, User, FileText, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, X, CheckCircle, AlertCircle, IndianRupee, Calendar, User, FileText, Filter, ChevronLeft, ChevronRight, Building2, UserCheck, CreditCard } from 'lucide-react';
 import { useCompany } from '../context/CompanyContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import SEO from '../components/SEO';
 import PremiumDateInput from '../components/common/PremiumDateInput';
+import SmartGuestBookingSelector from '../components/common/SmartGuestBookingSelector';
+import BankSelector from '../components/common/BankSelector';
 import {
     todayIST,
     toISTDateString,
@@ -20,6 +22,8 @@ const Advances = () => {
     const [advances, setAdvances] = useState([]);
     const [salarySummary, setSalarySummary] = useState([]);
     const [drivers, setDrivers] = useState([]);
+    const [bankAccounts, setBankAccounts] = useState([]);
+    const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
@@ -34,7 +38,13 @@ const Advances = () => {
         amount: '',
         date: '',
         remark: '',
-        givenBy: 'Office'
+        givenBy: 'Office',
+        paidBy: 'Company',
+        paymentMode: 'Cash',
+        bankAccountId: '',
+        bookingId: '',
+        bookingRef: '',
+        guestName: ''
     });
     const [submitting, setSubmitting] = useState(false);
     const [message, setMessage] = useState({ type: '', text: '' });
@@ -140,17 +150,21 @@ const Advances = () => {
         if (!selectedCompany?._id) return;
         setLoading(true);
         try {
-            // Fetch drivers for the dropdown
-            const [driversRes, advancesRes, salaryRes] = await Promise.all([
+            // Fetch drivers, advances, summary, bank accounts, and active bookings
+            const [driversRes, advancesRes, salaryRes, banksRes, bookingsRes] = await Promise.all([
                 axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&driverType=All&isFreelancer=false&month=${selectedMonth}&year=${selectedYear}`),
                 axios.get(`/api/admin/advances/${selectedCompany._id}?month=${selectedMonth}&year=${selectedYear}&isFreelancer=false`),
-                axios.get(`/api/admin/salary-summary/${selectedCompany._id}?month=${selectedMonth}&year=${selectedYear}`)
+                axios.get(`/api/admin/salary-summary/${selectedCompany._id}?month=${selectedMonth}&year=${selectedYear}`),
+                axios.get(`/api/banks/company/${selectedCompany._id}`).catch(() => axios.get(`/api/admin/bank-accounts/${selectedCompany._id}`)).catch(() => ({ data: [] })),
+                axios.get(`/api/bookings/${selectedCompany._id}?usePagination=false`).catch(() => ({ data: [] }))
             ]);
 
             setDrivers(driversRes.data.drivers || []);
             setAdvances(Array.isArray(advancesRes.data) ? advancesRes.data : []);
             const summary = Array.isArray(salaryRes.data) ? salaryRes.data : [];
             setSalarySummary(summary.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+            setBankAccounts(Array.isArray(banksRes.data) ? banksRes.data : (banksRes.data?.bankAccounts || []));
+            setBookings(bookingsRes.data?.bookings || bookingsRes.data || []);
 
         } catch (err) {
             console.error('Error fetching data:', err);
@@ -166,17 +180,17 @@ const Advances = () => {
 
         try {
             const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+            const payload = {
+                ...formData,
+                companyId: selectedCompany._id,
+                paidBy: formData.givenBy === 'Guest' ? 'Guest' : 'Company'
+            };
+
             if (editingId) {
-                await axios.put(`/api/admin/advances/${editingId}`, {
-                    ...formData,
-                    companyId: selectedCompany._id
-                }, { headers: { Authorization: `Bearer ${userInfo.token}` } });
+                await axios.put(`/api/admin/advances/${editingId}`, payload, { headers: { Authorization: `Bearer ${userInfo.token}` } });
                 setMessage({ type: 'success', text: 'Advance updated successfully!' });
             } else {
-                await axios.post('/api/admin/advances', {
-                    ...formData,
-                    companyId: selectedCompany._id
-                }, { headers: { Authorization: `Bearer ${userInfo.token}` } });
+                await axios.post('/api/admin/advances', payload, { headers: { Authorization: `Bearer ${userInfo.token}` } });
                 setMessage({ type: 'success', text: 'Advance recorded successfully!' });
             }
 
@@ -188,7 +202,13 @@ const Advances = () => {
                     amount: '',
                     date: '',
                     remark: '',
-                    givenBy: 'Office'
+                    givenBy: 'Office',
+                    paidBy: 'Company',
+                    paymentMode: 'Cash',
+                    bankAccountId: '',
+                    bookingId: '',
+                    bookingRef: '',
+                    guestName: ''
                 });
                 setMessage({ type: '', text: '' });
                 fetchData();
@@ -202,12 +222,19 @@ const Advances = () => {
 
     const handleEdit = (adv) => {
         setEditingId(adv._id);
+        const isGuest = adv.givenBy === 'Guest' || adv.paidBy === 'Guest' || adv.advanceType === 'Guest';
         setFormData({
             driverId: adv.driver?._id || adv.driver,
             amount: adv.amount || '',
             date: toISTDateString(adv.date),
             remark: adv.remark || '',
-            givenBy: adv.givenBy || 'Office'
+            givenBy: isGuest ? 'Guest' : 'Office',
+            paidBy: isGuest ? 'Guest' : 'Company',
+            paymentMode: adv.paymentMode || (isGuest ? 'Cash by Guest' : (adv.bankAccount ? 'Bank Transfer' : 'Cash')),
+            bankAccountId: adv.bankAccount?._id || adv.bankAccount || '',
+            bookingId: adv.bookingId || '',
+            bookingRef: adv.booking?._id || adv.booking || '',
+            guestName: adv.guestName || ''
         });
         setShowModal(true);
     };
@@ -355,7 +382,22 @@ const Advances = () => {
                     </div>
 
                     <button
-                        onClick={() => setShowModal(true)}
+                        onClick={() => {
+                            setEditingId(null);
+                            setFormData({
+                                driverId: '',
+                                amount: '',
+                                date: todayIST(),
+                                remark: '',
+                                givenBy: 'Office',
+                                paidBy: 'Company',
+                                bankAccountId: bankAccounts[0]?._id || '',
+                                bookingId: '',
+                                bookingRef: '',
+                                guestName: ''
+                            });
+                            setShowModal(true);
+                        }}
                         className="btn-primary"
                         style={{ height: '50px', padding: '0 20px', borderRadius: '15px', fontWeight: '1000' }}
                     >
@@ -499,16 +541,34 @@ const Advances = () => {
                                 </td>
                                 <td style={{ padding: '20px 25px' }}>
                                     <div style={{ 
-                                        color: advance.givenBy === 'Guest' ? '#fbbf24' : '#60a5fa', 
+                                        color: advance.givenBy === 'Guest' || advance.paidBy === 'Guest' ? '#fbbf24' : (advance.paymentMode === 'Cash' || !advance.bankAccount ? '#10b981' : '#60a5fa'), 
                                         fontSize: '11px', 
                                         fontWeight: '900', 
                                         textTransform: 'uppercase',
-                                        background: advance.givenBy === 'Guest' ? 'rgba(251, 191, 36, 0.1)' : 'rgba(96, 165, 250, 0.1)',
-                                        padding: '4px 10px',
-                                        borderRadius: '6px',
-                                        display: 'inline-block'
+                                        background: advance.givenBy === 'Guest' || advance.paidBy === 'Guest' ? 'rgba(251, 191, 36, 0.12)' : (advance.paymentMode === 'Cash' || !advance.bankAccount ? 'rgba(16, 185, 129, 0.12)' : 'rgba(96, 165, 250, 0.12)'),
+                                        padding: '5px 12px',
+                                        borderRadius: '8px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        border: advance.givenBy === 'Guest' || advance.paidBy === 'Guest' ? '1px solid rgba(251, 191, 36, 0.25)' : (advance.paymentMode === 'Cash' || !advance.bankAccount ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(96, 165, 250, 0.25)')
                                     }}>
-                                        {advance.givenBy || 'Office'}
+                                        {advance.givenBy === 'Guest' || advance.paidBy === 'Guest' ? (
+                                            <>
+                                                <UserCheck size={13} />
+                                                <span>Guest {advance.guestName ? `(${advance.guestName})` : advance.bookingId ? `(${advance.bookingId})` : ''}</span>
+                                            </>
+                                        ) : (advance.paymentMode === 'Cash' || !advance.bankAccount ? (
+                                            <>
+                                                <span>💵</span>
+                                                <span>Cash in Hand</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Building2 size={13} />
+                                                <span>Bank {advance.bankAccount?.bankName ? `(${advance.bankAccount.bankName})` : ''}</span>
+                                            </>
+                                        ))}
                                     </div>
                                 </td>
                                 <td style={{ padding: '20px 25px' }}>
@@ -600,17 +660,35 @@ const Advances = () => {
                                     <div style={{ textAlign: 'right' }}>
                                         <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800', marginBottom: '4px' }}>Source</div>
                                         <div style={{ 
-                                            color: advance.givenBy === 'Guest' ? '#fbbf24' : '#60a5fa', 
+                                            color: advance.givenBy === 'Guest' || advance.paidBy === 'Guest' ? '#fbbf24' : (advance.paymentMode === 'Cash' || !advance.bankAccount ? '#10b981' : '#60a5fa'), 
                                             fontSize: '10px', 
                                             fontWeight: '900', 
                                             textTransform: 'uppercase',
-                                            background: advance.givenBy === 'Guest' ? 'rgba(251, 191, 36, 0.1)' : 'rgba(96, 165, 250, 0.1)',
+                                            background: advance.givenBy === 'Guest' || advance.paidBy === 'Guest' ? 'rgba(251, 191, 36, 0.12)' : (advance.paymentMode === 'Cash' || !advance.bankAccount ? 'rgba(16, 185, 129, 0.12)' : 'rgba(96, 165, 250, 0.12)'),
                                             padding: '3px 8px',
                                             borderRadius: '5px',
-                                            display: 'inline-block'
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            border: advance.givenBy === 'Guest' || advance.paidBy === 'Guest' ? '1px solid rgba(251, 191, 36, 0.25)' : (advance.paymentMode === 'Cash' || !advance.bankAccount ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(96, 165, 250, 0.25)')
                                         }}>
-                                            {advance.givenBy || 'Office'}
-                                        </div>
+                                            {advance.givenBy === 'Guest' || advance.paidBy === 'Guest' ? (
+                                                 <>
+                                                     <UserCheck size={11} />
+                                                     <span>Guest {advance.guestName ? `(${advance.guestName})` : ''}</span>
+                                                 </>
+                                             ) : (advance.paymentMode === 'Cash' || !advance.bankAccount ? (
+                                                 <>
+                                                     <span>💵</span>
+                                                     <span>Cash in Hand</span>
+                                                 </>
+                                             ) : (
+                                                 <>
+                                                     <Building2 size={11} />
+                                                     <span>Bank {advance.bankAccount?.bankName ? `(${advance.bankAccount.bankName})` : ''}</span>
+                                                 </>
+                                             ))}
+                                         </div>
                                     </div>
                                 </div>
 
@@ -670,22 +748,21 @@ const Advances = () => {
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0.9, opacity: 0, y: 20 }}
                             className="modal-content-wrapper"
-                            style={{ maxWidth: '500px' }}
+                            style={{ maxWidth: '540px' }}
                         >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
                                 <div>
                                     <h2 style={{ color: 'white', fontSize: 'clamp(20px, 5vw, 24px)', margin: 0, fontWeight: '950', letterSpacing: '-0.5px' }}>{editingId ? 'Edit Record' : 'Log Advance'}</h2>
                                     <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', marginTop: '4px', fontWeight: '700' }}>Manage driver financial assistance.</p>
                                 </div>
                                 <button
-                                    onClick={() => { setShowModal(false); setEditingId(null); setFormData({ driverId: '', amount: '', date: '', remark: '', givenBy: 'Office' }); }}
+                                    onClick={() => { setShowModal(false); setEditingId(null); setFormData({ driverId: '', amount: '', date: '', remark: '', givenBy: 'Office', paidBy: 'Company', bankAccountId: '', bookingId: '', bookingRef: '', guestName: '' }); }}
                                     className="glass-card"
                                     style={{ width: '40px', height: '40px', borderRadius: '50%', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                 ><X size={20} /></button>
                             </div>
 
-
-                            <form onSubmit={handleSaveAdvance} style={{ display: 'grid', gap: '25px' }}>
+                            <form onSubmit={handleSaveAdvance} style={{ display: 'grid', gap: '20px' }}>
                                 <div className="input-field-group">
                                     <label className="input-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><User size={14} /> Select Driver</label>
                                     <select
@@ -724,25 +801,174 @@ const Advances = () => {
                                     </div>
                                 </div>
 
+                                {/* Paid By / Given By Selector */}
                                 <div className="input-field-group">
-                                    <label className="input-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><CheckCircle size={14} /> Given By</label>
-                                    <select
-                                        className="input-field"
-                                        required
-                                        value={formData.givenBy}
-                                        onChange={(e) => setFormData({ ...formData, givenBy: e.target.value })}
-                                        style={{ height: '54px' }}
-                                    >
-                                        <option value="Office" style={{ background: '#0f172a', color: 'white' }}>Office</option>
-                                        <option value="Guest" style={{ background: '#0f172a', color: 'white' }}>Guest</option>
-                                    </select>
+                                    <label className="input-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                        <CreditCard size={14} /> Paid By / Source
+                                    </label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, givenBy: 'Office', paidBy: 'Company', paymentMode: formData.paymentMode === 'Guest Cash' ? 'Cash' : (formData.paymentMode || 'Cash'), bookingId: '', bookingRef: '', guestName: '' })}
+                                            style={{
+                                                padding: '12px 14px',
+                                                borderRadius: '12px',
+                                                border: formData.paidBy === 'Company' ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                background: formData.paidBy === 'Company' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: formData.paidBy === 'Company' ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '13px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '8px',
+                                                transition: 'all 0.2s ease'
+                                            }}
+                                        >
+                                            <Building2 size={16} /> 🏢 By Company
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, givenBy: 'Guest', paidBy: 'Guest', paymentMode: 'Guest Cash', bankAccountId: '' })}
+                                            style={{
+                                                padding: '12px 14px',
+                                                borderRadius: '12px',
+                                                border: formData.paidBy === 'Guest' ? '2px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)',
+                                                background: formData.paidBy === 'Guest' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: formData.paidBy === 'Guest' ? '#fbbf24' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '13px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '8px',
+                                                transition: 'all 0.2s ease'
+                                            }}
+                                        >
+                                            <UserCheck size={16} /> 👤 By Guest
+                                        </button>
+                                    </div>
                                 </div>
+
+                                {/* Dynamic Section for Company (Cash vs Bank Account) */}
+                                {formData.paidBy === 'Company' && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                            Payment Account / Method
+                                        </label>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, paymentMode: 'Cash', bankAccountId: '' })}
+                                                style={{
+                                                    padding: '10px 12px',
+                                                    borderRadius: '10px',
+                                                    border: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                    background: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                    color: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                                    fontWeight: '800',
+                                                    fontSize: '12px',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '6px'
+                                                }}
+                                            >
+                                                💵 Cash in Hand
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, paymentMode: 'Bank Transfer', bankAccountId: formData.bankAccountId || (bankAccounts[0]?._id || '') })}
+                                                style={{
+                                                    padding: '10px 12px',
+                                                    borderRadius: '10px',
+                                                    border: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                    background: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                    color: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                    fontWeight: '800',
+                                                    fontSize: '12px',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '6px'
+                                                }}
+                                            >
+                                                🏦 Bank Account
+                                            </button>
+                                        </div>
+
+                                        {/* If Cash is chosen: Live Cash in Hand Balance Impact */}
+                                        {(!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? (
+                                            <div style={{
+                                                background: 'rgba(16, 185, 129, 0.08)',
+                                                border: '1px solid rgba(16, 185, 129, 0.25)',
+                                                borderRadius: '12px',
+                                                padding: '12px 14px',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '8px'
+                                            }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Current Cash in Hand:</span>
+                                                    <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '900' }}>₹{(selectedCompany?.cashBalance || 0).toLocaleString('en-IN')}</span>
+                                                </div>
+                                                {Number(formData.amount) > 0 && (
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(16, 185, 129, 0.2)', paddingTop: '6px' }}>
+                                                        <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Cash Balance After:</span>
+                                                        <span style={{
+                                                            fontSize: '14px',
+                                                            fontWeight: '950',
+                                                            color: ((selectedCompany?.cashBalance || 0) - Number(formData.amount)) < 0 ? '#f43f5e' : '#10b981'
+                                                        }}>
+                                                            ₹{((selectedCompany?.cashBalance || 0) - Number(formData.amount)).toLocaleString('en-IN')}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div style={{ fontSize: '11px', color: '#10b981', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                    <span>💵</span> Deducts from Cash in Hand & logs in Cash Book
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <BankSelector
+                                                bankAccounts={bankAccounts}
+                                                value={formData.bankAccountId}
+                                                amount={formData.amount}
+                                                onChange={(bId) => setFormData({ ...formData, bankAccountId: bId, paymentMode: 'Bank Transfer' })}
+                                            />
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Dynamic Section for Guest (Booking selection) */}
+                                {formData.paidBy === 'Guest' && (
+                                    <SmartGuestBookingSelector
+                                        bookings={bookings}
+                                        selectedDate={formData.date}
+                                        selectedDriverId={formData.driverId}
+                                        value={{
+                                            bookingRef: formData.bookingRef,
+                                            bookingId: formData.bookingId,
+                                            guestName: formData.guestName
+                                        }}
+                                        amount={formData.amount}
+                                        onChange={({ bookingRef, bookingId, guestName }) => setFormData({
+                                            ...formData,
+                                            bookingRef,
+                                            bookingId,
+                                            guestName
+                                        })}
+                                    />
+                                )}
 
                                 <div className="input-field-group">
                                     <label className="input-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><FileText size={14} /> Remark / Purpose</label>
                                     <textarea
                                         className="input-field"
-                                        placeholder="Ex: Urgent family need, Fuel advance..."
+                                        placeholder="Ex: Urgent family need, Fuel advance, Guest cash advance..."
                                         rows="2"
                                         value={formData.remark}
                                         onChange={(e) => setFormData({ ...formData, remark: e.target.value })}

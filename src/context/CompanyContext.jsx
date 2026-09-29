@@ -44,19 +44,30 @@ export const CompanyProvider = ({ children }) => {
                 const fullCompany = data.find(c => c._id === userCompanyId);
                 
                 if (fullCompany) {
+                    if (fullCompany.logoUrl && fullCompany.logoUrl.includes('superadmin.yatreedestination.com')) {
+                        fullCompany.logoUrl = '';
+                    }
                     console.log('Syncing context to user company:', fullCompany.name);
                     setSelectedCompany(fullCompany);
                     localStorage.setItem('selectedCompany', JSON.stringify(fullCompany));
                 } else {
                     // Critical Fix: If user's company not in fetched list, force the first available
                     if (data.length > 0) {
-                        setSelectedCompany(data[0]);
-                        localStorage.setItem('selectedCompany', JSON.stringify(data[0]));
+                        const first = { ...data[0] };
+                        if (first.logoUrl && first.logoUrl.includes('superadmin.yatreedestination.com')) {
+                            first.logoUrl = '';
+                        }
+                        setSelectedCompany(first);
+                        localStorage.setItem('selectedCompany', JSON.stringify(first));
                     }
                 }
             } else if (data.length > 0) {
-                setSelectedCompany(data[0]);
-                localStorage.setItem('selectedCompany', JSON.stringify(data[0]));
+                const first = { ...data[0] };
+                if (first.logoUrl && first.logoUrl.includes('superadmin.yatreedestination.com')) {
+                    first.logoUrl = '';
+                }
+                setSelectedCompany(first);
+                localStorage.setItem('selectedCompany', JSON.stringify(first));
             }
         } catch (err) {
             console.error('Error fetching companies', err);
