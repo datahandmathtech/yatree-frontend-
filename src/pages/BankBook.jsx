@@ -32,6 +32,18 @@ const CASH_CATEGORIES = [
     'Other Expense'
 ];
 
+const resolveReceiptUrl = (url) => {
+    if (!url) return '';
+    if (typeof url !== 'string') return '';
+    if (url.startsWith('/uploads/attendance/taxi-fleet-crm/')) {
+        return url.replace('/uploads/attendance/taxi-fleet-crm/', 'https://res.cloudinary.com/doaymwjki/image/upload/taxi-fleet-crm/');
+    }
+    if (url.startsWith('/uploads/taxi-fleet-crm/')) {
+        return url.replace('/uploads/taxi-fleet-crm/', 'https://res.cloudinary.com/doaymwjki/image/upload/taxi-fleet-crm/');
+    }
+    return url;
+};
+
 const BankBook = ({ initialTab = 'bank' }) => {
     const { selectedCompany } = useCompany();
     const [activeTab, setActiveTab] = useState(initialTab); // 'bank' or 'cash'
@@ -2412,34 +2424,62 @@ const BankBook = ({ initialTab = 'bank' }) => {
             {/* Modal: Receipt Image Preview */}
             <AnimatePresence>
                 {previewImageUrl && (
-                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200000, padding: '20px' }}>
-                        <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
-                            <button
-                                type="button"
-                                onClick={() => setPreviewImageUrl(null)}
-                                style={{
-                                    position: 'absolute',
-                                    top: '-15px',
-                                    right: '-15px',
-                                    width: '36px',
-                                    height: '36px',
-                                    borderRadius: '50%',
-                                    background: '#ef4444',
-                                    color: 'white',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    zIndex: 10
-                                }}
-                            >
-                                <X size={20} />
-                            </button>
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200000, padding: '20px' }}>
+                        <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <div style={{ position: 'absolute', top: '-18px', right: '-18px', display: 'flex', gap: '8px', zIndex: 10 }}>
+                                <a
+                                    href={resolveReceiptUrl(previewImageUrl)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                        width: '36px',
+                                        height: '36px',
+                                        borderRadius: '50%',
+                                        background: '#38bdf8',
+                                        color: '#000',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        textDecoration: 'none',
+                                        boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
+                                        transition: 'transform 0.2s'
+                                    }}
+                                    title="Open Full Image in New Tab"
+                                >
+                                    <ExternalLink size={18} />
+                                </a>
+                                <button
+                                    type="button"
+                                    onClick={() => setPreviewImageUrl(null)}
+                                    style={{
+                                        width: '36px',
+                                        height: '36px',
+                                        borderRadius: '50%',
+                                        background: '#ef4444',
+                                        color: 'white',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        boxShadow: '0 4px 14px rgba(0,0,0,0.5)',
+                                        transition: 'transform 0.2s'
+                                    }}
+                                    title="Close Preview"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
                             <img
-                                src={previewImageUrl}
+                                src={resolveReceiptUrl(previewImageUrl)}
                                 alt="Payment Receipt"
-                                style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: '12px', objectFit: 'contain', boxShadow: '0 25px 50px rgba(0,0,0,0.8)' }}
+                                onError={(e) => {
+                                    if (!e.target.dataset.triedJpg && !e.target.src.endsWith('.jpg') && !e.target.src.endsWith('.png')) {
+                                        e.target.dataset.triedJpg = 'true';
+                                        e.target.src = e.target.src + '.jpg';
+                                    }
+                                }}
+                                style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: '12px', objectFit: 'contain', boxShadow: '0 25px 50px rgba(0,0,0,0.8)', background: '#0b1120' }}
                             />
                         </div>
                     </div>
