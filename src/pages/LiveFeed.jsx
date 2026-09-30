@@ -150,13 +150,29 @@ const LiveFeed = () => {
         return `${h}h ${m}m`;
     };
 
+    const changeSelectedDate = (days) => {
+        const cur = (selectedDate && selectedDate !== 'undefined' && selectedDate !== 'null') ? selectedDate : todayIST();
+        const parts = cur.split('-').map(Number);
+        if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+            const d = new Date(parts[0], parts[1] - 1, parts[2] + days);
+            const nextY = d.getFullYear();
+            const nextM = String(d.getMonth() + 1).padStart(2, '0');
+            const nextD = String(d.getDate()).padStart(2, '0');
+            setSelectedDate(`${nextY}-${nextM}-${nextD}`);
+        }
+    };
+
     const fetchFeed = async (force = false) => {
         if (!selectedCompany) return;
         if (!stats) setLoading(true); // Don't flip to loading on background refreshes
         try {
             const userInfoRaw = localStorage.getItem('userInfo');
+            if (!userInfoRaw) return;
             const userInfo = JSON.parse(userInfoRaw);
-            const { data } = await axios.get(`/api/admin/live-feed/${selectedCompany._id}?date=${selectedDate}${force ? '&refresh=true' : ''}`, {
+            const validDate = (selectedDate && selectedDate !== 'undefined' && selectedDate !== 'null')
+                ? selectedDate
+                : todayIST();
+            const { data } = await axios.get(`/api/admin/live-feed/${selectedCompany._id}?date=${validDate}${force ? '&refresh=true' : ''}`, {
                 headers: { Authorization: `Bearer ${userInfo.token}` }
             });
             setStats(data);
@@ -171,7 +187,9 @@ const LiveFeed = () => {
     const fetchEvents = async () => {
         if (!selectedCompany) return;
         try {
-            const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+            const userInfoRaw = localStorage.getItem('userInfo');
+            if (!userInfoRaw) return;
+            const userInfo = JSON.parse(userInfoRaw);
             const { data } = await axios.get(`/api/admin/events/${selectedCompany._id}`, {
                 headers: { Authorization: `Bearer ${userInfo.token}` }
             });
@@ -209,7 +227,9 @@ const LiveFeed = () => {
         else if (modeParam === 'feed') setViewMode('feed');
         if (searchParam) setSearchQuery(searchParam);
         if (tabParam) setActiveTab(tabParam);
-        if (dateParam) setSelectedDate(dateParam);
+        if (dateParam && dateParam !== 'undefined' && dateParam !== 'null' && dateParam.trim()) {
+            setSelectedDate(dateParam.trim());
+        }
     }, [location.search]);
 
     const isToday = selectedDate === getTodayLocal();
@@ -501,11 +521,7 @@ const LiveFeed = () => {
                         {/* Calendar Controls */}
                         <div style={{ background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '18px', display: 'flex', gap: '4px', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(10px)' }}>
                             <button
-                                onClick={() => {
-                                    const d = nowIST(selectedDate);
-                                    d.setUTCDate(d.getUTCDate() - 1);
-                                    setSelectedDate(d.toISOString().split('T')[0]);
-                                }}
+                                onClick={() => changeSelectedDate(-1)}
                                 style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'white', cursor: 'pointer', transition: 'all 0.2s' }}
                                 className="driver-card-hover"
                             >
@@ -520,11 +536,7 @@ const LiveFeed = () => {
                                 />
                             </div>
                             <button
-                                onClick={() => {
-                                    const d = nowIST(selectedDate);
-                                    d.setUTCDate(d.getUTCDate() + 1);
-                                    setSelectedDate(d.toISOString().split('T')[0]);
-                                }}
+                                onClick={() => changeSelectedDate(1)}
                                 style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'white', cursor: 'pointer', transition: 'all 0.2s' }}
                                 className="driver-card-hover"
                             >
