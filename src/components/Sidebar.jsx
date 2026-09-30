@@ -291,9 +291,6 @@ const Sidebar = ({ isOpen, onClose }) => {
                     </>
                 )}
 
-                {(hasAccess('drs') || hasAccess('bookings') || isAdmin) && (
-                    <NavItem item={{ path: '/admin/drs', icon: Sparkles, label: 'Live DRS', labelKey: 'live_drs' }} onClick={onClose} />
-                )}
 
                 {(hasAccess('liveFeed') || hasAccess('vehiclesManagement')) && (
                     <NavItem item={{ path: '/admin/live-feed', icon: Activity, label: 'Live Feed', labelKey: 'live_feed' }} onClick={onClose} />
