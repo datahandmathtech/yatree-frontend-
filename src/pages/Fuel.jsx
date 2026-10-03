@@ -586,12 +586,12 @@ const FuelPage = () => {
         }
     };
 
-    // Auto-fetch guests when paymentSource changes to Guest in approval modal
+    // Auto-fetch guests when paymentSource or date changes in approval modal
     useEffect(() => {
         if (showApprovalModal && formData.paymentSource?.toLowerCase().includes('guest') && selectedPending?.carNumber) {
             fetchGuestForVehicle(selectedPending.carNumber, formData.date || toISTDateString(selectedPending.date));
         }
-    }, [formData.paymentSource, showApprovalModal]);
+    }, [formData.paymentSource, formData.date, showApprovalModal]);
 
     const handleApproveReject = async (attendanceId, expenseId, status, extraData = {}) => {
         setSubmitting(true);
@@ -1906,8 +1906,38 @@ const FuelPage = () => {
                                         </div>
                                     </div>
                                     <div>
-                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800' }}>Date</div>
-                                        <div style={{ color: 'white', fontWeight: '700' }}>{formatDateIST(selectedPending?.date)}</div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <span>Fuel Date</span>
+                                            <span style={{ fontSize: '10px', color: '#fbbf24', textTransform: 'none', fontWeight: '600' }}>(Edit)</span>
+                                        </div>
+                                        <input
+                                            type="date"
+                                            value={formData.date || ''}
+                                            onChange={(e) => {
+                                                const newDate = e.target.value;
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    date: newDate,
+                                                    drsDuty: '',
+                                                    client: '',
+                                                    paymentBy: prev.paymentSource?.toLowerCase().includes('guest') ? '' : prev.paymentBy
+                                                }));
+                                                if (selectedPending?.carNumber && newDate) {
+                                                    fetchGuestForVehicle(selectedPending.carNumber, newDate);
+                                                }
+                                            }}
+                                            style={{
+                                                background: 'rgba(255, 255, 255, 0.08)',
+                                                border: '1px solid rgba(251, 191, 36, 0.4)',
+                                                borderRadius: '8px',
+                                                color: 'white',
+                                                fontWeight: '700',
+                                                fontSize: '13px',
+                                                padding: '5px 8px',
+                                                outline: 'none',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
                                     </div>
                                 </div>
 
@@ -2192,7 +2222,7 @@ const FuelPage = () => {
 
                                 <div style={{ display: 'flex', gap: '15px', marginTop: '25px' }}>
                                     <button
-                                        onClick={() => handleApproveReject(selectedPending.attendanceId, selectedPending._id, 'approved', { amount: formData.amount, quantity: formData.quantity, rate: formData.rate, odometer: formData.odometer, slipPhoto: formData.slipPhoto, paymentSource: formData.paymentSource, paymentBy: formData.paymentBy, paymentMode: formData.paymentMode, bankAccountId: formData.bankAccountId, client: formData.client, drsDuty: formData.drsDuty })}
+                                        onClick={() => handleApproveReject(selectedPending.attendanceId, selectedPending._id, 'approved', { date: formData.date, amount: formData.amount, quantity: formData.quantity, rate: formData.rate, odometer: formData.odometer, slipPhoto: formData.slipPhoto, paymentSource: formData.paymentSource, paymentBy: formData.paymentBy, paymentMode: formData.paymentMode, bankAccountId: formData.bankAccountId, client: formData.client, drsDuty: formData.drsDuty })}
                                         disabled={submitting}
                                         style={{ flex: 2, height: '50px', borderRadius: '12px', fontSize: '15px', fontWeight: '800', background: submitting ? 'rgba(16, 185, 129, 0.5)' : '#10b981', color: 'white', border: 'none', cursor: submitting ? 'not-allowed' : 'pointer' }}
                                     >

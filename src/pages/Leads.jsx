@@ -234,7 +234,9 @@ export default function Leads() {
     const [hoveredLeadId, setHoveredLeadId] = useState(null);
     // Right Analytics Sidebar state (Closed by default as requested)
     const [showRightSidebar, setShowRightSidebar] = useState(false);
+    const [customSidebarMonth, setCustomSidebarMonth] = useState(null);
     const selectedSidebarMonth = useMemo(() => {
+        if (customSidebarMonth) return customSidebarMonth;
         if (monthFilter === 'All') {
             const currentMonthIdx = new Date().getMonth();
             const opt = SIDEBAR_MONTH_OPTIONS.find(o => o.monthIdx === currentMonthIdx);
@@ -243,7 +245,7 @@ export default function Leads() {
             const opt = SIDEBAR_MONTH_OPTIONS.find(o => o.tab === monthFilter);
             return opt ? opt.label : 'September 2026';
         }
-    }, [monthFilter]);
+    }, [monthFilter, customSidebarMonth]);
     const [showMonthDropdown, setShowMonthDropdown] = useState(false);
     const [sidebarLeads, setSidebarLeads] = useState([]);
     const [loadingSidebarLeads, setLoadingSidebarLeads] = useState(false);
@@ -1273,10 +1275,14 @@ export default function Leads() {
             dailyList.push({ day, leadsCount, leadsAmt, convCount, convAmt, leads: dayLeads, convLeads: convLeads });
         }
 
-        const today = new Date().getDate();
+        const now = new Date();
+        const isCurrentMonth = now.getFullYear() === year && now.getMonth() === monthIdx;
+        const today = now.getDate();
         dailyList.sort((a, b) => {
-            if (a.day === today) return -1;
-            if (b.day === today) return 1;
+            if (isCurrentMonth) {
+                if (a.day === today) return -1;
+                if (b.day === today) return 1;
+            }
             return a.day - b.day;
         });
 
@@ -1644,6 +1650,7 @@ export default function Leads() {
                         <button
                             key={m}
                             onClick={() => {
+                                setCustomSidebarMonth(null);
                                 setMonthFilter(m);
                                 setCurrentPage(1);
                             }}
@@ -2202,16 +2209,118 @@ export default function Leads() {
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
+                                position: 'relative'
                             }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div style={{ padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                                        <Calendar size={18} color="#94a3b8" />
+                                <div
+                                    onClick={() => setShowMonthDropdown(prev => !prev)}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '10px',
+                                        cursor: 'pointer',
+                                        padding: '6px 12px',
+                                        borderRadius: '10px',
+                                        background: showMonthDropdown ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        transition: 'all 0.2s',
+                                        userSelect: 'none'
+                                    }}
+                                    title="Click to select month"
+                                >
+                                    <div style={{ padding: '6px', background: 'rgba(251, 191, 36, 0.15)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <Calendar size={18} color="#fbbf24" />
                                     </div>
-                                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: 'white', letterSpacing: '0.3px' }}>
+                                    <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', color: 'white', letterSpacing: '0.3px' }}>
                                         {selectedSidebarMonth}
                                     </h3>
-                                    <ChevronDown size={16} color="#94a3b8" style={{ cursor: 'pointer' }} />
+                                    <ChevronDown
+                                        size={16}
+                                        color="#94a3b8"
+                                        style={{
+                                            transform: showMonthDropdown ? 'rotate(180deg)' : 'none',
+                                            transition: 'transform 0.2s'
+                                        }}
+                                    />
                                 </div>
+
+                                {/* Month Dropdown Menu */}
+                                {showMonthDropdown && (
+                                    <>
+                                        <div
+                                            style={{
+                                                position: 'fixed',
+                                                inset: 0,
+                                                zIndex: 200002
+                                            }}
+                                            onClick={() => setShowMonthDropdown(false)}
+                                        />
+                                        <div
+                                            style={{
+                                                position: 'absolute',
+                                                top: '68px',
+                                                left: '20px',
+                                                background: '#0d1527',
+                                                border: '1px solid rgba(255, 255, 255, 0.15)',
+                                                borderRadius: '12px',
+                                                boxShadow: '0 16px 40px rgba(0, 0, 0, 0.9)',
+                                                zIndex: 200003,
+                                                width: '210px',
+                                                maxHeight: '320px',
+                                                overflowY: 'auto',
+                                                padding: '6px'
+                                            }}
+                                        >
+                                            {SIDEBAR_MONTH_OPTIONS.map((opt) => {
+                                                const isSelected = selectedSidebarMonth === opt.label;
+                                                return (
+                                                    <button
+                                                        key={opt.label}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setCustomSidebarMonth(opt.label);
+                                                            setMonthFilter(opt.tab);
+                                                            setShowMonthDropdown(false);
+                                                        }}
+                                                        style={{
+                                                            width: '100%',
+                                                            textAlign: 'left',
+                                                            padding: '9px 12px',
+                                                            borderRadius: '8px',
+                                                            background: isSelected ? 'rgba(251, 191, 36, 0.15)' : 'transparent',
+                                                            color: isSelected ? '#fbbf24' : '#e2e8f0',
+                                                            border: 'none',
+                                                            fontSize: '13px',
+                                                            fontWeight: isSelected ? '800' : '500',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'space-between',
+                                                            transition: 'all 0.15s'
+                                                        }}
+                                                        onMouseEnter={(e) => {
+                                                            if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                                                        }}
+                                                        onMouseLeave={(e) => {
+                                                            if (!isSelected) e.currentTarget.style.background = 'transparent';
+                                                        }}
+                                                    >
+                                                        <span>{opt.label}</span>
+                                                        {isSelected && (
+                                                            <span
+                                                                style={{
+                                                                    width: '6px',
+                                                                    height: '6px',
+                                                                    borderRadius: '50%',
+                                                                    background: '#fbbf24'
+                                                                }}
+                                                            />
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                )}
                                 <button
                                     type="button"
                                     onClick={() => setShowRightSidebar(false)}
