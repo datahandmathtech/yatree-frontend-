@@ -128,6 +128,94 @@ export const nowIST = (date = new Date()) => {
     return new Date(d.getTime() + IST_OFFSET_MS);
 };
 
+/**
+ * Calculates Indian Financial Year string (e.g. 'FY 26-27', 'FY 27-28') for any date.
+ * Financial Year in India runs from 1 April of year Y to 31 March of year Y+1.
+ */
+export const getFinancialYear = (dateOrStr) => {
+    if (!dateOrStr) return null;
+    const d = dateOrStr instanceof Date ? dateOrStr : new Date(dateOrStr);
+    if (isNaN(d.getTime())) return null;
+
+    const ist = new Date(d.getTime() + IST_OFFSET_MS);
+    const month = ist.getUTCMonth(); // 0 = Jan, 3 = Apr, 11 = Dec
+    const year = ist.getUTCFullYear();
+
+    const startYear = month >= 3 ? year : year - 1;
+    const endYear = startYear + 1;
+    return `FY ${String(startYear).slice(-2)}-${String(endYear).slice(-2)}`;
+};
+
+/**
+ * Returns a dynamically computed list of Financial Years.
+ * Automatically includes past 2 years, current FY, and next 2 future FYs (e.g., FY 27-28, FY 28-29),
+ * PLUS any extra years found in booking/lead dates!
+ * Example return: ['FY 28-29', 'FY 27-28', 'FY 26-27', 'FY 25-26', 'FY 24-25']
+ */
+export const getAvailableFinancialYears = (items = []) => {
+    const today = new Date();
+    const todayIst = new Date(today.getTime() + IST_OFFSET_MS);
+    const curYear = todayIst.getUTCFullYear();
+
+    const fySet = new Set();
+
+    // Base list: 2 past FYs, current FY, and 2 future FYs
+    for (let offset = -2; offset <= 2; offset++) {
+        const y = curYear + offset;
+        const fy = getFinancialYear(new Date(Date.UTC(y, 6, 1)));
+        if (fy) fySet.add(fy);
+    }
+
+    // Dynamic scan: any booking / lead date beyond the base list
+    if (Array.isArray(items)) {
+        items.forEach(item => {
+            const d = item?.travelStartDate || item?.travelEndDate || item?.createdAt || item?.date || item?.leadDate;
+            if (d) {
+                const fy = getFinancialYear(d);
+                if (fy) fySet.add(fy);
+            }
+        });
+    }
+
+    // Sort descending by starting year: highest future FY first down to oldest
+    return Array.from(fySet).sort((a, b) => {
+        const yearA = parseInt(a.replace('FY ', '').split('-')[0], 10) || 0;
+        const yearB = parseInt(b.replace('FY ', '').split('-')[0], 10) || 0;
+        return yearB - yearA;
+    });
+};
+
+/**
+ * Returns month options (April to March) for a given Financial Year string (e.g. 'FY 26-27' -> 2026-2027).
+ */
+export const getSidebarMonthOptions = (fyString) => {
+    let startYear = 2026;
+    if (fyString && fyString.startsWith('FY ')) {
+        const parts = fyString.replace('FY ', '').split('-');
+        if (parts.length === 2) {
+            const yy = parseInt(parts[0], 10);
+            if (!isNaN(yy)) {
+                startYear = 2000 + yy;
+            }
+        }
+    }
+    const endYear = startYear + 1;
+    return [
+        { label: `April ${startYear}`, tab: 'Apr', monthIdx: 3, year: startYear, days: 30 },
+        { label: `May ${startYear}`, tab: 'May', monthIdx: 4, year: startYear, days: 31 },
+        { label: `June ${startYear}`, tab: 'Jun', monthIdx: 5, year: startYear, days: 30 },
+        { label: `July ${startYear}`, tab: 'Jul', monthIdx: 6, year: startYear, days: 31 },
+        { label: `August ${startYear}`, tab: 'Aug', monthIdx: 7, year: startYear, days: 31 },
+        { label: `September ${startYear}`, tab: 'Sep', monthIdx: 8, year: startYear, days: 30 },
+        { label: `October ${startYear}`, tab: 'Oct', monthIdx: 9, year: startYear, days: 31 },
+        { label: `November ${startYear}`, tab: 'Nov', monthIdx: 10, year: startYear, days: 30 },
+        { label: `December ${startYear}`, tab: 'Dec', monthIdx: 11, year: startYear, days: 31 },
+        { label: `January ${endYear}`, tab: 'Jan', monthIdx: 0, year: endYear, days: 31 },
+        { label: `February ${endYear}`, tab: 'Feb', monthIdx: 1, year: endYear, days: (endYear % 4 === 0 ? 29 : 28) },
+        { label: `March ${endYear}`, tab: 'Mar', monthIdx: 2, year: endYear, days: 31 }
+    ];
+};
+
 export default {
     todayIST,
     firstDayOfMonthIST,
@@ -139,4 +227,7 @@ export default {
     currentTimeIST,
     nowISTDateTimeString,
     nowIST,
+    getFinancialYear,
+    getAvailableFinancialYears,
+    getSidebarMonthOptions,
 };

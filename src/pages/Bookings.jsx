@@ -15,6 +15,7 @@ import { generateBookingConfirmationPDF } from '../utils/bookingConfirmationPdf'
 import { generateTaxInvoicePDF } from '../utils/taxInvoicePdf';
 import EditBookingModal from '../components/common/EditBookingModal';
 import BankSelector from '../components/common/BankSelector';
+import { getFinancialYear, getAvailableFinancialYears } from '../utils/istUtils';
 
 const MONTH_TABS = [
     'All Months', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'
@@ -65,6 +66,7 @@ export default function Bookings() {
     const [loading, setLoading] = useState(false);
     const [selectedFy, setSelectedFy] = useState('FY 26-27');
     const [showFyDropdown, setShowFyDropdown] = useState(false);
+    const fyOptions = useMemo(() => getAvailableFinancialYears(bookings), [bookings]);
     const [selectedMonth, setSelectedMonth] = useState('All Months');
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -395,6 +397,14 @@ export default function Bookings() {
         // ONLY show Confirmed and Ongoing bookings in the Bookings page
         list = list.filter(b => b.bookingStatus === 'Confirmed' || b.bookingStatus === 'Ongoing' || b.status === 'Confirmed' || b.status === 'Ongoing');
 
+        // 0. Financial Year Filter
+        if (selectedFy && selectedFy !== 'All FY') {
+            list = list.filter(b => {
+                const itemFy = getFinancialYear(b.travelStartDate || b.travelEndDate || b.createdAt);
+                return itemFy === selectedFy;
+            });
+        }
+
         // 1. Month Filter
         if (selectedMonth !== 'All Months') {
             const monthCodeMap = {
@@ -402,7 +412,7 @@ export default function Bookings() {
                 'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
                 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
             };
-                        list = list.filter(b => {
+            list = list.filter(b => {
                 const d = new Date(b.travelStartDate || b.createdAt || 0);
                 if (!isNaN(d.getTime())) {
                     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -443,7 +453,7 @@ export default function Bookings() {
             if (valA > valB) return sortAsc ? 1 : -1;
             return 0;
         });
-    }, [bookings, selectedMonth, searchTerm, sortField, sortAsc]);
+    }, [bookings, selectedMonth, selectedFy, searchTerm, sortField, sortAsc]);
 
     // KPI Metrics calculation
     const kpiStats = useMemo(() => {
@@ -900,7 +910,7 @@ export default function Bookings() {
                                     boxShadow: '0 10px 30px rgba(0,0,0,0.7)',
                                     overflow: 'hidden'
                                 }}>
-                                    {['FY 26-27', 'FY 25-26', 'FY 24-25'].map(fy => (
+                                    {fyOptions.map(fy => (
                                         <div
                                             key={fy}
                                             onClick={() => {

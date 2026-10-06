@@ -19,7 +19,7 @@ import html2canvas from 'html2canvas';
 import SEO from '../components/SEO';
 import { generateBookingConfirmationPDF } from '../utils/bookingConfirmationPdf';
 import ImageUploader from '../components/common/ImageUploader';
-import { formatDateIST, todayIST, toISTDateString } from '../utils/istUtils';
+import { formatDateIST, todayIST, toISTDateString, getFinancialYear, getAvailableFinancialYears, getSidebarMonthOptions } from '../utils/istUtils';
 
 const LEAD_SOURCES = [
     'Website', 'Google Ads', 'Repeat Guest', 'Hotel', 'Referral',
@@ -43,22 +43,6 @@ const VEHICLE_OPTIONS = [
     'SUV',
     'Luxury Car',
     'Bus'
-];
-
-
-const SIDEBAR_MONTH_OPTIONS = [
-    { label: 'April 2026', tab: 'Apr', monthIdx: 3, year: 2026, days: 30 },
-    { label: 'May 2026', tab: 'May', monthIdx: 4, year: 2026, days: 31 },
-    { label: 'June 2026', tab: 'Jun', monthIdx: 5, year: 2026, days: 30 },
-    { label: 'July 2026', tab: 'Jul', monthIdx: 6, year: 2026, days: 31 },
-    { label: 'August 2026', tab: 'Aug', monthIdx: 7, year: 2026, days: 31 },
-    { label: 'September 2026', tab: 'Sep', monthIdx: 8, year: 2026, days: 30 },
-    { label: 'October 2026', tab: 'Oct', monthIdx: 9, year: 2026, days: 31 },
-    { label: 'November 2026', tab: 'Nov', monthIdx: 10, year: 2026, days: 30 },
-    { label: 'December 2026', tab: 'Dec', monthIdx: 11, year: 2026, days: 31 },
-    { label: 'January 2027', tab: 'Jan', monthIdx: 0, year: 2027, days: 31 },
-    { label: 'February 2027', tab: 'Feb', monthIdx: 1, year: 2027, days: 28 },
-    { label: 'March 2027', tab: 'Mar', monthIdx: 2, year: 2027, days: 31 }
 ];
 
 
@@ -238,24 +222,27 @@ export default function Leads() {
     const [customSidebarMonth, setCustomSidebarMonth] = useState(null);
     const [expandedDailyDay, setExpandedDailyDay] = useState(null);
     const [hoveredDailyDay, setHoveredDailyDay] = useState(null);
-    const selectedSidebarMonth = useMemo(() => {
-        if (customSidebarMonth) return customSidebarMonth;
-        if (monthFilter === 'All') {
-            const currentMonthIdx = new Date().getMonth();
-            const opt = SIDEBAR_MONTH_OPTIONS.find(o => o.monthIdx === currentMonthIdx);
-            return opt ? opt.label : 'September 2026';
-        } else {
-            const opt = SIDEBAR_MONTH_OPTIONS.find(o => o.tab === monthFilter);
-            return opt ? opt.label : 'September 2026';
-        }
-    }, [monthFilter, customSidebarMonth]);
-
     const [selectedFy, setSelectedFy] = useState('FY 26-27');
     const [showFyDropdown, setShowFyDropdown] = useState(false);
     const [showMonthDropdown, setShowMonthDropdown] = useState(false);
     const [sidebarLeads, setSidebarLeads] = useState([]);
     const [loadingSidebarLeads, setLoadingSidebarLeads] = useState(false);
     const searchDebounceRef = useRef(null);
+
+    const fyOptions = useMemo(() => getAvailableFinancialYears(sidebarLeads.length > 0 ? sidebarLeads : leads), [sidebarLeads, leads]);
+    const SIDEBAR_MONTH_OPTIONS = useMemo(() => getSidebarMonthOptions(selectedFy), [selectedFy]);
+
+    const selectedSidebarMonth = useMemo(() => {
+        if (customSidebarMonth) return customSidebarMonth;
+        if (monthFilter === 'All') {
+            const currentMonthIdx = new Date().getMonth();
+            const opt = SIDEBAR_MONTH_OPTIONS.find(o => o.monthIdx === currentMonthIdx);
+            return opt ? opt.label : (SIDEBAR_MONTH_OPTIONS[5]?.label || 'April 2026');
+        } else {
+            const opt = SIDEBAR_MONTH_OPTIONS.find(o => o.tab === monthFilter);
+            return opt ? opt.label : (SIDEBAR_MONTH_OPTIONS[5]?.label || 'April 2026');
+        }
+    }, [monthFilter, customSidebarMonth, SIDEBAR_MONTH_OPTIONS]);
 
     // Monthly Bookings Overview states
     const navigate = useNavigate();
@@ -407,7 +394,7 @@ export default function Leads() {
             fetchTravelAgents();
             fetchCompanyBanks();
         }
-    }, [selectedCompany, monthFilter]);
+    }, [selectedCompany, monthFilter, selectedFy]);
 
     const fetchLeads = async () => {
         try {
@@ -415,6 +402,9 @@ export default function Leads() {
             let url = `/api/leads/${selectedCompany._id}?status=All`;
             if (monthFilter && monthFilter !== 'All') {
                 url += `&month=${monthFilter}`;
+            }
+            if (selectedFy && selectedFy !== 'All FY') {
+                url += `&fy=${encodeURIComponent(selectedFy)}`;
             }
             if (searchTerm) {
                 url += `&search=${encodeURIComponent(searchTerm)}`;
@@ -1218,6 +1208,12 @@ export default function Leads() {
                 if (end < today) return false;
             }
 
+            // Financial Year filter
+            if (selectedFy && selectedFy !== 'All FY') {
+                const itemFy = getFinancialYear(lead.travelStartDate || lead.travelEndDate || lead.leadDate || lead.createdAt);
+                if (itemFy && itemFy !== selectedFy) return false;
+            }
+
             if (sourceFilter !== 'All' && lead.source !== sourceFilter) return false;
             if (salesPersonFilter !== 'All' && lead.salesPerson !== salesPersonFilter) return false;
 
@@ -1250,7 +1246,7 @@ export default function Leads() {
 
             return true;
         });
-    }, [leads, sourceFilter, salesPersonFilter, searchTerm, priorityFilter]);
+    }, [leads, sourceFilter, salesPersonFilter, searchTerm, priorityFilter, selectedFy]);
 
     // Unique sales persons
     const salesPersonsList = useMemo(() => {
@@ -1920,7 +1916,7 @@ export default function Leads() {
                                     boxShadow: '0 10px 30px rgba(0,0,0,0.7)',
                                     overflow: 'hidden'
                                 }}>
-                                    {['FY 26-27', 'FY 25-26', 'FY 24-25'].map(fy => (
+                                    {fyOptions.map(fy => (
                                         <div
                                             key={fy}
                                             onClick={() => {

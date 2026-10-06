@@ -12,6 +12,7 @@ import SEO from '../components/SEO';
 import { generateTaxInvoicePDF } from '../utils/taxInvoicePdf';
 import ClientLedgerDrawer from '../components/common/ClientLedgerDrawer';
 import EditInvoiceModal from '../components/common/EditInvoiceModal';
+import { getFinancialYear, getAvailableFinancialYears } from '../utils/istUtils';
 import { Edit } from 'lucide-react';
 
 const MONTH_TABS = [
@@ -33,6 +34,7 @@ export default function CompletedBookings() {
     const [selectedMonth, setSelectedMonth] = useState('Sep');
     const [searchTerm, setSearchTerm] = useState('');
     const [showFyDropdown, setShowFyDropdown] = useState(false);
+    const fyOptions = useMemo(() => getAvailableFinancialYears(bookings), [bookings]);
 
     // Sorting
     const [sortField, setSortField] = useState('bookingId');
@@ -87,8 +89,16 @@ export default function CompletedBookings() {
     const processedBookings = useMemo(() => {
         let list = bookings;
 
+        // Financial Year filter
+        if (selectedFy && selectedFy !== 'All FY') {
+            list = list.filter(b => {
+                const itemFy = getFinancialYear(b.travelEndDate || b.travelStartDate || b.createdAt);
+                return itemFy === selectedFy;
+            });
+        }
+
         // Month filter
-        if (selectedMonth) {
+        if (selectedMonth && selectedMonth !== 'All Months') {
             const monthMap = {
                 'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
                 'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
@@ -140,7 +150,7 @@ export default function CompletedBookings() {
             if (valA > valB) return sortAsc ? 1 : -1;
             return 0;
         });
-    }, [bookings, selectedMonth, searchTerm, sortField, sortAsc]);
+    }, [bookings, selectedMonth, selectedFy, searchTerm, sortField, sortAsc]);
 
     // KPI Metrics calculation
     const kpiStats = useMemo(() => {
@@ -310,7 +320,7 @@ export default function CompletedBookings() {
                                     boxShadow: '0 10px 30px rgba(0,0,0,0.7)',
                                     overflow: 'hidden'
                                 }}>
-                                    {['FY 26-27', 'FY 25-26', 'FY 24-25'].map(fy => (
+                                    {fyOptions.map(fy => (
                                         <div
                                             key={fy}
                                             onClick={() => {

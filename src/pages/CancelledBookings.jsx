@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SEO from '../components/SEO';
+import { getFinancialYear, getAvailableFinancialYears } from '../utils/istUtils';
 
 const MONTH_TABS = [
     'All Months', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'
@@ -42,6 +43,7 @@ export default function CancelledBookings() {
     const [selectedMonth, setSelectedMonth] = useState('All Months');
     const [searchTerm, setSearchTerm] = useState('');
     const [showFyDropdown, setShowFyDropdown] = useState(false);
+    const fyOptions = useMemo(() => getAvailableFinancialYears(bookings), [bookings]);
 
     // Sorting
     const [sortField, setSortField] = useState('bookingCode');
@@ -184,6 +186,14 @@ export default function CancelledBookings() {
     const processedBookings = useMemo(() => {
         let list = bookings;
 
+        // 0. Financial Year filter
+        if (selectedFy && selectedFy !== 'All FY') {
+            list = list.filter(b => {
+                const itemFy = getFinancialYear(b.travelStartDate || b.travelEndDate || b.createdAt);
+                return itemFy === selectedFy;
+            });
+        }
+
         // Month filter
         if (selectedMonth !== 'All Months') {
             const monthMap = {
@@ -238,7 +248,7 @@ export default function CancelledBookings() {
             if (valA > valB) return sortAsc ? 1 : -1;
             return 0;
         });
-    }, [bookings, selectedMonth, searchTerm, sortField, sortAsc]);
+    }, [bookings, selectedMonth, selectedFy, searchTerm, sortField, sortAsc]);
 
     // KPI Metrics calculation
     const kpiStats = useMemo(() => {
@@ -408,7 +418,7 @@ export default function CancelledBookings() {
                                     boxShadow: '0 10px 30px rgba(0,0,0,0.7)',
                                     overflow: 'hidden'
                                 }}>
-                                    {['FY 26-27', 'FY 25-26', 'FY 24-25'].map(fy => (
+                                    {fyOptions.map(fy => (
                                         <div
                                             key={fy}
                                             onClick={() => {
