@@ -7,7 +7,7 @@ import {
     AlertCircle, Search, Filter, Phone, MessageSquare, Plus,
     FileText, X, ArrowUpRight, ShieldCheck, UserCheck,
     CreditCard, Hourglass, Edit, MoreVertical, User, ArrowUpDown,
-    ChevronLeft, ChevronRight, AlertTriangle, AlertOctagon, Ban, XCircle, ChevronDown
+    ChevronLeft, ChevronRight, AlertTriangle, AlertOctagon, Ban, XCircle, ChevronDown, Fuel
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SEO from '../components/SEO';
