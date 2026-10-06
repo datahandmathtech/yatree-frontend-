@@ -791,7 +791,7 @@ input[type="datetime-local"]::-webkit-datetime-edit-text {
 /* Large Tablet - 3 Columns */
 @media (min-width: 901px) and (max-width: 1200px) {
   .stats-grid {
-    grid-template-columns: repeat(3, 1fr) !important;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
   }
 }
 
@@ -1023,42 +1023,42 @@ header.dashboard-header {
 
 .expiry-alerts-grid {
   display: grid;
-  gap: 12px;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 }
 
 @media (max-width: 640px) {
   .expiry-alerts-grid {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
 }
 
-@media (min-width: 641px) and (max-width: 900px) {
+@media (min-width: 641px) and (max-width: 1024px) {
   .expiry-alerts-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
   }
 }
 
-@media (min-width: 901px) and (max-width: 1200px) {
+@media (min-width: 1025px) {
   .expiry-alerts-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (min-width: 1201px) {
-  .expiry-alerts-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
   }
 }
 
 .alert-card {
-  padding: clamp(14px, 3.5vw, 18px);
-  border-radius: 12px;
+  padding: 18px;
+  border-radius: 16px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .alert-identifier {
-  font-size: clamp(11px, 2.8vw, 13px);
+  font-size: 14px;
   font-weight: 800;
-  word-break: break-word;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
 }
 
 .alert-type {
