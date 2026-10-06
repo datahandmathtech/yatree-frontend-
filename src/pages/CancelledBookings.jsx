@@ -63,48 +63,103 @@ export default function CancelledBookings() {
     const fetchCancelledBookings = async () => {
         try {
             setLoading(true);
-            const { data } = await axios.get(`/api/bookings/${selectedCompany._id}?status=Cancelled`);
-            if (Array.isArray(data) && data.length > 0) {
-                const formatted = data.map(b => {
-                    let reason = 'Cancelled';
-                    if (b.notes) {
-                        const splitted = b.notes.split('Cancelled: ');
-                        if (splitted.length > 1) {
-                            reason = splitted[1].split(' | ')[0].trim();
-                        } else {
-                            reason = b.notes;
-                        }
+            const [bkgSettled, leadSettled] = await Promise.allSettled([
+                axios.get(`/api/bookings/${selectedCompany._id}?status=Cancelled`),
+                axios.get(`/api/leads/${selectedCompany._id}?status=All`)
+            ]);
+
+            const bkgData = bkgSettled.status === 'fulfilled' && Array.isArray(bkgSettled.value?.data) ? bkgSettled.value.data : [];
+            const leadData = leadSettled.status === 'fulfilled' && Array.isArray(leadSettled.value?.data) ? leadSettled.value.data : [];
+
+            const formattedBookings = bkgData.map(b => {
+                let reason = 'Cancelled';
+                if (b.notes) {
+                    const splitted = b.notes.split('Cancelled: ');
+                    if (splitted.length > 1) {
+                        reason = splitted[1].split(' | ')[0].trim();
+                    } else {
+                        reason = b.notes;
                     }
-                    const isNoShow = reason.toLowerCase().includes('no-show') || reason.toLowerCase().includes('date passed') || reason.toLowerCase().includes('call nahi aaya');
-                    return {
-                        ...b,
-                        bookingId: b.bookingCode || b.clientCode || b.bookingId || 'BKG',
-                        bookingCode: b.bookingCode || b.clientCode || b.bookingId || 'BKG',
-                        clientName: b.clientName || b.guestName || 'Valued Guest',
-                        cancellationReason: reason,
-                        isNoShow
-                    };
-                });
-                setBookings(formatted);
-            } else {
-                setBookings([]);
-            }
+                }
+                const isNoShow = reason.toLowerCase().includes('no-show') || reason.toLowerCase().includes('date passed') || reason.toLowerCase().includes('call nahi aaya');
+                return {
+                    ...b,
+                    isLead: false,
+                    recordType: 'Booking',
+                    bookingId: b.bookingCode || b.clientCode || b.bookingId || 'BKG',
+                    bookingCode: b.bookingCode || b.clientCode || b.bookingId || 'BKG',
+                    clientName: b.clientName || b.guestName || 'Valued Guest',
+                    cancellationReason: reason,
+                    isNoShow
+                };
+            });
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const formattedLeads = leadData.filter(l => {
+                if (l.bookingId) return false;
+                if (l.status === 'Cancelled' || l.status === 'Lost') return true;
+
+                const end = l.travelEndDate ? new Date(l.travelEndDate) : (l.travelStartDate ? new Date(l.travelStartDate) : null);
+                if (end) {
+                    end.setHours(23, 59, 59, 999);
+                    if (end < today && l.status !== 'Confirmed') return true;
+                }
+                return false;
+            }).map(l => {
+                const lastRemark = l.remarksHistory && l.remarksHistory.length > 0 ? l.remarksHistory[l.remarksHistory.length - 1] : null;
+                let reason = lastRemark?.text || l.notes || 'Tour date passed without confirmation';
+                const isNoShow = reason.toLowerCase().includes('no-show') || 
+                                 reason.toLowerCase().includes('date passed') || 
+                                 reason.toLowerCase().includes('auto-cancelled') || 
+                                 reason.toLowerCase().includes('call nahi aaya');
+
+                return {
+                    ...l,
+                    isLead: true,
+                    recordType: 'Lead',
+                    bookingId: l.clientCode || l.leadId || 'LEAD',
+                    bookingCode: l.clientCode || l.leadId || 'LEAD',
+                    clientCode: l.clientCode || l.leadId || 'LEAD',
+                    clientName: l.clientName || 'Valued Guest',
+                    guestName: l.clientName || 'Valued Guest',
+                    mobileNumber: l.mobileNumber || l.travelAgentMobile || '',
+                    totalAmount: Number(l.totalAmount) || 0,
+                    advancePaid: Number(l.advancePayment) || 0,
+                    balanceDue: Math.max(0, (Number(l.totalAmount) || 0) - (Number(l.advancePayment) || 0)),
+                    travelStartDate: l.travelStartDate,
+                    travelEndDate: l.travelEndDate,
+                    vehicleType: l.carType || l.vehicleName || 'Standard Sedan',
+                    cancellationReason: reason,
+                    isNoShow
+                };
+            });
+
+            setBookings([...formattedBookings, ...formattedLeads]);
         } catch (error) {
-            console.error('Error fetching cancelled bookings:', error);
+            console.error('Error fetching cancelled bookings & leads:', error);
             setBookings([]);
         } finally {
             setLoading(false);
         }
     };
 
-    // Restore Booking handler (moves it back to Confirmed Bookings)
+    // Restore Booking / Lead handler
     const handleRestoreBooking = async (bkg) => {
-        const confirmRestore = window.confirm(`Do you want to restore booking ${bkg.bookingCode || bkg.bookingId} back to Confirmed Bookings?`);
+        const itemType = bkg.isLead ? 'Lead' : 'Booking';
+        const targetPage = bkg.isLead ? 'Open Leads' : 'Confirmed Bookings';
+        const confirmRestore = window.confirm(`Do you want to restore ${itemType} ${bkg.bookingCode || bkg.bookingId} back to ${targetPage}?`);
         if (!confirmRestore) return;
 
         try {
             setRestoringId(bkg._id);
-            if (bkg._id && !String(bkg._id).startsWith('cnl-mock')) {
+            if (bkg.isLead) {
+                await axios.put(`/api/leads/single/${bkg._id}`, {
+                    status: 'New',
+                    notes: `${bkg.notes ? bkg.notes + ' | ' : ''}Restored from Lost on ${new Date().toLocaleDateString()}`
+                });
+            } else if (bkg._id && !String(bkg._id).startsWith('cnl-mock')) {
                 await axios.put(`/api/bookings/single/${bkg._id}`, {
                     bookingStatus: 'Confirmed',
                     notes: `${bkg.notes ? bkg.notes + ' | ' : ''}Restored from Cancelled on ${new Date().toLocaleDateString()}`
@@ -116,10 +171,10 @@ export default function CancelledBookings() {
             if (showDetailModal && selectedBooking?._id === bkg._id) {
                 setShowDetailModal(false);
             }
-            alert(`Booking ${bkg.bookingCode || bkg.bookingId} restored successfully! It is now active under Confirmed Bookings.`);
+            alert(`${itemType} ${bkg.bookingCode || bkg.bookingId} restored successfully! It is now active under ${targetPage}.`);
         } catch (err) {
-            console.error('Error restoring booking:', err);
-            alert(err.response?.data?.message || 'Failed to restore booking');
+            console.error('Error restoring:', err);
+            alert(err.response?.data?.message || 'Failed to restore');
         } finally {
             setRestoringId(null);
         }
@@ -681,7 +736,7 @@ export default function CancelledBookings() {
                             ) : processedBookings.length === 0 ? (
                                 <tr>
                                     <td colSpan="9" style={{ textAlign: 'center', padding: '60px 20px', color: 'rgba(255,255,255,0.4)' }}>
-                                        No cancelled bookings found.
+                                        No cancelled bookings or lost leads found.
                                     </td>
                                 </tr>
                             ) : (
@@ -708,15 +763,44 @@ export default function CancelledBookings() {
 
                                             {/* 2. Booking Code */}
                                             <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
-                                                <span style={{
-                                                    color: '#f87171',
-                                                    fontWeight: '800',
-                                                    fontSize: '13.5px',
-                                                    textDecoration: 'line-through',
-                                                    textDecorationColor: 'rgba(248, 113, 113, 0.6)'
-                                                }}>
-                                                    {bkgCode}
-                                                </span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <span style={{
+                                                        color: '#f87171',
+                                                        fontWeight: '800',
+                                                        fontSize: '13.5px',
+                                                        textDecoration: 'line-through',
+                                                        textDecorationColor: 'rgba(248, 113, 113, 0.6)'
+                                                    }}>
+                                                        {bkgCode}
+                                                    </span>
+                                                    {bkg.isLead ? (
+                                                        <span style={{
+                                                            fontSize: '10px',
+                                                            fontWeight: '800',
+                                                            padding: '2px 6px',
+                                                            borderRadius: '4px',
+                                                            background: 'rgba(168, 85, 247, 0.15)',
+                                                            color: '#c084fc',
+                                                            border: '1px solid rgba(168, 85, 247, 0.3)',
+                                                            letterSpacing: '0.5px'
+                                                        }}>
+                                                            LEAD
+                                                        </span>
+                                                    ) : (
+                                                        <span style={{
+                                                            fontSize: '10px',
+                                                            fontWeight: '800',
+                                                            padding: '2px 6px',
+                                                            borderRadius: '4px',
+                                                            background: 'rgba(56, 189, 248, 0.15)',
+                                                            color: '#38bdf8',
+                                                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                                                            letterSpacing: '0.5px'
+                                                        }}>
+                                                            RIDE
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
 
                                             {/* 3. Guest / Agent Name */}
@@ -802,7 +886,7 @@ export default function CancelledBookings() {
                                                     <button
                                                         onClick={() => handleRestoreBooking(bkg)}
                                                         disabled={restoringId === bkg._id}
-                                                        title="Restore this booking back to Confirmed Bookings"
+                                                        title={`Restore this ${bkg.isLead ? 'lead' : 'booking'} back to ${bkg.isLead ? 'Open Leads' : 'Confirmed Bookings'}`}
                                                         style={{
                                                             padding: '6px 14px',
                                                             background: 'rgba(16, 185, 129, 0.15)',
@@ -820,7 +904,7 @@ export default function CancelledBookings() {
                                                         }}
                                                     >
                                                         <RotateCcw size={12} />
-                                                        {restoringId === bkg._id ? 'Restoring...' : 'Restore Ride'}
+                                                        {restoringId === bkg._id ? 'Restoring...' : (bkg.isLead ? 'Restore Lead' : 'Restore Ride')}
                                                     </button>
 
                                                     {/* View Details Button */}
@@ -870,10 +954,10 @@ export default function CancelledBookings() {
                     color: 'rgba(255,255,255,0.5)'
                 }}>
                     <span>
-                        Showing {processedBookings.length} cancelled booking{processedBookings.length !== 1 ? 's' : ''}
+                        Showing {processedBookings.length} lost ride{processedBookings.length !== 1 ? 's' : ''} / lead{processedBookings.length !== 1 ? 's' : ''}
                     </span>
                     <span style={{ color: 'rgba(255,255,255,0.4)' }}>
-                        Tip: Click "Restore Ride" if the guest calls back or reschedules the tour.
+                        Tip: Click "Restore" if the guest calls back or reschedules the tour.
                     </span>
                 </div>
             </div>
@@ -911,7 +995,7 @@ export default function CancelledBookings() {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <XCircle size={20} color="#f87171" />
                                         <h2 style={{ color: 'white', margin: 0, fontSize: '18px', fontWeight: '800' }}>
-                                            Cancelled Booking {selectedBooking.bookingCode || selectedBooking.bookingId}
+                                            {selectedBooking.isLead ? 'Lost Lead' : 'Cancelled Booking'} {selectedBooking.bookingCode || selectedBooking.bookingId}
                                         </h2>
                                     </div>
                                     <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', margin: '4px 0 0 0' }}>
@@ -1042,7 +1126,7 @@ export default function CancelledBookings() {
                                         boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)'
                                     }}
                                 >
-                                    <RotateCcw size={14} /> Restore to Confirmed Bookings
+                                    <RotateCcw size={14} /> Restore to {selectedBooking.isLead ? 'Open Leads' : 'Confirmed Bookings'}
                                 </button>
                             </div>
                         </motion.div>
