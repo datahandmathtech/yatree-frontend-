@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from '../api/axios';
 import {
     ShieldAlert, Wallet, Droplets, Car, Search, ChevronRight, ChevronLeft,
-    X, Plus, CreditCard, Wrench, AlertCircle, CheckCircle2,
+    X, Plus, CreditCard, AlertCircle, CheckCircle2,
     Calendar, Filter, TrendingUp, Zap, Layers, Trash2, Edit3, Eye, FileText, ExternalLink, ArrowRight, Image,
     History, Activity, RefreshCw, Edit2, Shield, Activity as AutoIcon, Building2, UserCheck
 } from 'lucide-react';
@@ -25,7 +25,6 @@ const CarUtility = () => {
     // Core state
     const [vehicles, setVehicles] = useState([]);
     const [allBorderEntries, setAllBorderEntries] = useState([]);
-    const [allServiceRecords, setAllServiceRecords] = useState([]);
     const [drivers, setDrivers] = useState([]);
     const [bankAccounts, setBankAccounts] = useState([]);
     const [bookings, setBookings] = useState([]);
@@ -131,18 +130,11 @@ const CarUtility = () => {
             .premium-input-container input::placeholder, .premium-input-container textarea::placeholder {
                 color: rgba(255, 255, 255, 0.2);
             }
+            .premium-input-container input[type="date"] {
+                color-scheme: dark;
+            }
             .premium-input-container input[type="date"]::-webkit-calendar-picker-indicator {
-                background: transparent;
-                bottom: 0;
-                color: transparent;
                 cursor: pointer;
-                height: auto;
-                left: 0;
-                position: absolute;
-                right: 0;
-                top: 0;
-                width: auto;
-                z-index: 10;
                 opacity: 0;
             }
             .premium-input-container input[type="number"]::-webkit-inner-spin-button, 
@@ -207,10 +199,9 @@ const CarUtility = () => {
         try {
             const token = JSON.parse(localStorage.getItem('userInfo')).token;
             const headers = { Authorization: `Bearer ${token}` };
-            const [vehRes, borderRes, serviceRes, dvrRes, banksRes, bookingsRes] = await Promise.all([
+            const [vehRes, borderRes, dvrRes, banksRes, bookingsRes] = await Promise.all([
                 axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false&type=fleet`, { headers }),
                 axios.get(`/api/admin/border-tax/${selectedCompany._id}`, { headers }),
-                axios.get(`/api/admin/maintenance/${selectedCompany._id}`, { headers }),
                 axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&driverType=All`, { headers }),
                 axios.get(`/api/banks/company/${selectedCompany._id}`, { headers }).catch(() => axios.get(`/api/admin/bank-accounts/${selectedCompany._id}`, { headers })).catch(() => ({ data: [] })),
                 axios.get(`/api/bookings/${selectedCompany._id}?usePagination=false`, { headers }).catch(() => ({ data: [] }))
@@ -224,7 +215,6 @@ const CarUtility = () => {
 
             setVehicles(filteredVehs);
             setAllBorderEntries(borderRes.data || []);
-            setAllServiceRecords(serviceRes.data || []);
             setDrivers(dvrRes.data.drivers || []);
             setBankAccounts(Array.isArray(banksRes.data) ? banksRes.data : (banksRes.data?.bankAccounts || []));
             setBookings(bookingsRes.data?.bookings || bookingsRes.data || []);
@@ -287,37 +277,6 @@ const CarUtility = () => {
             return true;
         } catch (err) { 
             setMessage({ type: 'error', text: err.response?.data?.message || 'Error recording tax' }); 
-            return false;
-        } finally { 
-            setSubmitting(false); 
-        }
-    };
-
-    const handleAddService = async (vId, formData) => {
-        const targetId = vId || selectedVehicleId;
-        if (!targetId || targetId === 'new') return alert('Please select a vehicle');
-        setSubmitting(true);
-        try {
-            const token = JSON.parse(localStorage.getItem('userInfo')).token;
-            if (formData instanceof FormData && !formData.get('vehicleId')) {
-                formData.append('vehicleId', targetId);
-            }
-            await axios.post('/api/admin/maintenance', formData, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    companyid: selectedCompany._id
-                }
-            });
-            setMessage({ type: 'success', text: 'Service Record Logged Successfully!' });
-            setTimeout(() => { 
-                setMessage({ type: '', text: '' }); 
-                fetchAllData(); 
-                if (selectedVehicleId === 'new') setSelectedVehicleId(null);
-            }, 1500);
-            return true;
-        } catch (err) { 
-            console.error('Service add error:', err.response?.data || err.message); 
-            setMessage({ type: 'error', text: err.response?.data?.message || 'Error recording service' }); 
             return false;
         } finally { 
             setSubmitting(false); 
@@ -400,22 +359,14 @@ const CarUtility = () => {
             return (e.vehicle?._id === vId || e.vehicle === vId) && (m + 1) === selectedMonth && y === calendarYear;
         });
 
-        const sFilt = allServiceRecords.filter(r => {
-            const { m, y } = getISTMonthYear(r.billDate || r.date);
-            const calendarYear = (selectedMonth >= 1 && selectedMonth <= 3) ? selectedYear + 1 : selectedYear;
-            return (r.vehicle?._id === vId || r.vehicle === vId) && (m + 1) === selectedMonth && y === calendarYear;
-        });
-
         return {
             fastag: fFilt.reduce((s, h) => s + (Number(h.amount) || 0), 0),
             border: bFilt.reduce((s, e) => s + (Number(e.amount) || 0), 0),
-            service: sFilt.reduce((s, r) => s + (Number(r.amount) || 0), 0),
             total: fFilt.reduce((s, h) => s + (Number(h.amount) || 0), 0) + 
-                   bFilt.reduce((s, e) => s + (Number(e.amount) || 0), 0) + 
-                   sFilt.reduce((s, r) => s + (Number(r.amount) || 0), 0),
-            items: { fastag: fFilt, border: bFilt, service: sFilt }
+                   bFilt.reduce((s, e) => s + (Number(e.amount) || 0), 0),
+            items: { fastag: fFilt, border: bFilt }
         };
-    }, [vehicles, allBorderEntries, allServiceRecords, selectedMonth, selectedYear]);
+    }, [vehicles, allBorderEntries, selectedMonth, selectedYear]);
 
     // Construct unified chronological chronological logs for ALL vehicles
     const unifiedUtilityLogs = useMemo(() => {
@@ -424,7 +375,6 @@ const CarUtility = () => {
             const act = getVehicleActivity(v._id);
             act.items.fastag.forEach(x => logs.push({ ...x, type: 'fastag', typeLabel: 'Fastag', car: v.carNumber, carModel: v.model, color: '#38bdf8', icon: CreditCard, vehicleId: v._id }));
             act.items.border.forEach(x => logs.push({ ...x, type: 'border', typeLabel: 'Border Tax', car: v.carNumber, carModel: v.model, color: '#fbbf24', icon: Shield, vehicleId: v._id }));
-            act.items.service.forEach(x => logs.push({ ...x, type: 'services', typeLabel: 'Maintenance', car: v.carNumber, carModel: v.model, color: '#10b981', icon: Wrench, vehicleId: v._id }));
         });
         // Sort newest first
         return logs.sort((a, b) => new Date(b.date || b.billDate) - new Date(a.date || a.billDate));
@@ -432,7 +382,7 @@ const CarUtility = () => {
 
     // Period Totals (respects Vehicle Filter)
     const globalStats = useMemo(() => {
-        let f = 0, b = 0, s = 0;
+        let f = 0, b = 0;
         
         const vehiclesToProcess = filterVehicle === 'All' 
             ? vehicles 
@@ -440,11 +390,11 @@ const CarUtility = () => {
 
         vehiclesToProcess.forEach(v => {
             const act = getVehicleActivity(v._id);
-            f += act.fastag; b += act.border; s += act.service;
+            f += act.fastag; b += act.border;
         });
         return { 
-            f, b, s, 
-            t: f + b + s,
+            f, b, 
+            t: f + b,
             lowBalanceCount: vehicles.filter(v => (v.fastagBalance || 0) < 500).length
         };
     }, [vehicles, getVehicleActivity, filterVehicle]);
@@ -573,10 +523,9 @@ const CarUtility = () => {
                 </header>
 
                 {/* Big Stats Row */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '35px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '35px' }}>
                     <SummaryStat label="Fastag Paid" val={globalStats.f} col="#38bdf8" icon={CreditCard} desc="Total Highway Tolls" />
                     <SummaryStat label="Border Tax" val={globalStats.b} col="#fbbf24" icon={Shield} desc="State Entry Permits" />
-                    <SummaryStat label="Maintenance Exp" val={globalStats.s} col="#10b981" icon={Wrench} desc="Workshop & Servicing" />
                     <SummaryStat label="Month Total" val={globalStats.t} col="#a855f7" icon={TrendingUp} isDark desc="Total Utility Budget" />
                 </div>
 
@@ -611,7 +560,6 @@ const CarUtility = () => {
                                         <option value="All" style={{ background: '#0f172a' }}>All Utility Types</option>
                                         <option value="fastag" style={{ background: '#0f172a' }}>Fastag tolls {filterVehicle !== 'All' ? `(${unifiedUtilityLogs.filter(l => l.type === 'fastag' && l.vehicleId === filterVehicle).length})` : ''}</option>
                                         <option value="border" style={{ background: '#0f172a' }}>Border tax permits {filterVehicle !== 'All' ? `(${unifiedUtilityLogs.filter(l => l.type === 'border' && l.vehicleId === filterVehicle).length})` : ''}</option>
-                                        <option value="services" style={{ background: '#0f172a' }}>Vehicle Maintenance {filterVehicle !== 'All' ? `(${unifiedUtilityLogs.filter(l => l.type === 'services' && l.vehicleId === filterVehicle).length})` : ''}</option>
                                     </select>
                                 </div>
 
@@ -714,7 +662,7 @@ const CarUtility = () => {
                                                                 <Edit2 size={14} />
                                                             </button>
                                                             <button 
-                                                                onClick={() => handleDeleteRecord(log.type === 'fastag' ? `vehicles/${log.vehicleId}/fastag-recharge` : log.type === 'border' ? 'border-tax' : 'maintenance', log._id)} 
+                                                                onClick={() => handleDeleteRecord(log.type === 'fastag' ? `vehicles/${log.vehicleId}/fastag-recharge` : 'border-tax', log._id)} 
                                                                 style={{ background: 'rgba(244, 63, 94, 0.08)', color: '#f43f5e', border: 'none', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
                                                                 title="Delete"
                                                             >
@@ -772,14 +720,13 @@ const CarUtility = () => {
                                                 <th style={{ padding: '18px 25px', textAlign: 'right', fontSize: '11px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Fastag Balance</th>
                                                 <th style={{ padding: '18px 25px', textAlign: 'right', fontSize: '11px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Fastag (Month)</th>
                                                 <th style={{ padding: '18px 25px', textAlign: 'right', fontSize: '11px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Border (Month)</th>
-                                                <th style={{ padding: '18px 25px', textAlign: 'right', fontSize: '11px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Service (Month)</th>
                                                 <th style={{ padding: '18px 25px', textAlign: 'right', fontSize: '11px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Total (Month)</th>
                                                 <th style={{ padding: '18px 25px', textAlign: 'right', fontSize: '11px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Action</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {loading ? (
-                                                <tr><td colSpan="7" style={{ padding: '100px', textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }}></div></td></tr>
+                                                <tr><td colSpan="6" style={{ padding: '100px', textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }}></div></td></tr>
                                             ) : filteredVehicles.map(v => {
                                                 const act = getVehicleActivity(v._id);
                                                 const hasLowBalance = (v.fastagBalance || 0) < 500;
@@ -808,9 +755,6 @@ const CarUtility = () => {
                                                         </td>
                                                         <td style={{ padding: '18px 25px', textAlign: 'right', fontWeight: '700', color: 'rgba(255,255,255,0.8)' }}>
                                                             ₹{act.border.toLocaleString()}
-                                                        </td>
-                                                        <td style={{ padding: '18px 25px', textAlign: 'right', fontWeight: '700', color: 'rgba(255,255,255,0.8)' }}>
-                                                            ₹{act.service.toLocaleString()}
                                                         </td>
                                                         <td style={{ padding: '18px 25px', textAlign: 'right', fontWeight: '950', fontSize: '15px', color: '#10b981' }}>
                                                             ₹{act.total.toLocaleString()}
@@ -878,12 +822,6 @@ const CarUtility = () => {
                                                 desc={`${allBorderEntries.filter(e => (e.vehicle?._id === detailVehicleId || e.vehicle === detailVehicleId)).length} Total Logs`}
                                             />
                                             <DetailStat 
-                                                label="Maintenance" 
-                                                val={getVehicleActivity(detailVehicleId).service} 
-                                                icon={Wrench} col="#10b981" 
-                                                desc={`${allServiceRecords.filter(r => (r.vehicle?._id === detailVehicleId || r.vehicle === detailVehicleId)).length} Total Logs`}
-                                            />
-                                            <DetailStat 
                                                 label="Total Current" 
                                                 val={getVehicleActivity(detailVehicleId).total} 
                                                 icon={TrendingUp} col="#a855f7" isDark 
@@ -896,8 +834,7 @@ const CarUtility = () => {
                                 <div style={{ display: 'flex', gap: '10px', marginBottom: '30px', background: 'rgba(255,255,255,0.03)', padding: '6px', borderRadius: '18px', width: 'fit-content', border: '1px solid rgba(255,255,255,0.05)' }}>
                                     {[
                                         { id: 'fastag', label: 'Fastag Logs', icon: CreditCard, color: '#38bdf8' },
-                                        { id: 'border', label: 'Border Permits', icon: Shield, color: '#fbbf24' },
-                                        { id: 'services', label: 'Maintenance Logs', icon: Wrench, color: '#10b981' }
+                                        { id: 'border', label: 'Border Permits', icon: Shield, color: '#fbbf24' }
                                     ].map(t => (
                                         <button
                                             key={t.id}
@@ -923,9 +860,9 @@ const CarUtility = () => {
                                         drivers={drivers}
                                         getImageUrl={getImageUrl}
                                         hideForm={true}
-                                        onAdd={(vId, data, file) => activeUtility === 'fastag' ? handleRecharge(vId, data, file) : activeUtility === 'border' ? handleAddTax(vId, data, file) : handleAddService(vId, data, file)}
-                                        onUpdate={(id, data) => handleUpdateRecord(activeUtility === 'fastag' ? `vehicles/${detailVehicleId}/fastag-recharge` : activeUtility === 'border' ? 'border-tax' : 'maintenance', id, data)}
-                                        onDelete={id => handleDeleteRecord(activeUtility === 'fastag' ? `vehicles/${detailVehicleId}/fastag-recharge` : activeUtility === 'border' ? 'border-tax' : 'maintenance', id)}
+                                        onAdd={(vId, data, file) => activeUtility === 'fastag' ? handleRecharge(vId, data, file) : handleAddTax(vId, data, file)}
+                                        onUpdate={(id, data) => handleUpdateRecord(activeUtility === 'fastag' ? `vehicles/${detailVehicleId}/fastag-recharge` : 'border-tax', id, data)}
+                                        onDelete={id => handleDeleteRecord(activeUtility === 'fastag' ? `vehicles/${detailVehicleId}/fastag-recharge` : 'border-tax', id)}
                                         setViewingImage={setViewingImage}
                                         submitting={submitting}
                                         vehicle={detailVehicle}
@@ -972,8 +909,7 @@ const CarUtility = () => {
                                 <div style={{ display: 'flex', gap: '10px', padding: '8px', background: 'rgba(255,255,255,0.03)', borderRadius: '20px', marginBottom: '30px', border: '1px solid rgba(255,255,255,0.06)', width: 'fit-content', margin: '0 auto 30px auto' }}>
                                     {[
                                         { id: 'fastag', label: 'Fastag', icon: CreditCard },
-                                        { id: 'border', label: 'Border Tax', icon: Shield },
-                                        { id: 'services', label: 'Maintenance', icon: Wrench }
+                                        { id: 'border', label: 'Border Tax', icon: Shield }
                                     ].map(tab => (
                                         <button
                                             key={tab.id}
@@ -993,11 +929,11 @@ const CarUtility = () => {
                                 <ManagerHub
                                     key={activeUtility || 'fastag'}
                                     type={activeUtility || 'fastag'} color="#fbbf24"
-                                    act={selectedVehicleId === 'new' ? { items: { fastag: [], border: [], service: [] } } : getVehicleActivity(selectedVehicleId)}
+                                    act={selectedVehicleId === 'new' ? { items: { fastag: [], border: [] } } : getVehicleActivity(selectedVehicleId)}
                                     drivers={drivers} getImageUrl={getImageUrl}
-                                    onAdd={(vId, data, file) => (activeUtility || 'fastag') === 'fastag' ? handleRecharge(vId, data, file) : (activeUtility || 'fastag') === 'border' ? handleAddTax(vId, data, file) : handleAddService(vId, data, file)}
-                                    onUpdate={(id, data) => handleUpdateRecord((activeUtility || 'fastag') === 'fastag' ? `vehicles/${selectedVehicleId}/fastag-recharge` : (activeUtility || 'fastag') === 'border' ? 'border-tax' : 'maintenance', id, data)}
-                                    onDelete={id => handleDeleteRecord((activeUtility || 'fastag') === 'fastag' ? `vehicles/${selectedVehicleId}/fastag-recharge` : (activeUtility || 'fastag') === 'border' ? 'border-tax' : 'maintenance', id)}
+                                    onAdd={(vId, data, file) => (activeUtility || 'fastag') === 'fastag' ? handleRecharge(vId, data, file) : handleAddTax(vId, data, file)}
+                                    onUpdate={(id, data) => handleUpdateRecord((activeUtility || 'fastag') === 'fastag' ? `vehicles/${selectedVehicleId}/fastag-recharge` : 'border-tax', id, data)}
+                                    onDelete={id => handleDeleteRecord((activeUtility || 'fastag') === 'fastag' ? `vehicles/${selectedVehicleId}/fastag-recharge` : 'border-tax', id)}
                                     setViewingImage={setViewingImage} submitting={submitting} vehicle={vehicles.find(v => v._id === selectedVehicleId)} allVehicles={vehicles} companyId={selectedCompany?._id}
                                     selectedMonth={selectedMonth}
                                     selectedYear={selectedYear}
@@ -1080,8 +1016,24 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
     const [file, setFile] = useState(null);
     const [editingItem, setEditingItem] = useState(null);
 
+    const fromDateRef = useRef(null);
+    const validTillRef = useRef(null);
+
+    const openDatePicker = (ref) => {
+        if (!ref || !ref.current) return;
+        try {
+            if (typeof ref.current.showPicker === 'function') {
+                ref.current.showPicker();
+            } else {
+                ref.current.focus();
+            }
+        } catch (err) {
+            ref.current?.focus();
+        }
+    };
+
     // List of logs depending on active utility type
-    const hist = type === 'fastag' ? act.items.fastag : type === 'border' ? act.items.border : act.items.service;
+    const hist = type === 'fastag' ? act.items.fastag : (act.items.border || []);
 
     useEffect(() => {
         if (vehicle) setForm(prev => ({ ...prev, vehicleId: vehicle._id }));
@@ -1109,7 +1061,6 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 billDate: toISTDateString(editingItem.billDate || editingItem.date || ''),
                 validTill: toISTDateString(editingItem.validTill || ''),
                 driverId: editingItem.driver?._id || editingItem.driver || '',
-                category: editingItem.category || 'General Servicing',
                 paymentMode: editingItem.method || editingItem.paymentMode || 'UPI',
                 vehicleId: vehicle?._id || editingItem.vehicle?._id || editingItem.vehicle || editingItem.vehicleId || '',
                 paymentSource: isGuest ? 'Guest' : 'Office',
@@ -1133,7 +1084,6 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 billDate: defaultDate, 
                 validTill: '',
                 driverId: '', 
-                category: 'General Servicing', 
                 vehicleId: vehicle?._id || '', 
                 paymentSource: 'Office', 
                 paymentMode: 'UPI',
@@ -1191,7 +1141,6 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 fd.append('paymentSource', form.paidBy === 'Guest' ? 'Guest' : 'Office');
 
                 if (file) fd.append(type === 'border' ? 'receiptPhoto' : 'billPhoto', file);
-                if (type === 'services') fd.append('maintenanceType', 'Regular Service');
 
                 if (editingItem) {
                     success = await onUpdate(editingItem._id, fd);
@@ -1213,7 +1162,6 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                     billDate: defaultDate,
                     validTill: '',
                     driverId: '',
-                    category: 'General Servicing',
                     vehicleId: vehicle?._id || '',
                     paymentSource: 'Office',
                     paymentMode: 'UPI',
@@ -1242,7 +1190,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                         </div>
                         <div>
                             <h3 style={{ margin: '0 0 4px 0', fontSize: '24px', fontWeight: '950', letterSpacing: '-0.5px' }}>
-                                {editingItem ? 'Edit' : 'New'} {type === 'fastag' ? 'Recharge' : type === 'border' ? 'Border Permit' : 'Service Record'}
+                                {editingItem ? 'Edit' : 'New'} {type === 'fastag' ? 'Recharge' : 'Border Permit'}
                             </h3>
                             <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
                                 Fill out the details below to log the utility entry.
@@ -1433,38 +1381,111 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                         )}
 
                         <div style={type === 'border' ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' } : {}}>
-                            <div className="premium-input-container">
+                            <div
+                                className="premium-input-container"
+                                onClick={() => openDatePicker(fromDateRef)}
+                                style={{ cursor: 'pointer' }}
+                            >
                                 <label>{type === 'border' ? 'From Date' : 'Date'}</label>
-                                <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center' }}>
-                                    <div style={{ fontSize: '15px', fontWeight: '600', color: (form.date || form.billDate) ? '#fff' : 'rgba(255,255,255,0.2)' }}>
+                                <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center', minHeight: '26px' }}>
+                                    <div style={{ fontSize: '15px', fontWeight: '600', color: (form.date || form.billDate) ? '#fff' : 'rgba(255,255,255,0.3)' }}>
                                         {(() => {
                                             const dStr = form.date || form.billDate;
                                             if (!dStr) return 'DD/MM/YYYY';
                                             const parts = dStr.split('-');
-                                            if(parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                                            if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
                                             return dStr;
                                         })()}
                                     </div>
-                                    <input type="date" value={form.date || form.billDate} onChange={e => setForm({ ...form, date: e.target.value, billDate: e.target.value })} style={{ opacity: 0, position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
-                                    <Calendar size={18} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: color, pointerEvents: 'none', opacity: 0.8 }} />
+                                    <input
+                                        ref={fromDateRef}
+                                        type="date"
+                                        value={form.date || form.billDate || ''}
+                                        onChange={e => setForm({ ...form, date: e.target.value, billDate: e.target.value })}
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            openDatePicker(fromDateRef);
+                                        }}
+                                        style={{
+                                            opacity: 0,
+                                            position: 'absolute',
+                                            inset: 0,
+                                            width: '100%',
+                                            height: '100%',
+                                            cursor: 'pointer',
+                                            zIndex: 2,
+                                            colorScheme: 'dark'
+                                        }}
+                                    />
+                                    <Calendar size={18} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: color, pointerEvents: 'none', opacity: 0.85, zIndex: 1 }} />
                                 </div>
                             </div>
                             
                             {type === 'border' && (
-                                <div className="premium-input-container">
-                                    <label>Valid Till</label>
-                                    <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center' }}>
-                                        <div style={{ fontSize: '15px', fontWeight: '600', color: form.validTill ? '#fff' : 'rgba(255,255,255,0.2)' }}>
+                                <div
+                                    className="premium-input-container"
+                                    onClick={() => openDatePicker(validTillRef)}
+                                    style={{ cursor: 'pointer' }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ margin: 0 }}>Valid Till</label>
+                                        {form.validTill && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setForm({ ...form, validTill: '' });
+                                                }}
+                                                title="Clear Valid Till Date"
+                                                style={{
+                                                    background: 'rgba(239, 68, 68, 0.15)',
+                                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                    borderRadius: '6px',
+                                                    color: '#f87171',
+                                                    fontSize: '10px',
+                                                    fontWeight: '700',
+                                                    cursor: 'pointer',
+                                                    padding: '1px 6px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '3px'
+                                                }}
+                                            >
+                                                <X size={10} /> Clear
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center', minHeight: '26px' }}>
+                                        <div style={{ fontSize: '15px', fontWeight: '600', color: form.validTill ? '#fff' : 'rgba(255,255,255,0.3)' }}>
                                             {(() => {
                                                 const dStr = form.validTill;
                                                 if (!dStr) return 'DD/MM/YYYY';
                                                 const parts = dStr.split('-');
-                                                if(parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                                                if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
                                                 return dStr;
                                             })()}
                                         </div>
-                                        <input type="date" value={form.validTill || ''} onChange={e => setForm({ ...form, validTill: e.target.value })} style={{ opacity: 0, position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
-                                        <Calendar size={18} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: color, pointerEvents: 'none', opacity: 0.8 }} />
+                                        <input
+                                            ref={validTillRef}
+                                            type="date"
+                                            value={form.validTill || ''}
+                                            onChange={e => setForm({ ...form, validTill: e.target.value })}
+                                            onClick={e => {
+                                                e.stopPropagation();
+                                                openDatePicker(validTillRef);
+                                            }}
+                                            style={{
+                                                opacity: 0,
+                                                position: 'absolute',
+                                                inset: 0,
+                                                width: '100%',
+                                                height: '100%',
+                                                cursor: 'pointer',
+                                                zIndex: 2,
+                                                colorScheme: 'dark'
+                                            }}
+                                        />
+                                        <Calendar size={18} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: color, pointerEvents: 'none', opacity: 0.85, zIndex: 1 }} />
                                     </div>
                                 </div>
                             )}
@@ -1477,20 +1498,6 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                             </div>
                         )}
 
-                        {type === 'services' && (
-                            <div className="premium-input-container">
-                                <label>Maintenance Category</label>
-                                <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
-                                    <option style={{ background: '#0f172a' }}>General Servicing</option>
-                                    <option style={{ background: '#0f172a' }}>Engine oil change</option>
-                                    <option style={{ background: '#0f172a' }}>Periodic Service</option>
-                                    <option style={{ background: '#0f172a' }}>Brake & Clutch</option>
-                                    <option style={{ background: '#0f172a' }}>Tyre & Alignment</option>
-                                    <option style={{ background: '#0f172a' }}>AC & Electrical</option>
-                                    <option style={{ background: '#0f172a' }}>Other Maintenance</option>
-                                </select>
-                            </div>
-                        )}
 
                         <div className="premium-input-container">
                             <label>Remarks / Notes</label>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCompany } from '../context/CompanyContext';
 import { useTheme } from '../context/ThemeContext';
 import axios from '../api/axios';
@@ -8,7 +9,8 @@ import {
     Clock, Phone, ShieldCheck, Share2, HelpCircle, User, Users,
     Globe, Building2, Repeat, CircleDot, XCircle, ChevronLeft, ChevronRight, ChevronDown,
     TrendingUp, BarChart2, BarChart3, Info, CheckSquare, Square, CreditCard,
-    Landmark, UploadCloud, Camera, Eye, Image as ImageIcon, MessageSquare
+    Landmark, UploadCloud, Camera, Eye, Image as ImageIcon, MessageSquare,
+    ExternalLink, RefreshCw, MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
@@ -224,7 +226,6 @@ export default function Leads() {
     const [leads, setLeads] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState('All');
     const [monthFilter, setMonthFilter] = useState('All');
     const [sourceFilter, setSourceFilter] = useState('All');
     const [priorityFilter, setPriorityFilter] = useState('All');
@@ -235,6 +236,8 @@ export default function Leads() {
     // Right Analytics Sidebar state (Closed by default as requested)
     const [showRightSidebar, setShowRightSidebar] = useState(false);
     const [customSidebarMonth, setCustomSidebarMonth] = useState(null);
+    const [expandedDailyDay, setExpandedDailyDay] = useState(null);
+    const [hoveredDailyDay, setHoveredDailyDay] = useState(null);
     const selectedSidebarMonth = useMemo(() => {
         if (customSidebarMonth) return customSidebarMonth;
         if (monthFilter === 'All') {
@@ -250,6 +253,14 @@ export default function Leads() {
     const [sidebarLeads, setSidebarLeads] = useState([]);
     const [loadingSidebarLeads, setLoadingSidebarLeads] = useState(false);
     const searchDebounceRef = useRef(null);
+
+    // Monthly Bookings Overview states
+    const navigate = useNavigate();
+    const [companyBookings, setCompanyBookings] = useState([]);
+    const [loadingBookings, setLoadingBookings] = useState(false);
+    const [showBookingsModal, setShowBookingsModal] = useState(false);
+    const [bookingsModalTab, setBookingsModalTab] = useState('All');
+    const [bookingsModalSearch, setBookingsModalSearch] = useState('');
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -393,12 +404,12 @@ export default function Leads() {
             fetchTravelAgents();
             fetchCompanyBanks();
         }
-    }, [selectedCompany, statusFilter, monthFilter]);
+    }, [selectedCompany, monthFilter]);
 
     const fetchLeads = async () => {
         try {
             setLoading(true);
-            let url = `/api/leads/${selectedCompany._id}?status=${statusFilter}`;
+            let url = `/api/leads/${selectedCompany._id}?status=All`;
             if (monthFilter && monthFilter !== 'All') {
                 url += `&month=${monthFilter}`;
             }
@@ -436,6 +447,25 @@ export default function Leads() {
             fetchSidebarLeads(activeOption.tab);
         }
     }, [selectedCompany, selectedSidebarMonth]);
+
+    const fetchAllCompanyBookings = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            setLoadingBookings(true);
+            const { data } = await axios.get(`/api/bookings/${selectedCompany._id}`);
+            setCompanyBookings(data || []);
+        } catch (err) {
+            console.error("Error fetching company bookings:", err);
+        } finally {
+            setLoadingBookings(false);
+        }
+    };
+
+    useEffect(() => {
+        if (selectedCompany?._id) {
+            fetchAllCompanyBookings();
+        }
+    }, [selectedCompany]);
 
     useEffect(() => {
         if (!selectedCompany?._id) return;
@@ -1161,12 +1191,28 @@ export default function Leads() {
         }
     };
 
-    // Filter leads on client side: Confirmed leads move to Confirmed Bookings page, so exclude from this active leads grid
+    // Filter leads on client side: Confirmed leads move to Confirmed Bookings page,
+    // and Cancelled, Lost, or past-tour unconfirmed leads are excluded from Open Leads.
     const filteredLeads = useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
         return (leads || []).filter(lead => {
             // Confirmed leads are moved to Confirmed Bookings page, so do not display them in Sales Leads table!
             if (lead.status === 'Confirmed' || lead.bookingId) {
                 return false;
+            }
+
+            // Exclude cancelled / lost leads from Open Leads
+            if (lead.status === 'Cancelled' || lead.status === 'Lost') {
+                return false;
+            }
+
+            // Unconfirmed leads whose travel dates have already ended are expired/cancelled
+            const end = lead.travelEndDate ? new Date(lead.travelEndDate) : (lead.travelStartDate ? new Date(lead.travelStartDate) : null);
+            if (end) {
+                end.setHours(23, 59, 59, 999);
+                if (end < today) return false;
             }
 
             if (sourceFilter !== 'All' && lead.source !== sourceFilter) return false;
@@ -1245,8 +1291,12 @@ export default function Leads() {
         let totalConversionsAmt = 0;
         const dailyList = [];
 
-        // Pre-process leads to avoid redundant filtering
-        const allLeadsInMonth = (sourceList || []).filter(l => l.status !== 'Lost' && l.status !== 'Cancelled');
+        // Pre-process leads to avoid redundant filtering (keep all generated leads for accurate daily tally)
+        const allLeadsInMonth = (sourceList || []).filter(l => l.status !== 'Lost');
+
+        const now = new Date();
+        const isCurrentMonth = now.getFullYear() === year && now.getMonth() === monthIdx;
+        const today = now.getDate();
 
         for (let day = 1; day <= days; day++) {
             const dayLeads = allLeadsInMonth.filter(l => {
@@ -1272,12 +1322,11 @@ export default function Leads() {
             totalConversions += convCount;
             totalConversionsAmt += convAmt;
 
-            dailyList.push({ day, leadsCount, leadsAmt, convCount, convAmt, leads: dayLeads, convLeads: convLeads });
+            const isToday = isCurrentMonth && day === today;
+
+            dailyList.push({ day, leadsCount, leadsAmt, convCount, convAmt, leads: dayLeads, convLeads: convLeads, isToday });
         }
 
-        const now = new Date();
-        const isCurrentMonth = now.getFullYear() === year && now.getMonth() === monthIdx;
-        const today = now.getDate();
         dailyList.sort((a, b) => {
             if (isCurrentMonth) {
                 if (a.day === today) return -1;
@@ -1309,6 +1358,159 @@ export default function Leads() {
             totalLeadsCount: filteredLeads.length
         };
     }, [filteredLeads]);
+
+    // Helper to calculate trip relative timing badge (English only)
+    const getTripTimingBadge = (bkg) => {
+        if (bkg.bookingStatus === 'Cancelled' || bkg.bookingStatus === 'Lost') {
+            return { label: '❌ Cancelled / Lost', color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.15)' };
+        }
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const start = bkg.travelStartDate ? new Date(bkg.travelStartDate) : null;
+        if (start) start.setHours(0, 0, 0, 0);
+        const end = (bkg.travelEndDate || bkg.travelStartDate) ? new Date(bkg.travelEndDate || bkg.travelStartDate) : null;
+        if (end) end.setHours(23, 59, 59, 999);
+
+        if (bkg.bookingStatus === 'Completed' || (end && end < today)) {
+            return { label: '🏁 Trip Completed', color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)' };
+        }
+        if (start && end && today >= start && today <= end) {
+            return { label: '🚗 Ongoing / Live', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.2)' };
+        }
+        if (start && today < start) {
+            const diffDays = Math.ceil((start - today) / (1000 * 60 * 60 * 24));
+            const diffText = diffDays === 1 ? 'Starts Tomorrow' : `In ${diffDays} days`;
+            return { label: `⏳ ${diffText}`, color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.2)' };
+        }
+        return { label: '🏁 Trip Completed', color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)' };
+    };
+
+    // Calculate Monthly Bookings, Upcoming, Ongoing, Completed & Cancelled Stats
+    const monthlyBookingStats = useMemo(() => {
+        const isAllMonths = selectedSidebarMonth === 'All Months' || selectedSidebarMonth === 'All';
+        const activeOption = !isAllMonths
+            ? (SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[6])
+            : null;
+        const targetMonthIdx = activeOption ? activeOption.monthIdx : null;
+        const targetYear = activeOption ? activeOption.year : null;
+
+        const isInTargetMonth = (dateVal) => {
+            if (!dateVal) return false;
+            if (isAllMonths) return true;
+            const d = parseLeadDateInfo(dateVal);
+            return d && d.year === targetYear && d.monthIdx === targetMonthIdx;
+        };
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Filter bookings strictly for the selected month:
+        const list = (companyBookings || []).filter(b => {
+            if (isAllMonths) return true;
+            if (b.travelStartDate) {
+                return isInTargetMonth(b.travelStartDate);
+            }
+            return isInTargetMonth(b.bookingDate || b.createdAt);
+        });
+
+        // Cancelled / Lost leads from sidebarLeads / leads (including unconfirmed past tour leads)
+        const cancelledLeads = (sidebarLeads && sidebarLeads.length > 0 ? sidebarLeads : leads || []).filter(l => {
+            const end = l.travelEndDate ? new Date(l.travelEndDate) : (l.travelStartDate ? new Date(l.travelStartDate) : null);
+            if (end) end.setHours(23, 59, 59, 999);
+            const isTourPassed = end && end < today && l.status !== 'Confirmed' && !l.bookingId;
+
+            if (l.status === 'Cancelled' || l.status === 'Lost' || isTourPassed) {
+                return isInTargetMonth(l.travelStartDate || l.leadDate || l.createdAt);
+            }
+            return false;
+        });
+
+        const upcomingList = [];
+        const ongoingList = [];
+        const completedList = [];
+        const cancelledBookings = [];
+
+        list.forEach(b => {
+            if (b.bookingStatus === 'Cancelled' || b.bookingStatus === 'Lost') {
+                cancelledBookings.push(b);
+                return;
+            }
+            const start = b.travelStartDate ? new Date(b.travelStartDate) : null;
+            if (start) start.setHours(0, 0, 0, 0);
+            const end = (b.travelEndDate || b.travelStartDate) ? new Date(b.travelEndDate || b.travelStartDate) : null;
+            if (end) end.setHours(23, 59, 59, 999);
+
+            if (b.bookingStatus === 'Completed' || (end && end < today)) {
+                completedList.push(b);
+            } else if (start && end && today >= start && today <= end) {
+                ongoingList.push(b);
+            } else if (start && start > today) {
+                upcomingList.push(b);
+            } else {
+                completedList.push(b);
+            }
+        });
+
+        const formattedCancelledLeads = cancelledLeads.map(l => ({
+            _id: l._id,
+            bookingId: l.leadId || l.bookingId || 'LEAD',
+            clientCode: l.clientCode,
+            clientName: l.clientName,
+            mobileNumber: l.mobileNumber,
+            travelStartDate: l.travelStartDate,
+            travelEndDate: l.travelEndDate,
+            vehicleType: l.carType || l.vehicleType,
+            numberOfCars: l.numberOfCars || 1,
+            totalAmount: l.totalAmount,
+            advancePaid: l.advancePayment || 0,
+            bookingStatus: l.status || 'Cancelled',
+            isLead: true
+        }));
+
+        const fullCancelledList = [...cancelledBookings, ...formattedCancelledLeads];
+        const total = list.length;
+        const totalAmount = list.reduce((s, b) => s + (Number(b.totalAmount) || 0), 0);
+
+        return {
+            total,
+            totalAmount,
+            upcoming: upcomingList.length,
+            upcomingAmount: upcomingList.reduce((s, b) => s + (Number(b.totalAmount) || 0), 0),
+            ongoing: ongoingList.length,
+            ongoingAmount: ongoingList.reduce((s, b) => s + (Number(b.totalAmount) || 0), 0),
+            completed: completedList.length,
+            completedAmount: completedList.reduce((s, b) => s + (Number(b.totalAmount) || 0), 0),
+            cancelled: fullCancelledList.length,
+            cancelledAmount: fullCancelledList.reduce((s, b) => s + (Number(b.totalAmount) || 0), 0),
+            allList: list,
+            upcomingList,
+            ongoingList,
+            completedList,
+            cancelledList: fullCancelledList
+        };
+    }, [companyBookings, sidebarLeads, leads, selectedSidebarMonth]);
+
+    const displayedModalBookings = useMemo(() => {
+        let baseList = [];
+        if (bookingsModalTab === 'All') baseList = monthlyBookingStats.allList;
+        else if (bookingsModalTab === 'Upcoming') baseList = monthlyBookingStats.upcomingList;
+        else if (bookingsModalTab === 'Ongoing') baseList = monthlyBookingStats.ongoingList;
+        else if (bookingsModalTab === 'Completed') baseList = monthlyBookingStats.completedList;
+        else if (bookingsModalTab === 'Cancelled') baseList = monthlyBookingStats.cancelledList;
+        else baseList = monthlyBookingStats.allList;
+
+        if (!bookingsModalSearch.trim()) return baseList;
+        const term = bookingsModalSearch.toLowerCase().trim();
+        return baseList.filter(b => {
+            return (
+                (b.clientName && b.clientName.toLowerCase().includes(term)) ||
+                (b.bookingId && b.bookingId.toLowerCase().includes(term)) ||
+                (b.mobileNumber && b.mobileNumber.toLowerCase().includes(term)) ||
+                (b.vehicleType && b.vehicleType.toLowerCase().includes(term)) ||
+                (b.clientCode && b.clientCode.toLowerCase().includes(term))
+            );
+        });
+    }, [bookingsModalTab, bookingsModalSearch, monthlyBookingStats]);
 
     // Pagination calculations
     const totalPages = Math.ceil(filteredLeads.length / itemsPerPage) || 1;
@@ -1540,6 +1742,44 @@ export default function Leads() {
 
                 {/* Right side KPIs + Create Button */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                    {/* Monthly Bookings Overview Button */}
+                    <motion.button
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => setShowBookingsModal(true)}
+                        title={`View Bookings for ${selectedSidebarMonth}`}
+                        style={{
+                            height: '42px',
+                            padding: '0 16px',
+                            borderRadius: '12px',
+                            background: 'rgba(16, 185, 129, 0.12)',
+                            border: '1px solid rgba(16, 185, 129, 0.35)',
+                            color: '#10b981',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+                            transition: 'all 0.2s',
+                            fontSize: '13px',
+                            fontWeight: '800'
+                        }}
+                    >
+                        <Calendar size={18} />
+                        <span>Monthly Bookings</span>
+                        <span style={{
+                            background: 'rgba(16, 185, 129, 0.25)',
+                            color: '#34d399',
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            fontSize: '12px',
+                            fontWeight: '900',
+                            marginLeft: '2px'
+                        }}>
+                            {monthlyBookingStats.total}
+                        </span>
+                    </motion.button>
+
                     {/* Total Quote Card */}
                     <div style={{
                         background: 'rgba(30, 58, 138, 0.35)',
@@ -1803,17 +2043,17 @@ export default function Leads() {
                 <button 
                     onClick={() => { setPriorityFilter('Hot'); setCurrentPage(1); }}
                     style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800', border: priorityFilter === 'Hot' ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)', background: priorityFilter === 'Hot' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(255,255,255,0.05)', color: priorityFilter === 'Hot' ? '#fbbf24' : 'white', cursor: 'pointer', transition: 'all 0.2s' }}>
-                    🔥 Hot (High)
+                    🔥 Hot
                 </button>
                 <button 
                     onClick={() => { setPriorityFilter('Warm'); setCurrentPage(1); }}
                     style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800', border: priorityFilter === 'Warm' ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)', background: priorityFilter === 'Warm' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.05)', color: priorityFilter === 'Warm' ? '#38bdf8' : 'white', cursor: 'pointer', transition: 'all 0.2s' }}>
-                    ☀️ Warm (Average)
+                    ☀️ Warm
                 </button>
                 <button 
                     onClick={() => { setPriorityFilter('Cold'); setCurrentPage(1); }}
                     style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800', border: priorityFilter === 'Cold' ? '1px solid #94a3b8' : '1px solid rgba(255,255,255,0.1)', background: priorityFilter === 'Cold' ? 'rgba(148, 163, 184, 0.15)' : 'rgba(255,255,255,0.05)', color: priorityFilter === 'Cold' ? '#94a3b8' : 'white', cursor: 'pointer', transition: 'all 0.2s' }}>
-                    ❄️ Cold (Low)
+                    ❄️ Cold
                 </button>
             </div>
 
@@ -1930,7 +2170,7 @@ export default function Leads() {
                                     <td style={{ padding: '16px 20px' }}>
                                         {lead.travelStartDate ? (
                                             <div>
-                                                <div style={{ fontSize: '13px', color: 'white', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                <div style={{ fontSize: '13px', color: 'white', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
                                                     <Calendar size={13} color="#fbbf24" />
                                                     <span>
                                                         {formatTourDate(lead.travelStartDate)}
@@ -2371,53 +2611,349 @@ export default function Leads() {
                             <div style={{
                                 padding: '0 20px 12px 20px',
                                 display: 'grid',
-                                gridTemplateColumns: '60px 1fr 1fr',
+                                gridTemplateColumns: '64px 1fr 1fr 24px',
                                 borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-                                gap: '15px'
+                                gap: '10px'
                             }}>
                                 <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Date</div>
                                 <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Leads</div>
                                 <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Conversion</div>
+                                <div></div>
                             </div>
 
                             {/* Drawer Body (Scrollable Table) */}
                             <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px', display: 'flex', flexDirection: 'column' }}>
                                 <div style={{ flex: 1, overflowY: 'auto', paddingRight: '5px' }}>
                                     {sidebarStats.dailyList.map(item => {
+                                        const isExpanded = expandedDailyDay === item.day;
+                                        const isHovered = hoveredDailyDay === item.day;
+                                        const hasLeads = item.leadsCount > 0;
+                                        const isToday = item.isToday;
+
                                         return (
-                                            <div key={item.day} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                            <div
+                                                key={item.day}
+                                                onMouseEnter={() => setHoveredDailyDay(item.day)}
+                                                onMouseLeave={() => setHoveredDailyDay(null)}
+                                                style={{
+                                                    borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                                                    position: 'relative',
+                                                    transition: 'background 0.2s',
+                                                    background: isExpanded
+                                                        ? 'rgba(251, 191, 36, 0.08)'
+                                                        : isHovered && hasLeads
+                                                        ? 'rgba(255, 255, 255, 0.04)'
+                                                        : 'transparent',
+                                                    borderRadius: isExpanded ? '10px' : '0'
+                                                }}
+                                            >
+                                                {/* Row Summary Bar (Clickable) */}
                                                 <div
+                                                    onClick={() => {
+                                                        if (hasLeads || item.convCount > 0) {
+                                                            setExpandedDailyDay(prev => prev === item.day ? null : item.day);
+                                                        }
+                                                    }}
                                                     style={{
                                                         display: 'grid',
-                                                        gridTemplateColumns: '60px 1fr 1fr',
-                                                        padding: '12px 0',
+                                                        gridTemplateColumns: '64px 1fr 1fr 24px',
+                                                        padding: '12px 6px',
                                                         alignItems: 'center',
-                                                        gap: '15px'
+                                                        gap: '10px',
+                                                        cursor: (hasLeads || item.convCount > 0) ? 'pointer' : 'default',
+                                                        userSelect: 'none'
                                                     }}
+                                                    title={hasLeads ? `Click to view ${item.leadsCount} lead${item.leadsCount > 1 ? 's' : ''}` : ''}
                                                 >
                                                     {/* Date */}
-                                                    <div style={{ fontWeight: '600', fontSize: '16px', color: 'white' }}>
-                                                        {item.day}
+                                                    <div>
+                                                        <div style={{ fontWeight: '700', fontSize: '15px', color: isToday ? '#fbbf24' : 'white', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <span>{item.day}</span>
+                                                            {isToday && (
+                                                                <span style={{
+                                                                    fontSize: '8.5px',
+                                                                    background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
+                                                                    color: '#000',
+                                                                    padding: '1px 5px',
+                                                                    borderRadius: '4px',
+                                                                    fontWeight: '900',
+                                                                    letterSpacing: '0.4px',
+                                                                    textTransform: 'uppercase'
+                                                                }}>
+                                                                    Today
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
+
                                                     {/* Leads */}
                                                     <div>
-                                                        <div style={{ fontSize: '15px', color: 'white', fontWeight: '600', marginBottom: '2px' }}>
+                                                        <div style={{ fontSize: '15px', color: hasLeads ? (isToday ? '#fbbf24' : 'white') : 'rgba(255,255,255,0.4)', fontWeight: '700', marginBottom: '2px' }}>
                                                             {item.leadsCount}
                                                         </div>
-                                                        <div style={{ fontSize: '13px', color: '#94a3b8' }}>
+                                                        <div style={{ fontSize: '12.5px', color: hasLeads ? '#38bdf8' : 'rgba(255,255,255,0.3)', fontWeight: '600' }}>
                                                             ₹{item.leadsAmt.toLocaleString('en-IN')}
                                                         </div>
                                                     </div>
+
                                                     {/* Conversions */}
                                                     <div>
-                                                        <div style={{ fontSize: '15px', color: 'white', fontWeight: '600', marginBottom: '2px' }}>
+                                                        <div style={{ fontSize: '15px', color: item.convCount > 0 ? '#34d399' : 'rgba(255,255,255,0.4)', fontWeight: '700', marginBottom: '2px' }}>
                                                             {item.convCount}
                                                         </div>
-                                                        <div style={{ fontSize: '13px', color: '#94a3b8' }}>
+                                                        <div style={{ fontSize: '12.5px', color: item.convCount > 0 ? '#34d399' : 'rgba(255,255,255,0.3)', fontWeight: '600' }}>
                                                             ₹{item.convAmt.toLocaleString('en-IN')}
                                                         </div>
                                                     </div>
+
+                                                    {/* Chevron */}
+                                                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                                        {hasLeads && (
+                                                            <ChevronDown
+                                                                size={16}
+                                                                style={{
+                                                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                                                    transition: 'transform 0.2s',
+                                                                    color: isExpanded ? '#fbbf24' : 'rgba(255,255,255,0.4)'
+                                                                }}
+                                                            />
+                                                        )}
+                                                    </div>
                                                 </div>
+
+                                                {/* Hover Popover (Left of Drawer) */}
+                                                {isHovered && !isExpanded && hasLeads && (
+                                                    <div
+                                                        style={{
+                                                            position: 'absolute',
+                                                            right: '100%',
+                                                            top: '50%',
+                                                            transform: 'translateY(-50%)',
+                                                            marginRight: '14px',
+                                                            width: '320px',
+                                                            background: '#091122',
+                                                            border: '1px solid rgba(251, 191, 36, 0.5)',
+                                                            boxShadow: '0 16px 40px rgba(0,0,0,0.85), 0 0 20px rgba(251, 191, 36, 0.15)',
+                                                            borderRadius: '12px',
+                                                            padding: '12px 14px',
+                                                            zIndex: 200020,
+                                                            pointerEvents: 'none'
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                                            <span style={{ fontSize: '12px', fontWeight: '800', color: '#fbbf24' }}>
+                                                                📅 Day {item.day} Leads ({item.leadsCount})
+                                                            </span>
+                                                            <span style={{ fontSize: '12px', fontWeight: '800', color: '#38bdf8' }}>
+                                                                Total: ₹{item.leadsAmt.toLocaleString('en-IN')}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'hidden' }}>
+                                                            {item.leads.slice(0, 6).map((ld, lIdx) => (
+                                                                <div
+                                                                    key={ld._id || lIdx}
+                                                                    style={{
+                                                                        display: 'flex',
+                                                                        justifyContent: 'space-between',
+                                                                        alignItems: 'center',
+                                                                        gap: '8px',
+                                                                        padding: '5px 8px',
+                                                                        background: 'rgba(255,255,255,0.03)',
+                                                                        borderRadius: '6px',
+                                                                        border: '1px solid rgba(255,255,255,0.05)'
+                                                                    }}
+                                                                >
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                                                                        <span style={{
+                                                                            fontSize: '11px',
+                                                                            fontWeight: '800',
+                                                                            color: '#fbbf24',
+                                                                            background: 'rgba(251, 191, 36, 0.15)',
+                                                                            padding: '1px 6px',
+                                                                            borderRadius: '4px',
+                                                                            whiteSpace: 'nowrap'
+                                                                        }}>
+                                                                            #{ld.clientCode || ld.leadId || 'N/A'}
+                                                                        </span>
+                                                                        <span style={{
+                                                                            fontSize: '12px',
+                                                                            color: 'white',
+                                                                            fontWeight: '600',
+                                                                            whiteSpace: 'nowrap',
+                                                                            overflow: 'hidden',
+                                                                            textOverflow: 'ellipsis'
+                                                                        }}>
+                                                                            {ld.clientName || 'Guest'}
+                                                                        </span>
+                                                                    </div>
+                                                                    <span style={{ fontSize: '12px', fontWeight: '800', color: '#34d399', whiteSpace: 'nowrap' }}>
+                                                                        ₹{(Number(ld.totalAmount) || 0).toLocaleString('en-IN')}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                            {item.leads.length > 6 && (
+                                                                <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic', marginTop: '2px' }}>
+                                                                    +{item.leads.length - 6} more leads (Click row to see all)
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: '10.5px', color: '#fbbf24', textAlign: 'center', fontWeight: '600' }}>
+                                                            👆 Click row to expand & keep open
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Click-to-Expand Accordion Body */}
+                                                {isExpanded && (
+                                                    <div
+                                                        style={{
+                                                            padding: '12px 14px',
+                                                            marginBottom: '10px',
+                                                            background: 'rgba(11, 19, 36, 0.95)',
+                                                            border: '1px solid rgba(251, 191, 36, 0.35)',
+                                                            borderRadius: '10px',
+                                                            boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.5)'
+                                                        }}
+                                                    >
+                                                        {/* Header inside accordion */}
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', paddingBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                                                            <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                <span>📋 Leads on Day {item.day} ({item.leadsCount})</span>
+                                                            </div>
+                                                            <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#38bdf8' }}>
+                                                                Total: ₹{item.leadsAmt.toLocaleString('en-IN')}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Leads List */}
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto', paddingRight: '4px' }}>
+                                                            {item.leads.map((ld, lIdx) => {
+                                                                const isConfirmed = ld.status === 'Confirmed' || ld.status === 'Converted' || ld.bookingId;
+                                                                const isCancelled = ld.status === 'Cancelled' || ld.status === 'Lost';
+
+                                                                return (
+                                                                    <div
+                                                                        key={ld._id || lIdx}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            if (ld.clientCode || ld.leadId) {
+                                                                                setSearchTerm(ld.clientCode || ld.leadId);
+                                                                            }
+                                                                        }}
+                                                                        title="Click to search in main leads list"
+                                                                        style={{
+                                                                            background: 'rgba(255, 255, 255, 0.04)',
+                                                                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                                                                            borderRadius: '8px',
+                                                                            padding: '8px 10px',
+                                                                            display: 'flex',
+                                                                            flexDirection: 'column',
+                                                                            gap: '4px',
+                                                                            cursor: 'pointer',
+                                                                            transition: 'all 0.15s'
+                                                                        }}
+                                                                    >
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                                                                <span style={{
+                                                                                    fontSize: '11.5px',
+                                                                                    fontWeight: '800',
+                                                                                    color: '#fbbf24',
+                                                                                    background: 'rgba(251, 191, 36, 0.15)',
+                                                                                    border: '1px solid rgba(251, 191, 36, 0.3)',
+                                                                                    padding: '2px 7px',
+                                                                                    borderRadius: '5px'
+                                                                                }}>
+                                                                                    #{ld.clientCode || ld.leadId || 'N/A'}
+                                                                                </span>
+                                                                                <span style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>
+                                                                                    {ld.clientName || 'Guest'}
+                                                                                </span>
+                                                                            </div>
+                                                                            <div style={{ fontSize: '14px', fontWeight: '900', color: '#34d399' }}>
+                                                                                ₹{(Number(ld.totalAmount) || 0).toLocaleString('en-IN')}
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#94a3b8' }}>
+                                                                            <div>
+                                                                                {ld.mobileNumber && <span>📞 {ld.mobileNumber}</span>}
+                                                                                {ld.source && <span style={{ marginLeft: ld.mobileNumber ? '6px' : '0' }}>• {ld.source}</span>}
+                                                                                {ld.salesPerson && <span style={{ marginLeft: '6px' }}>• {ld.salesPerson}</span>}
+                                                                            </div>
+                                                                            <div>
+                                                                                <span style={{
+                                                                                    fontSize: '10px',
+                                                                                    fontWeight: '800',
+                                                                                    padding: '1px 6px',
+                                                                                    borderRadius: '4px',
+                                                                                    background: isConfirmed
+                                                                                        ? 'rgba(34, 197, 94, 0.2)'
+                                                                                        : isCancelled
+                                                                                        ? 'rgba(239, 68, 68, 0.2)'
+                                                                                        : 'rgba(56, 189, 248, 0.2)',
+                                                                                    color: isConfirmed
+                                                                                        ? '#4ade80'
+                                                                                        : isCancelled
+                                                                                        ? '#f87171'
+                                                                                        : '#38bdf8',
+                                                                                    border: isConfirmed
+                                                                                        ? '1px solid rgba(34, 197, 94, 0.3)'
+                                                                                        : isCancelled
+                                                                                        ? '1px solid rgba(239, 68, 68, 0.3)'
+                                                                                        : '1px solid rgba(56, 189, 248, 0.3)'
+                                                                                }}>
+                                                                                    {isConfirmed ? 'Confirmed' : isCancelled ? 'Cancelled' : (ld.status || 'Open')}
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+
+                                                        {/* If Conversions exist, also show Conversions sub-list */}
+                                                        {item.convCount > 0 && (
+                                                            <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                                                <div style={{ fontSize: '11.5px', fontWeight: '800', color: '#34d399', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                                                                    <span>🎯 Conversions ({item.convCount})</span>
+                                                                    <span>₹{item.convAmt.toLocaleString('en-IN')}</span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                                    {item.convLeads.map((cld, cIdx) => (
+                                                                        <div
+                                                                            key={cld._id || cIdx}
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                if (cld.clientCode || cld.leadId) {
+                                                                                    setSearchTerm(cld.clientCode || cld.leadId);
+                                                                                }
+                                                                            }}
+                                                                            title="Click to search in main leads list"
+                                                                            style={{
+                                                                                background: 'rgba(34, 197, 94, 0.08)',
+                                                                                border: '1px solid rgba(34, 197, 94, 0.2)',
+                                                                                borderRadius: '6px',
+                                                                                padding: '6px 8px',
+                                                                                display: 'flex',
+                                                                                justifyContent: 'space-between',
+                                                                                alignItems: 'center',
+                                                                                fontSize: '11.5px',
+                                                                                cursor: 'pointer'
+                                                                            }}
+                                                                        >
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                                <span style={{ fontWeight: '800', color: '#4ade80' }}>#{cld.clientCode || cld.leadId || 'N/A'}</span>
+                                                                                <span style={{ color: 'white', fontWeight: '600' }}>{cld.clientName}</span>
+                                                                            </div>
+                                                                            <span style={{ fontWeight: '800', color: '#34d399' }}>₹{(Number(cld.totalAmount) || 0).toLocaleString('en-IN')}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -2428,6 +2964,579 @@ export default function Leads() {
                             </div>
                         </motion.aside>
                     </>
+                )}
+            </AnimatePresence>
+
+            {/* ========================================================================= */}
+            {/* 5B. MODAL: 1-Click Monthly Bookings Overview (User Requested Feature)       */}
+            {/* ========================================================================= */}
+            <AnimatePresence>
+                {showBookingsModal && (
+                    <div style={{
+                        position: 'fixed',
+                        inset: 0,
+                        background: 'rgba(0, 0, 0, 0.85)',
+                        backdropFilter: 'blur(10px)',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        zIndex: 200004,
+                        padding: '16px'
+                    }}>
+                        <motion.div
+                            initial={{ y: 25, opacity: 0, scale: 0.98 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            exit={{ y: 25, opacity: 0, scale: 0.98 }}
+                            transition={{ duration: 0.2 }}
+                            style={{
+                                width: '96vw',
+                                maxWidth: '1280px',
+                                maxHeight: '92vh',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                background: '#0b1324',
+                                border: '1px solid rgba(255, 255, 255, 0.12)',
+                                borderRadius: '20px',
+                                boxShadow: '0 30px 70px rgba(0, 0, 0, 0.9)',
+                                color: '#f8fafc',
+                                overflow: 'hidden'
+                            }}
+                        >
+                            {/* Modal Header */}
+                            <div style={{
+                                padding: '20px 26px',
+                                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: '14px',
+                                background: 'linear-gradient(180deg, rgba(16, 185, 129, 0.08) 0%, rgba(11, 19, 36, 0.6) 100%)'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                    <div style={{
+                                        width: '44px',
+                                        height: '44px',
+                                        borderRadius: '12px',
+                                        background: 'rgba(16, 185, 129, 0.2)',
+                                        border: '1px solid rgba(16, 185, 129, 0.4)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: '#34d399'
+                                    }}>
+                                        <Calendar size={22} />
+                                    </div>
+                                    <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '900', color: '#fff', letterSpacing: '-0.3px' }}>
+                                                Monthly Bookings Overview
+                                            </h2>
+                                            {/* Month selector inside modal */}
+                                            <select
+                                                value={selectedSidebarMonth}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setCustomSidebarMonth(val);
+                                                    const opt = SIDEBAR_MONTH_OPTIONS.find(o => o.label === val);
+                                                    if (opt) setMonthFilter(opt.tab);
+                                                    else if (val === 'All Months') setMonthFilter('All');
+                                                }}
+                                                style={{
+                                                    background: 'rgba(15, 23, 42, 0.8)',
+                                                    border: '1px solid rgba(16, 185, 129, 0.5)',
+                                                    borderRadius: '8px',
+                                                    color: '#34d399',
+                                                    fontSize: '12px',
+                                                    fontWeight: '800',
+                                                    padding: '4px 10px',
+                                                    cursor: 'pointer',
+                                                    outline: 'none'
+                                                }}
+                                            >
+                                                <option value="All Months" style={{ background: '#0b1324', color: '#38bdf8', fontWeight: 'bold' }}>
+                                                    All Months (FY 2026-27)
+                                                </option>
+                                                {SIDEBAR_MONTH_OPTIONS.map(opt => (
+                                                    <option key={opt.label} value={opt.label} style={{ background: '#0b1324', color: '#fff' }}>
+                                                        {opt.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>
+                                            Overview of upcoming rides, ongoing duties, completed trips, and cancelled bookings for {selectedSidebarMonth}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            fetchAllCompanyBookings();
+                                            const activeOpt = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[6];
+                                            fetchSidebarLeads(activeOpt.tab);
+                                        }}
+                                        title="Refresh Bookings"
+                                        style={{
+                                            padding: '8px 12px',
+                                            borderRadius: '10px',
+                                            background: 'rgba(255, 255, 255, 0.06)',
+                                            border: '1px solid rgba(255, 255, 255, 0.12)',
+                                            color: '#cbd5e1',
+                                            fontSize: '12px',
+                                            fontWeight: '700',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px'
+                                        }}
+                                    >
+                                        <RefreshCw size={14} className={loadingBookings ? 'animate-spin' : ''} /> Refresh
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowBookingsModal(false);
+                                            navigate('/admin/bookings');
+                                        }}
+                                        style={{
+                                            padding: '8px 14px',
+                                            borderRadius: '10px',
+                                            background: 'rgba(56, 189, 248, 0.15)',
+                                            border: '1px solid rgba(56, 189, 248, 0.35)',
+                                            color: '#38bdf8',
+                                            fontSize: '12px',
+                                            fontWeight: '800',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px'
+                                        }}
+                                    >
+                                        <span>Manage in Bookings</span>
+                                        <ExternalLink size={13} />
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowBookingsModal(false)}
+                                        style={{
+                                            width: '36px',
+                                            height: '36px',
+                                            borderRadius: '10px',
+                                            background: 'rgba(255, 255, 255, 0.06)',
+                                            border: '1px solid rgba(255, 255, 255, 0.12)',
+                                            color: 'rgba(255, 255, 255, 0.7)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Top KPI Cards / Quick Tabs */}
+                            <div style={{
+                                padding: '16px 26px',
+                                background: 'rgba(0, 0, 0, 0.25)',
+                                borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                                gap: '12px'
+                            }}>
+                                {/* 1. All Bookings */}
+                                <div
+                                    onClick={() => setBookingsModalTab('All')}
+                                    style={{
+                                        padding: '12px 14px',
+                                        borderRadius: '12px',
+                                        background: bookingsModalTab === 'All' ? 'rgba(56, 189, 248, 0.18)' : 'rgba(255, 255, 255, 0.03)',
+                                        border: bookingsModalTab === 'All' ? '2px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.08)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    <div style={{ fontSize: '11px', color: bookingsModalTab === 'All' ? '#38bdf8' : 'rgba(255,255,255,0.6)', fontWeight: '800' }}>
+                                        ALL BOOKINGS
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+                                        <span style={{ fontSize: '20px', fontWeight: '900', color: '#fff' }}>
+                                            {monthlyBookingStats.total}
+                                        </span>
+                                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#38bdf8' }}>
+                                            ₹{monthlyBookingStats.totalAmount.toLocaleString('en-IN')}
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                                        Total registered for {selectedSidebarMonth}
+                                    </div>
+                                </div>
+
+                                {/* 2. Upcoming */}
+                                <div
+                                    onClick={() => setBookingsModalTab('Upcoming')}
+                                    style={{
+                                        padding: '12px 14px',
+                                        borderRadius: '12px',
+                                        background: bookingsModalTab === 'Upcoming' ? 'rgba(251, 191, 36, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                                        border: bookingsModalTab === 'Upcoming' ? '2px solid #fbbf24' : '1px solid rgba(251, 191, 36, 0.25)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    <div style={{ fontSize: '11px', color: '#fbbf24', fontWeight: '800' }}>
+                                        ⏳ UPCOMING RIDES
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+                                        <span style={{ fontSize: '20px', fontWeight: '900', color: '#fff' }}>
+                                            {monthlyBookingStats.upcoming}
+                                        </span>
+                                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#fbbf24' }}>
+                                            ₹{monthlyBookingStats.upcomingAmount.toLocaleString('en-IN')}
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: '#fde68a', marginTop: '2px' }}>
+                                        Trips scheduled ahead
+                                    </div>
+                                </div>
+
+                                {/* 3. Ongoing / Today */}
+                                <div
+                                    onClick={() => setBookingsModalTab('Ongoing')}
+                                    style={{
+                                        padding: '12px 14px',
+                                        borderRadius: '12px',
+                                        background: bookingsModalTab === 'Ongoing' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                                        border: bookingsModalTab === 'Ongoing' ? '2px solid #38bdf8' : '1px solid rgba(56, 189, 248, 0.25)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    <div style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '800' }}>
+                                        🚗 ONGOING / TODAY
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+                                        <span style={{ fontSize: '20px', fontWeight: '900', color: '#fff' }}>
+                                            {monthlyBookingStats.ongoing}
+                                        </span>
+                                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#38bdf8' }}>
+                                            ₹{monthlyBookingStats.ongoingAmount.toLocaleString('en-IN')}
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: '#bae6fd', marginTop: '2px' }}>
+                                        Trips running today
+                                    </div>
+                                </div>
+
+                                {/* 4. Completed */}
+                                <div
+                                    onClick={() => setBookingsModalTab('Completed')}
+                                    style={{
+                                        padding: '12px 14px',
+                                        borderRadius: '12px',
+                                        background: bookingsModalTab === 'Completed' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                                        border: bookingsModalTab === 'Completed' ? '2px solid #34d399' : '1px solid rgba(16, 185, 129, 0.25)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    <div style={{ fontSize: '11px', color: '#34d399', fontWeight: '800' }}>
+                                        🏁 COMPLETED TRIPS
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+                                        <span style={{ fontSize: '20px', fontWeight: '900', color: '#fff' }}>
+                                            {monthlyBookingStats.completed}
+                                        </span>
+                                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#34d399' }}>
+                                            ₹{monthlyBookingStats.completedAmount.toLocaleString('en-IN')}
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: '#a7f3d0', marginTop: '2px' }}>
+                                        Trip dates concluded
+                                    </div>
+                                </div>
+
+                                {/* 5. Cancelled / Lost */}
+                                <div
+                                    onClick={() => setBookingsModalTab('Cancelled')}
+                                    style={{
+                                        padding: '12px 14px',
+                                        borderRadius: '12px',
+                                        background: bookingsModalTab === 'Cancelled' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.03)',
+                                        border: bookingsModalTab === 'Cancelled' ? '2px solid #f87171' : '1px solid rgba(239, 68, 68, 0.25)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    <div style={{ fontSize: '11px', color: '#f87171', fontWeight: '800' }}>
+                                        ❌ CANCELLED / LOST
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+                                        <span style={{ fontSize: '20px', fontWeight: '900', color: '#fff' }}>
+                                            {monthlyBookingStats.cancelled}
+                                        </span>
+                                        <span style={{ fontSize: '12px', fontWeight: '800', color: '#f87171' }}>
+                                            ₹{monthlyBookingStats.cancelledAmount.toLocaleString('en-IN')}
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: '#fecaca', marginTop: '2px' }}>
+                                        Cancelled bookings & leads
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Search & Filter Toolbar */}
+                            <div style={{
+                                padding: '12px 26px',
+                                borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: '14px',
+                                flexWrap: 'wrap'
+                            }}>
+                                <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
+                                    <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
+                                    <input
+                                        type="text"
+                                        value={bookingsModalSearch}
+                                        onChange={(e) => setBookingsModalSearch(e.target.value)}
+                                        placeholder="Search by client, phone, car, ID..."
+                                        style={{
+                                            width: '100%',
+                                            padding: '8px 12px 8px 36px',
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            border: '1px solid rgba(255, 255, 255, 0.12)',
+                                            borderRadius: '8px',
+                                            color: '#fff',
+                                            fontSize: '12px',
+                                            outline: 'none',
+                                            boxSizing: 'border-box'
+                                        }}
+                                    />
+                                    {bookingsModalSearch && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setBookingsModalSearch('')}
+                                            style={{
+                                                position: 'absolute',
+                                                right: '10px',
+                                                top: '50%',
+                                                transform: 'translateY(-50%)',
+                                                background: 'transparent',
+                                                border: 'none',
+                                                color: 'rgba(255,255,255,0.5)',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            <X size={13} />
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>
+                                    Showing <strong style={{ color: '#fff' }}>{displayedModalBookings.length}</strong> items in <span style={{ color: '#fbbf24', fontWeight: '800' }}>{bookingsModalTab}</span>
+                                </div>
+                            </div>
+
+                            {/* Bookings Table / List */}
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '0 26px 20px 26px' }}>
+                                {loadingBookings ? (
+                                    <div style={{ textAlign: 'center', padding: '60px 0', color: 'rgba(255,255,255,0.5)' }}>
+                                        <RefreshCw size={28} className="animate-spin" style={{ margin: '0 auto 12px auto', display: 'block', color: 'var(--primary)' }} />
+                                        Loading bookings for {selectedSidebarMonth}...
+                                    </div>
+                                ) : displayedModalBookings.length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '60px 0', color: 'rgba(255,255,255,0.4)' }}>
+                                        <Calendar size={36} style={{ margin: '0 auto 12px auto', display: 'block', opacity: 0.3 }} />
+                                        <div style={{ fontSize: '15px', fontWeight: '700', color: '#fff', marginBottom: '4px' }}>
+                                            No {bookingsModalTab === 'All' ? '' : bookingsModalTab} Bookings Found
+                                        </div>
+                                        <p style={{ margin: 0, fontSize: '12px' }}>
+                                            No records match your selected month ({selectedSidebarMonth}) and filter tab.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px', fontSize: '13px' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', color: 'rgba(255,255,255,0.4)', textAlign: 'left', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                <th style={{ padding: '12px 10px' }}>Booking / Lead ID</th>
+                                                <th style={{ padding: '12px 10px' }}>Guest Details</th>
+                                                <th style={{ padding: '12px 10px' }}>Vehicle / Fleet</th>
+                                                <th style={{ padding: '12px 10px' }}>Travel Dates & Timing</th>
+                                                <th style={{ padding: '12px 10px' }}>Payment / Financials</th>
+                                                <th style={{ padding: '12px 10px' }}>Status</th>
+                                                <th style={{ padding: '12px 10px', textAlign: 'right' }}>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {displayedModalBookings.map((b) => {
+                                                const timingBadge = getTripTimingBadge(b);
+                                                const sDateStr = b.travelStartDate ? new Date(b.travelStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'TBA';
+                                                const eDateStr = b.travelEndDate ? new Date(b.travelEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : sDateStr;
+                                                const totalAmt = Number(b.totalAmount) || 0;
+                                                const advAmt = Number(b.advancePaid || b.advancePayment) || 0;
+                                                const balAmt = Math.max(0, totalAmt - advAmt);
+
+                                                return (
+                                                    <tr key={b._id || b.bookingId} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', transition: 'background 0.2s' }}>
+                                                        {/* ID & Date */}
+                                                        <td style={{ padding: '12px 10px' }}>
+                                                            <div style={{ fontWeight: '800', color: '#fff', fontSize: '13px' }}>
+                                                                {b.clientCode || b.bookingId || 'BKG'}
+                                                            </div>
+                                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                                                                {b.isLead ? (
+                                                                    <span style={{ color: '#f87171', fontWeight: '700' }}>[Lost / Cancelled Lead]</span>
+                                                                ) : (
+                                                                    `#${b.bookingId || 'BKG'}`
+                                                                )}
+                                                            </div>
+                                                        </td>
+
+                                                        {/* Client Details */}
+                                                        <td style={{ padding: '12px 10px' }}>
+                                                            <div style={{ fontWeight: '700', color: '#f8fafc' }}>
+                                                                {b.clientName || 'Guest (TBA)'}
+                                                            </div>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginTop: '2px' }}>
+                                                                <span>{b.mobileNumber || 'TBA'}</span>
+                                                                {b.mobileNumber && b.mobileNumber.length >= 8 && (
+                                                                    <a
+                                                                        href={`https://wa.me/91${b.mobileNumber.replace(/\D/g, '').slice(-10)}`}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        title="WhatsApp Guest"
+                                                                        style={{ color: '#4ade80', display: 'inline-flex', alignItems: 'center' }}
+                                                                    >
+                                                                        <MessageCircle size={12} />
+                                                                    </a>
+                                                                )}
+                                                            </div>
+                                                        </td>
+
+                                                        {/* Vehicle */}
+                                                        <td style={{ padding: '12px 10px' }}>
+                                                            <div style={{ fontWeight: '700', color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                <Car size={13} color="var(--primary)" />
+                                                                <span>{b.vehicleType || b.carType || 'Car'}</span>
+                                                            </div>
+                                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                                                                {b.numberOfCars && b.numberOfCars > 1 ? `${b.numberOfCars} Cars` : '1 Vehicle'}
+                                                            </div>
+                                                        </td>
+
+                                                        {/* Travel Dates & Relative Timing */}
+                                                        <td style={{ padding: '12px 10px' }}>
+                                                            <div style={{ fontWeight: '700', color: '#fff', fontSize: '12px' }}>
+                                                                {sDateStr} → {eDateStr}
+                                                            </div>
+                                                            <div style={{ marginTop: '4px' }}>
+                                                                <span style={{
+                                                                    display: 'inline-block',
+                                                                    padding: '2px 8px',
+                                                                    borderRadius: '8px',
+                                                                    fontSize: '10px',
+                                                                    fontWeight: '800',
+                                                                    background: timingBadge.bg,
+                                                                    color: timingBadge.color
+                                                                }}>
+                                                                    {timingBadge.label}
+                                                                </span>
+                                                            </div>
+                                                        </td>
+
+                                                        {/* Financials */}
+                                                        <td style={{ padding: '12px 10px' }}>
+                                                            <div style={{ fontWeight: '900', color: '#fff', fontSize: '13px' }}>
+                                                                ₹{totalAmt.toLocaleString('en-IN')}
+                                                            </div>
+                                                            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginTop: '2px', display: 'flex', gap: '6px' }}>
+                                                                <span style={{ color: '#4ade80' }}>Adv: ₹{advAmt.toLocaleString('en-IN')}</span>
+                                                                {balAmt > 0 && <span style={{ color: '#fbbf24' }}>Due: ₹{balAmt.toLocaleString('en-IN')}</span>}
+                                                            </div>
+                                                        </td>
+
+                                                        {/* Status */}
+                                                        <td style={{ padding: '12px 10px' }}>
+                                                            <span style={{
+                                                                display: 'inline-block',
+                                                                padding: '3px 10px',
+                                                                borderRadius: '12px',
+                                                                fontSize: '11px',
+                                                                fontWeight: '800',
+                                                                background: b.bookingStatus === 'Cancelled' ? 'rgba(239, 68, 68, 0.15)' : b.bookingStatus === 'Completed' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                                                                color: b.bookingStatus === 'Cancelled' ? '#f87171' : b.bookingStatus === 'Completed' ? '#34d399' : '#38bdf8',
+                                                                border: b.bookingStatus === 'Cancelled' ? '1px solid rgba(239, 68, 68, 0.3)' : b.bookingStatus === 'Completed' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)'
+                                                            }}>
+                                                                {b.bookingStatus || 'Confirmed'}
+                                                            </span>
+                                                        </td>
+
+                                                        {/* Action */}
+                                                        <td style={{ padding: '12px 10px', textAlign: 'right' }}>
+                                                            {b.isLead ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setShowBookingsModal(false);
+                                                                        handleOpenModal(b);
+                                                                    }}
+                                                                    style={{
+                                                                        padding: '4px 10px',
+                                                                        borderRadius: '6px',
+                                                                        background: 'rgba(255, 255, 255, 0.08)',
+                                                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                                                        color: '#fff',
+                                                                        fontSize: '11px',
+                                                                        fontWeight: '700',
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    View Lead
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setShowBookingsModal(false);
+                                                                        navigate(`/admin/bookings?search=${encodeURIComponent(b.bookingId || b.clientCode || '')}`);
+                                                                    }}
+                                                                    style={{
+                                                                        padding: '4px 10px',
+                                                                        borderRadius: '6px',
+                                                                        background: 'rgba(56, 189, 248, 0.15)',
+                                                                        border: '1px solid rgba(56, 189, 248, 0.3)',
+                                                                        color: '#38bdf8',
+                                                                        fontSize: '11px',
+                                                                        fontWeight: '700',
+                                                                        cursor: 'pointer',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '4px'
+                                                                    }}
+                                                                >
+                                                                    <span>Open</span>
+                                                                    <ExternalLink size={11} />
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
 
