@@ -7,7 +7,7 @@ import {
     AlertCircle, Search, Filter, Phone, MessageSquare, Plus,
     FileText, X, ArrowUpRight, ShieldCheck, UserCheck,
     CreditCard, Hourglass, Edit, MoreVertical, User, ArrowUpDown,
-    ChevronLeft, ChevronRight, AlertTriangle, AlertOctagon, Ban, XCircle
+    ChevronLeft, ChevronRight, AlertTriangle, AlertOctagon, Ban, XCircle, ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SEO from '../components/SEO';
@@ -63,6 +63,8 @@ export default function Bookings() {
 
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [selectedFy, setSelectedFy] = useState('FY 26-27');
+    const [showFyDropdown, setShowFyDropdown] = useState(false);
     const [selectedMonth, setSelectedMonth] = useState('All Months');
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -843,45 +845,125 @@ export default function Bookings() {
                 </div>
             </div>
 
-            {/* MONTH FILTER PILLS */}
+            {/* MONTH FILTER PILLS & FY SELECTOR */}
             <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 flexWrap: 'wrap',
-                gap: '16px',
+                gap: '12px',
                 marginBottom: '22px'
             }}>
-                {/* Month Pills */}
                 <div style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    overflowX: 'auto',
-                    paddingBottom: '4px'
+                    gap: '10px',
+                    maxWidth: '100%'
                 }}>
-                    {MONTH_TABS.map(m => {
-                        const isActive = selectedMonth === m;
-                        return (
-                            <button
-                                key={m}
-                                onClick={() => setSelectedMonth(m)}
-                                style={{
-                                    padding: '7px 14px',
+                    {/* FY Dropdown */}
+                    <div style={{ position: 'relative', zIndex: 110, flexShrink: 0 }}>
+                        <button
+                            type="button"
+                            onClick={() => setShowFyDropdown(!showFyDropdown)}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '7px 14px',
+                                borderRadius: '10px',
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                border: '1px solid rgba(255, 255, 255, 0.12)',
+                                color: '#ffffff',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                            }}
+                        >
+                            <span>{selectedFy}</span>
+                            <ChevronDown size={14} style={{ color: 'rgba(255,255,255,0.6)', transform: showFyDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                        </button>
+                        {showFyDropdown && (
+                            <>
+                                <div
+                                    style={{ position: 'fixed', inset: 0, zIndex: 999 }}
+                                    onClick={() => setShowFyDropdown(false)}
+                                />
+                                <div style={{
+                                    position: 'absolute',
+                                    top: 'calc(100% + 4px)',
+                                    left: 0,
+                                    background: '#0f172a',
+                                    border: '1px solid rgba(255,255,255,0.15)',
                                     borderRadius: '10px',
-                                    border: isActive ? 'none' : '1px solid rgba(255,255,255,0.08)',
-                                    background: isActive ? '#fbbf24' : 'rgba(255, 255, 255, 0.03)',
-                                    color: isActive ? '#000' : 'rgba(255,255,255,0.7)',
-                                    fontWeight: isActive ? '800' : '600',
-                                    fontSize: '13px',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s',
-                                    whiteSpace: 'nowrap'
-                                }}
-                            >
-                                {m}
-                            </button>
-                        );
-                    })}
+                                    zIndex: 1000,
+                                    minWidth: '120px',
+                                    boxShadow: '0 10px 30px rgba(0,0,0,0.7)',
+                                    overflow: 'hidden'
+                                }}>
+                                    {['FY 26-27', 'FY 25-26', 'FY 24-25'].map(fy => (
+                                        <div
+                                            key={fy}
+                                            onClick={() => {
+                                                setSelectedFy(fy);
+                                                setShowFyDropdown(false);
+                                            }}
+                                            style={{
+                                                padding: '9px 14px',
+                                                fontSize: '12px',
+                                                fontWeight: '600',
+                                                cursor: 'pointer',
+                                                color: selectedFy === fy ? '#fbbf24' : 'rgba(255,255,255,0.8)',
+                                                background: selectedFy === fy ? 'rgba(251, 191, 36, 0.1)' : 'transparent',
+                                                transition: 'background 0.15s'
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                if (selectedFy !== fy) e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                if (selectedFy !== fy) e.currentTarget.style.background = 'transparent';
+                                            }}
+                                        >
+                                            {fy}
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Month Pills Container */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        overflowX: 'auto',
+                        paddingBottom: '4px',
+                        scrollbarWidth: 'none'
+                    }}>
+                        {MONTH_TABS.map(m => {
+                            const isActive = selectedMonth === m;
+                            return (
+                                <button
+                                    key={m}
+                                    onClick={() => setSelectedMonth(m)}
+                                    style={{
+                                        padding: '7px 14px',
+                                        borderRadius: '10px',
+                                        border: isActive ? 'none' : '1px solid rgba(255,255,255,0.08)',
+                                        background: isActive ? '#fbbf24' : 'rgba(255, 255, 255, 0.03)',
+                                        color: isActive ? '#000' : 'rgba(255,255,255,0.7)',
+                                        fontWeight: isActive ? '800' : '600',
+                                        fontSize: '13px',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                >
+                                    {m}
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
             </div>
 

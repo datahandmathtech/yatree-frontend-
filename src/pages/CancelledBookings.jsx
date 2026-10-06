@@ -364,13 +364,11 @@ export default function CancelledBookings() {
                 <div style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    overflowX: 'auto',
-                    paddingBottom: '4px',
+                    gap: '10px',
                     maxWidth: '100%'
                 }}>
                     {/* FY Dropdown */}
-                    <div style={{ position: 'relative' }}>
+                    <div style={{ position: 'relative', zIndex: 110, flexShrink: 0 }}>
                         <button
                             type="button"
                             onClick={() => setShowFyDropdown(!showFyDropdown)}
@@ -390,43 +388,66 @@ export default function CancelledBookings() {
                             }}
                         >
                             <span>{selectedFy}</span>
-                            <ChevronDown size={14} style={{ color: 'rgba(255,255,255,0.6)' }} />
+                            <ChevronDown size={14} style={{ color: 'rgba(255,255,255,0.6)', transform: showFyDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
                         </button>
                         {showFyDropdown && (
-                            <div style={{
-                                position: 'absolute',
-                                top: '110%',
-                                left: 0,
-                                background: '#0f172a',
-                                border: '1px solid rgba(255,255,255,0.12)',
-                                borderRadius: '8px',
-                                zIndex: 100,
-                                minWidth: '110px',
-                                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                                overflow: 'hidden'
-                            }}>
-                                {['FY 26-27', 'FY 25-26', 'FY 24-25'].map(fy => (
-                                    <div
-                                        key={fy}
-                                        onClick={() => {
-                                            setSelectedFy(fy);
-                                            setShowFyDropdown(false);
-                                        }}
-                                        style={{
-                                            padding: '8px 12px',
-                                            fontSize: '12px',
-                                            fontWeight: '600',
-                                            cursor: 'pointer',
-                                            color: selectedFy === fy ? '#f87171' : 'rgba(255,255,255,0.8)',
-                                            background: selectedFy === fy ? 'rgba(239, 68, 68, 0.15)' : 'transparent'
-                                        }}
-                                    >
-                                        {fy}
-                                    </div>
-                                ))}
-                            </div>
+                            <>
+                                <div
+                                    style={{ position: 'fixed', inset: 0, zIndex: 999 }}
+                                    onClick={() => setShowFyDropdown(false)}
+                                />
+                                <div style={{
+                                    position: 'absolute',
+                                    top: 'calc(100% + 4px)',
+                                    left: 0,
+                                    background: '#0f172a',
+                                    border: '1px solid rgba(255,255,255,0.15)',
+                                    borderRadius: '10px',
+                                    zIndex: 1000,
+                                    minWidth: '120px',
+                                    boxShadow: '0 10px 30px rgba(0,0,0,0.7)',
+                                    overflow: 'hidden'
+                                }}>
+                                    {['FY 26-27', 'FY 25-26', 'FY 24-25'].map(fy => (
+                                        <div
+                                            key={fy}
+                                            onClick={() => {
+                                                setSelectedFy(fy);
+                                                setShowFyDropdown(false);
+                                            }}
+                                            style={{
+                                                padding: '9px 14px',
+                                                fontSize: '12px',
+                                                fontWeight: '600',
+                                                cursor: 'pointer',
+                                                color: selectedFy === fy ? '#f87171' : 'rgba(255,255,255,0.8)',
+                                                background: selectedFy === fy ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
+                                                transition: 'background 0.15s'
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                if (selectedFy !== fy) e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                if (selectedFy !== fy) e.currentTarget.style.background = 'transparent';
+                                            }}
+                                        >
+                                            {fy}
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
                         )}
                     </div>
+
+                    {/* Month Pills Container */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        overflowX: 'auto',
+                        paddingBottom: '4px',
+                        scrollbarWidth: 'none'
+                    }}>
 
                     {/* Month Pills */}
                     {MONTH_TABS.map(m => {
@@ -452,6 +473,7 @@ export default function CancelledBookings() {
                             </button>
                         );
                     })}
+                    </div>
                 </div>
 
                 {/* Instant Search Bar */}
