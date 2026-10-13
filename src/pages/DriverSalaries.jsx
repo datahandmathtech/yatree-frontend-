@@ -152,6 +152,8 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
         driverId: '',
         amount: '',
         date: todayIST(),
+        salaryMonth: month === 'All' ? (new Date().getMonth() + 1) : month,
+        salaryYear: year,
         remark: '',
         paidBy: 'Company',
         givenBy: 'Office',
@@ -417,19 +419,19 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
         setAdvanceMessage({ type: '', text: '' });
         try {
             const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+            const payload = {
+                ...advanceFormData,
+                month: advanceFormData.salaryMonth,
+                year: advanceFormData.salaryYear,
+                companyId: selectedCompany._id
+            };
             if (editingAdvanceId) {
-                await axios.put(`/api/admin/advances/${editingAdvanceId}`, {
-                    ...advanceFormData,
-                    companyId: selectedCompany._id
-                }, {
+                await axios.put(`/api/admin/advances/${editingAdvanceId}`, payload, {
                     headers: { Authorization: `Bearer ${userInfo.token}` }
                 });
                 setAdvanceMessage({ type: 'success', text: 'Advance updated successfully!' });
             } else {
-                await axios.post('/api/admin/advances', {
-                    ...advanceFormData,
-                    companyId: selectedCompany._id
-                }, {
+                await axios.post('/api/admin/advances', payload, {
                     headers: { Authorization: `Bearer ${userInfo.token}` }
                 });
                 setAdvanceMessage({ type: 'success', text: 'Advance recorded successfully!' });
@@ -442,6 +444,8 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                     driverId: '',
                     amount: '',
                     date: todayIST(),
+                    salaryMonth: month === 'All' ? (new Date().getMonth() + 1) : month,
+                    salaryYear: year,
                     remark: '',
                     paidBy: 'Company',
                     givenBy: 'Office',
@@ -466,10 +470,16 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
         setEditingAdvanceId(advance._id);
         const dInfo = selectedDriverDetails?.driver?.name ? selectedDriverDetails.driver : (selectedDriverDetails?.driver?.[0] || {});
         const isGuest = advance.paidBy === 'Guest' || advance.givenBy === 'Guest';
+        const advDate = advance.date ? new Date(advance.date) : new Date();
+        const advMonth = advance.month || (advDate.getMonth() + 1);
+        const advYear = advance.year || advDate.getFullYear();
+
         setAdvanceFormData({
             driverId: advance.driver?._id || advance.driver || dInfo?._id || '',
             amount: advance.amount || '',
             date: advance.date ? toISTDateString(advance.date) : todayIST(),
+            salaryMonth: advMonth,
+            salaryYear: advYear,
             remark: advance.remark || '',
             paidBy: isGuest ? 'Guest' : 'Company',
             givenBy: isGuest ? 'Guest' : 'Office',
@@ -1891,9 +1901,9 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
             {/* RECORD ADVANCE MODAL */}
             <AnimatePresence>
                 {showAdvanceModal && (
-                    <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', zIndex: 1100 }}>
+                    <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', zIndex: 1100, position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
                         <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
-                            className="modal-container" style={{ width: '100%', maxWidth: '480px', padding: '30px' }}>
+                            className="modal-container" style={{ width: '100%', maxWidth: '520px', padding: '25px', maxHeight: '90vh', overflowY: 'auto', background: '#0f172a', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)' }}>
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px' }}>
                                 <h2 style={{ color: 'white', fontSize: '22px', fontWeight: '900', margin: 0 }}>{editingAdvanceId ? 'Edit Advance' : 'Record Advance'}</h2>
@@ -1912,7 +1922,7 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                     >
                                         <option value="" style={{ background: '#1e293b', color: 'white' }}>Choose a driver...</option>
                                         {drivers.map(d => (
-                                            <option key={d._id} value={d._id} style={{ background: '#1e293b', color: 'white' }}>
+                                             <option key={d._id} value={d._id} style={{ background: '#1e293b', color: 'white' }}>
                                                 {d.name} ({d.mobile})
                                             </option>
                                         ))}
@@ -1925,11 +1935,78 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                     </div>
                                     <div>
                                         <PremiumDateInput
-                                            label="Date"
+                                            label="Advance Date"
                                             required
                                             value={advanceFormData.date}
-                                            onChange={(v) => setAdvanceFormData({ ...advanceFormData, date: v })}
+                                            onChange={(v) => {
+                                                setAdvanceFormData(prev => {
+                                                    const updated = { ...prev, date: v };
+                                                    if (v && v.includes('-') && !editingAdvanceId) {
+                                                        const [y, m] = v.split('-');
+                                                        if (y && m) {
+                                                            updated.salaryMonth = parseInt(m, 10);
+                                                            updated.salaryYear = parseInt(y, 10);
+                                                        }
+                                                    }
+                                                    return updated;
+                                                });
+                                            }}
                                         />
+                                    </div>
+                                </div>
+
+                                {/* Salary / Ledger Month Picker */}
+                                <div style={{
+                                    background: 'rgba(56, 189, 248, 0.05)',
+                                    border: '1px solid rgba(56, 189, 248, 0.2)',
+                                    borderRadius: '14px',
+                                    padding: '12px 14px'
+                                }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#38bdf8', marginBottom: '8px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>
+                                        <Calendar size={14} />
+                                        <span>Salary / Ledger Month</span>
+                                    </label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
+                                        <select
+                                            className="input-field"
+                                            value={advanceFormData.salaryMonth}
+                                            onChange={(e) => setAdvanceFormData({ ...advanceFormData, salaryMonth: parseInt(e.target.value, 10) })}
+                                            style={{ height: '44px', background: '#0f172a', color: 'white', marginBottom: 0 }}
+                                        >
+                                            {[
+                                                { m: 1, label: 'January' },
+                                                { m: 2, label: 'February' },
+                                                { m: 3, label: 'March' },
+                                                { m: 4, label: 'April' },
+                                                { m: 5, label: 'May' },
+                                                { m: 6, label: 'June' },
+                                                { m: 7, label: 'July' },
+                                                { m: 8, label: 'August' },
+                                                { m: 9, label: 'September' },
+                                                { m: 10, label: 'October' },
+                                                { m: 11, label: 'November' },
+                                                { m: 12, label: 'December' }
+                                            ].map(item => (
+                                                <option key={item.m} value={item.m} style={{ background: '#0f172a', color: 'white' }}>
+                                                    {item.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <select
+                                            className="input-field"
+                                            value={advanceFormData.salaryYear}
+                                            onChange={(e) => setAdvanceFormData({ ...advanceFormData, salaryYear: parseInt(e.target.value, 10) })}
+                                            style={{ height: '44px', background: '#0f172a', color: 'white', marginBottom: 0 }}
+                                        >
+                                            {[2024, 2025, 2026, 2027, 2028].map(y => (
+                                                <option key={y} value={y} style={{ background: '#0f172a', color: 'white' }}>
+                                                    {y}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginTop: '6px' }}>
+                                        📌 <b>Cash / Bank Book:</b> Transaction date: <b>{advanceFormData.date ? formatDateIST(advanceFormData.date) : 'Today'}</b> | <b>Driver Ledger:</b> Deducted from <b>{[ '', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December' ][advanceFormData.salaryMonth || 1]} {advanceFormData.salaryYear}</b> salary.
                                     </div>
                                 </div>
 

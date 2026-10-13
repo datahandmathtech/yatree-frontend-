@@ -36,7 +36,9 @@ const Advances = () => {
     const [formData, setFormData] = useState({
         driverId: '',
         amount: '',
-        date: '',
+        date: todayIST(),
+        salaryMonth: selectedMonth,
+        salaryYear: selectedYear,
         remark: '',
         givenBy: 'Office',
         paidBy: 'Company',
@@ -182,6 +184,8 @@ const Advances = () => {
             const userInfo = JSON.parse(localStorage.getItem('userInfo'));
             const payload = {
                 ...formData,
+                month: formData.salaryMonth,
+                year: formData.salaryYear,
                 companyId: selectedCompany._id,
                 paidBy: formData.givenBy === 'Guest' ? 'Guest' : 'Company'
             };
@@ -200,7 +204,9 @@ const Advances = () => {
                 setFormData({
                     driverId: '',
                     amount: '',
-                    date: '',
+                    date: todayIST(),
+                    salaryMonth: selectedMonth,
+                    salaryYear: selectedYear,
                     remark: '',
                     givenBy: 'Office',
                     paidBy: 'Company',
@@ -223,10 +229,16 @@ const Advances = () => {
     const handleEdit = (adv) => {
         setEditingId(adv._id);
         const isGuest = adv.givenBy === 'Guest' || adv.paidBy === 'Guest' || adv.advanceType === 'Guest';
+        const advDate = adv.date ? new Date(adv.date) : new Date();
+        const advMonth = adv.month || (advDate.getMonth() + 1);
+        const advYear = adv.year || advDate.getFullYear();
+
         setFormData({
             driverId: adv.driver?._id || adv.driver,
             amount: adv.amount || '',
             date: toISTDateString(adv.date),
+            salaryMonth: advMonth,
+            salaryYear: advYear,
             remark: adv.remark || '',
             givenBy: isGuest ? 'Guest' : 'Office',
             paidBy: isGuest ? 'Guest' : 'Company',
@@ -388,10 +400,13 @@ const Advances = () => {
                                 driverId: '',
                                 amount: '',
                                 date: todayIST(),
+                                salaryMonth: selectedMonth,
+                                salaryYear: selectedYear,
                                 remark: '',
                                 givenBy: 'Office',
                                 paidBy: 'Company',
-                                bankAccountId: bankAccounts[0]?._id || '',
+                                paymentMode: 'Cash',
+                                bankAccountId: '',
                                 bookingId: '',
                                 bookingRef: '',
                                 guestName: ''
@@ -742,13 +757,13 @@ const Advances = () => {
             {/* Add/Edit Advance Modal */}
             <AnimatePresence>
                 {showModal && (
-                    <div className="modal-overlay">
+                    <div className="modal-overlay" style={{ overflowY: 'auto', padding: '20px' }}>
                         <motion.div
                             initial={{ scale: 0.9, opacity: 0, y: 20 }}
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0.9, opacity: 0, y: 20 }}
                             className="modal-content-wrapper"
-                            style={{ maxWidth: '540px' }}
+                            style={{ maxWidth: '540px', maxHeight: '90vh', overflowY: 'auto' }}
                         >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
                                 <div>
@@ -794,10 +809,78 @@ const Advances = () => {
                                     </div>
                                     <div className="input-field-group">
                                         <PremiumDateInput
+                                            label="Advance Date"
                                             value={formData.date}
-                                            onChange={v => setFormData({ ...formData, date: v })}
+                                            onChange={v => {
+                                                setFormData(prev => {
+                                                    const updated = { ...prev, date: v };
+                                                    if (v && v.includes('-') && !editingId) {
+                                                        const [y, m] = v.split('-');
+                                                        if (y && m) {
+                                                            updated.salaryMonth = parseInt(m, 10);
+                                                            updated.salaryYear = parseInt(y, 10);
+                                                        }
+                                                    }
+                                                    return updated;
+                                                });
+                                            }}
                                             required
                                         />
+                                    </div>
+                                </div>
+
+                                {/* Salary / Ledger Month Picker */}
+                                <div className="input-field-group" style={{
+                                    background: 'rgba(56, 189, 248, 0.05)',
+                                    border: '1px solid rgba(56, 189, 248, 0.2)',
+                                    borderRadius: '14px',
+                                    padding: '12px 14px'
+                                }}>
+                                    <label className="input-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#38bdf8', marginBottom: '8px', fontWeight: '800' }}>
+                                        <Calendar size={14} />
+                                        <span>Salary / Ledger Month</span>
+                                    </label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
+                                        <select
+                                            className="input-field"
+                                            value={formData.salaryMonth}
+                                            onChange={(e) => setFormData({ ...formData, salaryMonth: parseInt(e.target.value, 10) })}
+                                            style={{ height: '44px', background: '#0f172a', color: 'white', marginBottom: 0 }}
+                                        >
+                                            {[
+                                                { m: 1, label: 'January' },
+                                                { m: 2, label: 'February' },
+                                                { m: 3, label: 'March' },
+                                                { m: 4, label: 'April' },
+                                                { m: 5, label: 'May' },
+                                                { m: 6, label: 'June' },
+                                                { m: 7, label: 'July' },
+                                                { m: 8, label: 'August' },
+                                                { m: 9, label: 'September' },
+                                                { m: 10, label: 'October' },
+                                                { m: 11, label: 'November' },
+                                                { m: 12, label: 'December' }
+                                            ].map(item => (
+                                                <option key={item.m} value={item.m} style={{ background: '#0f172a', color: 'white' }}>
+                                                    {item.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <select
+                                            className="input-field"
+                                            value={formData.salaryYear}
+                                            onChange={(e) => setFormData({ ...formData, salaryYear: parseInt(e.target.value, 10) })}
+                                            style={{ height: '44px', background: '#0f172a', color: 'white', marginBottom: 0 }}
+                                        >
+                                            {[2024, 2025, 2026, 2027, 2028].map(y => (
+                                                <option key={y} value={y} style={{ background: '#0f172a', color: 'white' }}>
+                                                    {y}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginTop: '6px' }}>
+                                        📌 <b>Cash / Bank Book:</b> Transaction date: <b>{formData.date ? formatDateIST(formData.date) : 'Today'}</b> | <b>Driver Ledger:</b> Deducted from <b>{[ '', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December' ][formData.salaryMonth || 1]} {formData.salaryYear}</b> salary.
                                     </div>
                                 </div>
 

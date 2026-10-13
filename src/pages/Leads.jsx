@@ -214,6 +214,10 @@ export default function Leads() {
     const [sourceFilter, setSourceFilter] = useState('All');
     const [priorityFilter, setPriorityFilter] = useState('All');
     const [salesPersonFilter, setSalesPersonFilter] = useState('All');
+    const [statusFilter, setStatusFilter] = useState('All'); // 'All' | 'Confirmed' | 'Cancelled' | 'Lost' | 'Open'
+    const [sortField, setSortField] = useState('clientCode'); // 'clientCode' | 'date' | 'price'
+    const [sortOrder, setSortOrder] = useState('asc'); // default 'asc' so 10/01, 10/02... are sequential in line!
+    const [dateFilterType, setDateFilterType] = useState('lead'); // 'lead' = Enquiry / Lead Created (10/xx), 'travel' = Tour Travel Date
 
     // Hover tooltip state
     const [hoveredLeadId, setHoveredLeadId] = useState(null);
@@ -394,12 +398,12 @@ export default function Leads() {
             fetchTravelAgents();
             fetchCompanyBanks();
         }
-    }, [selectedCompany, monthFilter, selectedFy]);
+    }, [selectedCompany, monthFilter, selectedFy, dateFilterType]);
 
     const fetchLeads = async () => {
         try {
             setLoading(true);
-            let url = `/api/leads/${selectedCompany._id}?status=All`;
+            let url = `/api/leads/${selectedCompany._id}?status=All&dateType=${dateFilterType}`;
             if (monthFilter && monthFilter !== 'All') {
                 url += `&month=${monthFilter}`;
             }
@@ -1184,28 +1188,61 @@ export default function Leads() {
         }
     };
 
-    // Filter leads on client side: Confirmed leads move to Confirmed Bookings page,
-    // and Cancelled, Lost, or past-tour unconfirmed leads are excluded from Open Leads.
-    const filteredLeads = useMemo(() => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+    // Calculate month-wise breakdown across All, Confirmed, Cancelled, Lost, and Open
+    const statusCounts = useMemo(() => {
+        let totalCount = 0;
+        let totalAmt = 0;
+        let confirmedCount = 0;
+        let confirmedAmt = 0;
+        let cancelledCount = 0;
+        let cancelledAmt = 0;
+        let lostCount = 0;
+        let lostAmt = 0;
+        let openCount = 0;
+        let openAmt = 0;
 
-        return (leads || []).filter(lead => {
-            // Confirmed leads are moved to Confirmed Bookings page, so do not display them in Sales Leads table!
+        (leads || []).forEach(lead => {
+            const amt = Number(lead.totalAmount) || 0;
+            totalCount += 1;
+            totalAmt += amt;
+
             if (lead.status === 'Confirmed' || lead.bookingId) {
-                return false;
+                confirmedCount += 1;
+                confirmedAmt += amt;
+            } else if (lead.status === 'Cancelled') {
+                cancelledCount += 1;
+                cancelledAmt += amt;
+            } else if (lead.status === 'Lost') {
+                lostCount += 1;
+                lostAmt += amt;
+            } else {
+                openCount += 1;
+                openAmt += amt;
             }
+        });
 
-            // Exclude cancelled / lost leads from Open Leads
-            if (lead.status === 'Cancelled' || lead.status === 'Lost') {
-                return false;
-            }
+        return {
+            total: { count: totalCount, amount: totalAmt },
+            confirmed: { count: confirmedCount, amount: confirmedAmt },
+            cancelled: { count: cancelledCount, amount: cancelledAmt },
+            lost: { count: lostCount, amount: lostAmt },
+            open: { count: openCount, amount: openAmt }
+        };
+    }, [leads]);
 
-            // Unconfirmed leads whose travel dates have already ended are expired/cancelled
-            const end = lead.travelEndDate ? new Date(lead.travelEndDate) : (lead.travelStartDate ? new Date(lead.travelStartDate) : null);
-            if (end) {
-                end.setHours(23, 59, 59, 999);
-                if (end < today) return false;
+    // All leads for the month are shown (Confirmed, Cancelled, Lost, Open)
+    // Filterable by status and sequentially sorted by Lead ID / Client Code
+    const filteredLeads = useMemo(() => {
+        const filtered = (leads || []).filter(lead => {
+            // Status Filter: Shows all leads received in month, with tab switching for Confirmed, Cancelled, Lost, Open
+            if (statusFilter === 'Confirmed') {
+                if (lead.status !== 'Confirmed' && !lead.bookingId) return false;
+            } else if (statusFilter === 'Cancelled') {
+                if (lead.status !== 'Cancelled') return false;
+            } else if (statusFilter === 'Lost') {
+                if (lead.status !== 'Lost') return false;
+            } else if (statusFilter === 'Open') {
+                if (lead.status === 'Confirmed' || lead.bookingId || lead.status === 'Cancelled' || lead.status === 'Lost') return false;
             }
 
             // Financial Year filter
@@ -1246,7 +1283,47 @@ export default function Leads() {
 
             return true;
         });
-    }, [leads, sourceFilter, salesPersonFilter, searchTerm, priorityFilter, selectedFy]);
+
+        // Sequential sorting by Lead ID / Client Code (e.g. 10/01, 10/02... 10/66) or chosen sort field
+        filtered.sort((a, b) => {
+            if (sortField === 'clientCode') {
+                const parseCode = (c) => {
+                    if (!c) return 0;
+                    const m = String(c).trim().match(/^(\d+)\/(\d+)$/);
+                    if (m) {
+                        return parseInt(m[1], 10) * 100000 + parseInt(m[2], 10);
+                    }
+                    const nums = String(c).match(/\d+/g);
+                    if (nums) return parseInt(nums.join(''), 10);
+                    return 0;
+                };
+                const valA = parseCode(a.clientCode || a.leadId);
+                const valB = parseCode(b.clientCode || b.leadId);
+                if (valA !== valB) {
+                    return sortOrder === 'asc' ? valA - valB : valB - valA;
+                }
+                return sortOrder === 'asc'
+                    ? String(a.clientCode || a.leadId || '').localeCompare(String(b.clientCode || b.leadId || ''))
+                    : String(b.clientCode || b.leadId || '').localeCompare(String(a.clientCode || a.leadId || ''));
+            }
+
+            if (sortField === 'date') {
+                const dateA = new Date(a.leadDate || a.createdAt).getTime() || 0;
+                const dateB = new Date(b.leadDate || b.createdAt).getTime() || 0;
+                return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+            }
+
+            if (sortField === 'price') {
+                const priceA = Number(a.totalAmount) || 0;
+                const priceB = Number(b.totalAmount) || 0;
+                return sortOrder === 'asc' ? priceA - priceB : priceB - priceA;
+            }
+
+            return 0;
+        });
+
+        return filtered;
+    }, [leads, statusFilter, sourceFilter, salesPersonFilter, searchTerm, priorityFilter, selectedFy, sortField, sortOrder]);
 
     // Unique sales persons
     const salesPersonsList = useMemo(() => {
@@ -1303,8 +1380,9 @@ export default function Leads() {
                 return d && d.year === year && d.monthIdx === monthIdx && d.day === day;
             });
             const convLeads = allLeadsInMonth.filter(l => {
-                // MUST BE CONFIRMED TO COUNT AS A CONVERSION
-                if (l.status !== 'Confirmed' && l.status !== 'Converted' && !l.bookingId) return false;
+                // MUST BE CONFIRMED TO COUNT AS A CONVERSION (EXCLUDE CANCELLED OR LOST)
+                if (l.status === 'Cancelled' || l.status === 'Lost') return false;
+                if (l.status !== 'Confirmed' && l.status !== 'Converted') return false;
                 
                 // Use advanceDate if available, otherwise updatedAt
                 const d = parseLeadDateInfo(l.advanceDate || l.updatedAt || l.createdAt);
@@ -1384,75 +1462,40 @@ export default function Leads() {
         return { label: '🏁 Trip Completed', color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)' };
     };
 
-    // Calculate Monthly Bookings, Upcoming, Ongoing, Completed & Cancelled Stats
+    // Calculate Monthly Bookings, Upcoming, Ongoing, Completed & Cancelled Stats for this month
     const monthlyBookingStats = useMemo(() => {
-        const isAllMonths = selectedSidebarMonth === 'All Months' || selectedSidebarMonth === 'All';
-        const activeOption = !isAllMonths
-            ? (SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[6])
-            : null;
-        const targetMonthIdx = activeOption ? activeOption.monthIdx : null;
-        const targetYear = activeOption ? activeOption.year : null;
-
-        const isInTargetMonth = (dateVal) => {
-            if (!dateVal) return false;
-            if (isAllMonths) return true;
-            const d = parseLeadDateInfo(dateVal);
-            return d && d.year === targetYear && d.monthIdx === targetMonthIdx;
-        };
-
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Filter bookings strictly for the selected month:
-        const list = (companyBookings || []).filter(b => {
-            if (isAllMonths) return true;
-            if (b.travelStartDate) {
-                return isInTargetMonth(b.travelStartDate);
-            }
-            return isInTargetMonth(b.bookingDate || b.createdAt);
+        // Confirmed leads of this month
+        const confirmedMonthLeads = (leads || []).filter(l => l.status === 'Confirmed' || l.bookingId);
+
+        const list = confirmedMonthLeads.map(l => {
+            const matchedBkg = (companyBookings || []).find(b => 
+                (l.bookingId && (b._id === l.bookingId || b.bookingId === l.bookingId)) ||
+                (l.clientCode && b.clientCode === l.clientCode)
+            );
+            return {
+                _id: matchedBkg?._id || l._id,
+                bookingId: matchedBkg?.bookingId || l.bookingId || l.clientCode || l.leadId || 'BKG',
+                clientCode: l.clientCode || matchedBkg?.clientCode,
+                clientName: l.clientName || matchedBkg?.clientName,
+                mobileNumber: l.mobileNumber || matchedBkg?.mobileNumber,
+                travelStartDate: l.travelStartDate || matchedBkg?.travelStartDate,
+                travelEndDate: l.travelEndDate || matchedBkg?.travelEndDate,
+                vehicleType: l.carType || matchedBkg?.vehicleType,
+                numberOfCars: l.numberOfCars || matchedBkg?.numberOfCars || 1,
+                totalAmount: Number(l.totalAmount || matchedBkg?.totalAmount) || 0,
+                advancePaid: Number(matchedBkg?.advancePaid || l.advancePayment) || 0,
+                bookingStatus: 'Confirmed',
+                isLead: !matchedBkg
+            };
         });
 
-        // Cancelled / Lost leads from sidebarLeads / leads (including unconfirmed past tour leads)
-        const cancelledLeads = (sidebarLeads && sidebarLeads.length > 0 ? sidebarLeads : leads || []).filter(l => {
-            const end = l.travelEndDate ? new Date(l.travelEndDate) : (l.travelStartDate ? new Date(l.travelStartDate) : null);
-            if (end) end.setHours(23, 59, 59, 999);
-            const isTourPassed = end && end < today && l.status !== 'Confirmed' && !l.bookingId;
-
-            if (l.status === 'Cancelled' || l.status === 'Lost' || isTourPassed) {
-                return isInTargetMonth(l.travelStartDate || l.leadDate || l.createdAt);
-            }
-            return false;
-        });
-
-        const upcomingList = [];
-        const ongoingList = [];
-        const completedList = [];
-        const cancelledBookings = [];
-
-        list.forEach(b => {
-            if (b.bookingStatus === 'Cancelled' || b.bookingStatus === 'Lost') {
-                cancelledBookings.push(b);
-                return;
-            }
-            const start = b.travelStartDate ? new Date(b.travelStartDate) : null;
-            if (start) start.setHours(0, 0, 0, 0);
-            const end = (b.travelEndDate || b.travelStartDate) ? new Date(b.travelEndDate || b.travelStartDate) : null;
-            if (end) end.setHours(23, 59, 59, 999);
-
-            if (b.bookingStatus === 'Completed' || (end && end < today)) {
-                completedList.push(b);
-            } else if (start && end && today >= start && today <= end) {
-                ongoingList.push(b);
-            } else if (start && start > today) {
-                upcomingList.push(b);
-            } else {
-                completedList.push(b);
-            }
-        });
-
+        const cancelledLeads = (leads || []).filter(l => l.status === 'Cancelled' || l.status === 'Lost');
         const formattedCancelledLeads = cancelledLeads.map(l => ({
             _id: l._id,
-            bookingId: l.leadId || l.bookingId || 'LEAD',
+            bookingId: l.leadId || l.clientCode || 'LEAD',
             clientCode: l.clientCode,
             clientName: l.clientName,
             mobileNumber: l.mobileNumber,
@@ -1460,13 +1503,33 @@ export default function Leads() {
             travelEndDate: l.travelEndDate,
             vehicleType: l.carType || l.vehicleType,
             numberOfCars: l.numberOfCars || 1,
-            totalAmount: l.totalAmount,
-            advancePaid: l.advancePayment || 0,
+            totalAmount: Number(l.totalAmount) || 0,
+            advancePaid: Number(l.advancePayment) || 0,
             bookingStatus: l.status || 'Cancelled',
             isLead: true
         }));
 
-        const fullCancelledList = [...cancelledBookings, ...formattedCancelledLeads];
+        const upcomingList = [];
+        const ongoingList = [];
+        const completedList = [];
+
+        list.forEach(b => {
+            const start = b.travelStartDate ? new Date(b.travelStartDate) : null;
+            if (start) start.setHours(0, 0, 0, 0);
+            const end = (b.travelEndDate || b.travelStartDate) ? new Date(b.travelEndDate || b.travelStartDate) : null;
+            if (end) end.setHours(23, 59, 59, 999);
+
+            if (end && end < today) {
+                completedList.push(b);
+            } else if (start && end && today >= start && today <= end) {
+                ongoingList.push(b);
+            } else if (start && start > today) {
+                upcomingList.push(b);
+            } else {
+                upcomingList.push(b);
+            }
+        });
+
         const total = list.length;
         const totalAmount = list.reduce((s, b) => s + (Number(b.totalAmount) || 0), 0);
 
@@ -1479,15 +1542,15 @@ export default function Leads() {
             ongoingAmount: ongoingList.reduce((s, b) => s + (Number(b.totalAmount) || 0), 0),
             completed: completedList.length,
             completedAmount: completedList.reduce((s, b) => s + (Number(b.totalAmount) || 0), 0),
-            cancelled: fullCancelledList.length,
-            cancelledAmount: fullCancelledList.reduce((s, b) => s + (Number(b.totalAmount) || 0), 0),
+            cancelled: formattedCancelledLeads.length,
+            cancelledAmount: formattedCancelledLeads.reduce((s, b) => s + (Number(b.totalAmount) || 0), 0),
             allList: list,
             upcomingList,
             ongoingList,
             completedList,
-            cancelledList: fullCancelledList
+            cancelledList: formattedCancelledLeads
         };
-    }, [companyBookings, sidebarLeads, leads, selectedSidebarMonth]);
+    }, [companyBookings, leads]);
 
     const displayedModalBookings = useMemo(() => {
         let baseList = [];
@@ -1765,7 +1828,7 @@ export default function Leads() {
                         }}
                     >
                         <Calendar size={18} />
-                        <span>Monthly Bookings</span>
+                        <span>{monthFilter === 'All' ? 'Monthly' : monthFilter} Bookings</span>
                         <span style={{
                             background: 'rgba(16, 185, 129, 0.25)',
                             color: '#34d399',
@@ -1984,6 +2047,8 @@ export default function Leads() {
                             );
                         })}
                     </div>
+
+
                 </div>
             </div>
 
@@ -1991,6 +2056,199 @@ export default function Leads() {
             <div style={{ width: '100%', position: 'relative' }}>
                 {/* Full Width Table Content */}
                 <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+
+                    {/* Month Leads Status Breakdown KPI Bar (All, Confirmed, Cancelled, Lost, Open) */}
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                        gap: '12px',
+                        marginBottom: '16px'
+                    }}>
+                        {/* 1. All Leads */}
+                        <div
+                            onClick={() => {
+                                setStatusFilter('All');
+                                setCurrentPage(1);
+                            }}
+                            style={{
+                                background: statusFilter === 'All' ? 'rgba(56, 189, 248, 0.16)' : 'rgba(255, 255, 255, 0.03)',
+                                border: statusFilter === 'All' ? '1.5px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: '14px',
+                                padding: '14px 16px',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'space-between',
+                                position: 'relative',
+                                boxShadow: statusFilter === 'All' ? '0 6px 20px rgba(56, 189, 248, 0.2)' : 'none'
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: 'rgba(255, 255, 255, 0.75)' }}>Total Leads</span>
+                                <div style={{ background: 'rgba(56, 189, 248, 0.2)', padding: '5px', borderRadius: '7px', display: 'flex' }}>
+                                    <TrendingUp size={15} color="#38bdf8" />
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                                <span style={{ fontSize: '24px', fontWeight: '900', color: '#fff' }}>{statusCounts.total.count}</span>
+                                <span style={{ fontSize: '12px', color: '#38bdf8', fontWeight: '700' }}>
+                                    ₹{statusCounts.total.amount >= 100000 ? `${(statusCounts.total.amount / 100000).toFixed(1)}L` : statusCounts.total.amount.toLocaleString('en-IN')}
+                                </span>
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.45)', marginTop: '4px' }}>
+                                All received in {monthFilter === 'All' ? 'all months' : monthFilter}
+                            </div>
+                        </div>
+
+                        {/* 2. Confirmed Leads */}
+                        <div
+                            onClick={() => {
+                                setStatusFilter('Confirmed');
+                                setCurrentPage(1);
+                            }}
+                            style={{
+                                background: statusFilter === 'Confirmed' ? 'rgba(16, 185, 129, 0.18)' : 'rgba(255, 255, 255, 0.03)',
+                                border: statusFilter === 'Confirmed' ? '1.5px solid #10b981' : '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: '14px',
+                                padding: '14px 16px',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'space-between',
+                                position: 'relative',
+                                boxShadow: statusFilter === 'Confirmed' ? '0 6px 20px rgba(16, 185, 129, 0.2)' : 'none'
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#34d399' }}>Confirmed</span>
+                                <div style={{ background: 'rgba(16, 185, 129, 0.2)', padding: '5px', borderRadius: '7px', display: 'flex' }}>
+                                    <CheckCircle size={15} color="#10b981" />
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                                <span style={{ fontSize: '24px', fontWeight: '900', color: '#10b981' }}>{statusCounts.confirmed.count}</span>
+                                <span style={{ fontSize: '12px', color: '#6ee7b7', fontWeight: '700' }}>
+                                    ₹{statusCounts.confirmed.amount >= 100000 ? `${(statusCounts.confirmed.amount / 100000).toFixed(1)}L` : statusCounts.confirmed.amount.toLocaleString('en-IN')}
+                                </span>
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: '#34d399', marginTop: '4px', fontWeight: '600' }}>
+                                {statusCounts.total.count > 0 ? Math.round((statusCounts.confirmed.count / statusCounts.total.count) * 100) : 0}% Conversion
+                            </div>
+                        </div>
+
+                        {/* 3. Cancelled Leads */}
+                        <div
+                            onClick={() => {
+                                setStatusFilter('Cancelled');
+                                setCurrentPage(1);
+                            }}
+                            style={{
+                                background: statusFilter === 'Cancelled' ? 'rgba(239, 68, 68, 0.18)' : 'rgba(255, 255, 255, 0.03)',
+                                border: statusFilter === 'Cancelled' ? '1.5px solid #ef4444' : '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: '14px',
+                                padding: '14px 16px',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'space-between',
+                                position: 'relative',
+                                boxShadow: statusFilter === 'Cancelled' ? '0 6px 20px rgba(239, 68, 68, 0.2)' : 'none'
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#f87171' }}>Cancelled</span>
+                                <div style={{ background: 'rgba(239, 68, 68, 0.2)', padding: '5px', borderRadius: '7px', display: 'flex' }}>
+                                    <XCircle size={15} color="#ef4444" />
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                                <span style={{ fontSize: '24px', fontWeight: '900', color: '#ef4444' }}>{statusCounts.cancelled.count}</span>
+                                <span style={{ fontSize: '12px', color: '#fca5a5', fontWeight: '700' }}>
+                                    ₹{statusCounts.cancelled.amount >= 100000 ? `${(statusCounts.cancelled.amount / 100000).toFixed(1)}L` : statusCounts.cancelled.amount.toLocaleString('en-IN')}
+                                </span>
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.45)', marginTop: '4px' }}>
+                                Cancelled / Expired
+                            </div>
+                        </div>
+
+                        {/* 4. Lost Leads */}
+                        <div
+                            onClick={() => {
+                                setStatusFilter('Lost');
+                                setCurrentPage(1);
+                            }}
+                            style={{
+                                background: statusFilter === 'Lost' ? 'rgba(148, 163, 184, 0.18)' : 'rgba(255, 255, 255, 0.03)',
+                                border: statusFilter === 'Lost' ? '1.5px solid #94a3b8' : '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: '14px',
+                                padding: '14px 16px',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'space-between',
+                                position: 'relative',
+                                boxShadow: statusFilter === 'Lost' ? '0 6px 20px rgba(148, 163, 184, 0.2)' : 'none'
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#94a3b8' }}>Lost</span>
+                                <div style={{ background: 'rgba(148, 163, 184, 0.2)', padding: '5px', borderRadius: '7px', display: 'flex' }}>
+                                    <AlertTriangle size={15} color="#94a3b8" />
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                                <span style={{ fontSize: '24px', fontWeight: '900', color: '#94a3b8' }}>{statusCounts.lost.count}</span>
+                                <span style={{ fontSize: '12px', color: '#cbd5e1', fontWeight: '700' }}>
+                                    ₹{statusCounts.lost.amount >= 100000 ? `${(statusCounts.lost.amount / 100000).toFixed(1)}L` : statusCounts.lost.amount.toLocaleString('en-IN')}
+                                </span>
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.45)', marginTop: '4px' }}>
+                                Dropped / Lost
+                            </div>
+                        </div>
+
+                        {/* 5. Open / In-Progress */}
+                        <div
+                            onClick={() => {
+                                setStatusFilter('Open');
+                                setCurrentPage(1);
+                            }}
+                            style={{
+                                background: statusFilter === 'Open' ? 'rgba(251, 191, 36, 0.18)' : 'rgba(255, 255, 255, 0.03)',
+                                border: statusFilter === 'Open' ? '1.5px solid #fbbf24' : '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: '14px',
+                                padding: '14px 16px',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'space-between',
+                                position: 'relative',
+                                boxShadow: statusFilter === 'Open' ? '0 6px 20px rgba(251, 191, 36, 0.2)' : 'none'
+                            }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#fbbf24' }}>Open / Follow-up</span>
+                                <div style={{ background: 'rgba(251, 191, 36, 0.2)', padding: '5px', borderRadius: '7px', display: 'flex' }}>
+                                    <CircleDot size={15} color="#fbbf24" />
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                                <span style={{ fontSize: '24px', fontWeight: '900', color: '#fbbf24' }}>{statusCounts.open.count}</span>
+                                <span style={{ fontSize: '12px', color: '#fde68a', fontWeight: '700' }}>
+                                    ₹{statusCounts.open.amount >= 100000 ? `${(statusCounts.open.amount / 100000).toFixed(1)}L` : statusCounts.open.amount.toLocaleString('en-IN')}
+                                </span>
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: 'rgba(255, 255, 255, 0.45)', marginTop: '4px' }}>
+                                Active Enquiries
+                            </div>
+                        </div>
+                    </div>
 
                     {/* 3. Filter Bar: Search + Sales Person Dropdown + Source Dropdown */}
                     <div className="glass-card" style={{
@@ -2136,11 +2394,28 @@ export default function Leads() {
                 <table style={{ width: '100%', color: 'white', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead style={{ background: 'rgba(0,0,0,0.3)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                         <tr>
-                            <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
-                                Lead Created ↕
+                            <th 
+                                onClick={() => {
+                                    if (sortField === 'date') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                                    else { setSortField('date'); setSortOrder('desc'); }
+                                }}
+                                style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: sortField === 'date' ? '#38bdf8' : 'rgba(255,255,255,0.7)', letterSpacing: '0.3px', cursor: 'pointer', userSelect: 'none' }}
+                                title="Click to sort by date"
+                            >
+                                Lead Created {sortField === 'date' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                            </th>
+                            <th 
+                                onClick={() => {
+                                    if (sortField === 'clientCode') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                                    else { setSortField('clientCode'); setSortOrder('asc'); }
+                                }}
+                                style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: sortField === 'clientCode' ? '#38bdf8' : 'rgba(255,255,255,0.7)', letterSpacing: '0.3px', cursor: 'pointer', userSelect: 'none' }}
+                                title="Click to sort sequentially by Lead ID / Code"
+                            >
+                                Lead ID / Code {sortField === 'clientCode' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
                             </th>
                             <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
-                                Client Code ↕
+                                Status ↕
                             </th>
                             <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
                                 Source ↕
@@ -2148,8 +2423,15 @@ export default function Leads() {
                             <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
                                 Travel Dates ↕
                             </th>
-                            <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
-                                Price ↕
+                            <th 
+                                onClick={() => {
+                                    if (sortField === 'price') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                                    else { setSortField('price'); setSortOrder('desc'); }
+                                }}
+                                style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: sortField === 'price' ? '#38bdf8' : 'rgba(255,255,255,0.7)', letterSpacing: '0.3px', cursor: 'pointer', userSelect: 'none' }}
+                                title="Click to sort by price"
+                            >
+                                Price {sortField === 'price' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
                             </th>
                             <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
                                 Last Remark ↕
@@ -2162,14 +2444,14 @@ export default function Leads() {
                     <tbody>
                         {loading ? (
                             <tr>
-                                <td colSpan="7" style={{ textAlign: 'center', padding: '60px' }}>
+                                <td colSpan="8" style={{ textAlign: 'center', padding: '60px' }}>
                                     <div className="loader" style={{ margin: '0 auto' }}></div>
                                     <div style={{ marginTop: '12px', color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>Loading leads...</div>
                                 </td>
                             </tr>
                         ) : paginatedLeads.length === 0 ? (
                             <tr>
-                                <td colSpan="7" style={{ textAlign: 'center', padding: '60px', color: 'rgba(255,255,255,0.5)' }}>
+                                <td colSpan="8" style={{ textAlign: 'center', padding: '60px', color: 'rgba(255,255,255,0.5)' }}>
                                     No leads found for this filter. Click <strong>+ Create a Lead</strong> to get started!
                                 </td>
                             </tr>
@@ -2235,12 +2517,81 @@ export default function Leads() {
                                         </div>
                                     </td>
 
-                                    {/* 3. Source */}
+                                    {/* 3. Status Badge */}
+                                    <td style={{ padding: '16px 20px', verticalAlign: 'middle' }}>
+                                        {lead.status === 'Confirmed' || lead.bookingId ? (
+                                            <span style={{
+                                                background: 'rgba(16, 185, 129, 0.15)',
+                                                color: '#10b981',
+                                                border: '1px solid rgba(16, 185, 129, 0.35)',
+                                                padding: '4px 10px',
+                                                borderRadius: '8px',
+                                                fontSize: '11.5px',
+                                                fontWeight: '800',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '5px',
+                                                whiteSpace: 'nowrap'
+                                            }}>
+                                                <CheckCircle size={13} color="#10b981" /> Confirmed
+                                            </span>
+                                        ) : lead.status === 'Cancelled' ? (
+                                            <span style={{
+                                                background: 'rgba(239, 68, 68, 0.15)',
+                                                color: '#ef4444',
+                                                border: '1px solid rgba(239, 68, 68, 0.35)',
+                                                padding: '4px 10px',
+                                                borderRadius: '8px',
+                                                fontSize: '11.5px',
+                                                fontWeight: '800',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '5px',
+                                                whiteSpace: 'nowrap'
+                                            }}>
+                                                <XCircle size={13} color="#ef4444" /> Cancelled
+                                            </span>
+                                        ) : lead.status === 'Lost' ? (
+                                            <span style={{
+                                                background: 'rgba(148, 163, 184, 0.15)',
+                                                color: '#94a3b8',
+                                                border: '1px solid rgba(148, 163, 184, 0.35)',
+                                                padding: '4px 10px',
+                                                borderRadius: '8px',
+                                                fontSize: '11.5px',
+                                                fontWeight: '800',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '5px',
+                                                whiteSpace: 'nowrap'
+                                            }}>
+                                                <AlertTriangle size={13} color="#94a3b8" /> Lost
+                                            </span>
+                                        ) : (
+                                            <span style={{
+                                                background: 'rgba(251, 191, 36, 0.15)',
+                                                color: '#fbbf24',
+                                                border: '1px solid rgba(251, 191, 36, 0.35)',
+                                                padding: '4px 10px',
+                                                borderRadius: '8px',
+                                                fontSize: '11.5px',
+                                                fontWeight: '800',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '5px',
+                                                whiteSpace: 'nowrap'
+                                            }}>
+                                                <CircleDot size={13} color="#fbbf24" /> {lead.status || 'Open'}
+                                            </span>
+                                        )}
+                                    </td>
+
+                                    {/* 4. Source */}
                                     <td style={{ padding: '16px 20px', fontSize: '13px', fontWeight: '600' }}>
                                         {renderSourceIcon(lead.source)}
                                     </td>
 
-                                    {/* 4. Travel Dates */}
+                                    {/* 5. Travel Dates */}
                                     <td style={{ padding: '16px 20px' }}>
                                         {lead.travelStartDate ? (
                                             <div>
@@ -2262,24 +2613,71 @@ export default function Leads() {
                                         )}
                                     </td>
 
-                                    {/* 5. Price */}
+                                    {/* 6. Price */}
                                     <td style={{ padding: '16px 20px' }}>
                                         <div style={{ fontWeight: '900', color: 'white', fontSize: '15px' }}>
                                             ₹{(lead.totalAmount || 0).toLocaleString('en-IN')}
                                         </div>
                                     </td>
 
-                                    
-                                    {/* 6. Status */}
+                                    {/* 7. Last Remark */}
                                     <td style={{ padding: '16px 20px', maxWidth: '240px', verticalAlign: 'middle' }}>
                                         <InlineRemarkEditor lead={lead} fetchLeads={fetchLeads} setViewingImage={setViewingImage} customRemarks={customRemarks} setCustomRemarks={setCustomRemarks} selectedCompany={selectedCompany} />
                                     </td>
 
-                                    {/* 7. Actions */}
+                                    {/* 8. Actions */}
                                     <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
                                             {/* Record Advance / Confirm action */}
-                                            {lead.status !== 'Confirmed' ? (
+                                            {lead.status === 'Confirmed' || lead.bookingId ? (
+                                                <a
+                                                    href="/admin/bookings"
+                                                    style={{
+                                                        padding: '5px 10px',
+                                                        borderRadius: '8px',
+                                                        fontSize: '11px',
+                                                        fontWeight: '800',
+                                                        background: 'rgba(34, 197, 94, 0.15)',
+                                                        color: '#4ade80',
+                                                        border: '1px solid rgba(34, 197, 94, 0.3)',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        textDecoration: 'none'
+                                                    }}
+                                                    title="View in Confirmed Bookings"
+                                                >
+                                                    <CheckCircle size={12} /> Confirmed (View ➔)
+                                                </a>
+                                            ) : lead.status === 'Cancelled' ? (
+                                                <button
+                                                    onClick={() => {
+                                                        setConvertingLead(lead);
+                                                        setAdvancePayment('');
+                                                        setPaymentRef('');
+                                                        setAdminOverride(false);
+                                                        setShowConvertModal(true);
+                                                    }}
+                                                    title="Re-open & Confirm Booking"
+                                                    style={{
+                                                        background: 'rgba(239, 68, 68, 0.15)',
+                                                        color: '#f87171',
+                                                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                                                        padding: '5px 8px',
+                                                        borderRadius: '6px',
+                                                        cursor: 'pointer',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        fontWeight: '800',
+                                                        fontSize: '10.5px',
+                                                        transition: 'all 0.2s',
+                                                        whiteSpace: 'nowrap'
+                                                    }}
+                                                >
+                                                    <CheckCircle size={12} /> Re-Confirm
+                                                </button>
+                                            ) : (
                                                 <button
                                                     onClick={() => {
                                                         setConvertingLead(lead);
@@ -2307,26 +2705,6 @@ export default function Leads() {
                                                 >
                                                     <CheckCircle size={12} /> Confirm Lead
                                                 </button>
-                                            ) : (
-                                                <a
-                                                    href="/admin/bookings"
-                                                    style={{
-                                                        padding: '5px 10px',
-                                                        borderRadius: '8px',
-                                                        fontSize: '11px',
-                                                        fontWeight: '800',
-                                                        background: 'rgba(34, 197, 94, 0.15)',
-                                                        color: '#4ade80',
-                                                        border: '1px solid rgba(34, 197, 94, 0.3)',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                        textDecoration: 'none'
-                                                    }}
-                                                    title="View in Confirmed Bookings"
-                                                >
-                                                    <CheckCircle size={12} /> Confirmed (View ➔)
-                                                </a>
                                             )}
 
                                             {/* Preview Tour & Quotation (Eye icon) */}
@@ -4316,32 +4694,11 @@ export default function Leads() {
                                     </div>
 
                                     {/* Optional Toggle for Day-wise Itinerary */}
+                                    {/* HIDDEN AS PER USER REQUEST: Day-wise itinerary is now managed in Confirmed Bookings */}
                                     <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '8px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '8px' }}>
                                         <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
-                                            {showDetailedItinerary 
-                                                ? `Configuring ${formData.itinerary?.length || 1} Days Tour Schedule & Pricing` 
-                                                : `Tour duration: ${formData.itinerary?.length || 1} Day(s). Day-wise itinerary details can be configured when confirming advance payment.`}
+                                            {`Tour duration: ${formData.itinerary?.length || 1} Day(s). Day-wise itinerary details and Vehicle Matrix can be configured when confirming advance payment in Bookings.`}
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowDetailedItinerary(!showDetailedItinerary)}
-                                            style={{
-                                                background: showDetailedItinerary ? 'rgba(251, 191, 36, 0.15)' : 'rgba(255, 255, 255, 0.06)',
-                                                border: showDetailedItinerary ? '1px solid #fbbf24' : '1px solid rgba(255, 255, 255, 0.15)',
-                                                color: showDetailedItinerary ? '#fbbf24' : 'rgba(255, 255, 255, 0.85)',
-                                                padding: '6px 14px',
-                                                borderRadius: '8px',
-                                                fontSize: '12px',
-                                                fontWeight: '800',
-                                                cursor: 'pointer',
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: '6px',
-                                                transition: 'all 0.2s ease'
-                                            }}
-                                        >
-                                            {showDetailedItinerary ? '▲ Hide Day-wise Schedule' : '+ View / Customize Day-wise Schedule (Optional) ▼'}
-                                        </button>
                                     </div>
                                 </div>
 
