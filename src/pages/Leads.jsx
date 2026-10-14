@@ -8,9 +8,9 @@ import {
     Calendar, Car, IndianRupee, MapPin, Search, Filter, AlertTriangle,
     Clock, Phone, ShieldCheck, Share2, HelpCircle, User, Users,
     Globe, Building2, Repeat, CircleDot, XCircle, ChevronLeft, ChevronRight, ChevronDown,
-    TrendingUp, BarChart2, BarChart3, Info, CheckSquare, Square, CreditCard,
+    TrendingUp, TrendingDown, BarChart2, BarChart3, Info, CheckSquare, Square, CreditCard,
     Landmark, UploadCloud, Camera, Eye, Image as ImageIcon, MessageSquare,
-    ExternalLink, RefreshCw, MessageCircle
+    ExternalLink, RefreshCw, MessageCircle, Calculator, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
@@ -43,6 +43,13 @@ const VEHICLE_OPTIONS = [
     'SUV',
     'Luxury Car',
     'Bus'
+];
+
+const FUEL_TYPES = [
+    { type: 'Diesel', label: 'Diesel', icon: '⛽', rateUnit: '₹/L', avgUnit: 'km/l' },
+    { type: 'Petrol', label: 'Petrol', icon: '⛽', rateUnit: '₹/L', avgUnit: 'km/l' },
+    { type: 'CNG', label: 'CNG', icon: '🍃', rateUnit: '₹/kg', avgUnit: 'km/kg' },
+    { type: 'EV', label: 'Electric (EV)', icon: '⚡', rateUnit: '₹/unit', avgUnit: 'km/unit' }
 ];
 
 
@@ -332,6 +339,18 @@ export default function Leads() {
     // Daily Breakdown Expanded Day
     const [expandedBreakdownDay, setExpandedBreakdownDay] = useState(null);
 
+    // Vehicle Matrix State (Direct Operating Expenses & Live Margin Analysis)
+    const [matrixFuelType, setMatrixFuelType] = useState('Diesel');
+    const [matrixTotalKmRun, setMatrixTotalKmRun] = useState('');
+    const [matrixVehicleAverage, setMatrixVehicleAverage] = useState('');
+    const [matrixFuelRate, setMatrixFuelRate] = useState('');
+    const [matrixDriverSalary, setMatrixDriverSalary] = useState('');
+    const [matrixNightHold, setMatrixNightHold] = useState('');
+    const [matrixTollAndParking, setMatrixTollAndParking] = useState('');
+    const [matrixGstAmount, setMatrixGstAmount] = useState('');
+    const [matrixTargetPerDay, setMatrixTargetPerDay] = useState('2500');
+    const [matrixSimSalePrice, setMatrixSimSalePrice] = useState('');
+
     const [formData, setFormData] = useState({
         bookingReference: 'Direct',
         travelAgent: '',
@@ -367,6 +386,57 @@ export default function Leads() {
         extraCharges: [],
         totalAmount: 0
     });
+
+    // Vehicle Matrix Math Calculations
+    const currentFuelConfig = FUEL_TYPES.find(f => f.type === matrixFuelType) || FUEL_TYPES[0];
+    const matrixKmVal = parseFloat(matrixTotalKmRun) || 0;
+    const matrixAvgVal = parseFloat(matrixVehicleAverage) || 0;
+    const matrixRateVal = parseFloat(matrixFuelRate) || 0;
+    const matrixFuelCost = matrixAvgVal > 0 ? (matrixKmVal / matrixAvgVal) * matrixRateVal : 0;
+
+    const matrixDriverSalaryVal = parseFloat(matrixDriverSalary) || 0;
+    const matrixNightHoldVal = parseFloat(matrixNightHold) || 0;
+    const matrixTollVal = parseFloat(matrixTollAndParking) || 0;
+    const matrixGstVal = parseFloat(matrixGstAmount) || 0;
+    const matrixPackageVal = parseFloat(formData.totalAmount) || 0;
+
+    const matrixDaysVal = Math.max(1, formData.itinerary?.length || (formData.travelStartDate && formData.travelEndDate ? getDaysDifference(formData.travelStartDate, formData.travelEndDate) : 1));
+    const matrixTargetPerDayVal = parseFloat(matrixTargetPerDay) || 0;
+
+    const matrixTotalCost = matrixFuelCost + matrixDriverSalaryVal + matrixNightHoldVal + matrixTollVal + matrixGstVal;
+    const matrixTotalProfit = matrixPackageVal - matrixTotalCost;
+    const matrixPerDayProfit = matrixDaysVal > 0 ? (matrixTotalProfit / matrixDaysVal) : 0;
+    const matrixDiffFromTarget = matrixPerDayProfit - matrixTargetPerDayVal;
+
+    const matrixSimPriceVal = parseFloat(matrixSimSalePrice) || 0;
+    const matrixSimProfit = matrixSimPriceVal > 0 ? (matrixSimPriceVal - matrixTotalCost) : 0;
+    const matrixSimPerDay = matrixDaysVal > 0 ? (matrixSimProfit / matrixDaysVal) : 0;
+
+    const handleAutoMatrixGST = () => {
+        const pkg = parseFloat(formData.totalAmount) || 0;
+        if (pkg > 0) {
+            const autoGst = Math.round(pkg - (pkg / 1.05));
+            setMatrixGstAmount(String(autoGst));
+        }
+    };
+
+    const applySimPriceToQuotation = (price) => {
+        const val = Math.max(0, parseFloat(price) || 0);
+        setFormData(prev => {
+            const days = prev.itinerary?.length || 1;
+            const ratePerDay = Math.round(val / Math.max(1, days));
+            const updatedItin = (prev.itinerary || []).map(day => ({
+                ...day,
+                rate: ratePerDay,
+                amount: ratePerDay * (day.quantity || 1)
+            }));
+            return {
+                ...prev,
+                totalAmount: val,
+                itinerary: updatedItin
+            };
+        });
+    };
 
     const fetchTravelAgents = async () => {
         if (!selectedCompany?._id) return;
@@ -527,11 +597,14 @@ export default function Leads() {
                 sDate = value;
             }
 
+            const todayStr = toLocalDateString(new Date());
+            const willBeFuture = (eDate && eDate >= todayStr) || (sDate && sDate >= todayStr);
             const updated = {
                 ...prev,
                 [field]: value,
                 travelStartDate: sDate,
-                travelEndDate: eDate
+                travelEndDate: eDate,
+                status: (prev.status === 'Cancelled' && willBeFuture) ? 'New' : prev.status
             };
 
             if (sDate && eDate) {
@@ -698,8 +771,13 @@ export default function Leads() {
                 numberOfCars: lead.numberOfCars || 1,
                 gstMode: lead.gstMode || 'GST Inclusive',
                 gstRate: lead.gstRate || 5,
-                status: lead.status || 'New',
-                  priority: lead.priority || 'Unassigned',
+                status: (() => {
+                    const todayStr = toLocalDateString(new Date());
+                    const isFuture = (eDate && eDate >= todayStr) || (sDate && sDate >= todayStr);
+                    if (lead.status === 'Cancelled' && isFuture) return 'New';
+                    return lead.status || 'New';
+                })(),
+                priority: lead.priority || 'Unassigned',
                 notes: lead.notes || '',
                 specialRemarks: lead.specialRemarks || '',
                 inclusions: {
@@ -727,11 +805,36 @@ export default function Leads() {
                 extraCharges: lead.extraCharges || [],
                 totalAmount: lead.totalAmount || 0
             });
+
+            // Populate Vehicle Matrix state from lead
+            const matrix = lead.vehicleMatrix || {};
+            setMatrixFuelType(matrix.fuelType || 'Diesel');
+            setMatrixTotalKmRun(matrix.totalKmRun ? String(matrix.totalKmRun) : '');
+            setMatrixVehicleAverage(matrix.vehicleAverage ? String(matrix.vehicleAverage) : '');
+            setMatrixFuelRate(matrix.fuelRate ? String(matrix.fuelRate) : '');
+            setMatrixDriverSalary(matrix.driverSalary ? String(matrix.driverSalary) : '');
+            setMatrixNightHold(matrix.nightHold ? String(matrix.nightHold) : '');
+            setMatrixTollAndParking(matrix.tollAndParking ? String(matrix.tollAndParking) : '');
+            setMatrixGstAmount(matrix.gstAmount ? String(matrix.gstAmount) : '');
+            setMatrixTargetPerDay(matrix.targetPerDay ? String(matrix.targetPerDay) : '2500');
+            setMatrixSimSalePrice('');
         } else {
             setEditingLead(null);
             setShowDetailedItinerary(false);
             const today = toLocalDateString(new Date());
             fetchNextClientCodePreview(today);
+
+            // Reset Vehicle Matrix state for new lead
+            setMatrixFuelType('Diesel');
+            setMatrixTotalKmRun('');
+            setMatrixVehicleAverage('');
+            setMatrixFuelRate('');
+            setMatrixDriverSalary('');
+            setMatrixNightHold('');
+            setMatrixTollAndParking('');
+            setMatrixGstAmount('');
+            setMatrixTargetPerDay('2500');
+            setMatrixSimSalePrice('');
 
             const initialItinerary = [
                 {
@@ -795,8 +898,27 @@ export default function Leads() {
             const finalClientName = formData.clientName?.trim() || (isAgent ? (formData.travelAgentName ? `${formData.travelAgentName} (Guest)` : 'Guest (TBA)') : '');
             const finalMobileNumber = formData.mobileNumber?.trim() || (isAgent ? (formData.travelAgentMobile || 'TBA') : '');
 
+            const finalVehicleMatrix = {
+                fuelType: matrixFuelType,
+                totalKmRun: parseFloat(matrixTotalKmRun) || 0,
+                vehicleAverage: parseFloat(matrixVehicleAverage) || 0,
+                fuelRate: parseFloat(matrixFuelRate) || 0,
+                fuelCost: Math.round(matrixFuelCost),
+                driverSalary: matrixDriverSalaryVal,
+                nightHold: matrixNightHoldVal,
+                tollAndParking: matrixTollVal,
+                gstType: '5% Included',
+                gstAmount: matrixGstVal,
+                packageValue: matrixPackageVal,
+                targetPerDay: matrixTargetPerDayVal,
+                totalCost: Math.round(matrixTotalCost),
+                totalProfit: Math.round(matrixTotalProfit),
+                perDayProfit: Math.round(matrixPerDayProfit)
+            };
+
             const payload = {
                 ...formData,
+                vehicleMatrix: finalVehicleMatrix,
                 clientName: finalClientName,
                 mobileNumber: finalMobileNumber,
                 bookingReference: isAgent ? 'Travel Agent' : formData.bookingReference,
@@ -819,6 +941,21 @@ export default function Leads() {
         } catch (error) {
             console.error('Error saving lead:', error);
             alert(error.response?.data?.message || 'Error saving lead');
+        }
+    };
+
+    const handleReopenLead = async (lead) => {
+        try {
+            await axios.put(`/api/leads/single/${lead._id}`, {
+                status: 'New',
+                notes: `${lead.notes ? lead.notes + ' | ' : ''}Reopened to Active enquiries`
+            });
+            fetchLeads();
+            const activeOpt = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5];
+            fetchSidebarLeads(activeOpt.tab);
+        } catch (err) {
+            console.error('Error reopening lead:', err);
+            alert('Failed to reopen lead: ' + (err.response?.data?.message || err.message));
         }
     };
 
@@ -2649,34 +2786,57 @@ export default function Leads() {
                                                 >
                                                     <CheckCircle size={12} /> Confirmed (View ➔)
                                                 </a>
-                                            ) : lead.status === 'Cancelled' ? (
-                                                <button
-                                                    onClick={() => {
-                                                        setConvertingLead(lead);
-                                                        setAdvancePayment('');
-                                                        setPaymentRef('');
-                                                        setAdminOverride(false);
-                                                        setShowConvertModal(true);
-                                                    }}
-                                                    title="Re-open & Confirm Booking"
-                                                    style={{
-                                                        background: 'rgba(239, 68, 68, 0.15)',
-                                                        color: '#f87171',
-                                                        border: '1px solid rgba(239, 68, 68, 0.35)',
-                                                        padding: '5px 8px',
-                                                        borderRadius: '6px',
-                                                        cursor: 'pointer',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                        fontWeight: '800',
-                                                        fontSize: '10.5px',
-                                                        transition: 'all 0.2s',
-                                                        whiteSpace: 'nowrap'
-                                                    }}
-                                                >
-                                                    <CheckCircle size={12} /> Re-Confirm
-                                                </button>
+                                             ) : lead.status === 'Cancelled' ? (
+                                                <div style={{ display: 'inline-flex', gap: '5px' }}>
+                                                    <button
+                                                        onClick={() => handleReopenLead(lead)}
+                                                        title="Restore Lead to Open / Active enquiries"
+                                                        style={{
+                                                            background: 'rgba(56, 189, 248, 0.15)',
+                                                            color: '#38bdf8',
+                                                            border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                            padding: '5px 8px',
+                                                            borderRadius: '6px',
+                                                            cursor: 'pointer',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                            fontWeight: '800',
+                                                            fontSize: '10.5px',
+                                                            transition: 'all 0.2s',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                    >
+                                                        <RefreshCw size={11} /> Re-Open
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setConvertingLead(lead);
+                                                            setAdvancePayment('');
+                                                            setPaymentRef('');
+                                                            setAdminOverride(false);
+                                                            setShowConvertModal(true);
+                                                        }}
+                                                        title="Re-open & Confirm Booking"
+                                                        style={{
+                                                            background: 'rgba(239, 68, 68, 0.15)',
+                                                            color: '#f87171',
+                                                            border: '1px solid rgba(239, 68, 68, 0.35)',
+                                                            padding: '5px 8px',
+                                                            borderRadius: '6px',
+                                                            cursor: 'pointer',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                            fontWeight: '800',
+                                                            fontSize: '10.5px',
+                                                            transition: 'all 0.2s',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                    >
+                                                        <CheckCircle size={12} /> Re-Confirm
+                                                    </button>
+                                                </div>
                                             ) : (
                                                 <button
                                                     onClick={() => {
@@ -4452,6 +4612,20 @@ export default function Leads() {
                                                 <option value="Cold" style={{ background: '#090f1d', color: '#94a3b8' }}>❄️ Low (Cold)</option>
                                             </select>
                                         </div>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Lead Status</label>
+                                            <select
+                                                value={formData.status || 'New'}
+                                                onChange={e => setFormData({ ...formData, status: e.target.value })}
+                                                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '13px', outline: 'none', cursor: 'pointer' }}
+                                            >
+                                                <option value="New" style={{ background: '#090f1d', color: '#4ade80' }}>🟢 New / Open</option>
+                                                <option value="Hot" style={{ background: '#090f1d', color: '#fbbf24' }}>🔥 Hot Follow-up</option>
+                                                <option value="Follow-up" style={{ background: '#090f1d', color: '#38bdf8' }}>📞 Follow-up</option>
+                                                <option value="Cancelled" style={{ background: '#090f1d', color: '#ef4444' }}>❌ Cancelled</option>
+                                                <option value="Lost" style={{ background: '#090f1d', color: '#94a3b8' }}>⚠️ Lost</option>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -4693,11 +4867,360 @@ export default function Leads() {
                                         </div>
                                     </div>
 
-                                    {/* Optional Toggle for Day-wise Itinerary */}
-                                    {/* HIDDEN AS PER USER REQUEST: Day-wise itinerary is now managed in Confirmed Bookings */}
-                                    <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '8px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap', gap: '8px' }}>
-                                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
-                                            {`Tour duration: ${formData.itinerary?.length || 1} Day(s). Day-wise itinerary details and Vehicle Matrix can be configured when confirming advance payment in Bookings.`}
+                                    {/* ========================================================= */}
+                                    {/* VEHICLE MATRIX (LIVE PROFIT & OPERATING EXPENSES)         */}
+                                    {/* ========================================================= */}
+                                    <div style={{
+                                        marginTop: '16px',
+                                        background: '#090f1d',
+                                        border: '1px solid rgba(59, 130, 246, 0.25)',
+                                        borderRadius: '14px',
+                                        padding: '16px',
+                                        boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                                    }}>
+                                        {/* Header */}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <span style={{ fontSize: '16px' }}>🚗</span>
+                                                <span style={{ fontSize: '13px', fontWeight: '800', color: '#60a5fa', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+                                                    Vehicle Operating Matrix & Quotation Profit Margin
+                                                </span>
+                                                <span style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#93c5fd', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                                                    Live P&L
+                                                </span>
+                                            </div>
+                                            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
+                                                Tour Duration: <strong style={{ color: '#fbbf24' }}>{matrixDaysVal} Day{matrixDaysVal > 1 ? 's' : ''}</strong>
+                                            </div>
+                                        </div>
+
+                                        {/* Matrix Split: Left Inputs, Right Live Output */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: '16px' }}>
+                                            
+                                            {/* Left: Operating Expenses Inputs */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                
+                                                {/* Fuel Box */}
+                                                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                                        <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            ⛽ Fuel Consumption ({matrixFuelType})
+                                                        </span>
+                                                        <span style={{ fontSize: '12.5px', color: '#f87171', fontWeight: '800' }}>
+                                                            Cost: ₹{Math.round(matrixFuelCost).toLocaleString('en-IN')}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Fuel Type Selector Pills */}
+                                                    <div style={{ marginBottom: '10px' }}>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                                                            {FUEL_TYPES.map(f => {
+                                                                const isSelected = matrixFuelType === f.type;
+                                                                return (
+                                                                    <button
+                                                                        key={f.type}
+                                                                        type="button"
+                                                                        onClick={() => setMatrixFuelType(f.type)}
+                                                                        style={{
+                                                                            padding: '6px 4px',
+                                                                            background: isSelected ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255,255,255,0.03)',
+                                                                            border: isSelected ? '1.5px solid #3b82f6' : '1px solid rgba(255,255,255,0.08)',
+                                                                            color: isSelected ? '#93c5fd' : 'rgba(255,255,255,0.65)',
+                                                                            borderRadius: '6px',
+                                                                            fontSize: '11px',
+                                                                            fontWeight: isSelected ? '800' : '500',
+                                                                            cursor: 'pointer',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            gap: '4px',
+                                                                            transition: 'all 0.15s ease'
+                                                                        }}
+                                                                    >
+                                                                        <span>{f.icon}</span>
+                                                                        <span>{f.label}</span>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '8px' }}>
+                                                        <div>
+                                                            <label style={labelStyle}>Total Km Run</label>
+                                                            <input
+                                                                type="number"
+                                                                value={matrixTotalKmRun}
+                                                                placeholder="e.g. 1400"
+                                                                onFocus={e => e.target.select()}
+                                                                onChange={e => setMatrixTotalKmRun(e.target.value)}
+                                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label style={{ ...labelStyle, color: '#60a5fa' }}>
+                                                                Average ({currentFuelConfig.avgUnit})
+                                                            </label>
+                                                            <input
+                                                                type="number"
+                                                                step="0.5"
+                                                                value={matrixVehicleAverage}
+                                                                placeholder={matrixFuelType === 'CNG' ? 'e.g. 24' : 'e.g. 12'}
+                                                                onFocus={e => e.target.select()}
+                                                                onChange={e => setMatrixVehicleAverage(e.target.value)}
+                                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px', borderColor: '#3b82f6' }}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label style={labelStyle}>
+                                                                Rate ({currentFuelConfig.rateUnit})
+                                                            </label>
+                                                            <input
+                                                                type="number"
+                                                                step="0.1"
+                                                                value={matrixFuelRate}
+                                                                placeholder="e.g. 94"
+                                                                onFocus={e => e.target.select()}
+                                                                onChange={e => setMatrixFuelRate(e.target.value)}
+                                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px', borderColor: '#60a5fa' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.4)', marginTop: '6px' }}>
+                                                        {matrixAvgVal > 0 && matrixRateVal > 0 ? (
+                                                            `Formula: (${matrixKmVal} km ÷ ${matrixAvgVal} ${currentFuelConfig.avgUnit}) × ₹${matrixRateVal} = ₹${Math.round(matrixFuelCost).toLocaleString('en-IN')}`
+                                                        ) : (
+                                                            `Enter Total KM, vehicle average (${currentFuelConfig.avgUnit}), and pump rate (${currentFuelConfig.rateUnit}).`
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Trip Expenses Box */}
+                                                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px' }}>
+                                                    <span style={{ fontSize: '12.5px', fontWeight: '700', color: 'white', display: 'block', marginBottom: '8px' }}>
+                                                        🛠️ Duty & Trip Expenses (Kharcha)
+                                                    </span>
+
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                                                        <div>
+                                                            <label style={labelStyle}>Driver Salary (₹)</label>
+                                                            <input
+                                                                type="number"
+                                                                value={matrixDriverSalary}
+                                                                placeholder="e.g. 3500"
+                                                                onFocus={e => e.target.select()}
+                                                                onChange={e => setMatrixDriverSalary(e.target.value)}
+                                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label style={labelStyle}>Night Hold (₹)</label>
+                                                            <input
+                                                                type="number"
+                                                                value={matrixNightHold}
+                                                                placeholder="e.g. 2000"
+                                                                onFocus={e => e.target.select()}
+                                                                onChange={e => setMatrixNightHold(e.target.value)}
+                                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                                        <div>
+                                                            <label style={labelStyle}>Toll & Parking (₹)</label>
+                                                            <input
+                                                                type="number"
+                                                                value={matrixTollAndParking}
+                                                                placeholder="e.g. 2000"
+                                                                onFocus={e => e.target.select()}
+                                                                onChange={e => setMatrixTollAndParking(e.target.value)}
+                                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <label style={labelStyle}>GST Amount (₹)</label>
+                                                                {matrixPackageVal > 0 && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={handleAutoMatrixGST}
+                                                                        style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontSize: '11px', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                                                                    >
+                                                                        Auto 5% (₹{Math.round(matrixPackageVal - (matrixPackageVal / 1.05)).toLocaleString('en-IN')})
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                            <input
+                                                                type="number"
+                                                                value={matrixGstAmount}
+                                                                placeholder="e.g. 2000"
+                                                                onFocus={e => e.target.select()}
+                                                                onChange={e => setMatrixGstAmount(e.target.value)}
+                                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Target Benchmark Setting */}
+                                                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <div>
+                                                            <label style={{ ...labelStyle, color: '#93c5fd', margin: 0 }}>Benchmark Target Per Day (₹)</label>
+                                                            <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                                                                Innova: 2500 | Ciaz: 1500 | Dzire: 1000 | TT: 3500
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ width: '130px' }}>
+                                                            <input
+                                                                type="number"
+                                                                value={matrixTargetPerDay}
+                                                                placeholder="e.g. 2500"
+                                                                onFocus={e => e.target.select()}
+                                                                onChange={e => setMatrixTargetPerDay(e.target.value)}
+                                                                style={{ ...darkInputStyle, padding: '7px 10px', textAlign: 'right', borderColor: '#3b82f6', fontWeight: 'bold' }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                            </div>
+
+                                            {/* Right: Live Calculation Statement & Target Comparison */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                
+                                                {/* Main Statement Card */}
+                                                <div style={{ background: '#070b16', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px' }}>
+                                                        <span style={{ fontSize: '13px', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <Calculator size={15} color="#fbbf24" /> P&L Live Statement
+                                                        </span>
+                                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>{matrixDaysVal} Days Tour</span>
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                                        <span style={{ color: 'rgba(255,255,255,0.7)' }}>Quoted Package Fare:</span>
+                                                        <span style={{ color: '#fbbf24', fontWeight: '800' }}>₹{matrixPackageVal.toLocaleString('en-IN')}</span>
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                                                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>Fuel Consumption:</span>
+                                                        <span style={{ color: '#f87171' }}>- ₹{Math.round(matrixFuelCost).toLocaleString('en-IN')}</span>
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                                                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>Driver + Night + Toll:</span>
+                                                        <span style={{ color: '#f87171' }}>- ₹{(matrixDriverSalaryVal + matrixNightHoldVal + matrixTollVal).toLocaleString('en-IN')}</span>
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                                                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>GST Value:</span>
+                                                        <span style={{ color: '#f87171' }}>- ₹{matrixGstVal.toLocaleString('en-IN')}</span>
+                                                    </div>
+
+                                                    <div style={{ height: '1px', background: 'rgba(255,255,255,0.08)', margin: '2px 0' }}></div>
+
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                                                        <span style={{ color: 'rgba(255,255,255,0.8)', fontWeight: '600' }}>Total Cost:</span>
+                                                        <span style={{ color: '#ef4444', fontWeight: '700' }}>₹{Math.round(matrixTotalCost).toLocaleString('en-IN')}</span>
+                                                    </div>
+
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14.5px', background: matrixTotalProfit >= 0 ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)', padding: '9px 12px', borderRadius: '8px', border: `1px solid ${matrixTotalProfit >= 0 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}` }}>
+                                                        <span style={{ color: 'white', fontWeight: '800' }}>Net Profit:</span>
+                                                        <span style={{ color: matrixTotalProfit >= 0 ? '#4ade80' : '#f87171', fontWeight: '900' }}>
+                                                            ₹{Math.round(matrixTotalProfit).toLocaleString('en-IN')}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Per Day Profit & Benchmark Match */}
+                                                    <div style={{ marginTop: '4px', background: '#0f172a', borderRadius: '10px', padding: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
+                                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Per Day Profit:</span>
+                                                            <span style={{ color: '#ffffff', fontWeight: '800' }}>₹{Math.round(matrixPerDayProfit).toLocaleString('en-IN')} / day</span>
+                                                        </div>
+
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', alignItems: 'center' }}>
+                                                            <span style={{ color: 'rgba(255,255,255,0.5)' }}>Target ({formData.carType || 'Car'}):</span>
+                                                            <span style={{ color: '#93c5fd', fontWeight: '600' }}>₹{matrixTargetPerDayVal.toLocaleString('en-IN')} / day</span>
+                                                        </div>
+
+                                                        <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '6px 0' }}></div>
+
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.7)' }}>Profitability Status:</span>
+                                                            <span style={{
+                                                                fontSize: '12px',
+                                                                fontWeight: '900',
+                                                                padding: '3px 8px',
+                                                                borderRadius: '6px',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '4px',
+                                                                background: matrixDiffFromTarget >= 0 ? 'rgba(74, 222, 128, 0.15)' : 'rgba(248, 113, 113, 0.15)',
+                                                                color: matrixDiffFromTarget >= 0 ? '#4ade80' : '#f87171'
+                                                            }}>
+                                                                {matrixDiffFromTarget >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+                                                                {matrixDiffFromTarget >= 0 ? '+' : '-'} ₹{Math.abs(Math.round(matrixDiffFromTarget)).toLocaleString('en-IN')} / day
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Quick Sale Price Simulator */}
+                                                <div style={{ background: 'rgba(59, 130, 246, 0.04)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '12px', padding: '12px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <Sparkles size={14} color="#60a5fa" />
+                                                            <span style={{ fontSize: '12px', fontWeight: '700', color: '#93c5fd' }}>
+                                                                Sale Price Simulator
+                                                            </span>
+                                                        </div>
+                                                        {matrixSimPriceVal > 0 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => applySimPriceToQuotation(matrixSimPriceVal)}
+                                                                style={{
+                                                                    background: 'rgba(59, 130, 246, 0.2)',
+                                                                    border: '1px solid #3b82f6',
+                                                                    color: '#93c5fd',
+                                                                    borderRadius: '4px',
+                                                                    padding: '2px 8px',
+                                                                    fontSize: '10.5px',
+                                                                    fontWeight: '700',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                            >
+                                                                Apply as Fare
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                        <div style={{ flex: 1 }}>
+                                                            <input
+                                                                type="number"
+                                                                placeholder="Test Rate (e.g. 40000)"
+                                                                value={matrixSimSalePrice}
+                                                                onFocus={e => e.target.select()}
+                                                                onChange={e => setMatrixSimSalePrice(e.target.value)}
+                                                                style={{ ...darkInputStyle, padding: '7px 10px', fontSize: '12px' }}
+                                                            />
+                                                        </div>
+                                                        {matrixSimPriceVal > 0 && (
+                                                            <div style={{ fontSize: '11.5px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                                                <div style={{ color: matrixSimProfit >= 0 ? '#4ade80' : '#f87171', fontWeight: 'bold' }}>
+                                                                    Profit: ₹{Math.round(matrixSimProfit).toLocaleString('en-IN')}
+                                                                </div>
+                                                                <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '10.5px' }}>
+                                                                    ₹{Math.round(matrixSimPerDay).toLocaleString('en-IN')} / day
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                            </div>
+
                                         </div>
                                     </div>
                                 </div>
