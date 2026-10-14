@@ -1,61 +1,93 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Save, Plus, Trash2, Calculator, TrendingUp, TrendingDown, Car, Calendar, Sparkles, Edit2, Check, Settings } from 'lucide-react';
+import {
+    X, Save, Plus, Trash2, Calculator, TrendingUp, TrendingDown,
+    Car, Calendar, Sparkles, Edit2, Check, Settings, Info, MapPin,
+    User, Phone, Mail, FileText, ChevronDown, CheckCircle, Clock
+} from 'lucide-react';
 import axios from '../../api/axios';
 
-const DEFAULT_CARS = [
+const ALL_VEHICLES = [
     'Innova Crysta',
     'Swift Dzire',
     'Ciaz',
     'Tempo Traveller',
     'Ertiga',
-    'Toyota Fortuner'
+    'Toyota Fortuner',
+    'Innova Hycross',
+    'Urbania',
+    'Etios',
+    'Honda City',
+    'BMW / Audi'
 ];
 
+const ALL_SOURCES = [
+    'Website',
+    'Google Ads',
+    'WhatsApp',
+    'Referral',
+    'Repeat Client',
+    'Travel Agent',
+    'Phone Call',
+    'Social Media',
+    'Direct Walk-in',
+    'Other'
+];
+
+const BOOKING_REFERENCES = ['Direct', 'Travel Agent'];
+
+const toLocalDateString = (val) => {
+    if (!val) return '';
+    if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val.trim())) return val.trim();
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
+
+const getDaysDifference = (s, e) => {
+    if (!s || !e) return 1;
+    const d1 = new Date(s);
+    const d2 = new Date(e);
+    if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return 1;
+    return Math.max(1, Math.round((d2 - d1) / (1000 * 60 * 60 * 24)) + 1);
+};
+
+const addDaysToDateString = (dateStr, days) => {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    d.setDate(d.getDate() + days);
+    return toLocalDateString(d);
+};
+
 export default function EditBookingModal({ booking, onClose, onSuccess }) {
-    // Dynamic Fleet Cars (stored in localStorage)
-    const [carList, setCarList] = useState(() => {
-        try {
-            const saved = localStorage.getItem('yatree_fleet_cars');
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-            }
-        } catch (e) {
-            console.error('Error loading car list', e);
-        }
-        return DEFAULT_CARS;
-    });
-
-    const [showCarManager, setShowCarManager] = useState(false);
-    const [newCarInput, setNewCarInput] = useState('');
-    const [editingCarIdx, setEditingCarIdx] = useState(null);
-    const [editingCarValue, setEditingCarValue] = useState('');
-
-    // Basic Details
+    // Basic & Client details
+    const [bookingReference, setBookingReference] = useState('Direct');
+    const [travelAgentName, setTravelAgentName] = useState('');
+    const [travelAgentMobile, setTravelAgentMobile] = useState('');
     const [clientName, setClientName] = useState('');
     const [mobileNumber, setMobileNumber] = useState('');
+    const [alternateMobile, setAlternateMobile] = useState('');
+    const [email, setEmail] = useState('');
+    const [gstin, setGstin] = useState('');
+    const [source, setSource] = useState('Website');
+    const [reference, setReference] = useState('');
+    const [salesPerson, setSalesPerson] = useState('');
+
+    // Tour details
     const [vehicleType, setVehicleType] = useState('Innova Crysta');
-    const [packageValue, setPackageValue] = useState('');
+    const [numberOfCars, setNumberOfCars] = useState(1);
     const [travelStartDate, setTravelStartDate] = useState('');
     const [travelEndDate, setTravelEndDate] = useState('');
-    const [totalDays, setTotalDays] = useState('1');
-    const [pickupLocation, setPickupLocation] = useState('');
-    const [dropLocation, setDropLocation] = useState('');
-    
-    // Day-wise Itinerary
-    const [itinerary, setItinerary] = useState([]);
+    const [totalAmount, setTotalAmount] = useState(0);
+    const [pickupPoint, setPickupPoint] = useState('');
+    const [dropPoint, setDropPoint] = useState('');
+    const [gstMode, setGstMode] = useState('GST Inclusive');
+    const [gstRate, setGstRate] = useState(5);
 
-    // Fuel Types configuration
-    const FUEL_TYPES = [
-        { type: 'Diesel', label: 'Diesel', icon: '⛽', rateUnit: '₹/L', avgUnit: 'km/l' },
-        { type: 'Petrol', label: 'Petrol', icon: '⛽', rateUnit: '₹/L', avgUnit: 'km/l' },
-        { type: 'CNG', label: 'CNG', icon: '🍃', rateUnit: '₹/kg', avgUnit: 'km/kg' },
-        { type: 'EV', label: 'Electric (EV)', icon: '⚡', rateUnit: '₹/unit', avgUnit: 'km/unit' }
-    ];
-
-    // Vehicle Matrix Inputs (Strings to avoid sticky 0)
-    // NOTE: vehicleAverage and fuelRate are NOT auto-calculated; user types them manually.
+    // Vehicle Matrix Inputs
     const [fuelType, setFuelType] = useState('Diesel');
     const [totalKmRun, setTotalKmRun] = useState('');
     const [vehicleAverage, setVehicleAverage] = useState('');
@@ -63,179 +95,297 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
     const [driverSalary, setDriverSalary] = useState('');
     const [nightHold, setNightHold] = useState('');
     const [tollAndParking, setTollAndParking] = useState('');
-    const [gstAmount, setGstAmount] = useState('');
-    const [targetPerDay, setTargetPerDay] = useState('');
+    const [matrixGstAmount, setMatrixGstAmount] = useState('');
+    const [targetPerDay, setTargetPerDay] = useState('2500');
+    const [matrixSimSalePrice, setMatrixSimSalePrice] = useState('');
 
-    // Simulation price test (e.g. test at 40000)
-    const [simSalePrice, setSimSalePrice] = useState('');
+    // Day-wise Itinerary
+    const [itinerary, setItinerary] = useState([]);
+
+    // Remarks & Inclusions
+    const [specialRemarks, setSpecialRemarks] = useState('');
+    const [inclusions, setInclusions] = useState({
+        driverAllowance: true,
+        nightAllowance: true,
+        tollParking: true,
+        gstIncluded: true,
+        manualRemarks: ''
+    });
 
     const [saving, setSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState('matrix'); // matrix (default), itinerary, general
-
-    // Save car list to localStorage
-    const updateCarList = (newList) => {
-        setCarList(newList);
-        try {
-            localStorage.setItem('yatree_fleet_cars', JSON.stringify(newList));
-        } catch (e) {
-            console.error('Error saving car list', e);
-        }
-    };
 
     useEffect(() => {
         if (booking) {
-            const vType = booking.vehicleType || 'Innova Crysta';
-            
-            // If booking vehicle is not in carList, add it
-            if (vType && !carList.includes(vType)) {
-                updateCarList([vType, ...carList]);
-            }
-
-            setClientName(booking.clientName || '');
+            setBookingReference(booking.bookingReference || 'Direct');
+            setTravelAgentName(booking.travelAgentName || '');
+            setTravelAgentMobile(booking.travelAgentMobile || '');
+            setClientName(booking.clientName || booking.guestName || '');
             setMobileNumber(booking.mobileNumber || '');
-            setVehicleType(vType);
-            setPackageValue(booking.totalAmount ? String(booking.totalAmount) : '');
-            
-            const startD = booking.travelStartDate ? new Date(booking.travelStartDate).toISOString().split('T')[0] : '';
-            const endD = booking.travelEndDate ? new Date(booking.travelEndDate).toISOString().split('T')[0] : '';
-            setTravelStartDate(startD);
-            setTravelEndDate(endD);
+            setAlternateMobile(booking.alternateMobile || '');
+            setEmail(booking.email || '');
+            setGstin(booking.gstin || '');
+            setSource(booking.source || 'Website');
+            setReference(booking.reference || '');
+            setSalesPerson(booking.salesPerson || '');
 
-            let calculatedDays = 1;
-            if (startD && endD) {
-                const diffTime = Math.abs(new Date(endD) - new Date(startD));
-                calculatedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-            }
-            setTotalDays(String(calculatedDays || 1));
+            setVehicleType(booking.vehicleType || 'Innova Crysta');
+            setNumberOfCars(booking.numberOfCars || 1);
+            setTravelStartDate(toLocalDateString(booking.travelStartDate));
+            setTravelEndDate(toLocalDateString(booking.travelEndDate));
+            setTotalAmount(Number(booking.totalAmount || booking.packagePrice) || 0);
+            setPickupPoint(booking.pickupPoint || booking.pickupLocation || '');
+            setDropPoint(booking.dropPoint || booking.dropLocation || '');
+            setGstMode(booking.gstMode || 'GST Inclusive');
+            setGstRate(booking.gstRate || 5);
 
-            setPickupLocation(booking.pickupLocation || '');
-            setDropLocation(booking.dropLocation || '');
-            setItinerary(Array.isArray(booking.itinerary) ? [...booking.itinerary] : []);
-
+            // Populate Matrix
             const matrix = booking.vehicleMatrix || {};
-            const loadedFuelType = matrix.fuelType || 'Diesel';
-            setFuelType(loadedFuelType);
+            setFuelType(matrix.fuelType || 'Diesel');
             setTotalKmRun(matrix.totalKmRun ? String(matrix.totalKmRun) : '');
-            // User types average and rate themselves; only show if previously entered
             setVehicleAverage(matrix.vehicleAverage ? String(matrix.vehicleAverage) : '');
             setFuelRate(matrix.fuelRate ? String(matrix.fuelRate) : '');
             setDriverSalary(matrix.driverSalary ? String(matrix.driverSalary) : '');
             setNightHold(matrix.nightHold ? String(matrix.nightHold) : '');
             setTollAndParking(matrix.tollAndParking ? String(matrix.tollAndParking) : '');
-            setGstAmount(matrix.gstAmount ? String(matrix.gstAmount) : '');
+            setMatrixGstAmount(matrix.gstAmount ? String(matrix.gstAmount) : '');
             setTargetPerDay(matrix.targetPerDay ? String(matrix.targetPerDay) : '2500');
+
+            // Populate Itinerary
+            if (Array.isArray(booking.itinerary) && booking.itinerary.length > 0) {
+                setItinerary(booking.itinerary.map((d, i) => ({
+                    dayNo: d.dayNo || (i + 1),
+                    date: toLocalDateString(d.date),
+                    time: d.time || '09:00 AM',
+                    isApg: d.isApg || d.time === 'APG',
+                    duty: d.duty || d.description || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
+                    description: d.duty || d.description || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
+                    vehicleType: d.vehicleType || booking.vehicleType || 'Innova Crysta',
+                    vehicleCount: d.vehicleCount || booking.numberOfCars || 1,
+                    quantity: d.quantity || d.vehicleCount || booking.numberOfCars || 1,
+                    rate: d.rate !== undefined ? d.rate : 0,
+                    amount: d.amount !== undefined ? d.amount : 0,
+                    pickupPoint: d.pickupPoint || '',
+                    vehicleNumber: d.vehicleNumber || '',
+                    driverName: d.driverName || '',
+                    driverPhone: d.driverPhone || ''
+                })));
+            } else {
+                const sDate = toLocalDateString(booking.travelStartDate);
+                const eDate = toLocalDateString(booking.travelEndDate);
+                const days = getDaysDifference(sDate, eDate);
+                const daysArr = [];
+                for (let i = 0; i < days; i++) {
+                    daysArr.push({
+                        dayNo: i + 1,
+                        date: sDate ? addDaysToDateString(sDate, i) : toLocalDateString(new Date()),
+                        time: i === 0 ? '09:00 AM' : '10:00 AM',
+                        isApg: false,
+                        duty: i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer',
+                        description: i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer',
+                        vehicleType: booking.vehicleType || 'Innova Crysta',
+                        vehicleCount: booking.numberOfCars || 1,
+                        quantity: booking.numberOfCars || 1,
+                        rate: 0,
+                        amount: 0,
+                        pickupPoint: '',
+                        vehicleNumber: '',
+                        driverName: '',
+                        driverPhone: ''
+                    });
+                }
+                setItinerary(daysArr);
+            }
+
+            // Populate Remarks & Inclusions
+            setSpecialRemarks(booking.specialRemarks || booking.notes || '');
+            if (booking.inclusions) {
+                setInclusions({
+                    driverAllowance: booking.inclusions.driverAllowance !== false,
+                    nightAllowance: booking.inclusions.nightAllowance !== false,
+                    tollParking: booking.inclusions.tollParking !== false,
+                    gstIncluded: booking.inclusions.gstIncluded !== false,
+                    manualRemarks: booking.inclusions.manualRemarks || ''
+                });
+            }
         }
     }, [booking]);
 
-    // Handle adding new car
-    const handleAddNewCar = () => {
-        const trimmed = newCarInput.trim();
-        if (!trimmed) return;
-        if (carList.includes(trimmed)) {
-            alert('This car is already in the list');
-            return;
-        }
-        const updated = [...carList, trimmed];
-        updateCarList(updated);
-        setVehicleType(trimmed);
-        setNewCarInput('');
-    };
-
-    // Handle editing existing car name
-    const handleSaveEditCar = (idx) => {
-        const trimmed = editingCarValue.trim();
-        if (!trimmed) return;
-        const oldName = carList[idx];
-        const updated = [...carList];
-        updated[idx] = trimmed;
-        updateCarList(updated);
-        if (vehicleType === oldName) {
-            setVehicleType(trimmed);
-        }
-        setEditingCarIdx(null);
-        setEditingCarValue('');
-    };
-
-    // Handle deleting car
-    const handleDeleteCar = (idx) => {
-        const carToDelete = carList[idx];
-        if (carList.length <= 1) {
-            alert('You must keep at least one vehicle in the list');
-            return;
-        }
-        const updated = carList.filter((_, i) => i !== idx);
-        updateCarList(updated);
-        if (vehicleType === carToDelete) {
-            setVehicleType(updated[0]);
-        }
-    };
-
-    // Calculate dates duration
-    const handleDateChange = (start, end) => {
-        setTravelStartDate(start);
-        setTravelEndDate(end);
-        if (start && end) {
-            const diffTime = Math.abs(new Date(end) - new Date(start));
-            const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-            setTotalDays(String(days > 0 ? days : 1));
-        }
-    };
-
-    // Auto 5% GST calculation: Package - (Package / 1.05)
-    const handleAutoGST = () => {
-        const pkg = parseFloat(packageValue) || 0;
-        if (pkg > 0) {
-            const autoGst = Math.round(pkg - (pkg / 1.05));
-            setGstAmount(String(autoGst));
-        }
-    };
-
-    // Current Fuel Config
-    const currentFuelConfig = FUEL_TYPES.find(f => f.type === fuelType) || FUEL_TYPES[0];
-
-    // Math Calculations
+    // Cost Matrix Calculations
+    const numDays = Math.max(1, getDaysDifference(travelStartDate, travelEndDate));
     const kmVal = parseFloat(totalKmRun) || 0;
     const avgVal = parseFloat(vehicleAverage) || 0;
     const rateVal = parseFloat(fuelRate) || 0;
     const fuelCost = avgVal > 0 ? (kmVal / avgVal) * rateVal : 0;
-
     const driverSalaryVal = parseFloat(driverSalary) || 0;
     const nightHoldVal = parseFloat(nightHold) || 0;
     const tollVal = parseFloat(tollAndParking) || 0;
-    const gstVal = parseFloat(gstAmount) || 0;
-    const packageVal = parseFloat(packageValue) || 0;
-    const daysVal = Math.max(1, parseInt(totalDays) || 1);
-    const targetPerDayVal = parseFloat(targetPerDay) || 0;
+    const gstVal = parseFloat(matrixGstAmount) || 0;
+    const targetPerDayVal = parseFloat(targetPerDay) || 2500;
+    const totalTargetProfit = targetPerDayVal * numDays;
 
     const totalCost = fuelCost + driverSalaryVal + nightHoldVal + tollVal + gstVal;
-    const totalProfit = packageVal - totalCost;
-    const perDayProfit = daysVal > 0 ? (totalProfit / daysVal) : 0;
-    const diffFromTarget = perDayProfit - targetPerDayVal;
+    const recommendedSaleFare = totalCost + totalTargetProfit;
+    const currentPkg = parseFloat(totalAmount) || 0;
+    const totalProfit = currentPkg - totalCost;
+    const perDayProfit = numDays > 0 ? totalProfit / numDays : 0;
+    const marginPercent = currentPkg > 0 ? Math.round((totalProfit / currentPkg) * 100) : 0;
 
-    // Simulation calculation (e.g. if you sale at 40000)
-    const simPriceVal = parseFloat(simSalePrice) || 0;
-    const simProfit = simPriceVal > 0 ? (simPriceVal - totalCost) : 0;
-    const simPerDay = daysVal > 0 ? (simProfit / daysVal) : 0;
+    // Simulation price calculation
+    const matrixSimPriceVal = parseFloat(matrixSimSalePrice) || 0;
+    const simNetProfit = matrixSimPriceVal > 0 ? matrixSimPriceVal - totalCost : 0;
+    const simPerDayProfit = (matrixSimPriceVal > 0 && numDays > 0) ? simNetProfit / numDays : 0;
 
-    // Itinerary helpers
-    const addItineraryDay = () => {
-        const nextDayNo = itinerary.length + 1;
-        setItinerary([
-            ...itinerary,
-            { dayNo: nextDayNo, date: '', time: '09:00 AM', pickupPoint: '', duty: '', vehicleType: vehicleType }
-        ]);
+    // Travel Date Change handler
+    const handleTravelDateChange = (field, value) => {
+        let sDate = field === 'travelStartDate' ? value : travelStartDate;
+        let eDate = field === 'travelEndDate' ? value : travelEndDate;
+
+        if (field === 'travelStartDate') {
+            setTravelStartDate(value);
+            if (!eDate || eDate < value) {
+                eDate = value;
+                setTravelEndDate(value);
+            }
+        } else {
+            setTravelEndDate(value);
+            if (!sDate || value < sDate) {
+                sDate = value;
+                setTravelStartDate(value);
+            }
+        }
+
+        if (sDate && eDate) {
+            const daysCount = getDaysDifference(sDate, eDate);
+            const newItinerary = [];
+            for (let i = 0; i < daysCount; i++) {
+                const dateStr = addDaysToDateString(sDate, i);
+                const existing = itinerary[i];
+                const isApg = existing ? existing.isApg : false;
+                const r = existing ? (Number(existing.rate) || 0) : 0;
+                const q = existing ? (Number(existing.quantity || existing.vehicleCount) || numberOfCars || 1) : (numberOfCars || 1);
+
+                newItinerary.push({
+                    dayNo: i + 1,
+                    date: dateStr,
+                    time: existing?.time || (isApg ? 'APG' : (i === 0 ? '09:00 AM' : '10:00 AM')),
+                    isApg: isApg,
+                    duty: existing?.duty || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
+                    description: existing?.description || existing?.duty || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
+                    vehicleType: existing?.vehicleType || vehicleType,
+                    vehicleCount: q,
+                    quantity: q,
+                    rate: r,
+                    amount: existing ? (Number(existing.amount) || (q * r)) : (q * r),
+                    pickupPoint: existing?.pickupPoint || '',
+                    vehicleNumber: existing?.vehicleNumber || '',
+                    driverName: existing?.driverName || '',
+                    driverPhone: existing?.driverPhone || ''
+                });
+            }
+            setItinerary(newItinerary);
+            const total = newItinerary.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+            if (total > 0) {
+                setTotalAmount(total);
+            }
+        }
     };
 
-    const updateItineraryDay = (index, field, value) => {
-        const newItin = [...itinerary];
-        newItin[index][field] = value;
-        setItinerary(newItin);
+    // Itinerary Row Change handler
+    const handleItineraryRowChange = (index, field, value) => {
+        const updated = [...itinerary];
+        const row = { ...updated[index] };
+
+        if (field === 'isApg') {
+            row.isApg = value;
+            if (value) {
+                row.time = 'APG';
+            } else if (row.time === 'APG') {
+                row.time = '09:00 AM';
+            }
+        } else if (field === 'rate' || field === 'quantity') {
+            const qty = field === 'quantity'
+                ? (value === '' ? '' : Math.max(1, parseInt(value) || 1))
+                : (row.quantity === '' ? 1 : (Number(row.quantity || row.vehicleCount) || 1));
+            const rate = field === 'rate'
+                ? (value === '' ? '' : Math.max(0, parseFloat(value) || 0))
+                : (row.rate === '' ? 0 : (Number(row.rate) || 0));
+            row.rate = rate;
+            row.quantity = qty;
+            row.vehicleCount = qty === '' ? 1 : qty;
+            const numericQty = qty === '' ? 1 : Number(qty);
+            const numericRate = rate === '' ? 0 : Number(rate);
+            row.amount = numericQty * numericRate;
+        } else if (field === 'amount') {
+            row.amount = value === '' ? '' : (Number(value) || 0);
+        } else if (field === 'duty') {
+            row.duty = value;
+            row.description = value;
+        } else {
+            row[field] = value;
+        }
+
+        updated[index] = row;
+        setItinerary(updated);
+        const total = updated.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+        if (total > 0) {
+            setTotalAmount(total);
+        }
+    };
+
+    const addAnotherDay = () => {
+        let nextDate = '';
+        const len = itinerary.length;
+        if (len > 0 && itinerary[len - 1].date) {
+            nextDate = addDaysToDateString(toLocalDateString(itinerary[len - 1].date), 1);
+        } else if (travelStartDate) {
+            nextDate = addDaysToDateString(travelStartDate, len);
+        } else {
+            nextDate = toLocalDateString(new Date());
+        }
+
+        const newDay = {
+            dayNo: len + 1,
+            date: nextDate,
+            time: '09:00 AM',
+            isApg: false,
+            pickupPoint: '',
+            duty: 'City Tour / Transfer',
+            description: 'City Tour / Transfer',
+            vehicleType: vehicleType,
+            vehicleCount: numberOfCars || 1,
+            quantity: numberOfCars || 1,
+            rate: 0,
+            amount: 0,
+            vehicleNumber: '',
+            driverName: '',
+            driverPhone: ''
+        };
+
+        const updated = [...itinerary, newDay];
+        setItinerary(updated);
+        setTravelEndDate(nextDate);
     };
 
     const removeItineraryDay = (index) => {
-        const newItin = [...itinerary];
-        newItin.splice(index, 1);
-        setItinerary(newItin);
+        if (itinerary.length <= 1) return;
+        const updated = itinerary
+            .filter((_, i) => i !== index)
+            .map((day, i) => ({ ...day, dayNo: i + 1 }));
+        setItinerary(updated);
+        if (updated.length > 0 && updated[updated.length - 1].date) {
+            setTravelEndDate(toLocalDateString(updated[updated.length - 1].date));
+        }
+        const total = updated.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+        if (total > 0) {
+            setTotalAmount(total);
+        }
+    };
+
+    const handleInclusionToggle = (key) => {
+        setInclusions(prev => ({
+            ...prev,
+            [key]: !prev[key]
+        }));
     };
 
     const handleSubmit = async (e) => {
@@ -243,14 +393,31 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
         setSaving(true);
         try {
             const payload = {
+                bookingReference,
+                travelAgentName,
+                travelAgentMobile,
                 clientName,
                 mobileNumber,
+                alternateMobile,
+                email,
+                gstin,
+                source,
+                reference,
+                salesPerson,
                 vehicleType,
-                totalAmount: packageVal,
+                numberOfCars,
                 travelStartDate,
                 travelEndDate,
-                pickupLocation,
-                dropLocation,
+                totalAmount: Number(totalAmount) || 0,
+                pickupPoint,
+                dropPoint,
+                pickupLocation: pickupPoint,
+                dropLocation: dropPoint,
+                gstMode,
+                gstRate,
+                specialRemarks,
+                notes: specialRemarks,
+                inclusions,
                 itinerary,
                 vehicleMatrix: {
                     fuelType,
@@ -264,7 +431,7 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                     gstAmount: gstVal,
                     targetPerDay: targetPerDayVal,
                     totalCost: Math.round(totalCost),
-                    netProfit: Math.round(totalProfit),
+                    totalProfit: Math.round(totalProfit),
                     perDayProfit: Math.round(perDayProfit)
                 }
             };
@@ -272,742 +439,834 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
             await axios.put(`/api/bookings/single/${booking._id}`, payload);
             onSuccess();
         } catch (error) {
-            console.error('Error updating booking', error);
-            alert('Failed to update booking details');
+            console.error('Error updating booking:', error);
+            alert(error.response?.data?.message || 'Failed to update booking details');
         } finally {
             setSaving(false);
         }
     };
 
-    const inputCleanStyle = {
+    const darkInputStyle = {
         width: '100%',
-        padding: '10px 14px',
-        background: '#090d16',
+        padding: '9px 12px',
+        background: '#090f1d',
         border: '1px solid rgba(255,255,255,0.12)',
         borderRadius: '8px',
         color: '#ffffff',
-        fontSize: '14px',
-        fontWeight: '500',
+        fontSize: '13px',
         outline: 'none',
-        transition: 'all 0.2s ease'
+        transition: 'all 0.15s ease'
     };
 
-    const labelStyle = { 
-        fontSize: '12px', 
-        color: 'rgba(255,255,255,0.65)', 
-        display: 'block', 
+    const labelStyle = {
+        display: 'block',
+        fontSize: '11px',
+        fontWeight: '700',
+        color: 'rgba(255,255,255,0.7)',
         marginBottom: '6px',
-        fontWeight: '600'
+        textTransform: 'uppercase',
+        letterSpacing: '0.4px'
     };
 
     return (
-        <AnimatePresence>
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 99999, padding: '16px' }}>
-                <motion.div 
-                    initial={{ y: 25, opacity: 0 }} 
-                    animate={{ y: 0, opacity: 1 }} 
-                    exit={{ y: 25, opacity: 0 }} 
-                    style={{ 
-                        width: '100%', 
-                        maxWidth: '960px', 
-                        maxHeight: '92vh', 
-                        overflow: 'hidden', 
-                        background: '#0d1322', 
-                        border: '1px solid rgba(255,255,255,0.15)', 
-                        borderRadius: '18px', 
-                        display: 'flex', 
-                        flexDirection: 'column',
-                        boxShadow: '0 25px 60px -15px rgba(0,0,0,0.8)'
-                    }}
-                >
-                    
-                    {/* Header with Quick Booking Summary */}
-                    <div style={{ padding: '18px 24px', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(3, 7, 18, 0.85)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+        }}>
+            <div style={{
+                width: '100%',
+                maxWidth: '1080px',
+                maxHeight: '92vh',
+                background: '#0d1526',
+                border: '1px solid rgba(251, 191, 36, 0.35)',
+                borderRadius: '18px',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.9)'
+            }}>
+                {/* Header */}
+                <div style={{
+                    padding: '18px 24px',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: 'linear-gradient(180deg, rgba(255,255,255,0.03), transparent)'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{
+                            width: '38px',
+                            height: '38px',
+                            borderRadius: '10px',
+                            background: 'rgba(251, 191, 36, 0.15)',
+                            color: '#fbbf24',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}>
+                            <Edit2 size={18} />
+                        </div>
                         <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <span style={{ background: '#3b82f6', color: 'white', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800', letterSpacing: '0.5px' }}>CONFIRMED</span>
-                                <h2 style={{ color: 'white', margin: 0, fontSize: '17px', fontWeight: '800' }}>
-                                    Booking #{booking?.bookingCode || booking?.bookingId || booking?._id?.slice(-6)}
-                                </h2>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '900' }}>
+                                    Edit Booking & Quotation
+                                </h3>
+                                <span style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    background: '#fbbf24',
+                                    color: '#000',
+                                    fontSize: '11px',
+                                    fontWeight: '900',
+                                    fontFamily: 'monospace'
+                                }}>
+                                    {booking.bookingCode || booking.bookingId}
+                                </span>
                             </div>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '6px', fontSize: '12.5px', color: 'rgba(255,255,255,0.7)' }}>
-                                <span>Guest: <strong style={{ color: 'white' }}>{clientName || 'N/A'}</strong> ({mobileNumber || 'N/A'})</span>
-                                <span>•</span>
-                                <span>Vehicle: <strong style={{ color: '#60a5fa' }}>{vehicleType}</strong></span>
-                                <span>•</span>
-                                <span>Duration: <strong style={{ color: '#fbbf24' }}>{totalDays} Days</strong></span>
+                            <p style={{ margin: '3px 0 0', color: 'rgba(255,255,255,0.5)', fontSize: '12px' }}>
+                                Update booking details, vehicle cost matrix, and day-wise itinerary schedule.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        style={{
+                            background: 'rgba(255, 255, 255, 0.06)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            color: 'rgba(255,255,255,0.7)',
+                            width: '32px',
+                            height: '32px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+
+                {/* Form Body: Scrollable with all 4 sequential sections */}
+                <form onSubmit={handleSubmit} style={{ flex: 1, overflowY: 'auto', padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: '22px' }}>
+                    
+                    {/* ========================================================= */}
+                    {/* SECTION 1: BOOKING & CLIENT DETAILS                       */}
+                    {/* ========================================================= */}
+                    <div style={{ background: '#0a101d', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '18px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#fbbf24', color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '11px' }}>1</span>
+                                <span style={{ color: '#fbbf24', fontSize: '12.5px', fontWeight: '800', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                                    Booking & Client Details
+                                </span>
+                            </div>
+
+                            {/* Booking Reference Toggle */}
+                            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '2px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                {BOOKING_REFERENCES.map(ref => (
+                                    <button
+                                        key={ref}
+                                        type="button"
+                                        onClick={() => setBookingReference(ref)}
+                                        style={{
+                                            padding: '4px 12px',
+                                            borderRadius: '6px',
+                                            border: 'none',
+                                            background: bookingReference === ref ? '#fbbf24' : 'transparent',
+                                            color: bookingReference === ref ? '#000' : 'rgba(255,255,255,0.7)',
+                                            fontWeight: '800',
+                                            fontSize: '11.5px',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        {ref}
+                                    </button>
+                                ))}
                             </div>
                         </div>
-                        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', width: '34px', height: '34px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                            <X size={18} />
-                        </button>
-                    </div>
 
-                    {/* Navigation Tabs */}
-                    <div style={{ display: 'flex', gap: '4px', background: 'rgba(0,0,0,0.2)', padding: '6px 24px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-                        <button
-                            onClick={() => setActiveTab('matrix')}
-                            style={{
-                                padding: '10px 18px',
-                                background: activeTab === 'matrix' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-                                border: 'none',
-                                borderBottom: activeTab === 'matrix' ? '2px solid #3b82f6' : '2px solid transparent',
-                                color: activeTab === 'matrix' ? '#60a5fa' : 'rgba(255,255,255,0.6)',
-                                fontWeight: '700',
-                                fontSize: '13px',
-                                borderRadius: '8px 8px 0 0',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
-                            }}
-                        >
-                            <Calculator size={15} /> Vehicle Matrix & Profit Calculator
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('itinerary')}
-                            style={{
-                                padding: '10px 18px',
-                                background: activeTab === 'itinerary' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-                                border: 'none',
-                                borderBottom: activeTab === 'itinerary' ? '2px solid #3b82f6' : '2px solid transparent',
-                                color: activeTab === 'itinerary' ? '#60a5fa' : 'rgba(255,255,255,0.6)',
-                                fontWeight: '700',
-                                fontSize: '13px',
-                                borderRadius: '8px 8px 0 0',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
-                            }}
-                        >
-                            <Calendar size={15} /> Day-wise Itinerary ({itinerary.length})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('general')}
-                            style={{
-                                padding: '10px 18px',
-                                background: activeTab === 'general' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-                                border: 'none',
-                                borderBottom: activeTab === 'general' ? '2px solid #3b82f6' : '2px solid transparent',
-                                color: activeTab === 'general' ? '#60a5fa' : 'rgba(255,255,255,0.6)',
-                                fontWeight: '700',
-                                fontSize: '13px',
-                                borderRadius: '8px 8px 0 0',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
-                            }}
-                        >
-                            <Car size={15} /> Edit Booking Details
-                        </button>
-                    </div>
-                    
-                    <form onSubmit={handleSubmit} style={{ padding: '20px 24px', flex: 1, overflowY: 'auto' }}>
-                        
-                        {/* TAB 1: VEHICLE MATRIX (P&L CALCULATOR) */}
-                        {activeTab === 'matrix' && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                                
-                                {/* Top Control Ribbon */}
-                                <div style={{ background: '#11192d', border: '1px solid rgba(255,255,255,0.08)', padding: '14px 16px', borderRadius: '12px', display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: '14px', alignItems: 'center' }}>
-                                    <div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                            <label style={{...labelStyle, marginBottom: 0}}>Select Car / Vehicle</label>
-                                            <button 
-                                                type="button" 
-                                                onClick={() => setShowCarManager(true)}
-                                                style={{
-                                                    background: 'rgba(59, 130, 246, 0.15)',
-                                                    border: '1px solid rgba(59, 130, 246, 0.3)',
-                                                    color: '#60a5fa',
-                                                    borderRadius: '6px',
-                                                    padding: '3px 8px',
-                                                    fontSize: '11px',
-                                                    fontWeight: '700',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '4px'
-                                                }}
-                                            >
-                                                <Settings size={12} /> Manage Cars
-                                            </button>
-                                        </div>
-                                        <select 
-                                            value={vehicleType} 
-                                            onChange={e => {
-                                                if (e.target.value === '__add_new__') {
-                                                    setShowCarManager(true);
-                                                } else {
-                                                    setVehicleType(e.target.value);
-                                                }
-                                            }} 
-                                            style={{...inputCleanStyle, border: '1px solid #3b82f6', color: '#93c5fd', fontWeight: 'bold'}}
-                                        >
-                                            {carList.map(vName => (
-                                                <option key={vName} value={vName} style={{ background: '#0f172a', color: 'white' }}>
-                                                    {vName}
-                                                </option>
-                                            ))}
-                                            <option value="__add_new__" style={{ background: '#1e293b', color: '#60a5fa', fontWeight: 'bold' }}>
-                                                ➕ Add / Edit More Cars...
-                                            </option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={labelStyle}>Package Selling Value (₹)</label>
-                                        <input 
-                                            type="number" 
-                                            value={packageValue} 
-                                            placeholder="e.g. 42000"
-                                            onFocus={e => e.target.select()}
-                                            onChange={e => setPackageValue(e.target.value)} 
-                                            style={{...inputCleanStyle, color: '#fbbf24', fontWeight: '800', borderColor: 'rgba(251, 191, 36, 0.4)'}} 
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={labelStyle}>Total Tour Days</label>
-                                        <input 
-                                            type="number" 
-                                            value={totalDays} 
-                                            placeholder="1"
-                                            onFocus={e => e.target.select()}
-                                            onChange={e => setTotalDays(e.target.value)} 
-                                            style={inputCleanStyle} 
-                                        />
-                                    </div>
+                        {/* Travel Agent Fields if selected */}
+                        {bookingReference === 'Travel Agent' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '14px', padding: '12px', background: 'rgba(251, 191, 36, 0.05)', borderRadius: '10px', border: '1px solid rgba(251, 191, 36, 0.2)' }}>
+                                <div>
+                                    <label style={labelStyle}>Travel Agent Name *</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Agency or Agent Name"
+                                        value={travelAgentName}
+                                        onChange={e => setTravelAgentName(e.target.value)}
+                                        style={darkInputStyle}
+                                    />
                                 </div>
-
-                                {/* Matrix Split: Left Inputs, Right Live Output */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '18px' }}>
-                                    
-                                    {/* Left: Direct Operating Expenses Inputs */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                                        
-                                        {/* Fuel Box */}
-                                        <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '14px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                                                <span style={{ fontSize: '13px', fontWeight: '700', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    ⛽ Fuel Consumption ({fuelType})
-                                                </span>
-                                                <span style={{ fontSize: '12.5px', color: '#f87171', fontWeight: '800' }}>
-                                                    Cost: ₹{Math.round(fuelCost).toLocaleString()}
-                                                </span>
-                                            </div>
-
-                                            {/* Fuel Type Selector Pills */}
-                                            <div style={{ marginBottom: '12px' }}>
-                                                <label style={{ ...labelStyle, marginBottom: '6px', color: 'rgba(255,255,255,0.7)' }}>
-                                                    Select Fuel Type:
-                                                </label>
-                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
-                                                    {FUEL_TYPES.map(f => {
-                                                        const isSelected = fuelType === f.type;
-                                                        return (
-                                                            <button
-                                                                key={f.type}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setFuelType(f.type);
-                                                                }}
-                                                                style={{
-                                                                    padding: '6px 4px',
-                                                                    background: isSelected ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255,255,255,0.03)',
-                                                                    border: isSelected ? '1.5px solid #3b82f6' : '1px solid rgba(255,255,255,0.08)',
-                                                                    color: isSelected ? '#93c5fd' : 'rgba(255,255,255,0.65)',
-                                                                    borderRadius: '6px',
-                                                                    fontSize: '11.5px',
-                                                                    fontWeight: isSelected ? '800' : '500',
-                                                                    cursor: 'pointer',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    justifyContent: 'center',
-                                                                    gap: '4px',
-                                                                    transition: 'all 0.15s ease'
-                                                                }}
-                                                            >
-                                                                <span>{f.icon}</span>
-                                                                <span>{f.label}</span>
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                            
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '10px' }}>
-                                                <div>
-                                                    <label style={labelStyle}>Total Km Run</label>
-                                                    <input 
-                                                        type="number" 
-                                                        value={totalKmRun} 
-                                                        placeholder="e.g. 1400"
-                                                        onFocus={e => e.target.select()}
-                                                        onChange={e => setTotalKmRun(e.target.value)} 
-                                                        style={inputCleanStyle} 
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label style={{...labelStyle, color: '#60a5fa'}}>
-                                                        Average ({currentFuelConfig.avgUnit})
-                                                    </label>
-                                                    <input 
-                                                        type="number" 
-                                                        step="0.5"
-                                                        value={vehicleAverage} 
-                                                        placeholder={fuelType === 'CNG' ? 'e.g. 24' : 'e.g. 12'}
-                                                        onFocus={e => e.target.select()}
-                                                        onChange={e => setVehicleAverage(e.target.value)} 
-                                                        style={{...inputCleanStyle, borderColor: '#3b82f6'}} 
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label style={labelStyle}>
-                                                        Rate ({currentFuelConfig.rateUnit})
-                                                    </label>
-                                                    <input 
-                                                        type="number" 
-                                                        step="0.1"
-                                                        value={fuelRate} 
-                                                        placeholder="e.g. 94"
-                                                        onFocus={e => e.target.select()}
-                                                        onChange={e => setFuelRate(e.target.value)} 
-                                                        style={{...inputCleanStyle, borderColor: '#60a5fa'}} 
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '6px' }}>
-                                                {avgVal > 0 && rateVal > 0 ? (
-                                                    `Formula: (${kmVal} km ÷ ${avgVal} ${currentFuelConfig.avgUnit}) × ₹${rateVal} (${fuelType}) = ₹${Math.round(fuelCost).toLocaleString()}`
-                                                ) : (
-                                                    `Selected: ${fuelType}. Type vehicle average (${currentFuelConfig.avgUnit}) & state pump rate (${currentFuelConfig.rateUnit}) above.`
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Other Direct Costs Box */}
-                                        <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '14px' }}>
-                                            <span style={{ fontSize: '13px', fontWeight: '700', color: 'white', display: 'block', marginBottom: '10px' }}>
-                                                🛠️ Duty & Trip Expenses (Kharcha)
-                                            </span>
-
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                                                <div>
-                                                    <label style={labelStyle}>Driver Salary (₹)</label>
-                                                    <input 
-                                                        type="number" 
-                                                        value={driverSalary} 
-                                                        placeholder="e.g. 3500"
-                                                        onFocus={e => e.target.select()}
-                                                        onChange={e => setDriverSalary(e.target.value)} 
-                                                        style={inputCleanStyle} 
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label style={labelStyle}>Night Hold (₹)</label>
-                                                    <input 
-                                                        type="number" 
-                                                        value={nightHold} 
-                                                        placeholder="e.g. 2000"
-                                                        onFocus={e => e.target.select()}
-                                                        onChange={e => setNightHold(e.target.value)} 
-                                                        style={inputCleanStyle} 
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                                <div>
-                                                    <label style={labelStyle}>Toll & Parking (₹)</label>
-                                                    <input 
-                                                        type="number" 
-                                                        value={tollAndParking} 
-                                                        placeholder="e.g. 2000"
-                                                        onFocus={e => e.target.select()}
-                                                        onChange={e => setTollAndParking(e.target.value)} 
-                                                        style={inputCleanStyle} 
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <label style={labelStyle}>GST Amount (₹)</label>
-                                                        {packageVal > 0 && (
-                                                            <button 
-                                                                type="button" 
-                                                                onClick={handleAutoGST}
-                                                                style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontSize: '11px', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
-                                                            >
-                                                                Auto 5% (₹{Math.round(packageVal - (packageVal / 1.05))})
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                    <input 
-                                                        type="number" 
-                                                        value={gstAmount} 
-                                                        placeholder="e.g. 2000"
-                                                        onFocus={e => e.target.select()}
-                                                        onChange={e => setGstAmount(e.target.value)} 
-                                                        style={inputCleanStyle} 
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Target Benchmark Setting */}
-                                        <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '14px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <div>
-                                                    <label style={{...labelStyle, color: '#93c5fd', margin: 0}}>Benchmark Target Per Day (₹)</label>
-                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
-                                                        Innova: 2500 | Ciaz: 1500 | Dzire: 1000 | TT: 3500
-                                                    </div>
-                                                </div>
-                                                <div style={{ width: '130px' }}>
-                                                    <input 
-                                                        type="number" 
-                                                        value={targetPerDay} 
-                                                        placeholder="e.g. 2500"
-                                                        onFocus={e => e.target.select()}
-                                                        onChange={e => setTargetPerDay(e.target.value)} 
-                                                        style={{...inputCleanStyle, textAlign: 'right', borderColor: '#3b82f6', fontWeight: 'bold'}} 
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                    </div>
-
-                                    {/* Right: Live Calculation Statement & Target Comparison */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                                        
-                                        {/* Main Statement Card */}
-                                        <div style={{ background: '#0a0f1d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px' }}>
-                                                <span style={{ fontSize: '13px', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    <Calculator size={15} color="#fbbf24" /> P&L Live Statement
-                                                </span>
-                                                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>{daysVal} Days Tour</span>
-                                            </div>
-
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                                                <span style={{ color: 'rgba(255,255,255,0.7)' }}>Package Value:</span>
-                                                <span style={{ color: '#fbbf24', fontWeight: '800' }}>₹{packageVal.toLocaleString()}</span>
-                                            </div>
-
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px' }}>
-                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Fuel Consumption:</span>
-                                                <span style={{ color: '#f87171' }}>- ₹{Math.round(fuelCost).toLocaleString()}</span>
-                                            </div>
-
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px' }}>
-                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Driver + Night + Toll:</span>
-                                                <span style={{ color: '#f87171' }}>- ₹{(driverSalaryVal + nightHoldVal + tollVal).toLocaleString()}</span>
-                                            </div>
-
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px' }}>
-                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>GST Value:</span>
-                                                <span style={{ color: '#f87171' }}>- ₹{gstVal.toLocaleString()}</span>
-                                            </div>
-
-                                            <div style={{ height: '1px', background: 'rgba(255,255,255,0.08)', margin: '4px 0' }}></div>
-
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                                                <span style={{ color: 'rgba(255,255,255,0.8)', fontWeight: '600' }}>Total Cost:</span>
-                                                <span style={{ color: '#ef4444', fontWeight: '700' }}>₹{Math.round(totalCost).toLocaleString()}</span>
-                                            </div>
-
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', background: totalProfit >= 0 ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${totalProfit >= 0 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}` }}>
-                                                <span style={{ color: 'white', fontWeight: '800' }}>Net Profit:</span>
-                                                <span style={{ color: totalProfit >= 0 ? '#4ade80' : '#f87171', fontWeight: '900' }}>
-                                                    ₹{Math.round(totalProfit).toLocaleString()}
-                                                </span>
-                                            </div>
-
-                                            {/* Per Day Profit & Benchmark Match */}
-                                            <div style={{ marginTop: '6px', background: '#111827', borderRadius: '10px', padding: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', marginBottom: '6px' }}>
-                                                    <span style={{ color: 'rgba(255,255,255,0.7)' }}>Per Day Profit:</span>
-                                                    <span style={{ color: '#ffffff', fontWeight: '800' }}>₹{Math.round(perDayProfit).toLocaleString()} / day</span>
-                                                </div>
-
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', alignItems: 'center' }}>
-                                                    <span style={{ color: 'rgba(255,255,255,0.5)' }}>Target ({vehicleType}):</span>
-                                                    <span style={{ color: '#93c5fd', fontWeight: '600' }}>₹{targetPerDayVal.toLocaleString()} / day</span>
-                                                </div>
-
-                                                <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '8px 0' }}></div>
-
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>Profitability Status:</span>
-                                                    <span style={{ 
-                                                        fontSize: '13px', 
-                                                        fontWeight: '900', 
-                                                        padding: '4px 10px', 
-                                                        borderRadius: '6px',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                        background: diffFromTarget >= 0 ? 'rgba(74, 222, 128, 0.15)' : 'rgba(248, 113, 113, 0.15)',
-                                                        color: diffFromTarget >= 0 ? '#4ade80' : '#f87171'
-                                                    }}>
-                                                        {diffFromTarget >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                                                        {diffFromTarget >= 0 ? '+' : '-'} ₹{Math.abs(Math.round(diffFromTarget)).toLocaleString()} / day
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Quick Sale Price Simulator */}
-                                        <div style={{ background: 'rgba(59, 130, 246, 0.04)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '12px', padding: '14px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                                                <Sparkles size={14} color="#60a5fa" />
-                                                <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#93c5fd' }}>
-                                                    Sale Price Simulator
-                                                </span>
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                                <div style={{ flex: 1 }}>
-                                                    <input 
-                                                        type="number" 
-                                                        placeholder="Test Rate (e.g. 40000)" 
-                                                        value={simSalePrice}
-                                                        onFocus={e => e.target.select()}
-                                                        onChange={e => setSimSalePrice(e.target.value)}
-                                                        style={{...inputCleanStyle, padding: '7px 10px', fontSize: '12.5px'}}
-                                                    />
-                                                </div>
-                                                {simPriceVal > 0 && (
-                                                    <div style={{ fontSize: '12px', textAlign: 'right' }}>
-                                                        <div style={{ color: simProfit >= 0 ? '#4ade80' : '#f87171', fontWeight: 'bold' }}>
-                                                            Profit: ₹{Math.round(simProfit).toLocaleString()}
-                                                        </div>
-                                                        <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px' }}>
-                                                            ₹{Math.round(simPerDay).toLocaleString()} / day
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                    </div>
-
+                                <div>
+                                    <label style={labelStyle}>Agent Contact / Mobile *</label>
+                                    <input
+                                        type="text"
+                                        placeholder="+91 Mobile Number"
+                                        value={travelAgentMobile}
+                                        onChange={e => setTravelAgentMobile(e.target.value)}
+                                        style={darkInputStyle}
+                                    />
                                 </div>
-
                             </div>
                         )}
 
-                        {/* TAB 2: DAY-WISE ITINERARY */}
-                        {activeTab === 'itinerary' && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                        <h3 style={{ margin: 0, color: 'white', fontSize: '15px' }}>Day-wise Tour Schedule & Duty</h3>
-                                        <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>Add detailed duty for each day to share with customer & driver</p>
-                                    </div>
-                                    <button type="button" onClick={addItineraryDay} style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '8px 14px', borderRadius: '8px', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        <Plus size={15} /> Add Day
+                        {/* Guest & Client Grid */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+                            <div>
+                                <label style={labelStyle}>Guest Name *</label>
+                                <input
+                                    required
+                                    type="text"
+                                    placeholder="Guest full name"
+                                    value={clientName}
+                                    onChange={e => setClientName(e.target.value)}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Mobile Number *</label>
+                                <input
+                                    required
+                                    type="text"
+                                    placeholder="+91 Mobile number"
+                                    value={mobileNumber}
+                                    onChange={e => setMobileNumber(e.target.value)}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Alternate Mobile</label>
+                                <input
+                                    type="text"
+                                    placeholder="Optional"
+                                    value={alternateMobile}
+                                    onChange={e => setAlternateMobile(e.target.value)}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Email Address</label>
+                                <input
+                                    type="email"
+                                    placeholder="client@example.com"
+                                    value={email}
+                                    onChange={e => setEmail(e.target.value)}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>GSTIN</label>
+                                <input
+                                    type="text"
+                                    placeholder="GST number"
+                                    value={gstin}
+                                    onChange={e => setGstin(e.target.value)}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Booking Source</label>
+                                <select
+                                    value={source}
+                                    onChange={e => setSource(e.target.value)}
+                                    style={darkInputStyle}
+                                >
+                                    {ALL_SOURCES.map(s => (
+                                        <option key={s} value={s} style={{ background: '#090f1d' }}>{s}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Vehicle & Travel Grid */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+                            <div>
+                                <label style={labelStyle}>Vehicle Type</label>
+                                <select
+                                    value={vehicleType}
+                                    onChange={e => {
+                                        const vt = e.target.value;
+                                        setVehicleType(vt);
+                                        setItinerary(prev => prev.map(d => ({ ...d, vehicleType: vt })));
+                                    }}
+                                    style={darkInputStyle}
+                                >
+                                    {ALL_VEHICLES.map(v => (
+                                        <option key={v} value={v} style={{ background: '#090f1d' }}>{v}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style={labelStyle}>Number of Cars</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={numberOfCars}
+                                    onChange={e => {
+                                        const cars = Math.max(1, parseInt(e.target.value) || 1);
+                                        setNumberOfCars(cars);
+                                        setItinerary(prev => prev.map(d => ({
+                                            ...d,
+                                            vehicleCount: cars,
+                                            quantity: cars,
+                                            amount: cars * (Number(d.rate) || 0)
+                                        })));
+                                    }}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+
+                            <div>
+                                <label style={labelStyle}>Travel Start Date *</label>
+                                <input
+                                    required
+                                    type="date"
+                                    value={travelStartDate}
+                                    onChange={e => handleTravelDateChange('travelStartDate', e.target.value)}
+                                    style={{ ...darkInputStyle, colorScheme: 'dark' }}
+                                />
+                            </div>
+
+                            <div>
+                                <label style={labelStyle}>Travel End Date *</label>
+                                <input
+                                    required
+                                    type="date"
+                                    value={travelEndDate}
+                                    onChange={e => handleTravelDateChange('travelEndDate', e.target.value)}
+                                    style={{ ...darkInputStyle, colorScheme: 'dark' }}
+                                />
+                            </div>
+
+                            <div>
+                                <label style={labelStyle}>Quoted Package Fare (₹) *</label>
+                                <input
+                                    required
+                                    type="number"
+                                    min="0"
+                                    placeholder="e.g. 15000"
+                                    value={totalAmount || ''}
+                                    onChange={e => {
+                                        const val = e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0);
+                                        setTotalAmount(val);
+                                    }}
+                                    style={{ ...darkInputStyle, color: '#fbbf24', fontWeight: '900' }}
+                                />
+                            </div>
+
+                            <div>
+                                <label style={labelStyle}>Pickup Point</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Jaipur Airport / Hotel"
+                                    value={pickupPoint}
+                                    onChange={e => setPickupPoint(e.target.value)}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+
+                            <div>
+                                <label style={labelStyle}>Drop Point</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Delhi Airport / Hotel"
+                                    value={dropPoint}
+                                    onChange={e => setDropPoint(e.target.value)}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ========================================================= */}
+                    {/* SECTION 2: VEHICLE & COST MATRIX (Real-time P&L)          */}
+                    {/* ========================================================= */}
+                    <div style={{ background: '#0a101d', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '18px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#fbbf24', color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '11px' }}>2</span>
+                                <span style={{ color: '#fbbf24', fontSize: '12.5px', fontWeight: '800', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                                    Vehicle & Cost Matrix ({numDays} {numDays > 1 ? 'Days' : 'Day'})
+                                </span>
+                            </div>
+
+                            {/* Fuel Type Pills */}
+                            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '2px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                {['Diesel', 'Petrol', 'CNG', 'EV'].map(ft => (
+                                    <button
+                                        key={ft}
+                                        type="button"
+                                        onClick={() => setFuelType(ft)}
+                                        style={{
+                                            padding: '4px 10px',
+                                            borderRadius: '6px',
+                                            border: 'none',
+                                            background: fuelType === ft ? '#3b82f6' : 'transparent',
+                                            color: fuelType === ft ? '#fff' : 'rgba(255,255,255,0.7)',
+                                            fontWeight: '800',
+                                            fontSize: '11px',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        {ft}
                                     </button>
-                                </div>
-                                
-                                {itinerary.map((day, idx) => (
-                                    <div key={idx} style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)', position: 'relative' }}>
-                                        <button type="button" onClick={() => removeItineraryDay(idx)} style={{ position: 'absolute', top: '14px', right: '14px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', borderRadius: '6px', padding: '6px', cursor: 'pointer' }}>
-                                            <Trash2 size={14} />
-                                        </button>
-                                        
-                                        <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', paddingRight: '40px' }}>
-                                            <div style={{ width: '90px' }}>
-                                                <label style={labelStyle}>Day</label>
-                                                <input type="number" value={day.dayNo} onChange={e => updateItineraryDay(idx, 'dayNo', e.target.value)} style={inputCleanStyle} />
-                                            </div>
-                                            <div style={{ flex: 1 }}>
-                                                <label style={labelStyle}>Date</label>
-                                                <input type="date" value={day.date ? new Date(day.date).toISOString().split('T')[0] : ''} onChange={e => updateItineraryDay(idx, 'date', e.target.value)} style={{...inputCleanStyle, colorScheme: 'dark'}} />
-                                            </div>
-                                            <div style={{ width: '130px' }}>
-                                                <label style={labelStyle}>Pickup Time</label>
-                                                <input type="text" value={day.time || ''} placeholder="09:00 AM" onChange={e => updateItineraryDay(idx, 'time', e.target.value)} style={inputCleanStyle} />
-                                            </div>
-                                        </div>
-                                        
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                            <div>
-                                                <label style={labelStyle}>Route / Duty Description</label>
-                                                <input type="text" value={day.duty || ''} onChange={e => updateItineraryDay(idx, 'duty', e.target.value)} style={inputCleanStyle} placeholder="e.g. Delhi to Agra, Taj Mahal & Agra Fort Sightseeing" />
-                                            </div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                                                <div>
-                                                    <label style={labelStyle}>Pickup Point</label>
-                                                    <input type="text" value={day.pickupPoint || ''} onChange={e => updateItineraryDay(idx, 'pickupPoint', e.target.value)} style={inputCleanStyle} placeholder="e.g. Hotel / Airport" />
-                                                </div>
-                                                <div>
-                                                    <label style={labelStyle}>Assigned Vehicle</label>
-                                                    <input type="text" value={day.vehicleType || vehicleType} onChange={e => updateItineraryDay(idx, 'vehicleType', e.target.value)} style={inputCleanStyle} />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
                                 ))}
-                                
-                                {itinerary.length === 0 && (
-                                    <div style={{ textAlign: 'center', padding: '45px 20px', background: 'rgba(255,255,255,0.01)', borderRadius: '12px', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                                        <Calendar size={28} color="rgba(255,255,255,0.3)" style={{ marginBottom: '8px' }} />
-                                        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', margin: 0 }}>No itinerary added yet.</p>
-                                        <button type="button" onClick={addItineraryDay} style={{ marginTop: '12px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '6px 14px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>
-                                            + Add First Day
-                                        </button>
-                                    </div>
+                            </div>
+                        </div>
+
+                        {/* Matrix Inputs Grid */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+                            <div>
+                                <label style={labelStyle}>Total KM Run</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="Est. Km"
+                                    value={totalKmRun}
+                                    onChange={e => setTotalKmRun(e.target.value)}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Avg ({fuelType === 'EV' ? 'km/unit' : 'km/l'})</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="Mileage"
+                                    value={vehicleAverage}
+                                    onChange={e => setVehicleAverage(e.target.value)}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Fuel Rate (₹)</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="Rate"
+                                    value={fuelRate}
+                                    onChange={e => setFuelRate(e.target.value)}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Fuel Cost (Auto)</label>
+                                <div style={{ ...darkInputStyle, background: 'rgba(255,255,255,0.03)', color: '#38bdf8', fontWeight: '800' }}>
+                                    ₹{Math.round(fuelCost).toLocaleString('en-IN')}
+                                </div>
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Driver Salary (₹)</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    value={driverSalary}
+                                    onChange={e => setDriverSalary(e.target.value)}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Night Hold (₹)</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    value={nightHold}
+                                    onChange={e => setNightHold(e.target.value)}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Toll & Parking (₹)</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    value={tollAndParking}
+                                    onChange={e => setTollAndParking(e.target.value)}
+                                    style={darkInputStyle}
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Target Profit/Day</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="2500"
+                                    value={targetPerDay}
+                                    onChange={e => setTargetPerDay(e.target.value)}
+                                    style={{ ...darkInputStyle, color: '#34d399', fontWeight: '800' }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Live P&L Summary Cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', background: 'rgba(0,0,0,0.25)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                            <div>
+                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '3px' }}>TOTAL TOUR COST</div>
+                                <div style={{ fontSize: '17px', fontWeight: '900', color: '#f87171' }}>
+                                    ₹{Math.round(totalCost).toLocaleString('en-IN')}
+                                </div>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '3px' }}>TARGET PROFIT</div>
+                                <div style={{ fontSize: '17px', fontWeight: '900', color: '#34d399' }}>
+                                    ₹{Math.round(totalTargetProfit).toLocaleString('en-IN')}
+                                </div>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '3px' }}>RECOMMENDED FARE</div>
+                                <div style={{ fontSize: '17px', fontWeight: '900', color: '#60a5fa' }}>
+                                    ₹{Math.round(recommendedSaleFare).toLocaleString('en-IN')}
+                                </div>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '3px' }}>ACTUAL NET PROFIT</div>
+                                <div style={{ fontSize: '17px', fontWeight: '900', color: totalProfit >= 0 ? '#34d399' : '#f87171' }}>
+                                    ₹{Math.round(totalProfit).toLocaleString('en-IN')} ({marginPercent}%)
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Sale Price Simulator */}
+                        <div style={{ marginTop: '14px', padding: '10px 14px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '10px', border: '1px solid rgba(59, 130, 246, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: '800', color: '#93c5fd' }}>Sale Price Simulator:</span>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="Test quote (e.g. 18000)"
+                                    value={matrixSimSalePrice}
+                                    onChange={e => setMatrixSimSalePrice(e.target.value)}
+                                    style={{ ...darkInputStyle, width: '180px', padding: '6px 10px' }}
+                                />
+                                {matrixSimPriceVal > 0 && (
+                                    <span style={{ fontSize: '12px', color: simNetProfit >= 0 ? '#34d399' : '#f87171', fontWeight: '700' }}>
+                                        Net Profit: ₹{Math.round(simNetProfit).toLocaleString('en-IN')} (₹{Math.round(simPerDayProfit)}/day)
+                                    </span>
                                 )}
                             </div>
-                        )}
+                            {matrixSimPriceVal > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setTotalAmount(matrixSimPriceVal)}
+                                    style={{
+                                        background: 'rgba(59, 130, 246, 0.25)',
+                                        border: '1px solid #3b82f6',
+                                        color: '#93c5fd',
+                                        borderRadius: '6px',
+                                        padding: '4px 12px',
+                                        fontSize: '11px',
+                                        fontWeight: '800',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Apply as Fare
+                                </button>
+                            )}
+                        </div>
+                    </div>
 
-                        {/* TAB 3: BASIC BOOKING DETAILS */}
-                        {activeTab === 'general' && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                                    <h4 style={{ color: 'white', margin: 0, fontSize: '14px' }}>Guest Information</h4>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                                        <div>
-                                            <label style={labelStyle}>Guest / Client Name</label>
-                                            <input type="text" value={clientName} onChange={e => setClientName(e.target.value)} style={inputCleanStyle} />
-                                        </div>
-                                        <div>
-                                            <label style={labelStyle}>Mobile Number</label>
-                                            <input type="text" value={mobileNumber} onChange={e => setMobileNumber(e.target.value)} style={inputCleanStyle} />
-                                        </div>
-                                    </div>
-                                </div>
+                    {/* ========================================================= */}
+                    {/* SECTION 3: DAY-WISE ITINERARY & PRICING                   */}
+                    {/* ========================================================= */}
+                    <div style={{ background: '#0a101d', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '18px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+                            <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#fbbf24', color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '11px' }}>3</span>
+                            <span style={{ color: '#fbbf24', fontSize: '12.5px', fontWeight: '800', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                                Day-wise Itinerary & Pricing
+                            </span>
+                        </div>
 
-                                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                                    <h4 style={{ color: 'white', margin: 0, fontSize: '14px' }}>Travel Dates & Route</h4>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                                        <div>
-                                            <label style={labelStyle}>Start Date</label>
-                                            <input type="date" value={travelStartDate} onChange={e => handleDateChange(e.target.value, travelEndDate)} style={{...inputCleanStyle, colorScheme: 'dark'}} />
-                                        </div>
-                                        <div>
-                                            <label style={labelStyle}>End Date</label>
-                                            <input type="date" value={travelEndDate} onChange={e => handleDateChange(travelStartDate, e.target.value)} style={{...inputCleanStyle, colorScheme: 'dark'}} />
-                                        </div>
-                                    </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                                        <div>
-                                            <label style={labelStyle}>Pickup Location</label>
-                                            <input type="text" value={pickupLocation} onChange={e => setPickupLocation(e.target.value)} style={inputCleanStyle} />
-                                        </div>
-                                        <div>
-                                            <label style={labelStyle}>Drop Location</label>
-                                            <input type="text" value={dropLocation} onChange={e => setDropLocation(e.target.value)} style={inputCleanStyle} />
-                                        </div>
-                                    </div>
-                                </div>
+                        {/* Itinerary Table */}
+                        <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)', overflowX: 'auto', marginBottom: '14px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '950px' }}>
+                                <thead style={{ background: '#060a12', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                                    <tr>
+                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '60px' }}>DAY</th>
+                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '150px' }}>DATE</th>
+                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '110px' }}>TIME</th>
+                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center', width: '55px' }}>APG</th>
+                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)' }}>ROUTE / ITINERARY</th>
+                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', width: '130px' }}>VEHICLE</th>
+                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center', width: '65px' }}>QTY</th>
+                                        <th style={{ padding: '12px 10px', fontSize: '11.5px', fontWeight: '800', color: '#f8fafc', textAlign: 'right', width: '130px' }}>RATE (₹)</th>
+                                        <th style={{ padding: '12px 10px', fontSize: '11.5px', fontWeight: '800', color: '#fbbf24', textAlign: 'right', width: '140px' }}>AMOUNT (₹)</th>
+                                        <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.6)', textAlign: 'center', width: '50px' }}>ACTION</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {itinerary.map((day, idx) => (
+                                        <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                            <td style={{ padding: '10px' }}>
+                                                <span style={{ background: '#fbbf24', color: '#000', fontWeight: '900', fontSize: '11px', padding: '3px 7px', borderRadius: '6px', display: 'inline-block' }}>
+                                                    D{day.dayNo || idx + 1}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '10px' }}>
+                                                <input
+                                                    type="date"
+                                                    value={toLocalDateString(day.date)}
+                                                    onChange={e => handleItineraryRowChange(idx, 'date', e.target.value)}
+                                                    style={{ ...darkInputStyle, colorScheme: 'dark', padding: '6px 8px', fontSize: '12px' }}
+                                                />
+                                            </td>
+                                            <td style={{ padding: '10px' }}>
+                                                <input
+                                                    type="text"
+                                                    value={day.isApg ? 'APG' : (day.time || '09:00 AM')}
+                                                    disabled={day.isApg}
+                                                    onChange={e => handleItineraryRowChange(idx, 'time', e.target.value)}
+                                                    style={{ ...darkInputStyle, padding: '6px 8px', fontSize: '12px', color: day.isApg ? '#fbbf24' : '#fff' }}
+                                                />
+                                            </td>
+                                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={!!day.isApg}
+                                                    onChange={e => handleItineraryRowChange(idx, 'isApg', e.target.checked)}
+                                                    style={{ width: '15px', height: '15px', accentColor: '#fbbf24', cursor: 'pointer' }}
+                                                />
+                                            </td>
+                                            <td style={{ padding: '10px' }}>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Airport Pickup & Local Sightseeing"
+                                                    value={day.duty || day.description || ''}
+                                                    onChange={e => handleItineraryRowChange(idx, 'duty', e.target.value)}
+                                                    style={{ ...darkInputStyle, padding: '6px 10px', fontSize: '12px' }}
+                                                />
+                                            </td>
+                                            <td style={{ padding: '10px' }}>
+                                                <select
+                                                    value={day.vehicleType || vehicleType}
+                                                    onChange={e => handleItineraryRowChange(idx, 'vehicleType', e.target.value)}
+                                                    style={{ ...darkInputStyle, padding: '6px 8px', fontSize: '12px' }}
+                                                >
+                                                    {ALL_VEHICLES.map(v => (
+                                                        <option key={v} value={v} style={{ background: '#090f1d' }}>{v}</option>
+                                                    ))}
+                                                </select>
+                                            </td>
+                                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={day.quantity !== undefined ? day.quantity : (day.vehicleCount || 1)}
+                                                    onChange={e => handleItineraryRowChange(idx, 'quantity', e.target.value)}
+                                                    style={{ ...darkInputStyle, padding: '6px 4px', fontSize: '12px', textAlign: 'center', width: '55px', margin: '0 auto' }}
+                                                />
+                                            </td>
+                                            <td style={{ padding: '10px' }}>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={day.rate !== undefined ? day.rate : 0}
+                                                    onChange={e => handleItineraryRowChange(idx, 'rate', e.target.value)}
+                                                    style={{ ...darkInputStyle, padding: '6px 10px', fontSize: '13px', fontWeight: '700', textAlign: 'right' }}
+                                                />
+                                            </td>
+                                            <td style={{ padding: '10px' }}>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={day.amount !== undefined ? day.amount : 0}
+                                                    onChange={e => handleItineraryRowChange(idx, 'amount', e.target.value)}
+                                                    style={{ ...darkInputStyle, padding: '6px 10px', fontSize: '13.5px', fontWeight: '900', color: '#fbbf24', textAlign: 'right' }}
+                                                />
+                                            </td>
+                                            <td style={{ padding: '10px', textAlign: 'center' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeItineraryDay(idx)}
+                                                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                                                >
+                                                    <Trash2 size={15} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Itinerary Bottom Bar: + Add Another Day & Total */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                            <button
+                                type="button"
+                                onClick={addAnotherDay}
+                                style={{
+                                    background: 'rgba(245, 158, 11, 0.1)',
+                                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                                    color: '#fbbf24',
+                                    borderRadius: '8px',
+                                    padding: '8px 16px',
+                                    fontSize: '12.5px',
+                                    fontWeight: '800',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                <Plus size={15} /> Add Another Day
+                            </button>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', background: '#060a12', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '8px 18px' }}>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '600' }}>
+                                    Total Quoted Fare:
+                                </span>
+                                <span style={{ fontSize: '20px', fontWeight: '900', color: '#fbbf24' }}>
+                                    ₹{Number(totalAmount).toLocaleString('en-IN')}
+                                </span>
                             </div>
-                        )}
+                        </div>
+                    </div>
 
-                        {/* Save Actions Bar */}
-                        <div style={{ display: 'flex', gap: '12px', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                            <button type="button" onClick={onClose} style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '13px' }}>
+                    {/* ========================================================= */}
+                    {/* SECTION 4: REMARKS & INCLUSIONS (2-Column)                */}
+                    {/* ========================================================= */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+                        {/* Left: Special Remarks */}
+                        <div style={{ background: '#0a101d', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: 'white' }}>
+                                    Any Remark / Special Request of Guest
+                                </span>
+                            </div>
+                            <textarea
+                                maxLength={500}
+                                rows={4}
+                                placeholder="e.g. Need wheelchair assistance, prefer Non-AC on hills, baby seat..."
+                                value={specialRemarks}
+                                onChange={e => setSpecialRemarks(e.target.value)}
+                                style={{ ...darkInputStyle, resize: 'vertical', minHeight: '90px', lineHeight: '1.4' }}
+                            />
+                        </div>
+
+                        {/* Right: Inclusions Checkboxes */}
+                        <div style={{ background: '#0a101d', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: 'white' }}>
+                                    Trip Inclusion Remarks
+                                </span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {[
+                                    { key: 'driverAllowance', label: 'Driver allowance included' },
+                                    { key: 'nightAllowance', label: 'Night allowance included' },
+                                    { key: 'tollParking', label: 'Toll & parking charges included' },
+                                    { key: 'gstIncluded', label: 'GST prices included' }
+                                ].map(({ key, label }) => (
+                                    <label
+                                        key={key}
+                                        onClick={() => handleInclusionToggle(key)}
+                                        style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12.5px', color: inclusions[key] ? '#fff' : 'rgba(255,255,255,0.5)', cursor: 'pointer' }}
+                                    >
+                                        <div style={{
+                                            width: '16px',
+                                            height: '16px',
+                                            borderRadius: '4px',
+                                            background: inclusions[key] ? '#fbbf24' : 'rgba(255,255,255,0.08)',
+                                            border: `1px solid ${inclusions[key] ? '#fbbf24' : 'rgba(255,255,255,0.2)'}`,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            color: '#000',
+                                            fontSize: '11px',
+                                            fontWeight: '900'
+                                        }}>
+                                            {inclusions[key] && '✓'}
+                                        </div>
+                                        <span>{label}</span>
+                                    </label>
+                                ))}
+                            </div>
+
+                            {/* Manual Inclusions */}
+                            <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '10px' }}>
+                                <label style={{ ...labelStyle, marginBottom: '4px' }}>Custom Inclusions (Auto-Saved)</label>
+                                <textarea
+                                    rows={2}
+                                    placeholder="e.g. State border tax included, parking at client cost..."
+                                    value={inclusions.manualRemarks || ''}
+                                    onChange={e => setInclusions(prev => ({ ...prev, manualRemarks: e.target.value }))}
+                                    style={{ ...darkInputStyle, resize: 'vertical' }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        paddingTop: '16px',
+                        borderTop: '1px solid rgba(255,255,255,0.08)',
+                        flexWrap: 'wrap',
+                        gap: '12px'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: 'rgba(255,255,255,0.5)' }}>
+                            <Info size={14} color="#38bdf8" />
+                            <span>Changes will be updated directly to booking and itinerary schedule.</span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                style={{
+                                    padding: '9px 20px',
+                                    background: '#0a101d',
+                                    color: 'white',
+                                    border: '1px solid rgba(255,255,255,0.15)',
+                                    borderRadius: '8px',
+                                    fontSize: '13px',
+                                    fontWeight: '600',
+                                    cursor: 'pointer'
+                                }}
+                            >
                                 Cancel
                             </button>
-                            <button type="submit" disabled={saving} style={{ flex: 1.5, padding: '12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '800', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 14px rgba(59, 130, 246, 0.4)' }}>
-                                <Save size={16} /> {saving ? 'Saving...' : 'Save Matrix & Itinerary'}
+                            <button
+                                type="submit"
+                                disabled={saving}
+                                style={{
+                                    padding: '9px 24px',
+                                    background: '#fbbf24',
+                                    color: '#000',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontSize: '13px',
+                                    fontWeight: '900',
+                                    cursor: saving ? 'not-allowed' : 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    opacity: saving ? 0.7 : 1
+                                }}
+                            >
+                                <Save size={15} />
+                                {saving ? 'Saving Changes...' : 'Update Booking'}
                             </button>
                         </div>
-                    </form>
-
-                    {/* FLEET CAR MANAGEMENT MODAL */}
-                    {showCarManager && (
-                        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(5px)', zIndex: 100000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '16px' }}>
-                            <div style={{ width: '100%', maxWidth: '440px', background: '#0e1726', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '16px', padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 25px 50px rgba(0,0,0,0.7)' }}>
-                                
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
-                                    <div>
-                                        <h3 style={{ margin: 0, color: 'white', fontSize: '16px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <Car size={18} color="#3b82f6" /> Manage Fleet Cars
-                                        </h3>
-                                        <p style={{ margin: '3px 0 0', color: 'rgba(255,255,255,0.6)', fontSize: '12px' }}>Add new cars, rename or delete existing cars</p>
-                                    </div>
-                                    <button type="button" onClick={() => setShowCarManager(false)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}>
-                                        <X size={18} />
-                                    </button>
-                                </div>
-
-                                {/* Add New Car */}
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <input 
-                                        type="text"
-                                        placeholder="Add new car (e.g. Kia Carens, Scorpio)"
-                                        value={newCarInput}
-                                        onChange={e => setNewCarInput(e.target.value)}
-                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddNewCar(); } }}
-                                        style={{ flex: 1, padding: '10px 14px', background: '#070b13', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', color: 'white', fontSize: '13px' }}
-                                    />
-                                    <button 
-                                        type="button"
-                                        onClick={handleAddNewCar}
-                                        style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '0 16px', borderRadius: '8px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                    >
-                                        <Plus size={15} /> Add
-                                    </button>
-                                </div>
-
-                                {/* Car List */}
-                                <div style={{ maxHeight: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
-                                    {carList.map((car, idx) => (
-                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '8px' }}>
-                                            {editingCarIdx === idx ? (
-                                                <div style={{ display: 'flex', gap: '6px', flex: 1 }}>
-                                                    <input 
-                                                        type="text" 
-                                                        value={editingCarValue} 
-                                                        onChange={e => setEditingCarValue(e.target.value)}
-                                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSaveEditCar(idx); } }}
-                                                        style={{ flex: 1, padding: '5px 8px', background: '#1e293b', border: '1px solid #3b82f6', borderRadius: '5px', color: 'white', fontSize: '13px' }}
-                                                    />
-                                                    <button type="button" onClick={() => handleSaveEditCar(idx)} style={{ background: '#22c55e', color: 'white', border: 'none', borderRadius: '5px', padding: '4px 10px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>Save</button>
-                                                    <button type="button" onClick={() => setEditingCarIdx(null)} style={{ background: 'rgba(255,255,255,0.1)', color: 'white', border: 'none', borderRadius: '5px', padding: '4px 8px', cursor: 'pointer', fontSize: '12px' }}>Cancel</button>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <span style={{ color: 'white', fontSize: '13px', fontWeight: '600' }}>{car}</span>
-                                                    <div style={{ display: 'flex', gap: '6px' }}>
-                                                        <button 
-                                                            type="button" 
-                                                            onClick={() => { setEditingCarIdx(idx); setEditingCarValue(car); }}
-                                                            style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', color: '#93c5fd', borderRadius: '5px', padding: '5px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                                                            title="Rename Car"
-                                                        >
-                                                            <Edit2 size={13} />
-                                                        </button>
-                                                        <button 
-                                                            type="button" 
-                                                            onClick={() => handleDeleteCar(idx)}
-                                                            style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', borderRadius: '5px', padding: '5px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                                                            title="Delete Car"
-                                                        >
-                                                            <Trash2 size={13} />
-                                                        </button>
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-
-                                <button 
-                                    type="button" 
-                                    onClick={() => setShowCarManager(false)}
-                                    style={{ width: '100%', padding: '11px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '800', fontSize: '13.5px', cursor: 'pointer', marginTop: '4px' }}
-                                >
-                                    Done
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                </motion.div>
+                    </div>
+                </form>
             </div>
-        </AnimatePresence>
+        </div>
     );
 }
