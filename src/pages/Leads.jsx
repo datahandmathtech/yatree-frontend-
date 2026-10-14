@@ -289,7 +289,7 @@ export default function Leads() {
     const ALL_VEHICLES = [...new Set([...VEHICLE_OPTIONS, ...customVehicles])];
 
     const [showModal, setShowModal] = useState(false);
-    const [showDetailedItinerary, setShowDetailedItinerary] = useState(false);
+    const [showDetailedItinerary, setShowDetailedItinerary] = useState(true);
     const [remarksModalLead, setRemarksModalLead] = useState(null);
     const [expandedRemarks, setExpandedRemarks] = useState({});
     const [editingLead, setEditingLead] = useState(null);
@@ -814,7 +814,7 @@ export default function Leads() {
             setMatrixSimSalePrice('');
         } else {
             setEditingLead(null);
-            setShowDetailedItinerary(false);
+            setShowDetailedItinerary(true);
             const today = toLocalDateString(new Date());
             fetchNextClientCodePreview(today);
 
@@ -5199,8 +5199,7 @@ export default function Leads() {
                                 {/* ========================================== */}
                                 {/* SECTION 3: DAY-WISE ITINERARY & PRICING    */}
                                 {/* ========================================== */}
-                                {showDetailedItinerary && (
-                                    <div>
+                                <div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                                             <span style={{
                                                 width: '20px',
@@ -5484,7 +5483,6 @@ export default function Leads() {
                                             </div>
                                         </div>
                                     </div>
-                                )}
 
                                 {/* ========================================== */}
                                 {/* SECTION 4: REMARKS & INCLUSIONS (2-COL)   */}
