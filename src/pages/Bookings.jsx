@@ -252,6 +252,20 @@ export default function Bookings() {
         setShowAssignDriverModal(true);
     };
 
+    const handleCompleteBooking = async (bkg) => {
+        const code = bkg.bookingCode || bkg.clientCode || bkg.bookingId || 'this booking';
+        if (!window.confirm(`Mark ${code} as Completed? This booking will be moved to Completed Bookings.`)) {
+            return;
+        }
+        try {
+            await axios.put(`/api/bookings/single/${bkg._id}`, { bookingStatus: 'Completed' });
+            fetchBookings();
+        } catch (err) {
+            console.error('Error completing booking:', err);
+            alert('Failed to mark booking as completed');
+        }
+    };
+
     const handleSaveDriverAssignments = async (e) => {
         if (e && e.preventDefault) e.preventDefault();
         try {
@@ -1273,12 +1287,17 @@ export default function Bookings() {
                                                       }
                                                   })()}
                                                   {isDatePassedBooking(bkg) && (
-                                                      <span style={{
-                                                          padding: '2px 8px', borderRadius: '4px', fontSize: '10px', 
-                                                          background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)'
-                                                      }}>
-                                                          ⚠️ Date Passed
-                                                      </span>
+                                                      <button
+                                                          onClick={() => handleCompleteBooking(bkg)}
+                                                          style={{
+                                                              padding: '3px 8px', borderRadius: '4px', fontSize: '10.5px', fontWeight: 'bold',
+                                                              background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.5)',
+                                                              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                                                          }}
+                                                          title="Trip finished: Click to move to Completed Bookings"
+                                                      >
+                                                          <CheckCircle size={11} color="#34d399" /> Complete Trip
+                                                      </button>
                                                   )}
                                               </div>
                                           </td>
@@ -1348,6 +1367,9 @@ export default function Bookings() {
                                                         </button>
                                                         <button onClick={() => { setActiveActionMenu(null); setSelectedBooking(bkg); setShowPaymentModal(true); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
                                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Record Payment
+                                                        </button>
+                                                        <button onClick={() => { setActiveActionMenu(null); handleCompleteBooking(bkg); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: '#34d399', fontSize: '12.5px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                            <CheckCircle size={14} color="#34d399" /> Complete Trip
                                                         </button>
                                                         <button onClick={() => { setActiveActionMenu(null); shareOnWhatsApp(bkg); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
                                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg> WhatsApp Share

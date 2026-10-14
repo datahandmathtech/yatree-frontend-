@@ -223,7 +223,7 @@ export default function Leads() {
     const [salesPersonFilter, setSalesPersonFilter] = useState('All');
     const [statusFilter, setStatusFilter] = useState('All'); // 'All' | 'Confirmed' | 'Cancelled' | 'Lost' | 'Open'
     const [sortField, setSortField] = useState('clientCode'); // 'clientCode' | 'date' | 'price'
-    const [sortOrder, setSortOrder] = useState('asc'); // default 'asc' so 10/01, 10/02... are sequential in line!
+    const [sortOrder, setSortOrder] = useState('desc'); // default 'desc' so current/newest leads (e.g. 10/70, 10/69...) appear at the top!
     const [dateFilterType, setDateFilterType] = useState('lead'); // 'lead' = Enquiry / Lead Created (10/xx), 'travel' = Tour Travel Date
 
     // Hover tooltip state
@@ -422,20 +422,10 @@ export default function Leads() {
 
     const applySimPriceToQuotation = (price) => {
         const val = Math.max(0, parseFloat(price) || 0);
-        setFormData(prev => {
-            const days = prev.itinerary?.length || 1;
-            const ratePerDay = Math.round(val / Math.max(1, days));
-            const updatedItin = (prev.itinerary || []).map(day => ({
-                ...day,
-                rate: ratePerDay,
-                amount: ratePerDay * (day.quantity || 1)
-            }));
-            return {
-                ...prev,
-                totalAmount: val,
-                itinerary: updatedItin
-            };
-        });
+        setFormData(prev => ({
+            ...prev,
+            totalAmount: val
+        }));
     };
 
     const fetchTravelAgents = async () => {
@@ -637,7 +627,11 @@ export default function Leads() {
 
                 const total = newItinerary.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
                 updated.itinerary = newItinerary;
-                updated.totalAmount = total;
+                if (total > 0) {
+                    updated.totalAmount = total;
+                } else if (prev.totalAmount) {
+                    updated.totalAmount = prev.totalAmount;
+                }
             }
             return updated;
         });
@@ -2544,7 +2538,7 @@ export default function Leads() {
                             <th 
                                 onClick={() => {
                                     if (sortField === 'clientCode') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-                                    else { setSortField('clientCode'); setSortOrder('asc'); }
+                                    else { setSortField('clientCode'); setSortOrder('desc'); }
                                 }}
                                 style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: sortField === 'clientCode' ? '#38bdf8' : 'rgba(255,255,255,0.7)', letterSpacing: '0.3px', cursor: 'pointer', userSelect: 'none' }}
                                 title="Click to sort sequentially by Lead ID / Code"
@@ -4612,20 +4606,7 @@ export default function Leads() {
                                                 <option value="Cold" style={{ background: '#090f1d', color: '#94a3b8' }}>❄️ Low (Cold)</option>
                                             </select>
                                         </div>
-                                        <div>
-                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Lead Status</label>
-                                            <select
-                                                value={formData.status || 'New'}
-                                                onChange={e => setFormData({ ...formData, status: e.target.value })}
-                                                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '13px', outline: 'none', cursor: 'pointer' }}
-                                            >
-                                                <option value="New" style={{ background: '#090f1d', color: '#4ade80' }}>🟢 New / Open</option>
-                                                <option value="Hot" style={{ background: '#090f1d', color: '#fbbf24' }}>🔥 Hot Follow-up</option>
-                                                <option value="Follow-up" style={{ background: '#090f1d', color: '#38bdf8' }}>📞 Follow-up</option>
-                                                <option value="Cancelled" style={{ background: '#090f1d', color: '#ef4444' }}>❌ Cancelled</option>
-                                                <option value="Lost" style={{ background: '#090f1d', color: '#94a3b8' }}>⚠️ Lost</option>
-                                            </select>
-                                        </div>
+                                        
                                     </div>
                                 </div>
 
@@ -4839,21 +4820,11 @@ export default function Leads() {
                                                     placeholder="e.g. 15000"
                                                     value={formData.totalAmount || ''}
                                                     onChange={e => {
-                                                        const val = Math.max(0, parseFloat(e.target.value) || 0);
-                                                        setFormData(prev => {
-                                                            const days = prev.itinerary?.length || 1;
-                                                            const ratePerDay = Math.round(val / Math.max(1, days));
-                                                            const updatedItin = (prev.itinerary || []).map(day => ({
-                                                                ...day,
-                                                                rate: ratePerDay,
-                                                                amount: ratePerDay * (day.quantity || 1)
-                                                            }));
-                                                            return {
-                                                                ...prev,
-                                                                totalAmount: val,
-                                                                itinerary: updatedItin
-                                                            };
-                                                        });
+                                                        const val = e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0);
+                                                        setFormData(prev => ({
+                                                            ...prev,
+                                                            totalAmount: val
+                                                        }));
                                                     }}
                                                     style={{
                                                         ...darkInputStyle,
