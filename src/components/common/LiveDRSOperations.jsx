@@ -12,6 +12,8 @@ import PremiumDateInput from './PremiumDateInput';
 import { formatDateIST, formatTimeIST, todayIST, nowIST, toISTDateString } from '../../utils/istUtils';
 import { generateBookingConfirmationPDF } from '../../utils/bookingConfirmationPdf';
 import ClientLedgerDrawer from './ClientLedgerDrawer';
+import LiveDRSExcelView from './LiveDRSExcelView';
+import GoogleSheetSyncModal from './GoogleSheetSyncModal';
 import { Edit, Download, User } from 'lucide-react';
 
 // Smart Time Parser for Chronological Sorting
@@ -80,6 +82,8 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
     const [endDate, setEndDate] = useState(todayIST());
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
+    const [drsDisplayMode, setDrsDisplayMode] = useState('excel'); // 'excel' (Spreadsheet Grid) or 'standard' (Dispatch Cards)
+    const [showGoogleSheetSyncModal, setShowGoogleSheetSyncModal] = useState(false);
 
     // Counts for tabs
     const [tabCounts, setTabCounts] = useState({ today: 0, tomorrow: 0, both: 0 });
@@ -1032,7 +1036,75 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                 </div>
 
                 {/* Right: Action Buttons */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    {/* View Switcher: Excel Spreadsheet View vs Cards View */}
+                    <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '3px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <button
+                            onClick={() => setDrsDisplayMode('excel')}
+                            style={{
+                                padding: '7px 13px',
+                                borderRadius: '9px',
+                                border: 'none',
+                                background: drsDisplayMode === 'excel' ? '#10b981' : 'transparent',
+                                color: drsDisplayMode === 'excel' ? '#000' : 'rgba(255,255,255,0.7)',
+                                fontWeight: drsDisplayMode === 'excel' ? '900' : '700',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                transition: 'all 0.15s'
+                            }}
+                            title="Daily Rental Excel / Google Sheet View"
+                        >
+                            <span>📊</span>
+                            <span>Excel Sheet View</span>
+                        </button>
+                        <button
+                            onClick={() => setDrsDisplayMode('standard')}
+                            style={{
+                                padding: '7px 13px',
+                                borderRadius: '9px',
+                                border: 'none',
+                                background: drsDisplayMode === 'standard' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                                color: drsDisplayMode === 'standard' ? '#fff' : 'rgba(255,255,255,0.7)',
+                                fontWeight: drsDisplayMode === 'standard' ? '900' : '700',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                transition: 'all 0.15s'
+                            }}
+                            title="Standard Dispatch Cards View"
+                        >
+                            <span>🗂️</span>
+                            <span>Cards View</span>
+                        </button>
+                    </div>
+
+                    {/* Google Sheets 2-Way Sync Button */}
+                    <button
+                        onClick={() => setShowGoogleSheetSyncModal(true)}
+                        style={{
+                            padding: '8px 14px',
+                            borderRadius: '12px',
+                            background: 'rgba(16, 124, 65, 0.25)',
+                            border: '1.5px solid #16a34a',
+                            color: '#4ade80',
+                            fontWeight: '900',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 4px 15px rgba(16, 124, 65, 0.25)'
+                        }}
+                        title="Two-Way Google Sheets Sync"
+                    >
+                        <span>🔗</span>
+                        <span>Sheet 2-Way Sync</span>
+                    </button>
                     <button
                         onClick={() => fetchDuties()}
                         style={{
@@ -1629,6 +1701,28 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                         </tbody>
                     </table>
                 </div>
+            ) : drsDisplayMode === 'excel' ? (
+                <LiveDRSExcelView
+                    duties={duties}
+                    selectedCompany={selectedCompany}
+                    drivers={drivers}
+                    vehicles={vehicles}
+                    onRefresh={fetchDuties}
+                    onOpenDirectBooking={(date) => {
+                        setDirectForm({
+                            ...initialDirectBookingForm,
+                            date: date || (dateTab === 'tomorrow' ? tomorrowDateStr : todayDateStr)
+                        });
+                        setShowDirectBookingModal(true);
+                    }}
+                    onOpenEditDuty={(duty) => {
+                        setSelectedDutyForEdit(duty);
+                        setShowEditDutyModal(true);
+                    }}
+                    onOpenAssign={(duty) => openAssignModal(duty)}
+                    onShareWhatsApp={(duty) => handleShareWhatsApp(duty)}
+                    onOpenSheetSync={() => setShowGoogleSheetSyncModal(true)}
+                />
             ) : (
             <div style={{
                 background: 'rgba(10, 16, 30, 0.75)',
@@ -3077,6 +3171,14 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                     );
                 })()}
             </AnimatePresence>
+
+            {/* GOOGLE SHEET 2-WAY SYNC MODAL */}
+            <GoogleSheetSyncModal
+                isOpen={showGoogleSheetSyncModal}
+                onClose={() => setShowGoogleSheetSyncModal(false)}
+                selectedCompany={selectedCompany}
+                onSyncComplete={fetchDuties}
+            />
         </div>
     );
 }
