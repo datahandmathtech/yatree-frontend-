@@ -7,13 +7,20 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// Formats date into short key like "1-10", "2-10"
+// Formats date into short key like "1-10", "2-10" using IST
 const getShortDateKey = (dateVal) => {
     if (!dateVal) return 'TBA';
+    if (typeof dateVal === 'string' && /^\d{1,2}-\d{1,2}$/.test(dateVal.trim())) {
+        return dateVal.trim();
+    }
     const d = new Date(dateVal);
     if (isNaN(d.getTime())) return String(dateVal);
-    const day = d.getDate();
-    const month = d.getMonth() + 1;
+    
+    // Convert to Indian Standard Time (IST)
+    const istString = d.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+    const istDate = new Date(istString);
+    const day = istDate.getDate();
+    const month = istDate.getMonth() + 1;
     return `${day}-${month}`;
 };
 
@@ -26,8 +33,7 @@ export default function LiveDRSExcelView({
     onOpenDirectBooking,
     onOpenEditDuty,
     onOpenAssign,
-    onShareWhatsApp,
-    onOpenSheetSync
+    onShareWhatsApp
 }) {
     const [selectedMonthTab, setSelectedMonthTab] = useState('Oct. 26');
     const [searchFilter, setSearchFilter] = useState('');
@@ -36,7 +42,7 @@ export default function LiveDRSExcelView({
     const [savingInline, setSavingInline] = useState(false);
 
     const MONTH_TABS = [
-        'Oct. 26', 'Nov. 26', 'Dec. 26', 'Sept. 26', 'August 26', 'All Duties'
+        'Oct. 26', 'Nov. 26', 'Dec. 26', 'Jan. 27', 'Sept. 26', 'August 26', 'All Duties'
     ];
 
     // Filter duties by search and selected month tab
@@ -46,12 +52,17 @@ export default function LiveDRSExcelView({
             if (selectedMonthTab !== 'All Duties') {
                 const d = duty.date ? new Date(duty.date) : null;
                 if (d && !isNaN(d.getTime())) {
-                    const m = d.getMonth(); // 0-indexed: 9 = Oct, 8 = Sep, 10 = Nov
-                    if (selectedMonthTab === 'Oct. 26' && m !== 9) return false;
-                    if (selectedMonthTab === 'Nov. 26' && m !== 10) return false;
-                    if (selectedMonthTab === 'Dec. 26' && m !== 11) return false;
-                    if (selectedMonthTab === 'Sept. 26' && m !== 8) return false;
-                    if (selectedMonthTab === 'August 26' && m !== 7) return false;
+                    const istString = d.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+                    const istDate = new Date(istString);
+                    const m = istDate.getMonth() + 1; // 1 to 12
+                    const y = istDate.getFullYear();
+
+                    if (selectedMonthTab === 'Oct. 26' && !(m === 10 && y === 2026)) return false;
+                    if (selectedMonthTab === 'Nov. 26' && !(m === 11 && y === 2026)) return false;
+                    if (selectedMonthTab === 'Dec. 26' && !(m === 12 && y === 2026)) return false;
+                    if (selectedMonthTab === 'Jan. 27' && !(m === 1 && y === 2027)) return false;
+                    if (selectedMonthTab === 'Sept. 26' && !(m === 9 && y === 2026)) return false;
+                    if (selectedMonthTab === 'August 26' && !(m === 8 && y === 2026)) return false;
                 }
             }
 
@@ -227,33 +238,37 @@ export default function LiveDRSExcelView({
                     ))}
                 </div>
 
-                {/* Right: Quick Stats & 2-Way Sheet Sync Button */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {/* Right: Quick Stats & + Add Duty Button */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>Total Month Revenue</div>
-                        <div style={{ fontSize: '15px', color: '#10b981', fontWeight: '900' }}>₹{monthStats.totalRevenue.toLocaleString('en-IN')}</div>
+                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700' }}>
+                            {monthStats.totalRides} Duties • Total Fare
+                        </div>
+                        <div style={{ fontSize: '16px', color: '#10b981', fontWeight: '900' }}>
+                            ₹{monthStats.totalRevenue.toLocaleString('en-IN')}
+                        </div>
                     </div>
 
                     <button
-                        onClick={onOpenSheetSync}
+                        onClick={() => onOpenDirectBooking && onOpenDirectBooking()}
                         style={{
-                            padding: '9px 16px',
-                            background: 'linear-gradient(135deg, #107c41, #0b6a37)',
-                            border: '1px solid #16a34a',
+                            padding: '9px 18px',
+                            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                            border: 'none',
                             borderRadius: '10px',
-                            color: 'white',
-                            fontWeight: '800',
+                            color: '#000',
+                            fontWeight: '900',
                             fontSize: '12.5px',
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '7px',
-                            boxShadow: '0 4px 15px rgba(16, 124, 65, 0.4)'
+                            gap: '6px',
+                            boxShadow: '0 4px 15px rgba(245, 158, 11, 0.35)'
                         }}
-                        title="Two-Way Google Sheets Connection"
+                        title="Add New Duty"
                     >
-                        <span style={{ fontSize: '14px' }}>📊</span>
-                        <span>Google Sheet 2-Way Sync</span>
+                        <Plus size={15} strokeWidth={3} />
+                        <span>Add Duty</span>
                     </button>
                 </div>
             </div>

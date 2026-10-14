@@ -160,7 +160,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
             fetchDropdowns();
             fetchAllCompanyBookings();
         }
-    }, [selectedCompany, dateTab, customDate, startDate, endDate]);
+    }, [selectedCompany, drsDisplayMode, dateTab, customDate, startDate, endDate]);
 
     const fetchAllCompanyBookings = async () => {
         if (!selectedCompany?._id) return;
@@ -177,7 +177,9 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
         setLoading(true);
         try {
             let url = `/api/drs/${selectedCompany._id}?`;
-            if (dateTab === 'today') {
+            if (drsDisplayMode === 'excel') {
+                url += `view=all`;
+            } else if (dateTab === 'today') {
                 url += `date=${todayDateStr}`;
             } else if (dateTab === 'tomorrow') {
                 url += `date=${tomorrowDateStr}`;
@@ -856,6 +858,140 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                 )}
             </AnimatePresence>
 
+            {/* CONDITIONAL RENDER: EXCEL SPREADSHEET VIEW VS STANDARD CARDS VIEW */}
+            {drsDisplayMode === 'excel' ? (
+                <div>
+                    {/* Top Clean Bar for Excel View */}
+                    <div style={{
+                        background: 'rgba(15, 23, 42, 0.65)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: '20px',
+                        padding: '12px 20px',
+                        marginBottom: '16px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '12px',
+                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+                        backdropFilter: 'blur(20px)'
+                    }}>
+                        {/* View Switcher */}
+                        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '3px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <button
+                                onClick={() => setDrsDisplayMode('excel')}
+                                style={{
+                                    padding: '7px 14px',
+                                    borderRadius: '9px',
+                                    border: 'none',
+                                    background: '#10b981',
+                                    color: '#000',
+                                    fontWeight: '900',
+                                    fontSize: '12.5px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                <span>📊</span>
+                                <span>Excel Sheet View</span>
+                            </button>
+                            <button
+                                onClick={() => setDrsDisplayMode('standard')}
+                                style={{
+                                    padding: '7px 14px',
+                                    borderRadius: '9px',
+                                    border: 'none',
+                                    background: 'transparent',
+                                    color: 'rgba(255,255,255,0.7)',
+                                    fontWeight: '700',
+                                    fontSize: '12.5px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                <span>🗂️</span>
+                                <span>Cards View</span>
+                            </button>
+                        </div>
+
+                        {/* Right: Actions */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <button
+                                onClick={() => fetchDuties()}
+                                style={{
+                                    padding: '9px 16px',
+                                    borderRadius: '12px',
+                                    background: 'rgba(255,255,255,0.05)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '7px',
+                                    fontSize: '12.5px',
+                                    fontWeight: '800'
+                                }}
+                                title="Refresh Live DRS"
+                            >
+                                <RefreshCw size={14} className={loading ? 'pulse-animation' : ''} /> Refresh
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    setDirectForm({
+                                        ...initialDirectBookingForm,
+                                        date: todayDateStr
+                                    });
+                                    setShowDirectBookingModal(true);
+                                }}
+                                style={{
+                                    padding: '9px 20px',
+                                    borderRadius: '12px',
+                                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                                    border: 'none',
+                                    color: '#000000',
+                                    fontWeight: '1000',
+                                    fontSize: '13px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    boxShadow: '0 6px 20px rgba(245, 158, 11, 0.35)'
+                                }}
+                            >
+                                <Plus size={16} strokeWidth={3} /> Direct Booking (Instant DRS)
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Pure Google Sheet Grid View */}
+                    <LiveDRSExcelView
+                        duties={duties}
+                        selectedCompany={selectedCompany}
+                        drivers={drivers}
+                        vehicles={vehicles}
+                        onRefresh={fetchDuties}
+                        onOpenDirectBooking={(date) => {
+                            setDirectForm({
+                                ...initialDirectBookingForm,
+                                date: date || todayDateStr
+                            });
+                            setShowDirectBookingModal(true);
+                        }}
+                        onOpenEditDuty={(duty) => {
+                            setSelectedDutyForEdit(duty);
+                            setShowEditDutyModal(true);
+                        }}
+                        onOpenAssign={(duty) => openAssignModal(duty)}
+                        onShareWhatsApp={(duty) => handleShareWhatsApp(duty)}
+                    />
+                </div>
+            ) : (
+                <>
             {/* OPERATIONS DISPATCH CONTROLS & DATE TABS */}
             <div style={{
                 background: 'rgba(15, 23, 42, 0.65)',
@@ -1082,29 +1218,6 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                             <span>Cards View</span>
                         </button>
                     </div>
-
-                    {/* Google Sheets 2-Way Sync Button */}
-                    <button
-                        onClick={() => setShowGoogleSheetSyncModal(true)}
-                        style={{
-                            padding: '8px 14px',
-                            borderRadius: '12px',
-                            background: 'rgba(16, 124, 65, 0.25)',
-                            border: '1.5px solid #16a34a',
-                            color: '#4ade80',
-                            fontWeight: '900',
-                            fontSize: '12px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            boxShadow: '0 4px 15px rgba(16, 124, 65, 0.25)'
-                        }}
-                        title="Two-Way Google Sheets Sync"
-                    >
-                        <span>🔗</span>
-                        <span>Sheet 2-Way Sync</span>
-                    </button>
                     <button
                         onClick={() => fetchDuties()}
                         style={{
@@ -1701,28 +1814,6 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                         </tbody>
                     </table>
                 </div>
-            ) : drsDisplayMode === 'excel' ? (
-                <LiveDRSExcelView
-                    duties={duties}
-                    selectedCompany={selectedCompany}
-                    drivers={drivers}
-                    vehicles={vehicles}
-                    onRefresh={fetchDuties}
-                    onOpenDirectBooking={(date) => {
-                        setDirectForm({
-                            ...initialDirectBookingForm,
-                            date: date || (dateTab === 'tomorrow' ? tomorrowDateStr : todayDateStr)
-                        });
-                        setShowDirectBookingModal(true);
-                    }}
-                    onOpenEditDuty={(duty) => {
-                        setSelectedDutyForEdit(duty);
-                        setShowEditDutyModal(true);
-                    }}
-                    onOpenAssign={(duty) => openAssignModal(duty)}
-                    onShareWhatsApp={(duty) => handleShareWhatsApp(duty)}
-                    onOpenSheetSync={() => setShowGoogleSheetSyncModal(true)}
-                />
             ) : (
             <div style={{
                 background: 'rgba(10, 16, 30, 0.75)',
@@ -2153,6 +2244,8 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                     </tbody>
                 </table>
             </div>
+            )}
+            </>
             )}
 
             {/* MODAL: DIRECT BOOKING / INSTANT DRS INSERT */}
@@ -3171,14 +3264,6 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                     );
                 })()}
             </AnimatePresence>
-
-            {/* GOOGLE SHEET 2-WAY SYNC MODAL */}
-            <GoogleSheetSyncModal
-                isOpen={showGoogleSheetSyncModal}
-                onClose={() => setShowGoogleSheetSyncModal(false)}
-                selectedCompany={selectedCompany}
-                onSyncComplete={fetchDuties}
-            />
         </div>
     );
 }
