@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import SEO from '../components/SEO';
 import { generateBookingConfirmationPDF } from '../utils/bookingConfirmationPdf';
 import { generateTaxInvoicePDF } from '../utils/taxInvoicePdf';
+import { generateClientLedgerPDF } from '../utils/clientLedgerPdf';
 import EditBookingModal from '../components/common/EditBookingModal';
 import BankSelector from '../components/common/BankSelector';
 import { getFinancialYear, getAvailableFinancialYears } from '../utils/istUtils';
@@ -2222,8 +2223,10 @@ export default function Bookings() {
                                         <FileText size={20} />
                                     </div>
                                     <div>
-                                        <h2 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Client Ledger - {ledgerModalBooking.bookingCode || ledgerModalBooking.bookingId}</h2>
-                                        <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.5)', fontSize: '12px' }}>View client account, payments and outstanding balance.</p>
+                                        <h2 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Client Ledger & Payment Statement</h2>
+                                        <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.5)', fontSize: '12px' }}>
+                                            {ledgerModalBooking.bookingCode || ledgerModalBooking.bookingId} • Track package fare, payments received & pending balance.
+                                        </p>
                                     </div>
                                 </div>
                                 <button onClick={() => setLedgerModalBooking(null)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}><X size={20} /></button>
@@ -2232,126 +2235,204 @@ export default function Bookings() {
                             {/* Scrollable Body */}
                             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
                                 {/* Top Stats */}
-                                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <div style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '6px', borderRadius: '6px' }}><Car size={16} /></div>
-                                            <div>
-                                                <div style={{ color: 'white', fontWeight: '700', fontSize: '14px' }}>{ledgerModalBooking.vehicleType}</div>
-                                                <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>Client booking details and trip information</div>
+                                {(() => {
+                                    const totalFare = Number(ledgerModalBooking.totalAmount) || 0;
+                                    const totalPaid = Number(ledgerModalBooking.advancePaid) || 0;
+                                    const balanceDue = ledgerModalBooking.balanceDue !== undefined ? Number(ledgerModalBooking.balanceDue) : Math.max(0, totalFare - totalPaid);
+                                    const isPaidFull = balanceDue <= 0;
+
+                                    return (
+                                        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '18px', marginBottom: '24px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <div style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '7px', borderRadius: '8px' }}><Car size={16} /></div>
+                                                    <div>
+                                                        <div style={{ color: 'white', fontWeight: '800', fontSize: '14px' }}>{ledgerModalBooking.vehicleType || 'Standard Vehicle'}</div>
+                                                        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>Client Booking & Trip Details</div>
+                                                    </div>
+                                                </div>
+                                                <div style={{ textAlign: 'right', fontSize: '13px', color: 'white', fontWeight: '700' }}>
+                                                    Client: <span style={{ color: '#60a5fa' }}>{ledgerModalBooking.clientName}</span>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Booking Code</div>
+                                                    <div style={{ fontSize: '13px', color: '#fbbf24', fontWeight: '800' }}>{ledgerModalBooking.bookingCode || ledgerModalBooking.bookingId}</div>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Trip Start</div>
+                                                    <div style={{ fontSize: '13px', color: 'white', fontWeight: '700' }}>{ledgerModalBooking.tripStartFormatted || new Date(ledgerModalBooking.travelStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</div>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Trip End</div>
+                                                    <div style={{ fontSize: '13px', color: 'white', fontWeight: '700' }}>{ledgerModalBooking.tripEndFormatted || new Date(ledgerModalBooking.travelEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</div>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Package Price</div>
+                                                    <div style={{ fontSize: '14px', color: 'white', fontWeight: '800' }}>₹{totalFare.toLocaleString('en-IN')}</div>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '16px', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '600' }}>Total Received</div>
+                                                    <div style={{ fontSize: '20px', color: '#10b981', fontWeight: '900' }}>₹{totalPaid.toLocaleString('en-IN')}</div>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '600' }}>Balance Due</div>
+                                                    <div style={{ fontSize: '20px', color: isPaidFull ? '#10b981' : '#f59e0b', fontWeight: '900' }}>₹{balanceDue.toLocaleString('en-IN')}</div>
+                                                </div>
+                                                <div style={{ textAlign: 'right' }}>
+                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '600' }}>Payment Status</div>
+                                                    <div style={{ 
+                                                        padding: '5px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800',
+                                                        background: isPaidFull ? 'rgba(16, 185, 129, 0.2)' : totalPaid > 0 ? 'rgba(245, 158, 11, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                                        color: isPaidFull ? '#34d399' : totalPaid > 0 ? '#fbbf24' : '#f87171',
+                                                        border: isPaidFull ? '1px solid rgba(16, 185, 129, 0.4)' : totalPaid > 0 ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)'
+                                                    }}>
+                                                        {isPaidFull ? 'Paid in Full' : totalPaid > 0 ? `Part Paid (₹${balanceDue.toLocaleString('en-IN')} Due)` : 'Payment Due'}
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div style={{ textAlign: 'right', fontSize: '12px', color: 'rgba(255,255,255,0.9)', fontWeight: '600' }}>
-                                            Name : {ledgerModalBooking.clientName}
-                                        </div>
-                                    </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px' }}>
-                                        <div>
-                                            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Booking Code</div>
-                                            <div style={{ fontSize: '13px', color: '#fbbf24', fontWeight: '800' }}>{ledgerModalBooking.bookingCode || ledgerModalBooking.bookingId}</div>
-                                        </div>
-                                        <div>
-                                            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Trip Start</div>
-                                            <div style={{ fontSize: '13px', color: 'white', fontWeight: '700' }}>{ledgerModalBooking.tripStartFormatted || new Date(ledgerModalBooking.travelStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</div>
-                                        </div>
-                                        <div>
-                                            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Trip End</div>
-                                            <div style={{ fontSize: '13px', color: 'white', fontWeight: '700' }}>{ledgerModalBooking.tripEndFormatted || new Date(ledgerModalBooking.travelEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</div>
-                                        </div>
-                                        <div>
-                                            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Package Price</div>
-                                            <div style={{ fontSize: '13px', color: 'white', fontWeight: '700' }}>₹{(ledgerModalBooking.totalAmount || 0).toLocaleString()}</div>
-                                        </div>
-                                    </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '16px', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
-                                        <div>
-                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Total Received</div>
-                                            <div style={{ fontSize: '18px', color: '#34d399', fontWeight: '800' }}>₹{(ledgerModalBooking.advancePaid || 0).toLocaleString()}</div>
-                                        </div>
-                                        <div>
-                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Closing Balance</div>
-                                            <div style={{ fontSize: '18px', color: '#fbbf24', fontWeight: '800' }}>₹{(ledgerModalBooking.balanceDue !== undefined ? ledgerModalBooking.balanceDue : (ledgerModalBooking.totalAmount - (ledgerModalBooking.advancePaid || 0))).toLocaleString()}</div>
-                                        </div>
-                                        <div style={{ textAlign: 'right' }}>
-                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Status</div>
-                                            <div style={{ 
-                                                padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '700',
-                                                background: (ledgerModalBooking.balanceDue || 0) <= 0 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(251, 191, 36, 0.2)',
-                                                color: (ledgerModalBooking.balanceDue || 0) <= 0 ? '#4ade80' : '#fbbf24',
-                                                border: (ledgerModalBooking.balanceDue || 0) <= 0 ? '1px solid rgba(34,197,94,0.4)' : '1px solid rgba(251,191,36,0.4)'
-                                            }}>
-                                                {(ledgerModalBooking.balanceDue || 0) <= 0 ? 'Settled' : 'Pending'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                                    );
+                                })()}
 
                                 {/* Ledger Table */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                                    <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '8px', borderRadius: '8px', color: 'rgba(255,255,255,0.7)' }}>
-                                        <FileText size={16} />
-                                    </div>
-                                    <div>
-                                        <h3 style={{ margin: 0, color: 'white', fontSize: '14px', fontWeight: '700' }}>Accounting Ledger</h3>
-                                        <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>Complete payment history for this booking.</p>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '7px', borderRadius: '8px', color: 'rgba(255,255,255,0.7)' }}>
+                                            <FileText size={16} />
+                                        </div>
+                                        <div>
+                                            <h3 style={{ margin: 0, color: 'white', fontSize: '14px', fontWeight: '800' }}>Billing & Payment Statement</h3>
+                                            <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>Itemized breakdown of package charges and received payments.</p>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div style={{ width: '100%', overflowX: 'auto', marginBottom: '16px' }}>
+                                <div style={{ width: '100%', overflowX: 'auto', marginBottom: '16px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
                                         <thead>
-                                            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                                                <th style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>Date</th>
-                                                <th style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>Particulars</th>
-                                                <th style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>Debit (₹)</th>
-                                                <th style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>Credit (₹)</th>
-                                                <th style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>Running Bal (₹)</th>
-                                                <th style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>Mode</th>
+                                            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)' }}>
+                                                <th style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Date</th>
+                                                <th style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Particulars / Description</th>
+                                                <th style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', textAlign: 'right' }}>Package Fare (₹)</th>
+                                                <th style={{ padding: '12px 10px', color: '#34d399', fontWeight: '700', textAlign: 'right' }}>Paid / Received (₹)</th>
+                                                <th style={{ padding: '12px 10px', color: '#fbbf24', fontWeight: '700', textAlign: 'right' }}>Balance Due (₹)</th>
+                                                <th style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', textAlign: 'center' }}>Payment Mode</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {/* Opening Balance Row */}
-                                            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                                <td style={{ padding: '12px 8px', color: 'white' }}>{new Date(ledgerModalBooking.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
-                                                <td style={{ padding: '12px 8px', color: 'white' }}>Opening Balance / Package Value</td>
-                                                <td style={{ padding: '12px 8px', color: 'white' }}>{(ledgerModalBooking.totalAmount || 0).toLocaleString()}</td>
-                                                <td style={{ padding: '12px 8px', color: 'white' }}>-</td>
-                                                <td style={{ padding: '12px 8px', color: 'white' }}>{(ledgerModalBooking.totalAmount || 0).toLocaleString()}</td>
-                                                <td style={{ padding: '12px 8px', color: 'white' }}>System</td>
-                                            </tr>
-                                            {/* Payment & Fuel Rows */}
+                                            {/* Row 1: Package Fare */}
                                             {(() => {
-                                                let runBal = ledgerModalBooking.totalAmount || 0;
-                                                return ledgerEntries.map((entry, idx) => {
-                                                    runBal -= (entry.amount || 0);
+                                                const totalFare = Number(ledgerModalBooking.totalAmount) || 0;
+                                                const createdDate = ledgerModalBooking.createdAt ? new Date(ledgerModalBooking.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
+                                                const sDate = ledgerModalBooking.tripStartFormatted || (ledgerModalBooking.travelStartDate ? new Date(ledgerModalBooking.travelStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
+                                                const eDate = ledgerModalBooking.tripEndFormatted || (ledgerModalBooking.travelEndDate ? new Date(ledgerModalBooking.travelEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
+
+                                                return (
+                                                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.015)' }}>
+                                                        <td style={{ padding: '12px 10px', color: 'white', whiteSpace: 'nowrap' }}>{createdDate}</td>
+                                                        <td style={{ padding: '12px 10px' }}>
+                                                            <div style={{ color: 'white', fontWeight: '700' }}>Tour Package Booking Fare</div>
+                                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
+                                                                Trip: {sDate} to {eDate} • {ledgerModalBooking.vehicleType || 'Vehicle'}
+                                                            </div>
+                                                        </td>
+                                                        <td style={{ padding: '12px 10px', color: 'white', fontWeight: '700', textAlign: 'right' }}>₹{totalFare.toLocaleString('en-IN')}</td>
+                                                        <td style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.4)', textAlign: 'right' }}>—</td>
+                                                        <td style={{ padding: '12px 10px', color: 'white', fontWeight: '700', textAlign: 'right' }}>₹{totalFare.toLocaleString('en-IN')}</td>
+                                                        <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                                                            <span style={{ padding: '3px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', fontSize: '11px', fontWeight: '700' }}>
+                                                                Booking Confirmed
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })()}
+
+                                            {/* Subsequent Rows */}
+                                            {(() => {
+                                                const totalFare = Number(ledgerModalBooking.totalAmount) || 0;
+                                                let runBal = totalFare;
+                                                
+                                                // Prepare rows list
+                                                let displayEntries = [...ledgerEntries];
+                                                // If no ledger entries exist but advancePaid > 0, inject default advance entry
+                                                if (displayEntries.length === 0 && (ledgerModalBooking.advancePaid || 0) > 0) {
+                                                    displayEntries.push({
+                                                        date: ledgerModalBooking.advanceDate || ledgerModalBooking.createdAt || new Date(),
+                                                        type: 'Advance',
+                                                        amount: ledgerModalBooking.advancePaid,
+                                                        description: `Advance Received via ${ledgerModalBooking.paymentMode || 'UPI / QR Code'}`
+                                                    });
+                                                }
+
+                                                if (displayEntries.length === 0) {
+                                                    return (
+                                                        <tr>
+                                                            <td colSpan="6" style={{ padding: '24px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>
+                                                                No payments recorded yet. Click <b>+ Record Payment</b> below to add payment.
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                }
+
+                                                return displayEntries.map((entry, idx) => {
+                                                    const amt = Number(entry.amount) || 0;
+                                                    runBal -= amt;
                                                     const isFuel = entry.type === 'Fuel';
                                                     const isAdv = entry.type === 'Advance';
+                                                    const modeName = isFuel 
+                                                        ? 'Guest Fuel' 
+                                                        : (entry.description?.split('via ')[1]?.split(' (')[0] || (isAdv ? 'Advance Payment' : 'Payment Received'));
+
                                                     return (
-                                                        <tr key={entry._id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: isFuel ? 'rgba(245, 158, 11, 0.05)' : 'transparent' }}>
-                                                            <td style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.8)' }}>{new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
-                                                            <td style={{ padding: '12px 8px', color: isFuel ? '#fbbf24' : 'rgba(255,255,255,0.9)', fontWeight: isFuel ? '700' : 'normal' }}>
+                                                        <tr key={entry._id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: isFuel ? 'rgba(245, 158, 11, 0.04)' : 'transparent' }}>
+                                                            <td style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap' }}>
+                                                                {new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}
+                                                            </td>
+                                                            <td style={{ padding: '12px 10px' }}>
                                                                 {isFuel ? (
-                                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                                                        <Fuel size={13} color="#fbbf24" />
-                                                                        <span>Fuel Paid by Guest {entry.description ? `(${entry.description.replace(/^Fuel paid by guest\s*/i, '')})` : ''}</span>
-                                                                    </span>
-                                                                ) : isAdv ? (
-                                                                    <span>Advance Received</span>
+                                                                    <div>
+                                                                        <div style={{ color: '#fbbf24', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                                            <Fuel size={13} color="#fbbf24" />
+                                                                            <span>Fuel Paid by Guest</span>
+                                                                        </div>
+                                                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
+                                                                            Deducted from booking balance {entry.description ? `(${entry.description.replace(/^Fuel paid by guest\s*/i, '')})` : ''}
+                                                                        </div>
+                                                                    </div>
                                                                 ) : (
-                                                                    <span>Payment Received</span>
+                                                                    <div>
+                                                                        <div style={{ color: '#34d399', fontWeight: '700' }}>
+                                                                            {isAdv ? 'Advance Payment Received' : 'Payment Received'}
+                                                                        </div>
+                                                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
+                                                                            Credited towards tour package
+                                                                        </div>
+                                                                    </div>
                                                                 )}
                                                             </td>
-                                                            <td style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.4)' }}>-</td>
-                                                            <td style={{ padding: '12px 8px', color: isFuel ? '#fbbf24' : '#4ade80', fontWeight: '800' }}>
-                                                                {isFuel ? `-₹${(entry.amount || 0).toLocaleString()}` : `₹${(entry.amount || 0).toLocaleString()}`}
+                                                            <td style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.4)', textAlign: 'right' }}>—</td>
+                                                            <td style={{ padding: '12px 10px', color: '#10b981', fontWeight: '800', textAlign: 'right' }}>
+                                                                + ₹{amt.toLocaleString('en-IN')}
                                                             </td>
-                                                            <td style={{ padding: '12px 8px', color: 'white', fontWeight: '700' }}>₹{Math.max(0, runBal).toLocaleString()}</td>
-                                                            <td style={{ padding: '12px 8px', color: 'rgba(255,255,255,0.8)' }}>
-                                                                {isFuel ? (
-                                                                    <span style={{ padding: '2px 8px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', borderRadius: '6px', fontSize: '11px', fontWeight: '800' }}>Guest Fuel</span>
-                                                                ) : (
-                                                                    entry.description?.split('via ')[1]?.split(' (')[0] || (isAdv ? 'Advance' : 'Payment')
-                                                                )}
+                                                            <td style={{ padding: '12px 10px', color: Math.max(0, runBal) === 0 ? '#10b981' : '#fbbf24', fontWeight: '800', textAlign: 'right' }}>
+                                                                ₹{Math.max(0, runBal).toLocaleString('en-IN')}
+                                                            </td>
+                                                            <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                                                                <span style={{ 
+                                                                    padding: '3px 8px', borderRadius: '6px', 
+                                                                    background: isFuel ? 'rgba(245, 158, 11, 0.18)' : 'rgba(16, 185, 129, 0.15)', 
+                                                                    color: isFuel ? '#fbbf24' : '#6ee7b7', 
+                                                                    fontSize: '11px', fontWeight: '700' 
+                                                                }}>
+                                                                    {modeName}
+                                                                </span>
                                                             </td>
                                                         </tr>
                                                     );
@@ -2362,33 +2443,98 @@ export default function Bookings() {
                                 </div>
 
                                 {/* Footer Banner */}
-                                {(ledgerModalBooking.balanceDue || 0) <= 0 ? (
-                                    <div style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', padding: '12px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                                        <div style={{ background: '#22c55e', color: 'white', borderRadius: '50%', padding: '4px' }}><CheckCircle size={16} /></div>
-                                        <div>
-                                            <div style={{ color: '#4ade80', fontWeight: '700', fontSize: '13px' }}>Booking fully settled</div>
-                                            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px', marginTop: '2px' }}>Total received ₹{(ledgerModalBooking.advancePaid || 0).toLocaleString()}. No outstanding balance.</div>
-                                        </div>
-                                    </div>
-                                ) : null}
+                                {(() => {
+                                    const totalFare = Number(ledgerModalBooking.totalAmount) || 0;
+                                    const totalPaid = Number(ledgerModalBooking.advancePaid) || 0;
+                                    const balanceDue = ledgerModalBooking.balanceDue !== undefined ? Number(ledgerModalBooking.balanceDue) : Math.max(0, totalFare - totalPaid);
+
+                                    if (balanceDue <= 0) {
+                                        return (
+                                            <div style={{ background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '12px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                                                <div style={{ background: '#10b981', color: 'white', borderRadius: '50%', padding: '4px', display: 'flex' }}><CheckCircle size={16} /></div>
+                                                <div>
+                                                    <div style={{ color: '#34d399', fontWeight: '800', fontSize: '13px' }}>Booking Fully Paid & Settled</div>
+                                                    <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px', marginTop: '2px' }}>Total received ₹{totalPaid.toLocaleString('en-IN')}. Zero outstanding balance.</div>
+                                                </div>
+                                            </div>
+                                        );
+                                    } else {
+                                        return (
+                                            <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', padding: '12px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                                                <div style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', borderRadius: '50%', padding: '6px', display: 'flex' }}><Clock size={16} /></div>
+                                                <div>
+                                                    <div style={{ color: '#fbbf24', fontWeight: '800', fontSize: '13px' }}>₹{balanceDue.toLocaleString('en-IN')} Outstanding Balance Due</div>
+                                                    <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: '11px', marginTop: '2px' }}>Client has paid ₹{totalPaid.toLocaleString('en-IN')} of total ₹{totalFare.toLocaleString('en-IN')}.</div>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                })()}
 
                                 {/* Buttons */}
                                 <div style={{ display: 'flex', gap: '12px' }}>
                                     <button 
                                         onClick={() => {
-                                            if ((ledgerModalBooking.balanceDue || 0) <= 0) {
-                                                alert('Booking is already fully settled.');
+                                            const totalFare = Number(ledgerModalBooking.totalAmount) || 0;
+                                            const totalPaid = Number(ledgerModalBooking.advancePaid) || 0;
+                                            const balanceDue = ledgerModalBooking.balanceDue !== undefined ? Number(ledgerModalBooking.balanceDue) : Math.max(0, totalFare - totalPaid);
+                                            if (balanceDue <= 0) {
+                                                alert('Booking is already fully paid and settled.');
                                                 return;
                                             }
                                             handleOpenPaymentModal(ledgerModalBooking);
                                         }}
-                                        style={{ flex: 1, padding: '12px', background: '#fbbf24', color: '#000', border: 'none', borderRadius: '8px', fontWeight: '800', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                        style={{ flex: 1, padding: '12px', background: '#fbbf24', color: '#000', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                                     >
-                                        <Plus size={16} /> Add Entry
+                                        <Plus size={16} /> Record Payment
                                     </button>
                                     <button 
-                                        onClick={() => alert('Download PDF feature coming soon')}
-                                        style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '8px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                        onClick={() => {
+                                            const totalFare = Number(ledgerModalBooking.totalAmount) || 0;
+                                            const createdDate = ledgerModalBooking.createdAt ? new Date(ledgerModalBooking.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
+                                            const sDate = ledgerModalBooking.tripStartFormatted || (ledgerModalBooking.travelStartDate ? new Date(ledgerModalBooking.travelStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
+                                            const eDate = ledgerModalBooking.tripEndFormatted || (ledgerModalBooking.travelEndDate ? new Date(ledgerModalBooking.travelEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
+
+                                            let runBal = totalFare;
+                                            let pdfRows = [
+                                                {
+                                                    date: createdDate,
+                                                    particulars: `Tour Package Booking Fare (${sDate} to ${eDate})`,
+                                                    fare: totalFare,
+                                                    paid: null,
+                                                    balance: totalFare,
+                                                    mode: 'Booking Confirmed'
+                                                }
+                                            ];
+
+                                            let displayEntries = [...ledgerEntries];
+                                            if (displayEntries.length === 0 && (ledgerModalBooking.advancePaid || 0) > 0) {
+                                                displayEntries.push({
+                                                    date: ledgerModalBooking.advanceDate || ledgerModalBooking.createdAt || new Date(),
+                                                    type: 'Advance',
+                                                    amount: ledgerModalBooking.advancePaid,
+                                                    description: `Advance Received via ${ledgerModalBooking.paymentMode || 'UPI / QR Code'}`
+                                                });
+                                            }
+
+                                            displayEntries.forEach(entry => {
+                                                const amt = Number(entry.amount) || 0;
+                                                runBal -= amt;
+                                                const isFuel = entry.type === 'Fuel';
+                                                const isAdv = entry.type === 'Advance';
+                                                pdfRows.push({
+                                                    date: new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }),
+                                                    particulars: isFuel ? 'Fuel Paid by Guest (Deducted)' : (isAdv ? 'Advance Payment Received' : 'Payment Received'),
+                                                    fare: null,
+                                                    paid: amt,
+                                                    balance: Math.max(0, runBal),
+                                                    mode: isFuel ? 'Guest Fuel' : (entry.description?.split('via ')[1]?.split(' (')[0] || (isAdv ? 'Advance' : 'Payment'))
+                                                });
+                                            });
+
+                                            generateClientLedgerPDF(ledgerModalBooking, pdfRows, selectedCompany);
+                                        }}
+                                        style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '10px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                                     >
                                         <Download size={16} /> Download Ledger PDF
                                     </button>
