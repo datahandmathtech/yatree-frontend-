@@ -7,7 +7,7 @@ import {
     AlertCircle, Search, Filter, Phone, MessageSquare, Plus,
     FileText, X, ArrowUpRight, ShieldCheck, UserCheck,
     CreditCard, Hourglass, Edit, MoreVertical, User, ArrowUpDown,
-    ChevronLeft, ChevronRight, AlertTriangle, AlertOctagon, Ban, XCircle, ChevronDown, Fuel
+    ChevronLeft, ChevronRight, AlertTriangle, AlertOctagon, Ban, XCircle, ChevronDown, Fuel, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SEO from '../components/SEO';
@@ -357,6 +357,28 @@ export default function Bookings() {
             alert(err.response?.data?.message || 'Failed to cancel booking');
         } finally {
             setCancelling(false);
+        }
+    };
+
+    const handleDeleteBooking = async (bkg) => {
+        const bkgCode = bkg.bookingCode || bkg.clientCode || bkg.bookingId || 'Booking';
+        const confirmDelete = window.confirm(
+            `Are you sure you want to permanently delete Booking ${bkgCode} (${bkg.clientName || 'Guest'})?\n\nThis will also automatically delete all associated duties from Live DRS!`
+        );
+        if (!confirmDelete) return;
+
+        try {
+            setLoading(true);
+            if (bkg._id && !String(bkg._id).startsWith('bkg-mock')) {
+                await axios.delete(`/api/bookings/${bkg._id}`);
+            }
+            setBookings(prev => prev.filter(b => b._id !== bkg._id));
+            alert(`Booking ${bkgCode} and associated Live DRS duties deleted successfully!`);
+        } catch (err) {
+            console.error('Error deleting booking:', err);
+            alert(err.response?.data?.message || 'Failed to delete booking');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -1378,6 +1400,9 @@ export default function Bookings() {
                                                         <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '4px 0' }}></div>
                                                         <button onClick={() => { setActiveActionMenu(null); setSelectedBooking(bkg); setCancelReason('Customer request'); setShowCancelModal(true); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: '#f87171', fontSize: '12.5px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
                                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Cancel Booking
+                                                        </button>
+                                                        <button onClick={() => { setActiveActionMenu(null); handleDeleteBooking(bkg); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: '#ef4444', fontSize: '12.5px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                            <Trash2 size={14} color="#ef4444" /> Delete Booking
                                                         </button>
                                                     </div>
                                                 )}

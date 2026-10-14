@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, Save, Plus, Trash2, Calculator, TrendingUp, TrendingDown,
@@ -9,16 +9,22 @@ import axios from '../../api/axios';
 
 const ALL_VEHICLES = [
     'Innova Crysta',
+    'Sedan',
+    'SUV',
     'Swift Dzire',
     'Ciaz',
-    'Tempo Traveller',
+    'Etios',
+    'Honda City',
     'Ertiga',
     'Toyota Fortuner',
     'Innova Hycross',
+    'Tempo Traveller',
+    'Tempo Traveller (12 Seater)',
+    'Tempo Traveller (17 Seater)',
     'Urbania',
-    'Etios',
-    'Honda City',
-    'BMW / Audi'
+    'BMW / Audi',
+    'Hatchback',
+    'Luxury'
 ];
 
 const ALL_SOURCES = [
@@ -114,6 +120,16 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
 
     const [saving, setSaving] = useState(false);
 
+    const vehicleOptions = useMemo(() => {
+        const set = new Set(ALL_VEHICLES);
+        if (booking?.vehicleType) set.add(booking.vehicleType);
+        if (vehicleType) set.add(vehicleType);
+        if (Array.isArray(itinerary)) {
+            itinerary.forEach(d => { if (d.vehicleType) set.add(d.vehicleType); });
+        }
+        return Array.from(set);
+    }, [booking, vehicleType, itinerary]);
+
     useEffect(() => {
         if (booking) {
             setBookingReference(booking.bookingReference || 'Direct');
@@ -128,7 +144,8 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
             setReference(booking.reference || '');
             setSalesPerson(booking.salesPerson || '');
 
-            setVehicleType(booking.vehicleType || 'Innova Crysta');
+            const initialVeh = booking.vehicleType || booking.itinerary?.[0]?.vehicleType || 'Innova Crysta';
+            setVehicleType(initialVeh);
             setNumberOfCars(booking.numberOfCars || 1);
             setTravelStartDate(toLocalDateString(booking.travelStartDate));
             setTravelEndDate(toLocalDateString(booking.travelEndDate));
@@ -159,7 +176,7 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                     isApg: d.isApg || d.time === 'APG',
                     duty: d.duty || d.description || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
                     description: d.duty || d.description || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
-                    vehicleType: d.vehicleType || booking.vehicleType || 'Innova Crysta',
+                    vehicleType: d.vehicleType || initialVeh,
                     vehicleCount: d.vehicleCount || booking.numberOfCars || 1,
                     quantity: d.quantity || d.vehicleCount || booking.numberOfCars || 1,
                     rate: d.rate !== undefined ? d.rate : 0,
@@ -317,6 +334,12 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
             row.amount = numericQty * numericRate;
         } else if (field === 'amount') {
             row.amount = value === '' ? '' : (Number(value) || 0);
+            const qty = Number(row.quantity || row.vehicleCount) || 1;
+            if (qty === 1 && row.amount !== '') {
+                row.rate = Number(row.amount);
+            }
+        } else if (field === 'vehicleType') {
+            row.vehicleType = value;
         } else if (field === 'duty') {
             row.duty = value;
             row.description = value;
@@ -326,7 +349,7 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
 
         updated[index] = row;
         setItinerary(updated);
-        const total = updated.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+        const total = updated.reduce((acc, curr) => acc + (Number(curr.amount) || Number(curr.rate) || 0), 0);
         if (total > 0) {
             setTotalAmount(total);
         }
@@ -392,6 +415,13 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
         e.preventDefault();
         setSaving(true);
         try {
+            const calculatedTotal = (itinerary && itinerary.length > 0)
+                ? itinerary.reduce((sum, d) => sum + (Number(d.amount) || Number(d.rate) || 0), 0)
+                : (Number(totalAmount) || 0);
+            const finalTotal = calculatedTotal > 0 ? calculatedTotal : (Number(totalAmount) || 0);
+            const finalVehicle = (itinerary && itinerary.length > 0 && itinerary[0].vehicleType) ? itinerary[0].vehicleType : vehicleType;
+            const finalPickup = (itinerary && itinerary.length > 0 && itinerary[0].pickupPoint) ? itinerary[0].pickupPoint : pickupPoint;
+
             const payload = {
                 bookingReference,
                 travelAgentName,
@@ -404,14 +434,14 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                 source,
                 reference,
                 salesPerson,
-                vehicleType,
+                vehicleType: finalVehicle,
                 numberOfCars,
                 travelStartDate,
                 travelEndDate,
-                totalAmount: Number(totalAmount) || 0,
-                pickupPoint,
+                totalAmount: finalTotal,
+                pickupPoint: finalPickup,
                 dropPoint,
-                pickupLocation: pickupPoint,
+                pickupLocation: finalPickup,
                 dropLocation: dropPoint,
                 gstMode,
                 gstRate,
@@ -702,7 +732,7 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                                     }}
                                     style={darkInputStyle}
                                 >
-                                    {ALL_VEHICLES.map(v => (
+                                    {vehicleOptions.map(v => (
                                         <option key={v} value={v} style={{ background: '#090f1d' }}>{v}</option>
                                     ))}
                                 </select>
@@ -1056,7 +1086,7 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                                                     onChange={e => handleItineraryRowChange(idx, 'vehicleType', e.target.value)}
                                                     style={{ ...darkInputStyle, padding: '6px 8px', fontSize: '12px' }}
                                                 >
-                                                    {ALL_VEHICLES.map(v => (
+                                                    {vehicleOptions.map(v => (
                                                         <option key={v} value={v} style={{ background: '#090f1d' }}>{v}</option>
                                                     ))}
                                                 </select>

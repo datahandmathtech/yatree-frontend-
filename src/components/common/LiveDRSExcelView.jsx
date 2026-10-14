@@ -166,7 +166,8 @@ export default function LiveDRSExcelView({
     // Filter duties by Mode (Month, Single Date, Range) and Search
     const filteredDuties = useMemo(() => {
         return (duties || []).filter(duty => {
-            if (!duty.date) return false;
+            if (!duty || !duty.date) return false;
+            if (duty.status === 'Cancelled') return false;
 
             const d = new Date(duty.date);
             if (isNaN(d.getTime())) return false;
@@ -970,6 +971,24 @@ export default function LiveDRSExcelView({
                                                                 style={{ padding: '5px', background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '6px', color: '#38bdf8', cursor: 'pointer' }}
                                                             >
                                                                 <User size={13} />
+                                                            </button>
+                                                            <button
+                                                                onClick={async () => {
+                                                                    const guestName = duty.clientName || 'Guest';
+                                                                    if (window.confirm(`Delete DRS duty for ${guestName} (${duty.duty || 'Duty'})?`)) {
+                                                                        try {
+                                                                            await axios.delete(`/api/drs/${duty._id}`);
+                                                                            if (onRefresh) onRefresh();
+                                                                        } catch (delErr) {
+                                                                            console.error('Error deleting DRS duty:', delErr);
+                                                                            alert('Failed to delete duty');
+                                                                        }
+                                                                    }
+                                                                }}
+                                                                title="Delete Duty"
+                                                                style={{ padding: '5px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', color: '#f87171', cursor: 'pointer' }}
+                                                            >
+                                                                <Trash2 size={13} />
                                                             </button>
                                                         </div>
                                                     </td>
