@@ -3,9 +3,11 @@ import axios from '../../api/axios';
 import { 
     Calendar, Plus, Phone, MessageSquare, Edit3, Trash2, 
     CheckCircle2, Clock, Car, User, Search, Download, 
-    ExternalLink, RefreshCw, Sparkles, Filter, ChevronRight, Check
+    ExternalLink, RefreshCw, Sparkles, Filter, ChevronRight, ChevronLeft, Check, CalendarRange
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import PremiumDateInput from './PremiumDateInput';
+import { todayIST } from '../../utils/istUtils';
 
 // Formats date into short key like "1-10", "2-10" using IST
 const getShortDateKey = (dateVal) => {
@@ -35,35 +37,163 @@ export default function LiveDRSExcelView({
     onOpenAssign,
     onShareWhatsApp
 }) {
+    // Mode: 'month' (Full Month Sheet), 'single' (Single Date Sheet), 'range' (Date Range Sheet)
+    const [filterMode, setFilterMode] = useState('month');
+    
+    // Dynamic Month Selection
+    const [selectedYear, setSelectedYear] = useState(2026);
+    const [selectedMonth, setSelectedMonth] = useState(10); // 1 = Jan, 10 = Oct
     const [selectedMonthTab, setSelectedMonthTab] = useState('Oct. 26');
+
+    // Single Date & Range Selection
+    const [singleDate, setSingleDate] = useState(todayIST());
+    const [rangeFrom, setRangeFrom] = useState('2026-10-01');
+    const [rangeTo, setRangeTo] = useState('2026-10-31');
+    const [jumpDate, setJumpDate] = useState('');
+
     const [searchFilter, setSearchFilter] = useState('');
     const [inlineEditingId, setInlineEditingId] = useState(null);
     const [inlineFormData, setInlineFormData] = useState({});
     const [savingInline, setSavingInline] = useState(false);
 
-    const MONTH_TABS = [
-        'Oct. 26', 'Nov. 26', 'Dec. 26', 'Jan. 27', 'Sept. 26', 'August 26', 'All Duties'
+    const MONTH_NAMES = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const SHORT_MONTH_NAMES = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'
     ];
 
-    // Filter duties by search and selected month tab
+    const MONTH_TABS = [
+        'Oct. 26', 'Nov. 26', 'Dec. 26', 'Jan. 27', 'Feb. 27', 'Sept. 26', 'August 26', 'All Duties'
+    ];
+
+    const handleSelectMonthTab = (tab) => {
+        setSelectedMonthTab(tab);
+        if (tab === 'Oct. 26') { setSelectedMonth(10); setSelectedYear(2026); }
+        else if (tab === 'Nov. 26') { setSelectedMonth(11); setSelectedYear(2026); }
+        else if (tab === 'Dec. 26') { setSelectedMonth(12); setSelectedYear(2026); }
+        else if (tab === 'Jan. 27') { setSelectedMonth(1); setSelectedYear(2027); }
+        else if (tab === 'Feb. 27') { setSelectedMonth(2); setSelectedYear(2027); }
+        else if (tab === 'Sept. 26') { setSelectedMonth(9); setSelectedYear(2026); }
+        else if (tab === 'August 26') { setSelectedMonth(8); setSelectedYear(2026); }
+        else if (tab === 'All Duties') { setSelectedMonth('all'); }
+    };
+
+    const handlePrevMonth = () => {
+        setFilterMode('month');
+        let newM = selectedMonth === 'all' ? 10 : selectedMonth;
+        let newY = selectedYear;
+        if (newM === 1) {
+            newM = 12;
+            newY = Number(selectedYear) - 1;
+        } else {
+            newM = newM - 1;
+        }
+        setSelectedMonth(newM);
+        setSelectedYear(newY);
+        setSelectedMonthTab(`${SHORT_MONTH_NAMES[newM - 1]}. ${String(newY).slice(-2)}`);
+    };
+
+    const handleNextMonth = () => {
+        setFilterMode('month');
+        let newM = selectedMonth === 'all' ? 10 : selectedMonth;
+        let newY = selectedYear;
+        if (newM === 12) {
+            newM = 1;
+            newY = Number(selectedYear) + 1;
+        } else {
+            newM = newM + 1;
+        }
+        setSelectedMonth(newM);
+        setSelectedYear(newY);
+        setSelectedMonthTab(`${SHORT_MONTH_NAMES[newM - 1]}. ${String(newY).slice(-2)}`);
+    };
+
+    const handleJumpToDate = (targetDateStr) => {
+        if (!targetDateStr) return;
+        setJumpDate(targetDateStr);
+        const d = new Date(targetDateStr);
+        if (isNaN(d.getTime())) return;
+
+        const istString = d.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+        const istDate = new Date(istString);
+        const m = istDate.getMonth() + 1;
+        const y = istDate.getFullYear();
+        const day = istDate.getDate();
+        const dateKey = `${day}-${m}`;
+
+        if (filterMode === 'month') {
+            if (m !== selectedMonth || y !== selectedYear) {
+                setSelectedMonth(m);
+                setSelectedYear(y);
+                setSelectedMonthTab(`${SHORT_MONTH_NAMES[m - 1]}. ${String(y).slice(-2)}`);
+            }
+        }
+
+        setTimeout(() => {
+            const el = document.getElementById(`date-block-${dateKey}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.style.transition = 'all 0.4s';
+                el.style.backgroundColor = 'rgba(245, 158, 11, 0.45)';
+                setTimeout(() => {
+                    el.style.backgroundColor = '#0f172a';
+                }, 2000);
+            }
+        }, 200);
+    };
+
+    const handlePrevDay = () => {
+        const d = new Date(singleDate);
+        d.setDate(d.getDate() - 1);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        setSingleDate(`${y}-${m}-${day}`);
+    };
+
+    const handleNextDay = () => {
+        const d = new Date(singleDate);
+        d.setDate(d.getDate() + 1);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        setSingleDate(`${y}-${m}-${day}`);
+    };
+
+    // Filter duties by Mode (Month, Single Date, Range) and Search
     const filteredDuties = useMemo(() => {
         return (duties || []).filter(duty => {
-            // Month tab filter
-            if (selectedMonthTab !== 'All Duties') {
-                const d = duty.date ? new Date(duty.date) : null;
-                if (d && !isNaN(d.getTime())) {
-                    const istString = d.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
-                    const istDate = new Date(istString);
-                    const m = istDate.getMonth() + 1; // 1 to 12
-                    const y = istDate.getFullYear();
+            if (!duty.date) return false;
 
-                    if (selectedMonthTab === 'Oct. 26' && !(m === 10 && y === 2026)) return false;
-                    if (selectedMonthTab === 'Nov. 26' && !(m === 11 && y === 2026)) return false;
-                    if (selectedMonthTab === 'Dec. 26' && !(m === 12 && y === 2026)) return false;
-                    if (selectedMonthTab === 'Jan. 27' && !(m === 1 && y === 2027)) return false;
-                    if (selectedMonthTab === 'Sept. 26' && !(m === 9 && y === 2026)) return false;
-                    if (selectedMonthTab === 'August 26' && !(m === 8 && y === 2026)) return false;
+            const d = new Date(duty.date);
+            if (isNaN(d.getTime())) return false;
+
+            const istString = d.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+            const istDate = new Date(istString);
+            const m = istDate.getMonth() + 1; // 1 to 12
+            const y = istDate.getFullYear();
+
+            const yyyy = istDate.getFullYear();
+            const mm = String(istDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(istDate.getDate()).padStart(2, '0');
+            const dutyDateStr = `${yyyy}-${mm}-${dd}`;
+
+            if (filterMode === 'month') {
+                if (selectedMonth !== 'all') {
+                    if (m !== Number(selectedMonth) || y !== Number(selectedYear)) {
+                        return false;
+                    }
                 }
+            } else if (filterMode === 'single') {
+                if (dutyDateStr !== singleDate) {
+                    return false;
+                }
+            } else if (filterMode === 'range') {
+                if (rangeFrom && dutyDateStr < rangeFrom) return false;
+                if (rangeTo && dutyDateStr > rangeTo) return false;
             }
 
             // Search filter
@@ -81,7 +211,7 @@ export default function LiveDRSExcelView({
             }
             return true;
         });
-    }, [duties, selectedMonthTab, searchFilter]);
+    }, [duties, filterMode, selectedMonth, selectedYear, singleDate, rangeFrom, rangeTo, searchFilter]);
 
     // Group duties by Date
     const groupedByDate = useMemo(() => {
@@ -181,95 +311,307 @@ export default function LiveDRSExcelView({
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Top Toolbar: Search + Month Tabs + Google Sheet Sync Button */}
+            {/* Top Toolbar: View Filter Mode + Navigation + Search + Stats */}
             <div style={{
                 background: 'rgba(15, 23, 42, 0.95)',
                 border: '1px solid rgba(255, 255, 255, 0.1)',
                 borderRadius: '16px',
-                padding: '12px 18px',
+                padding: '14px 18px',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
+                flexDirection: 'column',
                 gap: '12px',
                 boxShadow: '0 8px 30px rgba(0,0,0,0.4)'
             }}>
-                {/* Search Input */}
-                <div style={{ position: 'relative', width: '280px' }}>
-                    <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
-                    <input 
-                        type="text"
-                        value={searchFilter}
-                        onChange={(e) => setSearchFilter(e.target.value)}
-                        placeholder="Search guest, hotel, route, car..."
-                        style={{
-                            width: '100%',
-                            padding: '8px 12px 8px 34px',
-                            background: 'rgba(255,255,255,0.05)',
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            borderRadius: '10px',
-                            color: 'white',
-                            fontSize: '12.5px',
-                            outline: 'none'
-                        }}
-                    />
-                </div>
-
-                {/* Month Tabs (matching Google Sheet Tabs) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.03)', padding: '4px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    {MONTH_TABS.map(tab => (
+                {/* Row 1: Filter Mode Selector (Month / Single Date / Range) + Dynamic Nav Controls */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px'
+                }}>
+                    {/* Left: Mode Buttons */}
+                    <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '3px', border: '1px solid rgba(255,255,255,0.08)' }}>
                         <button
-                            key={tab}
-                            onClick={() => setSelectedMonthTab(tab)}
+                            onClick={() => setFilterMode('month')}
                             style={{
-                                padding: '6px 14px',
-                                borderRadius: '8px',
+                                padding: '6px 13px',
+                                borderRadius: '9px',
                                 border: 'none',
-                                background: selectedMonthTab === tab ? '#10b981' : 'transparent',
-                                color: selectedMonthTab === tab ? '#000' : 'rgba(255,255,255,0.7)',
-                                fontWeight: selectedMonthTab === tab ? '900' : '600',
+                                background: filterMode === 'month' ? '#10b981' : 'transparent',
+                                color: filterMode === 'month' ? '#000' : 'rgba(255,255,255,0.7)',
+                                fontWeight: filterMode === 'month' ? '900' : '600',
                                 fontSize: '12px',
                                 cursor: 'pointer',
-                                transition: 'all 0.15s'
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px'
                             }}
                         >
-                            {tab}
+                            <Calendar size={13} />
+                            <span>Full Month</span>
                         </button>
-                    ))}
-                </div>
 
-                {/* Right: Quick Stats & + Add Duty Button */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700' }}>
-                            {monthStats.totalRides} Duties • Total Fare
-                        </div>
-                        <div style={{ fontSize: '16px', color: '#10b981', fontWeight: '900' }}>
-                            ₹{monthStats.totalRevenue.toLocaleString('en-IN')}
-                        </div>
+                        <button
+                            onClick={() => setFilterMode('single')}
+                            style={{
+                                padding: '6px 13px',
+                                borderRadius: '9px',
+                                border: 'none',
+                                background: filterMode === 'single' ? '#38bdf8' : 'transparent',
+                                color: filterMode === 'single' ? '#000' : 'rgba(255,255,255,0.7)',
+                                fontWeight: filterMode === 'single' ? '900' : '600',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px'
+                            }}
+                        >
+                            <span>📌</span>
+                            <span>Single Date</span>
+                        </button>
+
+                        <button
+                            onClick={() => setFilterMode('range')}
+                            style={{
+                                padding: '6px 13px',
+                                borderRadius: '9px',
+                                border: 'none',
+                                background: filterMode === 'range' ? '#c084fc' : 'transparent',
+                                color: filterMode === 'range' ? '#000' : 'rgba(255,255,255,0.7)',
+                                fontWeight: filterMode === 'range' ? '900' : '600',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px'
+                            }}
+                        >
+                            <CalendarRange size={13} />
+                            <span>Date Range</span>
+                        </button>
                     </div>
 
-                    <button
-                        onClick={() => onOpenDirectBooking && onOpenDirectBooking()}
-                        style={{
-                            padding: '9px 18px',
-                            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                            border: 'none',
-                            borderRadius: '10px',
-                            color: '#000',
-                            fontWeight: '900',
-                            fontSize: '12.5px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            boxShadow: '0 4px 15px rgba(245, 158, 11, 0.35)'
-                        }}
-                        title="Add New Duty"
-                    >
-                        <Plus size={15} strokeWidth={3} />
-                        <span>Add Duty</span>
-                    </button>
+                    {/* Middle: Controls depending on Mode */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        {filterMode === 'month' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                {/* Prev Month Button */}
+                                <button
+                                    onClick={handlePrevMonth}
+                                    title="Previous Month"
+                                    style={{
+                                        padding: '6px 10px',
+                                        background: 'rgba(255,255,255,0.06)',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        borderRadius: '8px',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center'
+                                    }}
+                                >
+                                    <ChevronLeft size={16} />
+                                </button>
+
+                                {/* Month / Year Badge */}
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    background: 'rgba(16, 185, 129, 0.15)',
+                                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                                    padding: '5px 14px',
+                                    borderRadius: '10px',
+                                    color: '#34d399',
+                                    fontWeight: '900',
+                                    fontSize: '13px'
+                                }}>
+                                    <span>{selectedMonth === 'all' ? 'All Duties' : `${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}`}</span>
+                                </div>
+
+                                {/* Next Month Button */}
+                                <button
+                                    onClick={handleNextMonth}
+                                    title="Next Month"
+                                    style={{
+                                        padding: '6px 10px',
+                                        background: 'rgba(255,255,255,0.06)',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        borderRadius: '8px',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center'
+                                    }}
+                                >
+                                    <ChevronRight size={16} />
+                                </button>
+
+                                {/* Month Tabs Pills */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.03)', padding: '3px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)', overflowX: 'auto' }}>
+                                    {MONTH_TABS.map(tab => (
+                                        <button
+                                            key={tab}
+                                            onClick={() => handleSelectMonthTab(tab)}
+                                            style={{
+                                                padding: '5px 11px',
+                                                borderRadius: '7px',
+                                                border: 'none',
+                                                background: selectedMonthTab === tab ? '#10b981' : 'transparent',
+                                                color: selectedMonthTab === tab ? '#000' : 'rgba(255,255,255,0.7)',
+                                                fontWeight: selectedMonthTab === tab ? '900' : '600',
+                                                fontSize: '11.5px',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.15s',
+                                                whiteSpace: 'nowrap'
+                                            }}
+                                        >
+                                            {tab}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {filterMode === 'single' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <button
+                                    onClick={handlePrevDay}
+                                    title="Previous Day"
+                                    style={{ padding: '6px 10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', cursor: 'pointer' }}
+                                >
+                                    <ChevronLeft size={16} />
+                                </button>
+
+                                <div style={{ width: '150px' }}>
+                                    <PremiumDateInput
+                                        value={singleDate}
+                                        onChange={(val) => setSingleDate(val)}
+                                        placeholder="Pick Date"
+                                    />
+                                </div>
+
+                                <button
+                                    onClick={handleNextDay}
+                                    title="Next Day"
+                                    style={{ padding: '6px 10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', cursor: 'pointer' }}
+                                >
+                                    <ChevronRight size={16} />
+                                </button>
+
+                                <button
+                                    onClick={() => setSingleDate(todayIST())}
+                                    style={{ padding: '6px 12px', background: 'rgba(56, 189, 248, 0.2)', border: '1px solid rgba(56, 189, 248, 0.4)', borderRadius: '8px', color: '#38bdf8', fontWeight: '800', fontSize: '11.5px', cursor: 'pointer' }}
+                                >
+                                    ⚡ Today
+                                </button>
+                            </div>
+                        )}
+
+                        {filterMode === 'range' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(192, 132, 252, 0.08)', padding: '4px 10px', borderRadius: '12px', border: '1px solid rgba(192, 132, 252, 0.25)' }}>
+                                <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>From:</span>
+                                <div style={{ width: '135px' }}>
+                                    <PremiumDateInput
+                                        value={rangeFrom}
+                                        onChange={(val) => setRangeFrom(val)}
+                                        placeholder="Start Date"
+                                    />
+                                </div>
+                                <span style={{ color: '#c084fc', fontWeight: '900', fontSize: '13px' }}>➔</span>
+                                <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>To:</span>
+                                <div style={{ width: '135px' }}>
+                                    <PremiumDateInput
+                                        value={rangeTo}
+                                        onChange={(val) => setRangeTo(val)}
+                                        placeholder="End Date"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Right: Quick Jump to Date in Month Mode */}
+                    {filterMode === 'month' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.5)', fontWeight: '700' }}>🎯 Jump to Date:</span>
+                            <div style={{ width: '140px' }}>
+                                <PremiumDateInput
+                                    value={jumpDate}
+                                    onChange={handleJumpToDate}
+                                    placeholder="Select Date"
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Row 2: Search + Stats + Add Duty */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                    borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                    paddingTop: '10px'
+                }}>
+                    {/* Search Input */}
+                    <div style={{ position: 'relative', width: 'clamp(260px, 35vw, 380px)' }}>
+                        <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
+                        <input 
+                            type="text"
+                            value={searchFilter}
+                            onChange={(e) => setSearchFilter(e.target.value)}
+                            placeholder="Search guest, hotel, route, car, driver..."
+                            style={{
+                                width: '100%',
+                                padding: '8px 12px 8px 34px',
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '10px',
+                                color: 'white',
+                                fontSize: '12.5px',
+                                outline: 'none'
+                            }}
+                        />
+                    </div>
+
+                    {/* Right: Stats & + Add Duty Button */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700' }}>
+                                {monthStats.totalRides} Duties • Total Fare
+                            </div>
+                            <div style={{ fontSize: '16px', color: '#10b981', fontWeight: '900' }}>
+                                ₹{monthStats.totalRevenue.toLocaleString('en-IN')}
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => onOpenDirectBooking && onOpenDirectBooking()}
+                            style={{
+                                padding: '9px 18px',
+                                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                                border: 'none',
+                                borderRadius: '10px',
+                                color: '#000',
+                                fontWeight: '900',
+                                fontSize: '12.5px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                boxShadow: '0 4px 15px rgba(245, 158, 11, 0.35)'
+                            }}
+                            title="Add New Duty"
+                        >
+                            <Plus size={15} strokeWidth={3} />
+                            <span>Add Duty</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -294,8 +636,8 @@ export default function LiveDRSExcelView({
                             <tr>
                                 <td colSpan="11" style={{ padding: '60px 20px', textAlign: 'center', color: 'rgba(255,255,255,0.45)' }}>
                                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>📊</div>
-                                    <div style={{ fontSize: '15px', fontWeight: '700', color: 'white' }}>No DRS Duties Found for {selectedMonthTab}</div>
-                                    <p style={{ fontSize: '12px', margin: '4px 0 16px' }}>Click below to add a direct booking or sync from your Google Sheet.</p>
+                                    <div style={{ fontSize: '15px', fontWeight: '700', color: 'white' }}>No DRS Duties Found</div>
+                                    <p style={{ fontSize: '12px', margin: '4px 0 16px' }}>Try switching month, changing date filter, or click below to add a duty.</p>
                                     <button
                                         onClick={() => onOpenDirectBooking && onOpenDirectBooking()}
                                         style={{ padding: '8px 18px', background: '#fbbf24', border: 'none', borderRadius: '8px', color: '#000', fontWeight: '800', cursor: 'pointer' }}
@@ -316,10 +658,11 @@ export default function LiveDRSExcelView({
                                         )}
 
                                         {/* Day Header Row: Date | So. No. | Hotel | Guest | Guest Mob | Time | Duty | Day Total Rate | C/Out | Car | Actions */}
-                                        <tr style={{
+                                        <tr id={`date-block-${group.dateKey}`} style={{
                                             background: '#0f172a',
                                             borderTop: '2px solid rgba(255, 255, 255, 0.2)',
-                                            borderBottom: '1.5px solid rgba(255, 255, 255, 0.15)'
+                                            borderBottom: '1.5px solid rgba(255, 255, 255, 0.15)',
+                                            transition: 'all 0.4s'
                                         }}>
                                             <th style={{
                                                 padding: '10px 12px',
