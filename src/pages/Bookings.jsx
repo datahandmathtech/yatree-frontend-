@@ -240,13 +240,14 @@ export default function Bookings() {
                 time: src.time || '09:00 AM',
                 isApg: Boolean(src.isApg),
                 pickupPoint: src.pickupPoint || '',
-                duty: src.duty || ''
+                duty: src.duty || '',
+                amount: src.amount !== undefined ? src.amount : day.amount
             };
         }));
         if (src.driverId) setMasterDriverId(src.driverId);
         if (src.vehicleNumber) setMasterVehicleNumber(src.vehicleNumber);
         if (mode === 'all') {
-            showTemporaryCopyBanner(`Copied Day ${sourceIdx + 1} (Driver, Vehicle, Time & Tour Details) across all ${assignItinerary.length} days!`);
+            showTemporaryCopyBanner(`Copied Day ${sourceIdx + 1} (Driver, Vehicle, Time, Tour & Amount) across all ${assignItinerary.length} days!`);
         } else {
             showTemporaryCopyBanner(`Copied Day ${sourceIdx + 1} data to Day ${sourceIdx + 2} → Day ${assignItinerary.length}!`);
         }
@@ -269,7 +270,8 @@ export default function Bookings() {
                 time: prevDay.time || '09:00 AM',
                 isApg: Boolean(prevDay.isApg),
                 pickupPoint: prevDay.pickupPoint || '',
-                duty: prevDay.duty || ''
+                duty: prevDay.duty || '',
+                amount: prevDay.amount !== undefined ? prevDay.amount : day.amount
             };
         }));
         showTemporaryCopyBanner(`Copied Day ${targetIdx} details into Day ${targetIdx + 1}!`);
@@ -300,7 +302,8 @@ export default function Bookings() {
                     driverName: lastDay?.driverName || '',
                     driverPhone: lastDay?.driverPhone || '',
                     vehicleId: lastDay?.vehicleId || '',
-                    vehicleNumber: lastDay?.vehicleNumber || ''
+                    vehicleNumber: lastDay?.vehicleNumber || '',
+                    amount: lastDay?.amount || ''
                 }
             ];
         });
@@ -401,16 +404,22 @@ export default function Bookings() {
                 bkg.vehicleType ||
                 'Innova Crysta';
 
-            const timeVal = drsItem?.pickupTime || itinItem.time || '09:00 AM';
+            const timeVal = drsItem?.pickupTime || drsItem?.time || itinItem.time || '09:00 AM';
             const isApgVal = drsItem?.isApg !== undefined ? Boolean(drsItem.isApg) : Boolean(itinItem.isApg || timeVal === 'APG');
-            const pickupVal = drsItem?.pickupPoint || drsItem?.hotelName || itinItem.pickupPoint || bkg.pickupLocation || '';
+            const pickupVal = drsItem?.pickupPoint || drsItem?.hotel || drsItem?.hotelName || itinItem.pickupPoint || bkg.pickupLocation || '';
             const dutyVal =
+                drsItem?.duty ||
                 drsItem?.sightseeing ||
                 drsItem?.route ||
                 itinItem.duty ||
                 itinItem.description ||
                 (bkg.tripDetails && totalDays === 1 ? bkg.tripDetails : '') ||
                 '';
+
+            const amtVal =
+                (drsItem?.revenue !== undefined && Number(drsItem.revenue) > 0)
+                    ? Number(drsItem.revenue)
+                    : (itinItem.amount !== undefined && Number(itinItem.amount) > 0 ? Number(itinItem.amount) : '');
 
             days.push({
                 dayNo,
@@ -425,7 +434,7 @@ export default function Bookings() {
                 driverPhone: drvPhone,
                 vehicleId: rawVehId ? String(rawVehId) : '',
                 vehicleNumber: vehNum,
-                amount: itinItem.amount || 0,
+                amount: amtVal,
                 km: itinItem.km || 0
             });
         }
@@ -2161,7 +2170,7 @@ export default function Bookings() {
                                 {/* Column Headers */}
                                 <div style={{
                                     display: 'grid',
-                                    gridTemplateColumns: '125px 1.2fr 1.2fr 150px 1.5fr auto',
+                                    gridTemplateColumns: '115px 1.15fr 1.15fr 140px 1.35fr 115px auto',
                                     gap: '10px',
                                     padding: '0 12px 8px 12px',
                                     fontSize: '11px',
@@ -2175,6 +2184,7 @@ export default function Bookings() {
                                     <div style={{ color: '#38bdf8' }}>2. Assign Vehicle</div>
                                     <div style={{ color: '#fbbf24' }}>3. Time</div>
                                     <div style={{ color: '#c084fc' }}>4. Guest Tour / Duty Details</div>
+                                    <div style={{ color: '#4ade80' }}>5. Amount (₹)</div>
                                     <div style={{ textAlign: 'right' }}>Action</div>
                                 </div>
 
@@ -2199,7 +2209,7 @@ export default function Bookings() {
                                                     borderRadius: '10px',
                                                     padding: '10px 12px',
                                                     display: 'grid',
-                                                    gridTemplateColumns: '125px 1.2fr 1.2fr 150px 1.5fr auto',
+                                                    gridTemplateColumns: '115px 1.15fr 1.15fr 140px 1.35fr 115px auto',
                                                     gap: '10px',
                                                     alignItems: 'start'
                                                 }}
@@ -2218,7 +2228,7 @@ export default function Bookings() {
                                                             Day {day.dayNo || idx + 1}
                                                         </span>
                                                     </div>
-                                                    <div style={{ color: 'white', fontSize: '12.5px', fontWeight: '700' }}>
+                                                    <div style={{ color: 'white', fontSize: '12px', fontWeight: '700' }}>
                                                         {day.date ? new Date(day.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Pending'}
                                                     </div>
                                                 </div>
@@ -2369,6 +2379,25 @@ export default function Bookings() {
                                                     />
                                                 </div>
 
+                                                {/* 5. Amount (₹) */}
+                                                <div>
+                                                    <input
+                                                        type="number"
+                                                        placeholder="₹ Amount"
+                                                        value={day.amount !== undefined && day.amount !== 0 ? day.amount : ''}
+                                                        onChange={(e) => handleUpdateDayField(idx, 'amount', e.target.value)}
+                                                        style={{
+                                                            ...inputStyle,
+                                                            height: '36px',
+                                                            fontSize: '12.5px',
+                                                            fontWeight: '800',
+                                                            padding: '4px 10px',
+                                                            color: '#4ade80',
+                                                            border: Number(day.amount) > 0 ? '1px solid rgba(74, 222, 128, 0.45)' : '1px solid rgba(255,255,255,0.15)'
+                                                        }}
+                                                    />
+                                                </div>
+
                                                 {/* Row Copy Action */}
                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '36px' }}>
                                                     {idx === 0 && assignItinerary.length > 1 ? (
@@ -2425,53 +2454,64 @@ export default function Bookings() {
                                 background: '#0f172a',
                                 borderTop: '1px solid rgba(255,255,255,0.08)',
                                 display: 'flex',
-                                justifyContent: 'flex-end',
+                                justifyContent: 'space-between',
                                 alignItems: 'center',
+                                flexWrap: 'wrap',
                                 gap: '10px'
                             }}>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowAssignDriverModal(false)}
-                                    style={{
-                                        padding: '9px 18px',
-                                        background: 'rgba(255,255,255,0.06)',
-                                        color: 'white',
-                                        border: '1px solid rgba(255,255,255,0.15)',
-                                        borderRadius: '8px',
-                                        cursor: 'pointer',
-                                        fontWeight: '700',
-                                        fontSize: '13px'
-                                    }}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleSaveDriverAssignments}
-                                    disabled={savingAssignment}
-                                    style={{
-                                        padding: '9px 22px',
-                                        background: 'linear-gradient(135deg, #10b981, #059669)',
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: '8px',
-                                        cursor: 'pointer',
-                                        fontWeight: '800',
-                                        fontSize: '13px',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '7px',
-                                        boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)'
-                                    }}
-                                >
-                                    {savingAssignment ? (
-                                        <>Saving...</>
-                                    ) : (
-                                        <>
-                                            <CheckCircle size={15} /> Done — Save & Send to Live DRS
-                                        </>
-                                    )}
-                                </button>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '13px', color: 'rgba(255,255,255,0.75)' }}>
+                                    <span>
+                                        Package Total: <strong style={{ color: '#4ade80', fontSize: '14px' }}>
+                                            ₹{(assignItinerary.reduce((acc, d) => acc + (Number(d.amount) || 0), 0) || Number(assigningBooking.totalAmount) || 0).toLocaleString('en-IN')}
+                                        </strong>
+                                    </span>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowAssignDriverModal(false)}
+                                        style={{
+                                            padding: '9px 18px',
+                                            background: 'rgba(255,255,255,0.06)',
+                                            color: 'white',
+                                            border: '1px solid rgba(255,255,255,0.15)',
+                                            borderRadius: '8px',
+                                            cursor: 'pointer',
+                                            fontWeight: '700',
+                                            fontSize: '13px'
+                                        }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveDriverAssignments}
+                                        disabled={savingAssignment}
+                                        style={{
+                                            padding: '9px 22px',
+                                            background: 'linear-gradient(135deg, #10b981, #059669)',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '8px',
+                                            cursor: 'pointer',
+                                            fontWeight: '800',
+                                            fontSize: '13px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '7px',
+                                            boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)'
+                                        }}
+                                    >
+                                        {savingAssignment ? (
+                                            <>Saving...</>
+                                        ) : (
+                                            <>
+                                                <CheckCircle size={15} /> Done — Save & Send to Live DRS
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
                             </div>
                         </motion.div>
                     </div>
