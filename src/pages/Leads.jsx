@@ -217,10 +217,7 @@ export default function Leads() {
     const [leads, setLeads] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [monthFilter, setMonthFilter] = useState(() => {
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return monthNames[new Date().getMonth()];
-    });
+    const [monthFilter, setMonthFilter] = useState('All');
     const [sourceFilter, setSourceFilter] = useState('All');
     const [priorityFilter, setPriorityFilter] = useState('All');
     const [salesPersonFilter, setSalesPersonFilter] = useState('All');
@@ -1386,30 +1383,6 @@ export default function Leads() {
                 if (itemFy && itemFy !== selectedFy) return false;
             }
 
-            // Strict Month Matching based on Lead ID / Client Code (e.g. 10/xx -> Oct, 09/xx -> Sep)
-            if (monthFilter && monthFilter !== 'All') {
-                const MONTH_MAP = {
-                    'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
-                    'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
-                };
-                const mStr = MONTH_MAP[monthFilter] || monthFilter;
-                const code = String(lead.clientCode || lead.leadId || '').trim();
-                const codeMatch = code.match(/^(\d{1,2})\//);
-                if (codeMatch) {
-                    const codeMonth = String(parseInt(codeMatch[1], 10)).padStart(2, '0');
-                    if (codeMonth !== mStr) return false;
-                } else {
-                    const lDate = lead.leadDate || lead.createdAt;
-                    if (lDate) {
-                        const d = new Date(lDate);
-                        if (!isNaN(d.getTime())) {
-                            const m = String(d.getMonth() + 1).padStart(2, '0');
-                            if (m !== mStr) return false;
-                        }
-                    }
-                }
-            }
-
             if (sourceFilter !== 'All' && lead.source !== sourceFilter) return false;
             if (salesPersonFilter !== 'All' && lead.salesPerson !== salesPersonFilter) return false;
 
@@ -1514,30 +1487,6 @@ export default function Leads() {
         };
     };
 
-    // Helper to safely determine lead's month and day according to its Lead ID / Client Code (e.g. 10/xx -> Oct, 09/xx -> Sep)
-    const getLeadMonthAndDay = (lead) => {
-        const code = String(lead.clientCode || lead.leadId || '').trim();
-        const match = code.match(/^(\d{1,2})\//);
-        const codeMonthIdx = match ? (parseInt(match[1], 10) - 1) : null;
-
-        const dLead = parseLeadDateInfo(lead.leadDate);
-        const dCreated = parseLeadDateInfo(lead.createdAt);
-
-        if (codeMonthIdx !== null) {
-            const yr = (dLead && dLead.year) || (dCreated && dCreated.year) || 2026;
-            if (dLead && dLead.monthIdx === codeMonthIdx) {
-                return { year: yr, monthIdx: codeMonthIdx, day: dLead.day };
-            }
-            if (dCreated && dCreated.monthIdx === codeMonthIdx) {
-                return { year: yr, monthIdx: codeMonthIdx, day: dCreated.day };
-            }
-            const fallbackDay = (dLead && dLead.day) || (dCreated && dCreated.day) || 1;
-            return { year: yr, monthIdx: codeMonthIdx, day: Math.min(28, fallbackDay) };
-        }
-
-        return dLead || dCreated;
-    };
-
     // Calculate Right Sidebar daily breakdown and totals
     const sidebarStats = useMemo(() => {
         const activeOption = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5];
@@ -1551,7 +1500,7 @@ export default function Leads() {
         const dailyList = [];
 
         // Pre-process leads to avoid redundant filtering (keep all generated leads for accurate daily tally)
-        const allLeadsInMonth = (sourceList || []);
+        const allLeadsInMonth = (sourceList || []).filter(l => l.status !== 'Lost');
 
         const now = new Date();
         const isCurrentMonth = now.getFullYear() === year && now.getMonth() === monthIdx;
@@ -1559,7 +1508,7 @@ export default function Leads() {
 
         for (let day = 1; day <= days; day++) {
             const dayLeads = allLeadsInMonth.filter(l => {
-                const d = getLeadMonthAndDay(l);
+                const d = parseLeadDateInfo(l.leadDate || l.createdAt);
                 return d && d.year === year && d.monthIdx === monthIdx && d.day === day;
             });
             const convLeads = allLeadsInMonth.filter(l => {
