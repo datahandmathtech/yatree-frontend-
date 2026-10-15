@@ -54,6 +54,10 @@ const DriversPanel = () => {
         { id: 'performance', title: 'Performance', icon: AlertCircle }
     ];
 
+    const handleStatsUpdate = React.useCallback((stats) => {
+        setSalaryStats(stats);
+    }, []);
+
     const renderContent = () => {
         switch (activeTab) {
             case 'drivers':
@@ -61,7 +65,7 @@ const DriversPanel = () => {
             case 'dutys':
                 return <Reports isSubComponent={true} />;
             case 'settlement':
-                return <DriverSalaries isSubComponent={true} onStatsUpdate={setSalaryStats} />;
+                return <DriverSalaries isSubComponent={true} onStatsUpdate={handleStatsUpdate} />;
             case 'performance':
                 return <DriverPerformance />;
             default:

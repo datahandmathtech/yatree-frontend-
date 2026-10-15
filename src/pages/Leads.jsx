@@ -7,9 +7,9 @@ import {
     Plus, Edit, Trash2, FileText, CheckCircle, X, Download, Briefcase,
     Calendar, Car, IndianRupee, MapPin, Search, Filter, AlertTriangle,
     Clock, Phone, ShieldCheck, Share2, HelpCircle, User, Users,
-    Globe, Building2, Repeat, CircleDot, XCircle, ChevronLeft, ChevronRight, ChevronDown,
+    Globe, Building2, Repeat, CircleDot, XCircle, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
     TrendingUp, TrendingDown, BarChart2, BarChart3, Info, CheckSquare, Square, CreditCard,
-    Landmark, UploadCloud, Camera, Eye, Image as ImageIcon, MessageSquare,
+    Landmark, UploadCloud, Camera, Eye, EyeOff, Image as ImageIcon, MessageSquare,
     ExternalLink, RefreshCw, MessageCircle, Calculator, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -217,7 +217,10 @@ export default function Leads() {
     const [leads, setLeads] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [monthFilter, setMonthFilter] = useState('All');
+    const [monthFilter, setMonthFilter] = useState(() => {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return monthNames[new Date().getMonth()];
+    });
     const [sourceFilter, setSourceFilter] = useState('All');
     const [priorityFilter, setPriorityFilter] = useState('All');
     const [salesPersonFilter, setSalesPersonFilter] = useState('All');
@@ -289,7 +292,7 @@ export default function Leads() {
     const ALL_VEHICLES = [...new Set([...VEHICLE_OPTIONS, ...customVehicles])];
 
     const [showModal, setShowModal] = useState(false);
-    const [showDetailedItinerary, setShowDetailedItinerary] = useState(true);
+    const [showDetailedItinerary, setShowDetailedItinerary] = useState(false);
     const [remarksModalLead, setRemarksModalLead] = useState(null);
     const [expandedRemarks, setExpandedRemarks] = useState({});
     const [editingLead, setEditingLead] = useState(null);
@@ -741,7 +744,8 @@ export default function Leads() {
         setPhoneCheckResult(null);
         if (lead) {
             setEditingLead(lead);
-            setShowDetailedItinerary(true);
+            const hasCustomItin = Array.isArray(lead.itinerary) && lead.itinerary.length > 0 && lead.itinerary.some(day => (Number(day.rate) > 0 || Number(day.amount) > 0 || (day.route && day.route.trim())));
+            setShowDetailedItinerary(hasCustomItin);
             setPreviewClientCode(lead.clientCode || lead.leadId || '');
             const sDate = toLocalDateString(lead.travelStartDate);
             const eDate = toLocalDateString(lead.travelEndDate);
@@ -814,7 +818,7 @@ export default function Leads() {
             setMatrixSimSalePrice('');
         } else {
             setEditingLead(null);
-            setShowDetailedItinerary(true);
+            setShowDetailedItinerary(false);
             const today = toLocalDateString(new Date());
             fetchNextClientCodePreview(today);
 
@@ -1382,6 +1386,30 @@ export default function Leads() {
                 if (itemFy && itemFy !== selectedFy) return false;
             }
 
+            // Strict Month Matching based on Lead ID / Client Code (e.g. 10/xx -> Oct, 09/xx -> Sep)
+            if (monthFilter && monthFilter !== 'All') {
+                const MONTH_MAP = {
+                    'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+                    'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+                };
+                const mStr = MONTH_MAP[monthFilter] || monthFilter;
+                const code = String(lead.clientCode || lead.leadId || '').trim();
+                const codeMatch = code.match(/^(\d{1,2})\//);
+                if (codeMatch) {
+                    const codeMonth = String(parseInt(codeMatch[1], 10)).padStart(2, '0');
+                    if (codeMonth !== mStr) return false;
+                } else {
+                    const lDate = lead.leadDate || lead.createdAt;
+                    if (lDate) {
+                        const d = new Date(lDate);
+                        if (!isNaN(d.getTime())) {
+                            const m = String(d.getMonth() + 1).padStart(2, '0');
+                            if (m !== mStr) return false;
+                        }
+                    }
+                }
+            }
+
             if (sourceFilter !== 'All' && lead.source !== sourceFilter) return false;
             if (salesPersonFilter !== 'All' && lead.salesPerson !== salesPersonFilter) return false;
 
@@ -1486,6 +1514,30 @@ export default function Leads() {
         };
     };
 
+    // Helper to safely determine lead's month and day according to its Lead ID / Client Code (e.g. 10/xx -> Oct, 09/xx -> Sep)
+    const getLeadMonthAndDay = (lead) => {
+        const code = String(lead.clientCode || lead.leadId || '').trim();
+        const match = code.match(/^(\d{1,2})\//);
+        const codeMonthIdx = match ? (parseInt(match[1], 10) - 1) : null;
+
+        const dLead = parseLeadDateInfo(lead.leadDate);
+        const dCreated = parseLeadDateInfo(lead.createdAt);
+
+        if (codeMonthIdx !== null) {
+            const yr = (dLead && dLead.year) || (dCreated && dCreated.year) || 2026;
+            if (dLead && dLead.monthIdx === codeMonthIdx) {
+                return { year: yr, monthIdx: codeMonthIdx, day: dLead.day };
+            }
+            if (dCreated && dCreated.monthIdx === codeMonthIdx) {
+                return { year: yr, monthIdx: codeMonthIdx, day: dCreated.day };
+            }
+            const fallbackDay = (dLead && dLead.day) || (dCreated && dCreated.day) || 1;
+            return { year: yr, monthIdx: codeMonthIdx, day: Math.min(28, fallbackDay) };
+        }
+
+        return dLead || dCreated;
+    };
+
     // Calculate Right Sidebar daily breakdown and totals
     const sidebarStats = useMemo(() => {
         const activeOption = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5];
@@ -1499,7 +1551,7 @@ export default function Leads() {
         const dailyList = [];
 
         // Pre-process leads to avoid redundant filtering (keep all generated leads for accurate daily tally)
-        const allLeadsInMonth = (sourceList || []).filter(l => l.status !== 'Lost');
+        const allLeadsInMonth = (sourceList || []);
 
         const now = new Date();
         const isCurrentMonth = now.getFullYear() === year && now.getMonth() === monthIdx;
@@ -1507,7 +1559,7 @@ export default function Leads() {
 
         for (let day = 1; day <= days; day++) {
             const dayLeads = allLeadsInMonth.filter(l => {
-                const d = parseLeadDateInfo(l.leadDate || l.createdAt);
+                const d = getLeadMonthAndDay(l);
                 return d && d.year === year && d.monthIdx === monthIdx && d.day === day;
             });
             const convLeads = allLeadsInMonth.filter(l => {
@@ -5008,11 +5060,29 @@ export default function Leads() {
                                 {/* ========================================== */}
                                 {/* SECTION 3: DAY-WISE ITINERARY & PRICING    */}
                                 {/* ========================================== */}
-                                <div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                <div style={{
+                                    background: 'rgba(255, 255, 255, 0.02)',
+                                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                                    borderRadius: '14px',
+                                    padding: '14px 16px',
+                                    transition: 'all 0.2s ease'
+                                }}>
+                                    <div
+                                        onClick={() => setShowDetailedItinerary(prev => !prev)}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            cursor: 'pointer',
+                                            userSelect: 'none',
+                                            flexWrap: 'wrap',
+                                            gap: '10px'
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                             <span style={{
-                                                width: '20px',
-                                                height: '20px',
+                                                width: '22px',
+                                                height: '22px',
                                                 borderRadius: '50%',
                                                 background: '#fbbf24',
                                                 color: '#000',
@@ -5024,12 +5094,59 @@ export default function Leads() {
                                             }}>
                                                 3
                                             </span>
-                                            <span style={{ color: '#fbbf24', fontSize: '12px', fontWeight: '800', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
-                                                Day-wise Itinerary & Pricing
+                                            <span style={{ color: '#fbbf24', fontSize: '13px', fontWeight: '800', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                                                Day-wise Itinerary & Pricing (Optional)
+                                            </span>
+                                            <span style={{
+                                                fontSize: '11px',
+                                                background: showDetailedItinerary ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+                                                color: showDetailedItinerary ? '#fbbf24' : 'rgba(255, 255, 255, 0.55)',
+                                                padding: '2px 8px',
+                                                borderRadius: '12px',
+                                                fontWeight: '700',
+                                                border: '1px solid rgba(255, 255, 255, 0.08)'
+                                            }}>
+                                                {showDetailedItinerary ? `${formData.itinerary?.length || 0} Days Visible` : 'Hidden (Click to Open)'}
                                             </span>
                                         </div>
 
-                                        {/* Day-wise Table */}
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setShowDetailedItinerary(prev => !prev);
+                                            }}
+                                            style={{
+                                                background: showDetailedItinerary ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                                border: showDetailedItinerary ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(245, 158, 11, 0.4)',
+                                                color: showDetailedItinerary ? '#f87171' : '#fbbf24',
+                                                padding: '6px 14px',
+                                                borderRadius: '8px',
+                                                fontSize: '12px',
+                                                fontWeight: '800',
+                                                cursor: 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                transition: 'all 0.15s ease'
+                                            }}
+                                        >
+                                            {showDetailedItinerary ? (
+                                                <>
+                                                    <ChevronUp size={15} /> Hide Itinerary & Pricing
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Plus size={15} /> + Add / Show Day-wise Itinerary & Pricing
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+
+                                    {/* Collapsible Content */}
+                                    {showDetailedItinerary && (
+                                        <div style={{ marginTop: '14px' }}>
+                                            {/* Day-wise Table */}
                                         <div style={{
                                             background: 'rgba(0,0,0,0.2)',
                                             borderRadius: '12px',
@@ -5292,6 +5409,8 @@ export default function Leads() {
                                             </div>
                                         </div>
                                     </div>
+                                )}
+                            </div>
 
                                 {/* ========================================== */}
                                 {/* SECTION 4: REMARKS & INCLUSIONS (2-COL)   */}

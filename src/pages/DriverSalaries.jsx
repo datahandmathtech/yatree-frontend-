@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from '../api/axios';
 import jsPDF from 'jspdf';
@@ -248,7 +248,7 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                 axios.get(`/api/admin/advances/${selectedCompany._id}?${query}`, {
                     headers: { Authorization: `Bearer ${userInfo.token}` }
                 }),
-                axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&isFreelancer=false&status=active&driverType=${driverType}`, {
+                axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&isFreelancer=false&includeAll=true&driverType=${driverType}`, {
                     headers: { Authorization: `Bearer ${userInfo.token}` }
                 }),
                 axios.get(`/api/banks/company/${selectedCompany._id}`, {
@@ -259,7 +259,7 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                 }).catch(() => ({ data: [] }))
             ]);
             setAdvances(advRes.data || []);
-            setDrivers(driversRes.data.drivers || []);
+            setDrivers(driversRes.data?.drivers || driversRes.data || []);
             setBankAccounts(Array.isArray(banksRes.data) ? banksRes.data : (banksRes.data?.bankAccounts || []));
             setBookings(bookingsRes.data?.bookings || bookingsRes.data || []);
         } catch (err) { console.error('Error fetching advance data:', err); }
@@ -302,8 +302,19 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
     const filteredLoans = useMemo(() => {
         if (!loans) return [];
 
-        const validDriverIds = new Set(drivers.map(d => d._id));
-        let processedLoans = loans.filter(loan => validDriverIds.has(loan.driver?._id || loan.driver));
+        const validDriverIds = new Set((drivers || []).map(d => String(d._id)));
+        let processedLoans = loans.filter(loan => {
+            const dId = String(loan.driver?._id || loan.driver || '');
+            if (validDriverIds.size > 0 && dId && !validDriverIds.has(dId)) {
+                return false;
+            }
+            if (loan.driver && typeof loan.driver === 'object') {
+                if (loan.driver.isFreelancer) return false;
+                if (driverType === 'Taxi' && loan.driver.driverType === 'Bus') return false;
+                if (driverType === 'Bus' && loan.driver.driverType !== 'Bus') return false;
+            }
+            return true;
+        });
 
         if (month === 'All') {
             const fyStartValue = (year * 12) + 4; // April of start year
@@ -351,7 +362,7 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                 l.remarks?.toLowerCase().includes(searchTerm.toLowerCase())
             )
             .sort((a, b) => new Date(b.createdAt || b.startDate || 0) - new Date(a.createdAt || a.startDate || 0));
-    }, [loans, month, year, searchTerm]);
+    }, [loans, drivers, month, year, driverType, searchTerm]);
 
     const handleRecordLoan = async (e) => {
         if (e) e.preventDefault();
@@ -929,32 +940,58 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
         }
     };
 
-    const filteredSalaries = salaries
-        .filter(s =>
-            s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            s.mobile?.includes(searchTerm)
-        )
-        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const filteredSalaries = useMemo(() => {
+        return (salaries || [])
+            .filter(s =>
+                s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                s.mobile?.includes(searchTerm)
+            )
+            .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }, [salaries, searchTerm]);
 
-    const validDriverIds = new Set(drivers.map(d => d._id));
+    const validDriverIds = useMemo(() => new Set((drivers || []).map(d => String(d._id))), [drivers]);
 
-    const filteredAdvances = advances
-        .filter(a => validDriverIds.has(a.driver?._id || a.driver))
-        .filter(a =>
-            a.driver?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            a.remark?.toLowerCase().includes(searchTerm.toLowerCase())
-        )
-        .sort((a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
+    const filteredAdvances = useMemo(() => {
+        return (advances || [])
+            .filter(a => {
+                const dId = String(a.driver?._id || a.driver || '');
+                if (validDriverIds.size > 0 && dId && !validDriverIds.has(dId)) {
+                    return false;
+                }
+                if (a.driver && typeof a.driver === 'object') {
+                    if (a.driver.isFreelancer) return false;
+                    if (driverType === 'Taxi' && a.driver.driverType === 'Bus') return false;
+                    if (driverType === 'Bus' && a.driver.driverType !== 'Bus') return false;
+                }
+                return true;
+            })
+            .filter(a =>
+                a.driver?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                a.remark?.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+            .sort((a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
+    }, [advances, validDriverIds, driverType, searchTerm]);
 
-
-
-    const filteredAllowances = (allowances || [])
-        .filter(a => validDriverIds.has(a.driver?._id || a.driver))
-        .filter(a =>
-            a.driver?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            a.remark?.toLowerCase().includes(searchTerm.toLowerCase())
-        )
-        .sort((a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
+    const filteredAllowances = useMemo(() => {
+        return (allowances || [])
+            .filter(a => {
+                const dId = String(a.driver?._id || a.driver || '');
+                if (validDriverIds.size > 0 && dId && !validDriverIds.has(dId)) {
+                    return false;
+                }
+                if (a.driver && typeof a.driver === 'object') {
+                    if (a.driver.isFreelancer) return false;
+                    if (driverType === 'Taxi' && a.driver.driverType === 'Bus') return false;
+                    if (driverType === 'Bus' && a.driver.driverType !== 'Bus') return false;
+                }
+                return true;
+            })
+            .filter(a =>
+                a.driver?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                a.remark?.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+            .sort((a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
+    }, [allowances, validDriverIds, driverType, searchTerm]);
 
     const totalGrossEarnings = filteredSalaries.reduce((sum, s) => sum + (s.totalEarned || 0), 0);
     const totalNetPayout = filteredSalaries.reduce((sum, s) => sum + (s.netPayable || 0), 0);
@@ -966,25 +1003,43 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
     const totalSDRCount = filteredSalaries.reduce((sum, s) => sum + (Number(s.sameDayCount) || 0), 0);
     const totalNightsCount = filteredSalaries.reduce((sum, s) => sum + (Number(s.nightStayCount) || 0), 0);
 
-    useEffect(() => {
-        if (onStatsUpdate) {
-            const sdrBreakdown = filteredSalaries
-                .filter(s => (Number(s.sameDayCount) || 0) > 0)
-                .map(s => ({ name: s.name, count: s.sameDayCount, amount: s.totalSameDayAmount }));
-                
-            const nightsBreakdown = filteredSalaries
-                .filter(s => (Number(s.nightStayCount) || 0) > 0)
-                .map(s => ({ name: s.name, count: s.nightStayCount, amount: s.totalNightStayAmount }));
+    const lastStatsRef = useRef(null);
 
-            onStatsUpdate({ 
-                sdr: totalSDRAmount, 
-                nights: totalNightsAmount,
-                sdrCount: totalSDRCount,
-                nightsCount: totalNightsCount,
-                sdrBreakdown,
-                nightsBreakdown
-            });
+    useEffect(() => {
+        if (!onStatsUpdate) return;
+
+        const sdrBreakdown = filteredSalaries
+            .filter(s => (Number(s.sameDayCount) || 0) > 0)
+            .map(s => ({ name: s.name, count: s.sameDayCount, amount: s.totalSameDayAmount }));
+            
+        const nightsBreakdown = filteredSalaries
+            .filter(s => (Number(s.nightStayCount) || 0) > 0)
+            .map(s => ({ name: s.name, count: s.nightStayCount, amount: s.totalNightStayAmount }));
+
+        const newStats = { 
+            sdr: totalSDRAmount, 
+            nights: totalNightsAmount,
+            sdrCount: totalSDRCount,
+            nightsCount: totalNightsCount,
+            sdrBreakdown,
+            nightsBreakdown
+        };
+
+        const prev = lastStatsRef.current;
+        if (
+            prev &&
+            prev.sdr === newStats.sdr &&
+            prev.nights === newStats.nights &&
+            prev.sdrCount === newStats.sdrCount &&
+            prev.nightsCount === newStats.nightsCount &&
+            JSON.stringify(prev.sdrBreakdown) === JSON.stringify(newStats.sdrBreakdown) &&
+            JSON.stringify(prev.nightsBreakdown) === JSON.stringify(newStats.nightsBreakdown)
+        ) {
+            return;
         }
+
+        lastStatsRef.current = newStats;
+        onStatsUpdate(newStats);
     }, [filteredSalaries, totalSDRAmount, totalNightsAmount, totalSDRCount, totalNightsCount, onStatsUpdate]);
 
     const det = selectedDriverDetails;

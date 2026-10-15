@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import axios from '../api/axios';
 import * as XLSX from 'xlsx';
 import {
-    Fuel, Plus, Search, Trash2, Calendar, MapPin, Gauge, Droplets, CreditCard, History, Car, Filter, ChevronDown, User, ArrowUpRight, TrendingUp, Edit, Shield, FileSpreadsheet, Eye, X, Image as ImageIcon, Navigation, ChevronLeft, ChevronRight
+    Fuel, Plus, Search, Trash2, Calendar, MapPin, Gauge, Droplets, CreditCard, History, Car, Filter, ChevronDown, User, ArrowUpRight, TrendingUp, Edit, Shield, FileSpreadsheet, Eye, X, Image as ImageIcon, Navigation, ChevronLeft, ChevronRight, Check
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -658,6 +658,40 @@ const FuelPage = () => {
 
     const uniquePayers = [...new Set(entries.map(e => e.paymentBy).filter(name => name && name.trim() !== ''))].sort();
 
+    const formatPayerName = (name) => {
+        if (!name) return '';
+        const trimmed = name.trim();
+        if (trimmed.toLowerCase() === 'all') return 'All';
+        if (trimmed.toLowerCase() === 'office') return 'Office';
+        if (trimmed.toLowerCase() === 'guest') return 'Guest';
+        return trimmed
+            .toLowerCase()
+            .split(/\s+/)
+            .map(word => {
+                if (!word) return '';
+                if (word === 'mr' || word === 'mr.') return 'Mr.';
+                if (word === 'ms' || word === 'ms.') return 'Ms.';
+                if (word === 'dr' || word === 'dr.') return 'Dr.';
+                return word.charAt(0).toUpperCase() + word.slice(1);
+            })
+            .join(' ');
+    };
+
+    const paymentSourceCounts = useMemo(() => {
+        const counts = { All: entries.length, Office: 0, Guest: 0 };
+        (entries || []).forEach(e => {
+            const isGuest = e.paymentSource?.toLowerCase().includes('guest');
+            if (isGuest) counts.Guest = (counts.Guest || 0) + 1;
+            else counts.Office = (counts.Office || 0) + 1;
+
+            if (e.paymentBy) {
+                const key = e.paymentBy.trim().toLowerCase();
+                counts[key] = (counts[key] || 0) + 1;
+            }
+        });
+        return counts;
+    }, [entries]);
+
     const filteredEntries = entries.filter(e => {
         const matchesSearch = (e.vehicle?.carNumber?.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
             e.stationName?.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
@@ -1041,99 +1075,288 @@ const FuelPage = () => {
                                     <th style={{ padding: '20px 25px', color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>Odometer & Trip</th>
                                     <th style={{ padding: '20px 25px', color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>Efficiency</th>
                                     <th style={{ padding: '20px 25px', color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            PAYMENT SOURCE
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <span>Payment Source</span>
                                             <div style={{ position: 'relative' }} ref={paymentFilterRef}>
-                                                <div 
+                                                <button 
+                                                    type="button"
                                                     onClick={() => setShowPaymentFilter(!showPaymentFilter)}
                                                     style={{
-                                                        background: showPaymentFilter ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
-                                                        border: '1px solid rgba(255,255,255,0.1)',
-                                                        borderRadius: '6px',
-                                                        padding: '4px 24px 4px 10px',
-                                                        color: 'white',
-                                                        fontSize: '10px',
-                                                        fontWeight: '800',
-                                                        textTransform: 'uppercase',
+                                                        background: filterPaymentSource !== 'All' 
+                                                            ? 'rgba(245, 158, 11, 0.15)' 
+                                                            : (showPaymentFilter ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.05)'),
+                                                        border: filterPaymentSource !== 'All' 
+                                                            ? '1px solid rgba(245, 158, 11, 0.45)' 
+                                                            : (showPaymentFilter ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(255, 255, 255, 0.1)'),
+                                                        borderRadius: '8px',
+                                                        padding: filterPaymentSource !== 'All' ? '3px 8px 3px 10px' : '4px 10px',
+                                                        color: filterPaymentSource !== 'All' ? '#fbbf24' : 'rgba(255, 255, 255, 0.85)',
+                                                        fontSize: '11px',
+                                                        fontWeight: '700',
                                                         cursor: 'pointer',
-                                                        display: 'flex',
+                                                        display: 'inline-flex',
                                                         alignItems: 'center',
-                                                        transition: 'all 0.2s'
+                                                        gap: '6px',
+                                                        transition: 'all 0.2s',
+                                                        outline: 'none',
+                                                        boxShadow: filterPaymentSource !== 'All' ? '0 2px 10px rgba(245, 158, 11, 0.2)' : 'none'
                                                     }}
                                                 >
-                                                    {filterPaymentSource === 'All' ? 'ALL' : filterPaymentSource}
-                                                    <ChevronDown size={12} style={{ position: 'absolute', right: '8px', top: '50%', transform: `translateY(-50%) ${showPaymentFilter ? 'rotate(180deg)' : 'rotate(0deg)'}`, color: 'rgba(255,255,255,0.6)', transition: 'transform 0.2s' }} />
-                                                </div>
+                                                    <Filter size={11} color={filterPaymentSource !== 'All' ? '#fbbf24' : 'rgba(255, 255, 255, 0.5)'} />
+                                                    <span style={{ maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {filterPaymentSource === 'All' ? 'All' : formatPayerName(filterPaymentSource)}
+                                                    </span>
+                                                    {filterPaymentSource !== 'All' ? (
+                                                        <span
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setFilterPaymentSource('All');
+                                                                setPayerSearch('');
+                                                            }}
+                                                            style={{
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                width: '15px',
+                                                                height: '15px',
+                                                                borderRadius: '50%',
+                                                                background: 'rgba(245, 158, 11, 0.25)',
+                                                                marginLeft: '2px',
+                                                                transition: 'all 0.15s'
+                                                            }}
+                                                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(245, 158, 11, 0.5)'}
+                                                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(245, 158, 11, 0.25)'}
+                                                            title="Clear filter"
+                                                        >
+                                                            <X size={9} color="#fbbf24" />
+                                                        </span>
+                                                    ) : (
+                                                        <ChevronDown 
+                                                            size={11} 
+                                                            style={{ 
+                                                                color: 'rgba(255, 255, 255, 0.5)', 
+                                                                transition: 'transform 0.2s', 
+                                                                transform: showPaymentFilter ? 'rotate(180deg)' : 'rotate(0deg)' 
+                                                            }} 
+                                                        />
+                                                    )}
+                                                </button>
                                                 
                                                 <AnimatePresence>
                                                     {showPaymentFilter && (
                                                         <motion.div
-                                                            initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                                                            initial={{ opacity: 0, y: 6, scale: 0.96 }}
                                                             animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                            exit={{ opacity: 0, y: 5, scale: 0.95 }}
-                                                            transition={{ duration: 0.15 }}
+                                                            exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                                                            transition={{ duration: 0.15, ease: 'easeOut' }}
                                                             style={{
                                                                 position: 'absolute',
-                                                                top: '100%',
+                                                                top: 'calc(100% + 8px)',
                                                                 left: 0,
-                                                                marginTop: '8px',
-                                                                width: '180px',
+                                                                width: '280px',
                                                                 background: '#0f172a',
-                                                                border: '1px solid rgba(255,255,255,0.1)',
-                                                                borderRadius: '8px',
-                                                                padding: '6px',
-                                                                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                                                                border: '1px solid rgba(255, 255, 255, 0.12)',
+                                                                borderRadius: '14px',
+                                                                padding: '12px',
+                                                                boxShadow: '0 20px 45px -10px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05)',
                                                                 zIndex: 100,
                                                                 display: 'flex',
                                                                 flexDirection: 'column',
-                                                                gap: '4px',
-                                                                maxHeight: '250px'
+                                                                gap: '10px'
                                                             }}
+                                                            onClick={(e) => e.stopPropagation()}
                                                         >
-                                                            <div style={{ padding: '4px', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: '4px' }}>
-                                                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                                                    <Search size={12} color="rgba(255,255,255,0.4)" style={{ position: 'absolute', left: '8px' }} />
-                                                                    <input 
-                                                                        type="text" 
-                                                                        placeholder="Search..." 
-                                                                        value={payerSearch}
-                                                                        onChange={(e) => setPayerSearch(e.target.value)}
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        style={{ 
-                                                                            width: '100%', background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '4px', 
-                                                                            padding: '6px 8px 6px 24px', color: 'white', fontSize: '11px', outline: 'none' 
-                                                                        }} 
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                            <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', paddingRight: '2px' }} className="custom-scrollbar">
-                                                                {['All', 'Office', 'Guest', ...uniquePayers]
-                                                                    .filter(opt => opt.toLowerCase().includes(payerSearch.toLowerCase()))
-                                                                    .map(option => (
-                                                                    <div
-                                                                        key={option}
-                                                                        onClick={() => { setFilterPaymentSource(option); setShowPaymentFilter(false); setPayerSearch(''); }}
-                                                                        style={{
-                                                                            padding: '8px 12px',
-                                                                            borderRadius: '6px',
-                                                                            background: filterPaymentSource === option ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
-                                                                            color: filterPaymentSource === option ? '#3b82f6' : 'rgba(255,255,255,0.7)',
-                                                                            fontSize: '11px',
-                                                                            fontWeight: '800',
-                                                                            textTransform: 'uppercase',
-                                                                            cursor: 'pointer',
-                                                                            transition: 'all 0.2s',
-                                                                            whiteSpace: 'nowrap',
-                                                                            overflow: 'hidden',
-                                                                            textOverflow: 'ellipsis'
-                                                                        }}
-                                                                        onMouseEnter={(e) => { if(filterPaymentSource !== option) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                                                                        onMouseLeave={(e) => { if(filterPaymentSource !== option) e.currentTarget.style.background = 'transparent' }}
-                                                                        title={option}
-                                                                    >
-                                                                        {option}
+                                                            {/* Popover Header */}
+                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '8px', borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                    <div style={{ width: '22px', height: '22px', borderRadius: '6px', background: 'rgba(245, 158, 11, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                        <Filter size={11} color="#f59e0b" />
                                                                     </div>
-                                                                ))}
+                                                                    <span style={{ fontSize: '12px', fontWeight: '800', color: 'white', letterSpacing: '-0.2px' }}>
+                                                                        Payment Source
+                                                                    </span>
+                                                                </div>
+                                                                {filterPaymentSource !== 'All' && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => { setFilterPaymentSource('All'); setPayerSearch(''); }}
+                                                                        style={{
+                                                                            background: 'rgba(245, 158, 11, 0.15)',
+                                                                            border: '1px solid rgba(245, 158, 11, 0.3)',
+                                                                            color: '#fbbf24',
+                                                                            fontSize: '10px',
+                                                                            fontWeight: '800',
+                                                                            cursor: 'pointer',
+                                                                            padding: '2px 8px',
+                                                                            borderRadius: '6px'
+                                                                        }}
+                                                                    >
+                                                                        Reset
+                                                                    </button>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Search Input */}
+                                                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                                                <Search size={13} color="rgba(255, 255, 255, 0.4)" style={{ position: 'absolute', left: '10px' }} />
+                                                                <input 
+                                                                    type="text" 
+                                                                    placeholder="Search payer..." 
+                                                                    value={payerSearch}
+                                                                    onChange={(e) => setPayerSearch(e.target.value)}
+                                                                    style={{ 
+                                                                        width: '100%', 
+                                                                        background: 'rgba(255, 255, 255, 0.04)', 
+                                                                        border: '1px solid rgba(255, 255, 255, 0.08)', 
+                                                                        borderRadius: '8px', 
+                                                                        padding: '7px 28px 7px 30px', 
+                                                                        color: 'white', 
+                                                                        fontSize: '11px', 
+                                                                        fontWeight: '600',
+                                                                        outline: 'none',
+                                                                        boxSizing: 'border-box'
+                                                                    }} 
+                                                                    onFocus={(e) => e.target.style.borderColor = 'rgba(245, 158, 11, 0.4)'}
+                                                                    onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.08)'}
+                                                                />
+                                                                {payerSearch && (
+                                                                    <X 
+                                                                        size={12} 
+                                                                        color="rgba(255, 255, 255, 0.5)" 
+                                                                        style={{ position: 'absolute', right: '10px', cursor: 'pointer' }}
+                                                                        onClick={() => setPayerSearch('')}
+                                                                    />
+                                                                )}
+                                                            </div>
+
+                                                            {/* Quick Categories Bar (All, Office, Guest) */}
+                                                            {!payerSearch && (
+                                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                                                                    {[
+                                                                        { id: 'All', label: 'All', count: paymentSourceCounts.All, color: '#f59e0b' },
+                                                                        { id: 'Office', label: 'Office', count: paymentSourceCounts.Office, color: '#10b981' },
+                                                                        { id: 'Guest', label: 'Guest', count: paymentSourceCounts.Guest, color: '#3b82f6' }
+                                                                    ].map(item => {
+                                                                        const isSel = filterPaymentSource.toLowerCase() === item.id.toLowerCase();
+                                                                        return (
+                                                                            <button
+                                                                                key={item.id}
+                                                                                type="button"
+                                                                                onClick={() => { setFilterPaymentSource(item.id); setShowPaymentFilter(false); setPayerSearch(''); }}
+                                                                                style={{
+                                                                                    background: isSel ? `rgba(${item.id === 'Office' ? '16, 185, 129' : (item.id === 'Guest' ? '59, 130, 246' : '245, 158, 11')}, 0.2)` : 'rgba(255, 255, 255, 0.03)',
+                                                                                    border: isSel ? `1px solid ${item.color}` : '1px solid rgba(255, 255, 255, 0.06)',
+                                                                                    borderRadius: '8px',
+                                                                                    padding: '6px 4px',
+                                                                                    color: isSel ? item.color : 'rgba(255, 255, 255, 0.7)',
+                                                                                    cursor: 'pointer',
+                                                                                    display: 'flex',
+                                                                                    flexDirection: 'column',
+                                                                                    alignItems: 'center',
+                                                                                    gap: '2px',
+                                                                                    transition: 'all 0.15s'
+                                                                                }}
+                                                                                onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)'; }}
+                                                                                onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'; }}
+                                                                            >
+                                                                                <span style={{ fontSize: '11px', fontWeight: '800' }}>{item.label}</span>
+                                                                                <span style={{ fontSize: '9px', opacity: 0.6, fontWeight: '700' }}>{item.count || 0}</span>
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Payers List */}
+                                                            <div>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 4px 6px', borderTop: !payerSearch ? '1px solid rgba(255, 255, 255, 0.06)' : 'none' }}>
+                                                                    <span style={{ fontSize: '9px', fontWeight: '800', color: 'rgba(255, 255, 255, 0.4)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                                                                        By Payer / Person
+                                                                    </span>
+                                                                    <span style={{ fontSize: '9px', color: 'rgba(255, 255, 255, 0.3)', fontWeight: '700' }}>
+                                                                        {uniquePayers.filter(p => p.toLowerCase().includes(payerSearch.toLowerCase()) || formatPayerName(p).toLowerCase().includes(payerSearch.toLowerCase())).length} found
+                                                                    </span>
+                                                                </div>
+
+                                                                <div style={{ maxHeight: '190px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px', paddingRight: '2px' }} className="custom-scrollbar">
+                                                                    {(() => {
+                                                                        const matching = uniquePayers.filter(p => 
+                                                                            p.toLowerCase().includes(payerSearch.toLowerCase()) || 
+                                                                            formatPayerName(p).toLowerCase().includes(payerSearch.toLowerCase())
+                                                                        );
+
+                                                                        if (matching.length === 0) {
+                                                                            return (
+                                                                                <div style={{ padding: '24px 10px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.35)', fontSize: '11px' }}>
+                                                                                    No payer matching "{payerSearch}"
+                                                                                </div>
+                                                                            );
+                                                                        }
+
+                                                                        return matching.map(payer => {
+                                                                            const isSel = filterPaymentSource.toLowerCase() === payer.toLowerCase();
+                                                                            const count = paymentSourceCounts[payer.trim().toLowerCase()] || 0;
+                                                                            return (
+                                                                                <div
+                                                                                    key={payer}
+                                                                                    onClick={() => { setFilterPaymentSource(payer); setShowPaymentFilter(false); setPayerSearch(''); }}
+                                                                                    style={{
+                                                                                        padding: '7px 10px',
+                                                                                        borderRadius: '8px',
+                                                                                        background: isSel ? 'rgba(245, 158, 11, 0.15)' : 'transparent',
+                                                                                        color: isSel ? '#fbbf24' : 'rgba(255, 255, 255, 0.8)',
+                                                                                        fontSize: '12px',
+                                                                                        fontWeight: isSel ? '800' : '600',
+                                                                                        cursor: 'pointer',
+                                                                                        display: 'flex',
+                                                                                        alignItems: 'center',
+                                                                                        justifyContent: 'space-between',
+                                                                                        transition: 'all 0.15s',
+                                                                                        gap: '8px'
+                                                                                    }}
+                                                                                    onMouseEnter={(e) => { if (!isSel) { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; e.currentTarget.style.color = 'white'; } }}
+                                                                                    onMouseLeave={(e) => { if (!isSel) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255, 255, 255, 0.8)'; } }}
+                                                                                >
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                                                                                        <div style={{
+                                                                                            width: '20px',
+                                                                                            height: '20px',
+                                                                                            borderRadius: '50%',
+                                                                                            background: isSel ? 'rgba(245, 158, 11, 0.25)' : 'rgba(255, 255, 255, 0.08)',
+                                                                                            color: isSel ? '#fbbf24' : 'rgba(255, 255, 255, 0.6)',
+                                                                                            display: 'flex',
+                                                                                            alignItems: 'center',
+                                                                                            justifyContent: 'center',
+                                                                                            fontSize: '9px',
+                                                                                            fontWeight: '800',
+                                                                                            flexShrink: 0
+                                                                                        }}>
+                                                                                            {payer.charAt(0).toUpperCase()}
+                                                                                        </div>
+                                                                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                                            {formatPayerName(payer)}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                                                                        {count > 0 && (
+                                                                                            <span style={{
+                                                                                                fontSize: '10px',
+                                                                                                padding: '1px 6px',
+                                                                                                borderRadius: '10px',
+                                                                                                background: isSel ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.06)',
+                                                                                                color: isSel ? '#fbbf24' : 'rgba(255, 255, 255, 0.4)',
+                                                                                                fontWeight: '700'
+                                                                                            }}>
+                                                                                                {count}
+                                                                                            </span>
+                                                                                        )}
+                                                                                        {isSel && <Check size={13} color="#fbbf24" strokeWidth={2.5} />}
+                                                                                    </div>
+                                                                                </div>
+                                                                            );
+                                                                        });
+                                                                    })()}
+                                                                </div>
                                                             </div>
                                                         </motion.div>
                                                     )}
@@ -1196,10 +1419,27 @@ const FuelPage = () => {
                                             </div>
                                         </td>
                                         <td style={{ padding: '15px 20px', color: 'rgba(255,255,255,0.7)', fontSize: '14px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: e.paymentSource?.toLowerCase().includes('guest') ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: e.paymentSource?.toLowerCase().includes('guest') ? '#3b82f6' : '#10b981', padding: '4px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: '700' }}>
+                                            <span style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                background: e.paymentSource?.toLowerCase().includes('guest') ? 'rgba(59, 130, 246, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                                                color: e.paymentSource?.toLowerCase().includes('guest') ? '#60a5fa' : '#34d399',
+                                                border: e.paymentSource?.toLowerCase().includes('guest') ? '1px solid rgba(59, 130, 246, 0.25)' : '1px solid rgba(16, 185, 129, 0.25)',
+                                                padding: '3px 9px',
+                                                borderRadius: '7px',
+                                                fontSize: '11px',
+                                                fontWeight: '800'
+                                            }}>
+                                                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: e.paymentSource?.toLowerCase().includes('guest') ? '#60a5fa' : '#34d399' }}></span>
                                                 {e.paymentSource?.toLowerCase().includes('guest') ? 'Guest' : 'Office'}
                                             </span>
-                                            {e.paymentBy && <div style={{ fontSize: '12px', marginTop: '4px', color: 'rgba(255,255,255,0.5)' }}>{e.paymentBy}</div>}
+                                            {e.paymentBy && (
+                                                <div style={{ fontSize: '12px', marginTop: '5px', color: 'rgba(255,255,255,0.65)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                    <User size={11} color="rgba(255,255,255,0.4)" />
+                                                    <span>{formatPayerName(e.paymentBy)}</span>
+                                                </div>
+                                            )}
                                         </td>
                                         <td style={{ padding: '15px 25px' }}>
                                             <div style={{ color: 'white', fontWeight: '950', fontSize: '18px' }}>₹{e.amount.toLocaleString()}</div>

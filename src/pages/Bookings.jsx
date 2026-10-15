@@ -68,7 +68,10 @@ export default function Bookings() {
     const [selectedFy, setSelectedFy] = useState('FY 26-27');
     const [showFyDropdown, setShowFyDropdown] = useState(false);
     const fyOptions = useMemo(() => getAvailableFinancialYears(bookings), [bookings]);
-    const [selectedMonth, setSelectedMonth] = useState('All Months');
+    const [selectedMonth, setSelectedMonth] = useState(() => {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return monthNames[new Date().getMonth()];
+    });
     const [searchTerm, setSearchTerm] = useState('');
 
     // Sorting state
@@ -442,18 +445,25 @@ export default function Bookings() {
             });
         }
 
-        // 1. Month Filter
+        // 1. Month Filter (Strictly by Booking Code / Lead ID month e.g. 10/xx -> Oct, 09/xx -> Sep)
         if (selectedMonth !== 'All Months') {
-            const monthCodeMap = {
+            const MONTH_MAP = {
                 'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
                 'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
                 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
             };
+            const mStr = MONTH_MAP[selectedMonth] || selectedMonth;
             list = list.filter(b => {
-                const d = new Date(b.travelStartDate || b.createdAt || 0);
+                const code = String(b.bookingCode || b.clientCode || b.bookingId || '').trim();
+                const codeMatch = code.match(/^(\d{1,2})\//);
+                if (codeMatch) {
+                    const codeMonth = String(parseInt(codeMatch[1], 10)).padStart(2, '0');
+                    return codeMonth === mStr;
+                }
+                const d = new Date(b.bookingDate || b.createdAt || 0);
                 if (!isNaN(d.getTime())) {
-                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                    return months[d.getMonth()] === selectedMonth;
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    return m === mStr;
                 }
                 return false;
             });
