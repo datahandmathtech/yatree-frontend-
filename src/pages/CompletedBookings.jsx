@@ -870,30 +870,9 @@ export default function CompletedBookings() {
 
                                             {/* Booking ID */}
                                             <td style={{ padding: '14px 16px' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                                    <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#fbbf24', fontFamily: 'monospace' }}>
-                                                        {bkg.bookingId}
-                                                    </span>
-                                                    {bkg.rawBookingId && bkg.rawBookingId !== bkg.bookingId && (
-                                                        <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>
-                                                            {bkg.rawBookingId}
-                                                        </span>
-                                                    )}
-                                                    <span style={{
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                        padding: '1px 6px',
-                                                        borderRadius: '4px',
-                                                        fontSize: '9.5px',
-                                                        fontWeight: '700',
-                                                        background: 'rgba(52, 211, 153, 0.15)',
-                                                        color: '#34d399',
-                                                        width: 'fit-content'
-                                                    }}>
-                                                        ✓ Completed
-                                                    </span>
-                                                </div>
+                                                <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#fbbf24', fontFamily: 'monospace' }}>
+                                                    {bkg.bookingId}
+                                                </span>
                                             </td>
 
                                             {/* Guest Name & Mobile */}
