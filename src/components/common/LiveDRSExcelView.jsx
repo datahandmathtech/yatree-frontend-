@@ -276,6 +276,7 @@ export default function LiveDRSExcelView({
             revenue: duty.revenue || 0,
             cOut: duty.cOut || '',
             carType: duty.carType || 'Sedan',
+            customCarNumber: duty.vehicle?.carNumber || duty.customCarNumber || '',
             customDriverName: duty.driver?.name || duty.customDriverName || ''
         });
     };
@@ -298,6 +299,7 @@ export default function LiveDRSExcelView({
                 revenue: Number(inlineFormData.revenue) || 0,
                 cOut: inlineFormData.cOut,
                 carType: inlineFormData.carType,
+                customCarNumber: inlineFormData.customCarNumber,
                 customDriverName: inlineFormData.customDriverName
             });
             setInlineEditingId(null);
@@ -635,7 +637,7 @@ export default function LiveDRSExcelView({
                     <tbody>
                         {groupedByDate.length === 0 ? (
                             <tr>
-                                <td colSpan="11" style={{ padding: '60px 20px', textAlign: 'center', color: 'rgba(255,255,255,0.45)' }}>
+                                <td colSpan="12" style={{ padding: '60px 20px', textAlign: 'center', color: 'rgba(255,255,255,0.45)' }}>
                                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>📊</div>
                                     <div style={{ fontSize: '15px', fontWeight: '700', color: 'white' }}>No DRS Duties Found</div>
                                     <p style={{ fontSize: '12px', margin: '4px 0 16px' }}>Try switching month, changing date filter, or click below to add a duty.</p>
@@ -654,11 +656,11 @@ export default function LiveDRSExcelView({
                                         {/* Blank Separator Row if not first group */}
                                         {groupIdx > 0 && (
                                             <tr style={{ height: '14px', background: '#070b14' }}>
-                                                <td colSpan="11" style={{ padding: 0, border: 'none' }}></td>
+                                                <td colSpan="12" style={{ padding: 0, border: 'none' }}></td>
                                             </tr>
                                         )}
 
-                                        {/* Day Header Row: Date | So. No. | Hotel | Guest | Guest Mob | Time | Duty | Day Total Rate | C/Out | Car | Actions */}
+                                        {/* Day Header Row: Date | So. No. | Hotel | Guest | Guest Mob | Time | Duty | Day Total Rate | C/Out | Car | Driver | Actions */}
                                         <tr id={`date-block-${group.dateKey}`} style={{
                                             background: '#0f172a',
                                             borderTop: '2px solid rgba(255, 255, 255, 0.2)',
@@ -710,10 +712,13 @@ export default function LiveDRSExcelView({
                                             <th style={{ padding: '10px 10px', width: '80px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
                                                 C/Out
                                             </th>
-                                            <th style={{ padding: '10px 10px', width: '100px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                            <th style={{ padding: '10px 10px', width: '125px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
                                                 Car
                                             </th>
-                                            <th style={{ padding: '10px 12px', width: '120px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px' }}>
+                                            <th style={{ padding: '10px 10px', width: '140px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                Driver
+                                            </th>
+                                            <th style={{ padding: '10px 12px', width: '90px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px' }}>
                                                 Actions
                                             </th>
                                         </tr>
@@ -723,6 +728,10 @@ export default function LiveDRSExcelView({
                                             const isEditing = inlineEditingId === duty._id;
                                             const fare = Number(duty.revenue) || 0;
                                             const isHighFare = fare >= 3500;
+                                            const carNo = duty.vehicle?.carNumber || duty.customCarNumber || '';
+                                            const carLabel = duty.vehicle?.model || duty.vehicle?.type || duty.carType || 'Car';
+                                            const driverName = duty.driver?.name || duty.customDriverName || '';
+                                            const driverPhone = duty.driver?.mobile || duty.driver?.phone || '';
 
                                             if (isEditing) {
                                                 return (
@@ -785,9 +794,18 @@ export default function LiveDRSExcelView({
                                                         </td>
                                                         <td style={{ padding: '6px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
                                                             <input 
-                                                                value={inlineFormData.carType}
-                                                                onChange={e => setInlineFormData({ ...inlineFormData, carType: e.target.value })}
-                                                                style={{ width: '100%', padding: '5px 8px', background: '#0b1120', border: '1px solid #38bdf8', borderRadius: '5px', color: 'white', fontSize: '12px' }}
+                                                                value={inlineFormData.customCarNumber}
+                                                                onChange={e => setInlineFormData({ ...inlineFormData, customCarNumber: e.target.value.toUpperCase() })}
+                                                                placeholder="Car No (e.g. RJ27TA9053)"
+                                                                style={{ width: '100%', padding: '5px 8px', background: '#0b1120', border: '1px solid #38bdf8', borderRadius: '5px', color: '#38bdf8', fontSize: '12px', fontWeight: '700' }}
+                                                            />
+                                                        </td>
+                                                        <td style={{ padding: '6px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
+                                                            <input 
+                                                                value={inlineFormData.customDriverName}
+                                                                onChange={e => setInlineFormData({ ...inlineFormData, customDriverName: e.target.value })}
+                                                                placeholder="Driver Name"
+                                                                style={{ width: '100%', padding: '5px 8px', background: '#0b1120', border: '1px solid #4ade80', borderRadius: '5px', color: '#4ade80', fontSize: '12px', fontWeight: '700' }}
                                                             />
                                                         </td>
                                                         <td style={{ padding: '6px', textAlign: 'center' }}>
@@ -937,40 +955,122 @@ export default function LiveDRSExcelView({
                                                         {duty.cOut || '—'}
                                                     </td>
 
-                                                    {/* Car / Vehicle */}
+                                                    {/* Car / Vehicle (Clickable to Assign Car & Driver) */}
                                                     <td style={{
-                                                        padding: '10px 10px',
-                                                        color: 'white',
-                                                        fontWeight: '700',
+                                                        padding: '8px 10px',
                                                         borderRight: '1px solid rgba(255,255,255,0.06)',
                                                         whiteSpace: 'nowrap'
                                                     }}>
-                                                        {duty.vehicle?.carNumber || duty.customCarNumber || duty.carType || 'Car'}
+                                                        <div
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (onOpenAssign) onOpenAssign(duty);
+                                                            }}
+                                                            title="Click to Assign / Change Car & Driver"
+                                                            style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '2px' }}
+                                                        >
+                                                            {carNo ? (
+                                                                <>
+                                                                    <span style={{
+                                                                        padding: '2px 7px',
+                                                                        borderRadius: '6px',
+                                                                        background: 'rgba(56, 189, 248, 0.14)',
+                                                                        border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                                        color: '#38bdf8',
+                                                                        fontWeight: '800',
+                                                                        fontSize: '11.5px',
+                                                                        width: 'fit-content'
+                                                                    }}>
+                                                                        🚗 {carNo}
+                                                                    </span>
+                                                                    {carLabel && carLabel !== carNo && (
+                                                                        <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
+                                                                            {carLabel}
+                                                                        </span>
+                                                                    )}
+                                                                </>
+                                                            ) : (
+                                                                <span style={{
+                                                                    padding: '3px 8px',
+                                                                    borderRadius: '6px',
+                                                                    background: 'rgba(255,255,255,0.05)',
+                                                                    border: '1px dashed rgba(56, 189, 248, 0.4)',
+                                                                    color: '#38bdf8',
+                                                                    fontWeight: '700',
+                                                                    fontSize: '11px',
+                                                                    width: 'fit-content'
+                                                                }}>
+                                                                    🚗 {carLabel} (+ Assign)
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
 
-                                                    {/* Actions */}
+                                                    {/* Driver (Clickable to Assign Car & Driver) */}
+                                                    <td style={{
+                                                        padding: '8px 10px',
+                                                        borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                        whiteSpace: 'nowrap'
+                                                    }}>
+                                                        {driverName ? (
+                                                            <div
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (onOpenAssign) onOpenAssign(duty);
+                                                                }}
+                                                                title="Click to Change Driver & Car"
+                                                                style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '2px' }}
+                                                            >
+                                                                <span style={{
+                                                                    padding: '2px 8px',
+                                                                    borderRadius: '6px',
+                                                                    background: 'rgba(34, 197, 94, 0.15)',
+                                                                    border: '1px solid rgba(34, 197, 94, 0.35)',
+                                                                    color: '#4ade80',
+                                                                    fontWeight: '800',
+                                                                    fontSize: '11.5px',
+                                                                    width: 'fit-content'
+                                                                }}>
+                                                                    👤 {driverName}
+                                                                </span>
+                                                                {driverPhone && (
+                                                                    <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
+                                                                        {driverPhone}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (onOpenAssign) onOpenAssign(duty);
+                                                                }}
+                                                                title="Assign Driver & Car"
+                                                                style={{
+                                                                    padding: '4px 10px',
+                                                                    background: 'rgba(74, 222, 128, 0.1)',
+                                                                    border: '1px dashed rgba(74, 222, 128, 0.45)',
+                                                                    borderRadius: '6px',
+                                                                    color: '#4ade80',
+                                                                    fontSize: '11px',
+                                                                    fontWeight: '800',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                            >
+                                                                + Assign Driver
+                                                            </button>
+                                                        )}
+                                                    </td>
+
+                                                    {/* Actions: ONLY Edit and Delete */}
                                                     <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                                                             <button
                                                                 onClick={() => startInlineEdit(duty)}
-                                                                title="Quick Edit Row"
-                                                                style={{ padding: '5px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', color: '#fbbf24', cursor: 'pointer' }}
+                                                                title="Edit Row"
+                                                                style={{ padding: '5px 7px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: '#fbbf24', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                                             >
                                                                 <Edit3 size={13} />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => onShareWhatsApp && onShareWhatsApp(duty)}
-                                                                title="WhatsApp Slip"
-                                                                style={{ padding: '5px', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '6px', color: '#4ade80', cursor: 'pointer' }}
-                                                            >
-                                                                <MessageSquare size={13} />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => onOpenAssign && onOpenAssign(duty)}
-                                                                title="Assign Driver"
-                                                                style={{ padding: '5px', background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '6px', color: '#38bdf8', cursor: 'pointer' }}
-                                                            >
-                                                                <User size={13} />
                                                             </button>
                                                             <button
                                                                 onClick={async () => {
@@ -986,7 +1086,7 @@ export default function LiveDRSExcelView({
                                                                     }
                                                                 }}
                                                                 title="Delete Duty"
-                                                                style={{ padding: '5px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', color: '#f87171', cursor: 'pointer' }}
+                                                                style={{ padding: '5px 7px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                                             >
                                                                 <Trash2 size={13} />
                                                             </button>
@@ -998,7 +1098,7 @@ export default function LiveDRSExcelView({
 
                                         {/* Add Row under this Date */}
                                         <tr style={{ background: 'rgba(255,255,255,0.015)', borderBottom: '1px dashed rgba(255,255,255,0.1)' }}>
-                                            <td colSpan="11" style={{ padding: '6px 14px' }}>
+                                            <td colSpan="12" style={{ padding: '6px 14px' }}>
                                                 <button
                                                     onClick={() => {
                                                         if (onOpenDirectBooking) {

@@ -102,7 +102,9 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
     const [selectedDutyForEdit, setSelectedDutyForEdit] = useState(null);
     const [selectedDutyForPayment, setSelectedDutyForPayment] = useState(null);
     const [assignDriverId, setAssignDriverId] = useState('');
+    const [assignCustomDriverName, setAssignCustomDriverName] = useState('');
     const [assignVehicleId, setAssignVehicleId] = useState('');
+    const [assignCustomCarNumber, setAssignCustomCarNumber] = useState('');
     const [savingAssign, setSavingAssign] = useState(false);
     const [savingEdit, setSavingEdit] = useState(false);
 
@@ -662,6 +664,18 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
     };
 
     // Quick Assign Driver & Vehicle Handler
+    const openAssignModal = (duty) => {
+        if (!duty) return;
+        setSelectedDutyForAssign(duty);
+        const drvId = duty.driver?._id || (typeof duty.driver === 'string' ? duty.driver : '');
+        const vehId = duty.vehicle?._id || (typeof duty.vehicle === 'string' ? duty.vehicle : '');
+        setAssignDriverId(drvId || '');
+        setAssignCustomDriverName(duty.driver?.name || duty.customDriverName || '');
+        setAssignVehicleId(vehId || '');
+        setAssignCustomCarNumber(duty.vehicle?.carNumber || duty.customCarNumber || '');
+        setShowAssignModal(true);
+    };
+
     const handleQuickAssignSave = async (e) => {
         e.preventDefault();
         if (!selectedDutyForAssign) return;
@@ -671,12 +685,16 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
             const selectedDriverObj = drivers.find(d => d._id === assignDriverId);
             const selectedVehicleObj = vehicles.find(v => v._id === assignVehicleId);
 
+            const finalDriverName = selectedDriverObj ? selectedDriverObj.name : (assignCustomDriverName || '').trim();
+            const finalCarNumber = selectedVehicleObj ? selectedVehicleObj.carNumber : (assignCustomCarNumber || '').trim();
+
             const updatePayload = {
                 driver: assignDriverId || null,
-                customDriverName: selectedDriverObj ? selectedDriverObj.name : (assignDriverId ? '' : selectedDutyForAssign.customDriverName),
+                customDriverName: finalDriverName,
                 vehicle: assignVehicleId || null,
-                customCarNumber: selectedVehicleObj ? selectedVehicleObj.carNumber : (assignVehicleId ? '' : selectedDutyForAssign.customCarNumber),
-                status: (assignDriverId || selectedDriverObj) ? 'Assigned' : selectedDutyForAssign.status
+                customCarNumber: finalCarNumber,
+                carType: selectedVehicleObj ? (selectedVehicleObj.model || selectedVehicleObj.type || selectedDutyForAssign.carType) : selectedDutyForAssign.carType,
+                status: (assignDriverId || finalDriverName || assignVehicleId || finalCarNumber) ? 'Assigned' : selectedDutyForAssign.status
             };
 
             await axios.put(`/api/drs/${selectedDutyForAssign._id}`, updatePayload);
@@ -982,10 +1000,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                             });
                             setShowDirectBookingModal(true);
                         }}
-                        onOpenEditDuty={(duty) => {
-                            setSelectedDutyForEdit(duty);
-                            setShowEditDutyModal(true);
-                        }}
+                        onOpenEditDuty={(duty) => openEditModal(duty)}
                         onOpenAssign={(duty) => openAssignModal(duty)}
                         onShareWhatsApp={(duty) => handleShareWhatsApp(duty)}
                     />
@@ -2033,7 +2048,11 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                         {/* Vehicle */}
                                         <td style={{ padding: '14px 12px' }}>
                                             {vehicleNum ? (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                <div
+                                                    onClick={() => openAssignModal(duty)}
+                                                    title="Click to change Car / Driver"
+                                                    style={{ display: 'flex', flexDirection: 'column', gap: '3px', cursor: 'pointer' }}
+                                                >
                                                     <span style={{
                                                         background: 'rgba(56, 189, 248, 0.12)',
                                                         border: '1px solid rgba(56, 189, 248, 0.3)',
@@ -2044,23 +2063,39 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                                         fontWeight: '900',
                                                         width: 'fit-content'
                                                     }}>
-                                                        {vehicleNum}
+                                                        🚗 {vehicleNum}
                                                     </span>
                                                     <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: '11px', fontWeight: '600' }}>
                                                         {carModel}
                                                     </span>
                                                 </div>
                                             ) : (
-                                                <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '12px', fontWeight: '700' }}>
-                                                    Unassigned
-                                                </span>
+                                                <button
+                                                    onClick={() => openAssignModal(duty)}
+                                                    style={{
+                                                        background: 'rgba(56, 189, 248, 0.1)',
+                                                        border: '1px dashed rgba(56, 189, 248, 0.4)',
+                                                        color: '#38bdf8',
+                                                        padding: '4px 10px',
+                                                        borderRadius: '8px',
+                                                        fontSize: '11px',
+                                                        fontWeight: '800',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    + Assign Car
+                                                </button>
                                             )}
                                         </td>
 
                                         {/* Driver */}
                                         <td style={{ padding: '14px 12px' }}>
                                             {driverName ? (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                <div
+                                                    onClick={() => openAssignModal(duty)}
+                                                    title="Click to change Driver / Car"
+                                                    style={{ display: 'flex', flexDirection: 'column', gap: '3px', cursor: 'pointer' }}
+                                                >
                                                     <div style={{ color: '#4ade80', fontWeight: '800', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                                                         <UserCheck size={13} /> {driverName}
                                                     </div>
@@ -2071,9 +2106,21 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                                     )}
                                                 </div>
                                             ) : (
-                                                <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '12px', fontWeight: '700' }}>
-                                                    Unassigned
-                                                </span>
+                                                <button
+                                                    onClick={() => openAssignModal(duty)}
+                                                    style={{
+                                                        background: 'rgba(74, 222, 128, 0.1)',
+                                                        border: '1px dashed rgba(74, 222, 128, 0.4)',
+                                                        color: '#4ade80',
+                                                        padding: '4px 10px',
+                                                        borderRadius: '8px',
+                                                        fontSize: '11px',
+                                                        fontWeight: '800',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    + Assign Driver
+                                                </button>
                                             )}
                                         </td>
 
@@ -2165,7 +2212,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                             </select>
                                         </td>
 
-                                        {/* Actions */}
+                                        {/* Actions: Only Edit and Delete */}
                                         <td style={{
                                             padding: '14px 12px',
                                             textAlign: 'center',
@@ -2173,27 +2220,6 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                             borderBottomRightRadius: '14px'
                                         }}>
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                                                {/* WhatsApp Share */}
-                                                <button
-                                                    onClick={() => handleShareWhatsApp(duty)}
-                                                    title="Share Dispatch Slip on WhatsApp"
-                                                    style={{
-                                                        width: '30px',
-                                                        height: '30px',
-                                                        borderRadius: '8px',
-                                                        background: 'rgba(52, 211, 153, 0.15)',
-                                                        border: '1px solid rgba(52, 211, 153, 0.3)',
-                                                        color: '#34d399',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                >
-                                                    <Share2 size={13} />
-                                                </button>
-
                                                 {/* Edit Duty */}
                                                 <button
                                                     onClick={() => openEditModal(duty)}
@@ -2609,34 +2635,74 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                             <form onSubmit={handleQuickAssignSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                                 <div>
                                     <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
-                                        Select Driver
+                                        1. Select Driver (Fleet)
                                     </label>
                                     <select
                                         value={assignDriverId}
-                                        onChange={(e) => setAssignDriverId(e.target.value)}
-                                        style={{ width: '100%', padding: '12px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
+                                        onChange={(e) => {
+                                            const dId = e.target.value;
+                                            setAssignDriverId(dId);
+                                            const dObj = drivers.find(d => d._id === dId);
+                                            if (dObj) {
+                                                setAssignCustomDriverName(dObj.name);
+                                                const linkedVehId = dObj.assignedVehicle?._id || (typeof dObj.assignedVehicle === 'string' ? dObj.assignedVehicle : '');
+                                                if (linkedVehId) {
+                                                    setAssignVehicleId(linkedVehId);
+                                                    const vObj = vehicles.find(v => v._id === linkedVehId);
+                                                    if (vObj) setAssignCustomCarNumber(vObj.carNumber);
+                                                }
+                                            }
+                                        }}
+                                        style={{ width: '100%', padding: '11px 12px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
                                     >
-                                        <option value="">-- No Driver / Custom --</option>
+                                        <option value="">-- Select Fleet Driver or Enter Below --</option>
                                         {drivers.map(d => (
-                                            <option key={d._id} value={d._id}>{d.name} ({d.mobile || 'No mob'})</option>
+                                            <option key={d._id} value={d._id}>{d.name} ({d.mobile || d.phone || 'No mob'})</option>
                                         ))}
                                     </select>
+                                    <input
+                                        type="text"
+                                        value={assignCustomDriverName}
+                                        onChange={(e) => {
+                                            setAssignCustomDriverName(e.target.value);
+                                            if (assignDriverId) setAssignDriverId('');
+                                        }}
+                                        placeholder="Or type Driver Name (e.g., Ramesh / Vendor Driver)"
+                                        style={{ marginTop: '6px', width: '100%', padding: '9px 12px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(74, 222, 128, 0.3)', borderRadius: '8px', color: '#4ade80', fontSize: '12.5px', fontWeight: '700', outline: 'none' }}
+                                    />
                                 </div>
 
                                 <div>
                                     <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
-                                        Select Vehicle
+                                        2. Select Vehicle / Car (Fleet)
                                     </label>
                                     <select
                                         value={assignVehicleId}
-                                        onChange={(e) => setAssignVehicleId(e.target.value)}
-                                        style={{ width: '100%', padding: '12px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
+                                        onChange={(e) => {
+                                            const vId = e.target.value;
+                                            setAssignVehicleId(vId);
+                                            const vObj = vehicles.find(v => v._id === vId);
+                                            if (vObj) {
+                                                setAssignCustomCarNumber(vObj.carNumber);
+                                            }
+                                        }}
+                                        style={{ width: '100%', padding: '11px 12px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
                                     >
-                                        <option value="">-- No Vehicle / Custom --</option>
+                                        <option value="">-- Select Fleet Car or Enter Below --</option>
                                         {vehicles.map(v => (
                                             <option key={v._id} value={v._id}>{v.carNumber} - {v.model || v.type}</option>
                                         ))}
                                     </select>
+                                    <input
+                                        type="text"
+                                        value={assignCustomCarNumber}
+                                        onChange={(e) => {
+                                            setAssignCustomCarNumber(e.target.value.toUpperCase());
+                                            if (assignVehicleId) setAssignVehicleId('');
+                                        }}
+                                        placeholder="Or type Car Number (e.g., RJ27TA9053)"
+                                        style={{ marginTop: '6px', width: '100%', padding: '9px 12px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '8px', color: '#38bdf8', fontSize: '12.5px', fontWeight: '800', outline: 'none' }}
+                                    />
                                 </div>
 
                                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
@@ -2652,7 +2718,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                         disabled={savingAssign}
                                         style={{ flex: 1, padding: '10px', borderRadius: '10px', background: '#38bdf8', border: 'none', color: '#000000', fontWeight: '900', cursor: 'pointer' }}
                                     >
-                                        {savingAssign ? 'Saving...' : 'Save Assignment'}
+                                        {savingAssign ? 'Saving...' : 'Save Car & Driver'}
                                     </button>
                                 </div>
                             </form>
