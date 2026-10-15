@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, FileText, Car, CheckCircle, Clock, Plus, Download, Fuel } from 'lucide-react';
+import { X, FileText, Car, CheckCircle, Clock, Plus, Download, Fuel, Edit } from 'lucide-react';
 import axios from '../../api/axios';
 import { useCompany } from '../../context/CompanyContext';
 import { generateClientLedgerPDF } from '../../utils/clientLedgerPdf';
 
-export default function ClientLedgerDrawer({ booking, onClose, onAddEntry }) {
+export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEditBooking }) {
     const { selectedCompany } = useCompany();
     const [ledgerEntries, setLedgerEntries] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -313,13 +313,18 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry }) {
                     )}
                     
                     {/* Action Buttons */}
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                        {onAddEntry && (
-                            <button onClick={onAddEntry} style={{ flex: 1, padding: '12px', background: '#fbbf24', color: '#000', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        {onAddEntry && !isPaidFull && (
+                            <button onClick={onAddEntry} style={{ flex: 1, minWidth: '150px', padding: '12px', background: '#fbbf24', color: '#000', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                                 <Plus size={16} /> Record Payment
                             </button>
                         )}
-                        <button onClick={handleDownloadPdf} style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '10px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                        {onEditBooking && (
+                            <button onClick={onEditBooking} style={{ flex: 1, minWidth: '140px', padding: '12px', background: 'rgba(167, 139, 250, 0.14)', border: '1px solid rgba(167, 139, 250, 0.35)', color: '#c4b5fd', borderRadius: '10px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                <Edit size={15} /> Edit Booking
+                            </button>
+                        )}
+                        <button onClick={handleDownloadPdf} style={{ flex: 1, minWidth: '150px', padding: '12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '10px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                             <Download size={16} /> Download Ledger PDF
                         </button>
                     </div>

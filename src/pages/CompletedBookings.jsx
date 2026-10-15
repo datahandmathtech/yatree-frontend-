@@ -414,7 +414,7 @@ export default function CompletedBookings() {
                             margin: '3px 0 0 0',
                             fontWeight: '500'
                         }}>
-                            View day-wise tour itinerary, guest scene, and download tour confirmation or tax invoice PDFs.
+                            Manage finished trip accounts, clear balance payments, and download GST tax invoices.
                         </p>
                     </div>
                 </div>
@@ -828,7 +828,7 @@ export default function CompletedBookings() {
                                     </div>
                                 </th>
                                 <th style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textAlign: 'center' }}>
-                                    Account & Edit
+                                    Client Ledger
                                 </th>
                                 <th style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textAlign: 'right' }}>
                                     Tax Invoice
@@ -935,193 +935,95 @@ export default function CompletedBookings() {
                                             {/* Balance Due */}
                                             <td style={{ padding: '14px 16px' }}>
                                                 {bal > 0 ? (
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                                        <span style={{ fontSize: '13.5px', fontWeight: '900', color: '#f87171' }}>
-                                                            ₹{bal.toLocaleString('en-IN')}
-                                                        </span>
-                                                        <span style={{
-                                                            fontSize: '9.5px',
-                                                            fontWeight: '800',
-                                                            color: '#fbbf24',
-                                                            background: 'rgba(245, 158, 11, 0.15)',
-                                                            border: '1px solid rgba(245, 158, 11, 0.35)',
-                                                            padding: '1px 6px',
-                                                            borderRadius: '4px',
-                                                            width: 'fit-content'
-                                                        }}>
-                                                            Pending
-                                                        </span>
-                                                    </div>
+                                                    <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#f87171' }}>
+                                                        ₹{bal.toLocaleString('en-IN')}
+                                                    </span>
                                                 ) : (
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                                        <span style={{ fontSize: '13px', fontWeight: '800', color: '#34d399' }}>
-                                                            ₹0
-                                                        </span>
-                                                        <span style={{
-                                                            fontSize: '9.5px',
-                                                            fontWeight: '800',
-                                                            color: '#34d399',
-                                                            background: 'rgba(16, 185, 129, 0.15)',
-                                                            border: '1px solid rgba(16, 185, 129, 0.35)',
-                                                            padding: '1px 6px',
-                                                            borderRadius: '4px',
-                                                            width: 'fit-content'
-                                                        }}>
-                                                            ✓ Payment Done
-                                                        </span>
-                                                    </div>
+                                                    <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#34d399' }}>
+                                                        ₹0
+                                                    </span>
                                                 )}
                                             </td>
 
-                                            {/* Account & Edit */}
+                                            {/* Client Ledger */}
                                             <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                                                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setLedgerModalBooking(bkg)}
-                                                        title="Open Client Account Ledger & Payment Statement"
-                                                        style={{
-                                                            padding: '5px 12px',
-                                                            background: '#2563eb',
-                                                            border: 'none',
-                                                            borderRadius: '20px',
-                                                            color: '#ffffff',
-                                                            fontSize: '11px',
-                                                            fontWeight: '700',
-                                                            cursor: 'pointer',
-                                                            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
-                                                            whiteSpace: 'nowrap'
-                                                        }}
-                                                    >
-                                                        Accounts
-                                                    </button>
-
-                                                    {bal > 0 && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleOpenPaymentModal(bkg)}
-                                                            title="Record remaining balance payment"
-                                                            style={{
-                                                                padding: '5px 11px',
-                                                                background: 'rgba(34, 197, 94, 0.18)',
-                                                                border: '1px solid rgba(34, 197, 94, 0.45)',
-                                                                borderRadius: '20px',
-                                                                color: '#4ade80',
-                                                                fontSize: '11px',
-                                                                fontWeight: '800',
-                                                                cursor: 'pointer',
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                gap: '4px',
-                                                                whiteSpace: 'nowrap'
-                                                            }}
-                                                        >
-                                                            <Plus size={12} />
-                                                            <span>Pay ₹{bal.toLocaleString('en-IN')}</span>
-                                                        </button>
-                                                    )}
-
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setEditingBooking(bkg)}
-                                                        title="Edit Booking & Account Details"
-                                                        style={{
-                                                            padding: '5px 10px',
-                                                            background: 'rgba(167, 139, 250, 0.14)',
-                                                            border: '1px solid rgba(167, 139, 250, 0.35)',
-                                                            borderRadius: '8px',
-                                                            color: '#c4b5fd',
-                                                            fontSize: '11px',
-                                                            fontWeight: '700',
-                                                            cursor: 'pointer',
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '4px',
-                                                            whiteSpace: 'nowrap'
-                                                        }}
-                                                    >
-                                                        <Edit size={12} />
-                                                        <span>Edit</span>
-                                                    </button>
-                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setLedgerModalBooking(bkg)}
+                                                    title="Open Client Account Ledger & Payment Statement"
+                                                    style={{
+                                                        padding: '6px 14px',
+                                                        background: '#2563eb',
+                                                        border: 'none',
+                                                        borderRadius: '20px',
+                                                        color: '#ffffff',
+                                                        fontSize: '11.5px',
+                                                        fontWeight: '700',
+                                                        cursor: 'pointer',
+                                                        boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
+                                                        whiteSpace: 'nowrap'
+                                                    }}
+                                                >
+                                                    Accounts
+                                                </button>
                                             </td>
 
                                             {/* Tax Invoice (Appears ONLY when payment is done) */}
                                             <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
-                                                    {isPaymentDone ? (
-                                                        <>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleDownloadInvoice(bkg)}
-                                                                style={{
-                                                                    display: 'inline-flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '5px',
-                                                                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-                                                                    border: '1px solid rgba(56, 189, 248, 0.4)',
-                                                                    borderRadius: '8px',
-                                                                    padding: '6px 12px',
-                                                                    color: '#ffffff',
-                                                                    fontSize: '11.5px',
-                                                                    fontWeight: '800',
-                                                                    cursor: 'pointer',
-                                                                    boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)'
-                                                                }}
-                                                                title="Payment Done — Download Official GST Tax Invoice"
-                                                            >
-                                                                <Receipt size={13} />
-                                                                <span>Tax Invoice</span>
-                                                            </button>
-
-                                                            {bkg.invoiceGenerated && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setInvoiceModalBooking(bkg)}
-                                                                    style={{
-                                                                        display: 'inline-flex',
-                                                                        alignItems: 'center',
-                                                                        gap: '4px',
-                                                                        background: 'rgba(255,255,255,0.06)',
-                                                                        border: '1px solid rgba(255,255,255,0.15)',
-                                                                        borderRadius: '8px',
-                                                                        padding: '6px 10px',
-                                                                        color: '#38bdf8',
-                                                                        fontSize: '11px',
-                                                                        fontWeight: '700',
-                                                                        cursor: 'pointer'
-                                                                    }}
-                                                                    title="Edit Tax Invoice"
-                                                                >
-                                                                    <Edit size={12} />
-                                                                </button>
-                                                            )}
-                                                        </>
-                                                    ) : (
+                                                {isPaymentDone ? (
+                                                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
                                                         <button
                                                             type="button"
-                                                            onClick={() => handleOpenPaymentModal(bkg)}
+                                                            onClick={() => handleDownloadInvoice(bkg)}
                                                             style={{
                                                                 display: 'inline-flex',
                                                                 alignItems: 'center',
                                                                 gap: '5px',
-                                                                background: 'rgba(245, 158, 11, 0.12)',
-                                                                border: '1px dashed rgba(245, 158, 11, 0.45)',
+                                                                background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                                                                border: '1px solid rgba(56, 189, 248, 0.4)',
                                                                 borderRadius: '8px',
-                                                                padding: '5px 10px',
-                                                                color: '#fbbf24',
-                                                                fontSize: '11px',
-                                                                fontWeight: '700',
+                                                                padding: '6px 12px',
+                                                                color: '#ffffff',
+                                                                fontSize: '11.5px',
+                                                                fontWeight: '800',
                                                                 cursor: 'pointer',
+                                                                boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)',
                                                                 whiteSpace: 'nowrap'
                                                             }}
-                                                            title="Tax Invoice unlocks automatically once balance payment is completed"
+                                                            title="Download Official GST Tax Invoice"
                                                         >
-                                                            <Clock size={12} />
-                                                            <span>Clear Balance for Invoice</span>
+                                                            <Receipt size={13} />
+                                                            <span>Tax Invoice</span>
                                                         </button>
-                                                    )}
-                                                </div>
+
+                                                        {bkg.invoiceGenerated && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setInvoiceModalBooking(bkg)}
+                                                                style={{
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '4px',
+                                                                    background: 'rgba(255,255,255,0.06)',
+                                                                    border: '1px solid rgba(255,255,255,0.15)',
+                                                                    borderRadius: '8px',
+                                                                    padding: '6px 10px',
+                                                                    color: '#38bdf8',
+                                                                    fontSize: '11px',
+                                                                    fontWeight: '700',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                                title="Edit Tax Invoice"
+                                                            >
+                                                                <Edit size={12} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', fontWeight: '600' }}>
+                                                        —
+                                                    </span>
+                                                )}
                                             </td>
                                         </tr>
                                     );
@@ -1760,6 +1662,11 @@ export default function CompletedBookings() {
                         }
                         setLedgerModalBooking(null);
                         handleOpenPaymentModal(bkg);
+                    }}
+                    onEditBooking={() => {
+                        const bkg = ledgerModalBooking;
+                        setLedgerModalBooking(null);
+                        setEditingBooking(bkg);
                     }}
                 />
             )}
