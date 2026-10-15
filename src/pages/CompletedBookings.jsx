@@ -64,22 +64,57 @@ export default function CompletedBookings() {
             setLoading(true);
             const { data } = await axios.get(`/api/bookings/${selectedCompany._id}?status=Completed`);
             if (Array.isArray(data) && data.length > 0) {
-                const formatted = data.map(b => ({
-                    ...b,
-                    _id: b._id,
-                    bookingId: b.bookingCode || b.clientCode || b.bookingId || 'BKG',
-                    bookingCode: b.bookingCode || b.clientCode || b.bookingId || 'BKG',
-                    guestName: b.clientName || b.guestName || 'Valued Guest',
-                    clientName: b.clientName || b.guestName || 'Valued Guest',
-                    mobileNumber: b.mobileNumber || '',
-                    packagePrice: Number(b.totalAmount) || 0,
-                    totalAmount: Number(b.totalAmount) || 0,
-                    vehicleType: b.vehicleType || 'Innova Crysta',
-                    month: b.month || 'Sep',
-                    travelStartDate: b.travelStartDate,
-                    travelEndDate: b.travelEndDate,
-                    createdAt: b.createdAt
-                }));
+                const formatted = data.map(b => {
+                    // Extract vehicle numbers & driver names from itinerary or root
+                    const vehNums = [...new Set((b.itinerary || []).map(i => i.vehicleNumber).filter(Boolean))];
+                    if (b.vehicleNumber && !vehNums.includes(b.vehicleNumber)) vehNums.unshift(b.vehicleNumber);
+
+                    const drivers = [...new Set((b.itinerary || []).map(i => i.driverName).filter(Boolean))];
+                    if (b.driverName && !drivers.includes(b.driverName)) drivers.unshift(b.driverName);
+
+                    // Extract duties / route description from itinerary
+                    const duties = (b.itinerary || [])
+                        .map(i => (i.duty || i.description || i.pickupPoint || '').trim())
+                        .filter(Boolean);
+
+                    let routeSummary = '';
+                    if (b.pickupPoint && b.dropPoint) {
+                        routeSummary = `${b.pickupPoint} ➔ ${b.dropPoint}`;
+                    } else if (b.route) {
+                        routeSummary = b.route;
+                    } else if (duties.length > 0) {
+                        routeSummary = duties.join(' ➔ ');
+                    } else if (b.pickupPoint) {
+                        routeSummary = b.pickupPoint;
+                    } else if (b.dropPoint) {
+                        routeSummary = `➔ ${b.dropPoint}`;
+                    }
+
+                    const displayCode = b.clientCode || b.bookingCode || b.bookingId || 'BKG';
+
+                    return {
+                        ...b,
+                        _id: b._id,
+                        bookingId: displayCode,
+                        bookingCode: displayCode,
+                        rawBookingId: b.bookingId,
+                        clientCode: b.clientCode || displayCode,
+                        guestName: b.clientName || b.guestName || 'Valued Guest',
+                        clientName: b.clientName || b.guestName || 'Valued Guest',
+                        mobileNumber: b.mobileNumber || '',
+                        packagePrice: Number(b.totalAmount) || 0,
+                        totalAmount: Number(b.totalAmount) || 0,
+                        vehicleType: b.vehicleType || 'Commercial Vehicle',
+                        vehicleNumbers: vehNums,
+                        primaryVehicleNumber: vehNums[0] || b.vehicleNumber || '',
+                        driverNames: drivers,
+                        primaryDriverName: drivers[0] || b.driverName || '',
+                        routeSummary: routeSummary,
+                        travelStartDate: b.travelStartDate,
+                        travelEndDate: b.travelEndDate,
+                        createdAt: b.createdAt
+                    };
+                });
                 setBookings(formatted);
             } else {
                 setBookings([]);
@@ -96,48 +131,54 @@ export default function CompletedBookings() {
     const processedBookings = useMemo(() => {
         let list = bookings;
 
+        // 0. Strict completed validation: trips whose travel dates are in the future cannot be completed
+        const nowEnd = new Date();
+        nowEnd.setHours(23, 59, 59, 999);
+        list = list.filter(b => {
+            if (b.bookingStatus === 'Cancelled' || b.status === 'Cancelled') return false;
+            if (b.travelStartDate) {
+                const d = new Date(b.travelStartDate);
+                if (!isNaN(d.getTime()) && d > nowEnd) return false;
+            }
+            return true;
+        });
+
         // Financial Year filter
         if (selectedFy && selectedFy !== 'All FY') {
             list = list.filter(b => {
-                const itemFy = getFinancialYear(b.travelEndDate || b.travelStartDate || b.createdAt);
+                const itemFy = getFinancialYear(b.travelStartDate || b.travelEndDate || b.createdAt);
                 return itemFy === selectedFy;
             });
         }
 
-        // Month filter
+        // Month filter (based on trip dates)
         if (selectedMonth && selectedMonth !== 'All Months') {
-            const monthMap = {
-                'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
-                'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
-                'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
-            };
-            const targetPrefix = monthMap[selectedMonth];
-
             list = list.filter(b => {
-                if (b.month && b.month === selectedMonth) return true;
-                const code = b.bookingId || b.bookingCode || '';
-                if (targetPrefix && /^\d{2}\//.test(code)) {
-                    if (code.startsWith(targetPrefix + '/')) return true;
-                }
-                const d = new Date(b.travelEndDate || b.travelStartDate || b.createdAt || 0);
+                const d = new Date(b.travelStartDate || b.travelEndDate || b.createdAt || 0);
                 if (!isNaN(d.getTime())) {
                     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                     return months[d.getMonth()] === selectedMonth;
                 }
-                return true;
+                return false;
             });
         }
 
-        // Search filter
+        // Search filter (searches across booking code, guest, phone, car, plate, driver, route)
         if (searchTerm.trim()) {
             const q = searchTerm.toLowerCase().trim();
             list = list.filter(b => (
                 (b.bookingId && b.bookingId.toLowerCase().includes(q)) ||
                 (b.bookingCode && b.bookingCode.toLowerCase().includes(q)) ||
+                (b.rawBookingId && b.rawBookingId.toLowerCase().includes(q)) ||
                 (b.guestName && b.guestName.toLowerCase().includes(q)) ||
                 (b.clientName && b.clientName.toLowerCase().includes(q)) ||
                 (b.mobileNumber && b.mobileNumber.toLowerCase().includes(q)) ||
                 (b.vehicleType && b.vehicleType.toLowerCase().includes(q)) ||
+                (b.primaryVehicleNumber && b.primaryVehicleNumber.toLowerCase().includes(q)) ||
+                (b.primaryDriverName && b.primaryDriverName.toLowerCase().includes(q)) ||
+                (b.routeSummary && b.routeSummary.toLowerCase().includes(q)) ||
+                (b.vehicleNumbers && b.vehicleNumbers.some(v => v.toLowerCase().includes(q))) ||
+                (b.driverNames && b.driverNames.some(d => d.toLowerCase().includes(q))) ||
                 (b.pickupPoint && b.pickupPoint.toLowerCase().includes(q)) ||
                 (b.dropPoint && b.dropPoint.toLowerCase().includes(q))
             ));
@@ -666,6 +707,11 @@ export default function CompletedBookings() {
                                                     <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#fbbf24', fontFamily: 'monospace' }}>
                                                         {bkg.bookingId}
                                                     </span>
+                                                    {bkg.rawBookingId && bkg.rawBookingId !== bkg.bookingId && (
+                                                        <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', fontFamily: 'monospace' }}>
+                                                            {bkg.rawBookingId}
+                                                        </span>
+                                                    )}
                                                     <span style={{
                                                         display: 'inline-flex',
                                                         alignItems: 'center',
@@ -696,16 +742,81 @@ export default function CompletedBookings() {
                                             </td>
 
                                             {/* Vehicle & Route */}
-                                            <td style={{ padding: '14px 16px' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    <Car size={13} color="#60a5fa" />
-                                                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#60a5fa' }}>
-                                                        {bkg.vehicleType || 'Commercial Car'}
-                                                    </span>
+                                            <td style={{ padding: '14px 16px', minWidth: '240px', maxWidth: '360px' }}>
+                                                {/* Vehicle row: Type + Plate Number Badge + Driver Badge */}
+                                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                        <Car size={13} color="#60a5fa" />
+                                                        <span style={{ fontSize: '13px', fontWeight: '700', color: '#60a5fa' }}>
+                                                            {bkg.vehicleType || 'Commercial Vehicle'}
+                                                        </span>
+                                                    </div>
+                                                    {bkg.primaryVehicleNumber ? (
+                                                        <span style={{
+                                                            background: 'rgba(59, 130, 246, 0.15)',
+                                                            border: '1px solid rgba(59, 130, 246, 0.35)',
+                                                            color: '#93c5fd',
+                                                            fontSize: '11px',
+                                                            fontWeight: '800',
+                                                            padding: '1px 6px',
+                                                            borderRadius: '4px',
+                                                            fontFamily: 'monospace',
+                                                            letterSpacing: '0.3px',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '3px'
+                                                        }} title={bkg.vehicleNumbers?.length > 1 ? `Vehicles: ${bkg.vehicleNumbers.join(', ')}` : `Vehicle Plate: ${bkg.primaryVehicleNumber}`}>
+                                                            🚗 {bkg.primaryVehicleNumber}
+                                                            {bkg.vehicleNumbers?.length > 1 && (
+                                                                <span style={{ opacity: 0.7, fontSize: '10px' }}>+{bkg.vehicleNumbers.length - 1}</span>
+                                                            )}
+                                                        </span>
+                                                    ) : null}
+                                                    {bkg.primaryDriverName ? (
+                                                        <span style={{
+                                                            background: 'rgba(52, 211, 153, 0.12)',
+                                                            border: '1px solid rgba(52, 211, 153, 0.3)',
+                                                            color: '#34d399',
+                                                            fontSize: '11px',
+                                                            fontWeight: '700',
+                                                            padding: '1px 6px',
+                                                            borderRadius: '4px',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '3px'
+                                                        }} title={bkg.driverNames?.length > 1 ? `Drivers: ${bkg.driverNames.join(', ')}` : `Driver: ${bkg.primaryDriverName}`}>
+                                                            👤 {bkg.primaryDriverName}
+                                                            {bkg.driverNames?.length > 1 && (
+                                                                <span style={{ opacity: 0.7, fontSize: '10px' }}>+{bkg.driverNames.length - 1}</span>
+                                                            )}
+                                                        </span>
+                                                    ) : null}
                                                 </div>
-                                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                    <MapPin size={10} color="#f87171" />
-                                                    <span>{bkg.pickupPoint || 'Jaipur'} {bkg.dropPoint ? `➔ ${bkg.dropPoint}` : ''}</span>
+
+                                                {/* Route row: Actual Duties / Route */}
+                                                <div style={{
+                                                    fontSize: '11.5px',
+                                                    color: 'rgba(255,255,255,0.7)',
+                                                    marginTop: '5px',
+                                                    display: 'flex',
+                                                    alignItems: 'flex-start',
+                                                    gap: '5px',
+                                                    lineHeight: '1.4'
+                                                }}>
+                                                    <MapPin size={12} color="#f87171" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                                    <span
+                                                        style={{
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                            display: '-webkit-box',
+                                                            WebkitLineClamp: 2,
+                                                            WebkitBoxOrient: 'vertical',
+                                                            wordBreak: 'break-word'
+                                                        }}
+                                                        title={bkg.routeSummary || 'Tour Package / Sightseeing'}
+                                                    >
+                                                        {bkg.routeSummary || 'Tour Package / Sightseeing'}
+                                                    </span>
                                                 </div>
                                             </td>
 
@@ -1044,9 +1155,16 @@ export default function CompletedBookings() {
                             }}>
                                 <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px 16px' }}>
                                     <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '3px' }}>Vehicle Assigned</div>
-                                    <div style={{ fontSize: '14px', fontWeight: '800', color: '#60a5fa' }}>{viewItineraryBooking.vehicleType || 'Innova Crysta'}</div>
-                                    {viewItineraryBooking.vehicleNumber && (
-                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', marginTop: '2px' }}>Car: {viewItineraryBooking.vehicleNumber}</div>
+                                    <div style={{ fontSize: '14px', fontWeight: '800', color: '#60a5fa' }}>{viewItineraryBooking.vehicleType || 'Commercial Vehicle'}</div>
+                                    {(viewItineraryBooking.primaryVehicleNumber || (viewItineraryBooking.vehicleNumbers && viewItineraryBooking.vehicleNumbers.length > 0)) && (
+                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', marginTop: '2px' }}>
+                                            Car: {viewItineraryBooking.vehicleNumbers?.join(', ') || viewItineraryBooking.primaryVehicleNumber}
+                                        </div>
+                                    )}
+                                    {(viewItineraryBooking.primaryDriverName || (viewItineraryBooking.driverNames && viewItineraryBooking.driverNames.length > 0)) && (
+                                        <div style={{ fontSize: '11px', color: '#34d399', marginTop: '2px' }}>
+                                            Driver: {viewItineraryBooking.driverNames?.join(', ') || viewItineraryBooking.primaryDriverName}
+                                        </div>
                                     )}
                                 </div>
 
@@ -1174,7 +1292,7 @@ export default function CompletedBookings() {
                                         </div>
                                         <div>
                                             <div style={{ fontSize: '13.5px', fontWeight: '700', color: '#ffffff' }}>
-                                                {viewItineraryBooking.pickupPoint || 'Jaipur Local / Outstation'} {viewItineraryBooking.dropPoint ? `➔ ${viewItineraryBooking.dropPoint}` : ''}
+                                                {viewItineraryBooking.routeSummary || viewItineraryBooking.pickupPoint || 'Tour Package / Sightseeing'}
                                             </div>
                                             <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginTop: '3px' }}>
                                                 Vehicle: {viewItineraryBooking.vehicleType || 'Commercial Vehicle'} • Full Tour Service Completed
