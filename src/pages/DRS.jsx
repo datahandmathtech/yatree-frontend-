@@ -340,8 +340,8 @@ export default function DRS() {
             vehicle: duty.vehicle ? { value: duty.vehicle._id, label: `${duty.vehicle.carNumber} - ${duty.vehicle.model}` } : null,
             isDirectBooking: duty.isDirectBooking !== false,
             bookingId: duty.bookingId || null,
-            bookingRef: duty.bookingRef || null,
-            leadId: duty.leadId || null
+            bookingRef: duty.bookingRef?._id || duty.bookingRef || null,
+            leadId: duty.leadId?._id || duty.leadId || null
         });
         setShowModal(true);
     };
@@ -349,13 +349,28 @@ export default function DRS() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
+            const cleanDrvName = (formData.customDriverName || '').trim();
+            const matchedFleetDriver = drivers.find(d =>
+                (cleanDrvName && d.name && d.name.trim().toLowerCase() === cleanDrvName.toLowerCase()) ||
+                (formData.driver?.value && String(d._id) === String(formData.driver.value) && (!cleanDrvName || d.name?.trim().toLowerCase() === cleanDrvName.toLowerCase()))
+            );
+
+            const cleanCarNum = (formData.customCarNumber || '').trim();
+            const matchedFleetVehicle = vehicles.find(v =>
+                (cleanCarNum && v.carNumber && v.carNumber.trim().toLowerCase() === cleanCarNum.toLowerCase()) ||
+                (formData.vehicle?.value && String(v._id) === String(formData.vehicle.value) && (!cleanCarNum || v.carNumber?.trim().toLowerCase() === cleanCarNum.toLowerCase()))
+            );
+
             const payload = {
                 ...formData,
                 company: selectedCompany?._id,
-                driver: formData.driver?.value || null,
-                vehicle: formData.vehicle?.value || null,
+                driver: matchedFleetDriver ? matchedFleetDriver._id : null,
+                customDriverName: cleanDrvName || (matchedFleetDriver ? matchedFleetDriver.name : ''),
+                driverMobile: matchedFleetDriver ? (matchedFleetDriver.mobile || matchedFleetDriver.phone || '') : (formData.driverMobile || ''),
+                vehicle: matchedFleetVehicle ? matchedFleetVehicle._id : null,
+                customCarNumber: cleanCarNum || (matchedFleetVehicle ? matchedFleetVehicle.carNumber : ''),
                 revenue: Number(formData.revenue) || 0,
-                status: (formData.driver || formData.customDriverName) ? 'Assigned' : 'Pending'
+                status: (matchedFleetDriver || cleanDrvName || matchedFleetVehicle || cleanCarNum) ? 'Assigned' : 'Pending'
             };
 
             if (editingDutyId && String(editingDutyId).startsWith('mock-')) {
@@ -1168,28 +1183,76 @@ export default function DRS() {
                                 {/* 9. Car Number */}
                                 <div>
                                     <label style={{ color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '5px', fontSize: '12px', fontWeight: '700' }}>
-                                        Car Number
+                                        Car Number (Fleet or Custom)
                                     </label>
+                                    {vehicles.length > 0 && (
+                                        <select
+                                            value={vehicles.find(v => v.carNumber === formData.customCarNumber)?._id || ''}
+                                            onChange={e => {
+                                                const v = vehicles.find(veh => String(veh._id) === String(e.target.value));
+                                                if (v) {
+                                                    setFormData({
+                                                        ...formData,
+                                                        vehicle: { value: v._id, label: `${v.carNumber} - ${v.model || v.type}` },
+                                                        customCarNumber: v.carNumber,
+                                                        carType: v.model || v.type || formData.carType
+                                                    });
+                                                }
+                                            }}
+                                            style={{ ...inputStyle, marginBottom: '6px', padding: '7px 10px', fontSize: '12px', background: '#070d18', cursor: 'pointer' }}
+                                        >
+                                            <option value="">-- Quick Pick Fleet Vehicle --</option>
+                                            {vehicles.map(v => (
+                                                <option key={v._id} value={v._id}>
+                                                    🚗 {v.carNumber} ({v.model || v.type || 'Car'})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
                                     <input 
                                         type="text" 
                                         value={formData.customCarNumber} 
                                         onChange={e => setFormData({ ...formData, customCarNumber: e.target.value })} 
                                         style={inputStyle} 
-                                        placeholder="e.g. 9836/6113, Crysta - 9053, Sedan - 9822" 
+                                        placeholder="e.g. RJ27 TA 8946 or type custom car no." 
                                     />
                                 </div>
 
                                 {/* 10. Driver Name */}
                                 <div>
                                     <label style={{ color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '5px', fontSize: '12px', fontWeight: '700' }}>
-                                        Driver Name
+                                        Driver Name (Fleet or Custom)
                                     </label>
+                                    {drivers.length > 0 && (
+                                        <select
+                                            value={drivers.find(d => d.name === formData.customDriverName)?._id || ''}
+                                            onChange={e => {
+                                                const d = drivers.find(drv => String(drv._id) === String(e.target.value));
+                                                if (d) {
+                                                    setFormData({
+                                                        ...formData,
+                                                        driver: { value: d._id, label: d.name },
+                                                        customDriverName: d.name,
+                                                        ...(d.vehicleNumber || d.vehicle?.carNumber ? { customCarNumber: d.vehicleNumber || d.vehicle?.carNumber } : {})
+                                                    });
+                                                }
+                                            }}
+                                            style={{ ...inputStyle, marginBottom: '6px', padding: '7px 10px', fontSize: '12px', background: '#070d18', cursor: 'pointer' }}
+                                        >
+                                            <option value="">-- Quick Pick Fleet Driver --</option>
+                                            {drivers.map(d => (
+                                                <option key={d._id} value={d._id}>
+                                                    👤 {d.name} ({d.mobile || d.phone || 'Driver'})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
                                     <input 
                                         type="text" 
                                         value={formData.customDriverName} 
                                         onChange={e => setFormData({ ...formData, customDriverName: e.target.value })} 
                                         style={inputStyle} 
-                                        placeholder="e.g. Kailash/Shailendra, Manish, Gopal, Arjun" 
+                                        placeholder="e.g. Shailendra, Gopal or type custom driver" 
                                     />
                                 </div>
 

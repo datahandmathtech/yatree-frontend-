@@ -127,6 +127,7 @@ export default function Bookings() {
     const [downloadOptionModal, setDownloadOptionModal] = useState(null);
     const [masterDriverId, setMasterDriverId] = useState('');
     const [masterVehicleNumber, setMasterVehicleNumber] = useState('');
+    const [copySuccessMsg, setCopySuccessMsg] = useState('');
 
     useEffect(() => {
         if (selectedCompany?._id) {
@@ -166,6 +167,13 @@ export default function Bookings() {
         }
     };
 
+    const showTemporaryCopyBanner = (msg) => {
+        setCopySuccessMsg(msg);
+        setTimeout(() => {
+            setCopySuccessMsg('');
+        }, 3500);
+    };
+
     const handleApplyMasterDriver = (driverVal) => {
         setMasterDriverId(driverVal);
         const allDrivers = driversList || [];
@@ -203,51 +211,227 @@ export default function Bookings() {
 
     const handleApplyMasterVehicle = (vehVal) => {
         setMasterVehicleNumber(vehVal);
+        const allVehicles = vehiclesList || [];
+        const matchedVeh = allVehicles.find(
+            v => String(v._id) === String(vehVal) || (v.carNumber && v.carNumber.toLowerCase() === String(vehVal).trim().toLowerCase())
+        );
         setAssignItinerary(prev => prev.map(day => ({
             ...day,
-            vehicleNumber: vehVal
+            vehicleId: matchedVeh ? matchedVeh._id : '',
+            vehicleNumber: matchedVeh ? matchedVeh.carNumber : vehVal,
+            vehicleType: matchedVeh?.carType || day.vehicleType
+        })));
+    };
+
+    const handleCopyDayToAll = (sourceIdx = 0, mode = 'all') => {
+        const src = assignItinerary[sourceIdx];
+        if (!src) return;
+        setAssignItinerary(prev => prev.map((day, idx) => {
+            if (idx === sourceIdx) return day;
+            if (mode === 'below' && idx < sourceIdx) return day;
+            return {
+                ...day,
+                driverId: src.driverId || '',
+                driverName: src.driverName || '',
+                driverPhone: src.driverPhone || '',
+                vehicleId: src.vehicleId || '',
+                vehicleNumber: src.vehicleNumber || '',
+                vehicleType: src.vehicleType || day.vehicleType,
+                time: src.time || '09:00 AM',
+                isApg: Boolean(src.isApg),
+                pickupPoint: src.pickupPoint || '',
+                duty: src.duty || ''
+            };
+        }));
+        if (src.driverId) setMasterDriverId(src.driverId);
+        if (src.vehicleNumber) setMasterVehicleNumber(src.vehicleNumber);
+        if (mode === 'all') {
+            showTemporaryCopyBanner(`Copied Day ${sourceIdx + 1} (Driver, Vehicle, Time & Tour Details) across all ${assignItinerary.length} days!`);
+        } else {
+            showTemporaryCopyBanner(`Copied Day ${sourceIdx + 1} data to Day ${sourceIdx + 2} → Day ${assignItinerary.length}!`);
+        }
+    };
+
+    const handleCopyPreviousDay = (targetIdx) => {
+        if (targetIdx <= 0) return;
+        const prevDay = assignItinerary[targetIdx - 1];
+        if (!prevDay) return;
+        setAssignItinerary(prev => prev.map((day, idx) => {
+            if (idx !== targetIdx) return day;
+            return {
+                ...day,
+                driverId: prevDay.driverId || '',
+                driverName: prevDay.driverName || '',
+                driverPhone: prevDay.driverPhone || '',
+                vehicleId: prevDay.vehicleId || '',
+                vehicleNumber: prevDay.vehicleNumber || '',
+                vehicleType: prevDay.vehicleType || day.vehicleType,
+                time: prevDay.time || '09:00 AM',
+                isApg: Boolean(prevDay.isApg),
+                pickupPoint: prevDay.pickupPoint || '',
+                duty: prevDay.duty || ''
+            };
+        }));
+        showTemporaryCopyBanner(`Copied Day ${targetIdx} details into Day ${targetIdx + 1}!`);
+    };
+
+    const handleAddExtraAssignDay = () => {
+        setAssignItinerary(prev => {
+            const lastDay = prev[prev.length - 1];
+            let nextDateStr = new Date().toISOString().split('T')[0];
+            if (lastDay?.date) {
+                const d = new Date(lastDay.date);
+                if (!isNaN(d.getTime())) {
+                    d.setDate(d.getDate() + 1);
+                    nextDateStr = d.toISOString().split('T')[0];
+                }
+            }
+            return [
+                ...prev,
+                {
+                    dayNo: prev.length + 1,
+                    date: nextDateStr,
+                    time: lastDay?.time || '09:00 AM',
+                    isApg: Boolean(lastDay?.isApg),
+                    pickupPoint: lastDay?.pickupPoint || '',
+                    duty: lastDay?.duty || 'Local Sightseeing / Tour',
+                    vehicleType: lastDay?.vehicleType || assigningBooking?.vehicleType || 'Innova Crysta',
+                    driverId: lastDay?.driverId || '',
+                    driverName: lastDay?.driverName || '',
+                    driverPhone: lastDay?.driverPhone || '',
+                    vehicleId: lastDay?.vehicleId || '',
+                    vehicleNumber: lastDay?.vehicleNumber || ''
+                }
+            ];
+        });
+    };
+
+    const handleRemoveAssignDay = (idxToRemove) => {
+        if (assignItinerary.length <= 1) return;
+        setAssignItinerary(prev => prev.filter((_, idx) => idx !== idxToRemove).map((d, i) => ({
+            ...d,
+            dayNo: i + 1
         })));
     };
 
     const handleOpenAssignDriver = (bkg) => {
         setAssigningBooking(bkg);
-        let days = [];
-        if (Array.isArray(bkg.itinerary) && bkg.itinerary.length > 0) {
-            days = bkg.itinerary.map((d, i) => ({
-                dayNo: d.dayNo || (i + 1),
-                date: d.date || bkg.travelStartDate,
-                time: d.time || '09:00 AM',
-                duty: d.duty || d.description || 'City Tour / Transfer',
-                vehicleType: d.vehicleType || bkg.vehicleType || 'Innova Crysta',
-                driverId: d.driverId || d.driver?._id || d.driver || '',
-                driverName: d.driverName || d.driver?.name || d.customDriverName || '',
-                driverPhone: d.driverPhone || d.driver?.mobile || d.driverMobile || '',
-                vehicleId: d.vehicleId || d.vehicle?._id || d.vehicle || '',
-                vehicleNumber: d.vehicleNumber || d.vehicle?.carNumber || d.customCarNumber || ''
-            }));
-        } else {
-            const s = bkg.travelStartDate ? new Date(bkg.travelStartDate) : new Date();
-            const e = bkg.travelEndDate ? new Date(bkg.travelEndDate) : s;
-            const daysCount = Math.max(1, Math.round((e - s) / 86400000) + 1);
-            for (let i = 0; i < daysCount; i++) {
-                const curDate = new Date(s);
-                curDate.setDate(curDate.getDate() + i);
-                days.push({
-                    dayNo: i + 1,
-                    date: curDate.toISOString().split('T')[0],
-                    time: '09:00 AM',
-                    duty: i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer',
-                    vehicleType: bkg.vehicleType || 'Innova Crysta',
-                    driverId: '',
-                    driverName: '',
-                    driverPhone: '',
-                    vehicleId: '',
-                    vehicleNumber: ''
-                });
-            }
+        setCopySuccessMsg('');
+
+        const sRaw = bkg.travelStartDate ? new Date(bkg.travelStartDate) : new Date();
+        const s = isNaN(sRaw.getTime()) ? new Date() : sRaw;
+        const eRaw = bkg.travelEndDate ? new Date(bkg.travelEndDate) : s;
+        const e = isNaN(eRaw.getTime()) || eRaw < s ? s : eRaw;
+
+        const sMidnight = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+        const eMidnight = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+        const dateRangeDays = Math.max(1, Math.round((eMidnight - sMidnight) / 86400000) + 1);
+
+        const existingItin = Array.isArray(bkg.itinerary) ? bkg.itinerary : [];
+        const existingDrs = Array.isArray(bkg.drsDuties) ? bkg.drsDuties : [];
+        const totalDays = Math.max(dateRangeDays, existingItin.length, existingDrs.length);
+
+        const days = [];
+        for (let i = 0; i < totalDays; i++) {
+            const dayNo = i + 1;
+            const curDate = new Date(sMidnight);
+            curDate.setDate(curDate.getDate() + i);
+            const y = curDate.getFullYear();
+            const m = String(curDate.getMonth() + 1).padStart(2, '0');
+            const dNum = String(curDate.getDate()).padStart(2, '0');
+            const defaultDateStr = `${y}-${m}-${dNum}`;
+
+            const itinItem =
+                existingItin.find(it => Number(it.dayNo) === dayNo) ||
+                existingItin.find(it => it.date && String(it.date).slice(0, 10) === defaultDateStr) ||
+                existingItin[i] ||
+                {};
+
+            const itemDateStr = itinItem.date ? String(itinItem.date).slice(0, 10) : defaultDateStr;
+
+            const drsItem =
+                existingDrs.find(dr => Number(dr.dayNo) === dayNo) ||
+                existingDrs.find(dr => dr.date && new Date(dr.date).toISOString().slice(0, 10) === itemDateStr) ||
+                (existingDrs.length === totalDays ? existingDrs[i] : null);
+
+            const rawDrvId =
+                (drsItem && (drsItem.driver?._id || drsItem.driver)) ||
+                itinItem.driverId ||
+                itinItem.driver?._id ||
+                itinItem.driver ||
+                '';
+
+            const drvName =
+                drsItem?.driver?.name ||
+                drsItem?.customDriverName ||
+                itinItem.driverName ||
+                itinItem.driver?.name ||
+                itinItem.customDriverName ||
+                '';
+
+            const drvPhone =
+                drsItem?.driver?.mobile ||
+                drsItem?.driverMobile ||
+                itinItem.driverPhone ||
+                itinItem.driver?.mobile ||
+                itinItem.driverMobile ||
+                '';
+
+            const drvId = rawDrvId ? String(rawDrvId) : (drvName ? 'custom' : '');
+
+            const rawVehId =
+                (drsItem && (drsItem.vehicle?._id || drsItem.vehicle)) ||
+                itinItem.vehicleId ||
+                itinItem.vehicle?._id ||
+                itinItem.vehicle ||
+                '';
+
+            const vehNum =
+                drsItem?.vehicle?.carNumber ||
+                drsItem?.customCarNumber ||
+                itinItem.vehicleNumber ||
+                itinItem.vehicle?.carNumber ||
+                itinItem.customCarNumber ||
+                '';
+
+            const vehType =
+                drsItem?.vehicle?.carType ||
+                drsItem?.vehicleType ||
+                itinItem.vehicleType ||
+                bkg.vehicleType ||
+                'Innova Crysta';
+
+            const timeVal = drsItem?.pickupTime || itinItem.time || '09:00 AM';
+            const isApgVal = drsItem?.isApg !== undefined ? Boolean(drsItem.isApg) : Boolean(itinItem.isApg || timeVal === 'APG');
+            const pickupVal = drsItem?.pickupPoint || drsItem?.hotelName || itinItem.pickupPoint || bkg.pickupLocation || '';
+            const dutyVal =
+                drsItem?.sightseeing ||
+                drsItem?.route ||
+                itinItem.duty ||
+                itinItem.description ||
+                (bkg.tripDetails && totalDays === 1 ? bkg.tripDetails : '') ||
+                '';
+
+            days.push({
+                dayNo,
+                date: itemDateStr,
+                time: timeVal,
+                isApg: isApgVal,
+                pickupPoint: pickupVal,
+                duty: dutyVal,
+                vehicleType: vehType,
+                driverId: drvId,
+                driverName: drvName,
+                driverPhone: drvPhone,
+                vehicleId: rawVehId ? String(rawVehId) : '',
+                vehicleNumber: vehNum,
+                amount: itinItem.amount || 0,
+                km: itinItem.km || 0
+            });
         }
+
         const firstAssigned = days.find(d => d.driverId || d.driverName);
-        setMasterDriverId(firstAssigned ? (firstAssigned.driverId || '__custom__') : '');
+        setMasterDriverId(firstAssigned ? (firstAssigned.driverId === 'custom' ? '__custom__' : firstAssigned.driverId) : '');
         setMasterVehicleNumber(firstAssigned ? firstAssigned.vehicleNumber : (bkg.vehicleNumber || ''));
         setAssignItinerary(days);
         setShowAssignDriverModal(true);
@@ -271,20 +455,27 @@ export default function Bookings() {
         if (e && e.preventDefault) e.preventDefault();
         try {
             setSavingAssignment(true);
+            const normalizedItinerary = assignItinerary.map((d, idx) => ({
+                ...d,
+                dayNo: idx + 1,
+                duty: (d.duty || '').trim() || 'Local Sightseeing / Tour',
+                description: (d.duty || '').trim() || 'Local Sightseeing / Tour',
+                time: d.isApg ? 'APG' : (d.time || '09:00 AM')
+            }));
             if (assigningBooking._id && !String(assigningBooking._id).startsWith('bkg-mock')) {
                 await axios.post(`/api/bookings/${assigningBooking._id}/assign-drivers`, {
-                    itinerary: assignItinerary
+                    itinerary: normalizedItinerary
                 });
-                fetchBookings();
+                await fetchBookings();
             } else {
                 setBookings(prev => prev.map(b => {
                     if (b._id === assigningBooking._id || b.bookingCode === assigningBooking.bookingCode) {
-                        return { ...b, itinerary: assignItinerary };
+                        return { ...b, itinerary: normalizedItinerary };
                     }
                     return b;
                 }));
             }
-            alert('Driver assigned successfully! DRS Schedule has been updated.');
+            alert('Drivers, Vehicles & Duty Schedule saved and synced to Live DRS!');
             setShowAssignDriverModal(false);
         } catch (err) {
             console.error('Error saving driver assignments:', err);
@@ -327,12 +518,54 @@ export default function Bookings() {
         setAssignItinerary(updated);
     };
 
+    const handleUpdateDayVehicleSelect = (index, vehicleVal) => {
+        const updated = [...assignItinerary];
+        const allVehicles = vehiclesList || [];
+        if (!vehicleVal) {
+            updated[index] = {
+                ...updated[index],
+                vehicleId: '',
+                vehicleNumber: ''
+            };
+        } else if (vehicleVal === '__custom__') {
+            updated[index] = {
+                ...updated[index],
+                vehicleId: ''
+            };
+        } else {
+            const found = allVehicles.find(v => String(v._id) === String(vehicleVal));
+            if (found) {
+                updated[index] = {
+                    ...updated[index],
+                    vehicleId: found._id,
+                    vehicleNumber: found.carNumber || '',
+                    vehicleType: found.carType || updated[index].vehicleType
+                };
+            }
+        }
+        setAssignItinerary(updated);
+    };
+
     const handleUpdateDayField = (index, field, value) => {
         const updated = [...assignItinerary];
-        updated[index] = {
+        const nextRow = {
             ...updated[index],
             [field]: value
         };
+        if (field === 'driverName') {
+            const allDrivers = driversList || [];
+            const matchedDrv = allDrivers.find(d => d.name && d.name.toLowerCase() === String(value).trim().toLowerCase());
+            if (!matchedDrv) {
+                nextRow.driverId = value ? 'custom' : '';
+            }
+        }
+        if (field === 'vehicleNumber') {
+            const allVehicles = vehiclesList || [];
+            const matchedVeh = allVehicles.find(v => v.carNumber && v.carNumber.toLowerCase() === String(value).trim().toLowerCase());
+            nextRow.vehicleId = matchedVeh ? matchedVeh._id : '';
+            if (matchedVeh?.carType) nextRow.vehicleType = matchedVeh.carType;
+        }
+        updated[index] = nextRow;
         setAssignItinerary(updated);
     };
 
@@ -1239,42 +1472,75 @@ export default function Bookings() {
 
                                         {/* 9. Status Pill */}
                                         <td style={{ padding: '14px 16px' }}>
-                                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', alignItems: 'flex-start' }}>
                                                   {(() => {
+                                                      const drsArr = Array.isArray(bkg.drsDuties) ? bkg.drsDuties : [];
+                                                      const itinArr = Array.isArray(bkg.itinerary) ? bkg.itinerary : [];
+                                                      const isLiveInDrs = drsArr.length > 0;
+
                                                       let drvName = null;
-                                                      if (bkg.itinerary && bkg.itinerary.length > 0) {
-                                                          const firstAssigned = bkg.itinerary.find(d => d.driverId || d.driverName);
+                                                      let vehNum = null;
+
+                                                      const firstDrsAssigned = drsArr.find(d => d.driver?.name || d.customDriverName || d.vehicle?.carNumber || d.customCarNumber);
+                                                      if (firstDrsAssigned) {
+                                                          drvName = firstDrsAssigned.driver?.name || firstDrsAssigned.customDriverName || null;
+                                                          vehNum = firstDrsAssigned.vehicle?.carNumber || firstDrsAssigned.customCarNumber || null;
+                                                      }
+
+                                                      if (!drvName && itinArr.length > 0) {
+                                                          const firstAssigned = itinArr.find(d => d.driverId || d.driverName || d.vehicleNumber);
                                                           if (firstAssigned) {
                                                               if (firstAssigned.driverName) drvName = firstAssigned.driverName;
                                                               else if (firstAssigned.driverId) {
                                                                   const foundDrv = driversList.find(d => String(d._id) === String(firstAssigned.driverId));
                                                                   if (foundDrv) drvName = foundDrv.name;
                                                               }
+                                                              if (!vehNum && firstAssigned.vehicleNumber) vehNum = firstAssigned.vehicleNumber;
                                                           }
                                                       }
-                                                      
-                                                      if (drvName) {
+
+                                                      if (drvName || vehNum || isLiveInDrs) {
                                                           return (
                                                               <button
                                                                   type="button"
                                                                   onClick={() => handleOpenAssignDriver(bkg)}
                                                                   style={{
-                                                                      padding: '5px 12px',
-                                                                      borderRadius: '20px',
+                                                                      padding: '6px 12px',
+                                                                      borderRadius: '10px',
                                                                       fontSize: '11.5px',
                                                                       fontWeight: '800',
-                                                                      background: 'rgba(6, 95, 70, 0.45)',
+                                                                      background: 'linear-gradient(135deg, rgba(6, 95, 70, 0.55), rgba(4, 120, 87, 0.35))',
                                                                       color: '#34d399',
-                                                                      border: '1px solid rgba(52, 211, 153, 0.4)',
+                                                                      border: '1px solid rgba(52, 211, 153, 0.45)',
                                                                       display: 'flex',
-                                                                      alignItems: 'center',
-                                                                      gap: '6px',
-                                                                      cursor: 'pointer'
+                                                                      flexDirection: 'column',
+                                                                      alignItems: 'flex-start',
+                                                                      gap: '3px',
+                                                                      cursor: 'pointer',
+                                                                      textAlign: 'left'
                                                                   }}
-                                                                  title="Click to edit/view assigned vehicle & driver"
+                                                                  title="Click to edit/view assigned drivers, vehicles & duty schedule (2-Way Synced with Live DRS)"
                                                               >
-                                                                  <span>👤 {drvName}</span>
-                                                                  <Edit size={11} color="#34d399" />
+                                                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                      <span>👤 {drvName || 'Driver Pending'}</span>
+                                                                      <Edit size={11} color="#34d399" />
+                                                                  </div>
+                                                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: '#a7f3d0', fontWeight: '700' }}>
+                                                                      {vehNum && <span>🚗 {vehNum}</span>}
+                                                                      {isLiveInDrs && (
+                                                                          <span style={{
+                                                                              background: 'rgba(16, 185, 129, 0.25)',
+                                                                              color: '#6ee7b7',
+                                                                              padding: '1px 6px',
+                                                                              borderRadius: '4px',
+                                                                              fontSize: '9px',
+                                                                              fontWeight: '900',
+                                                                              letterSpacing: '0.4px'
+                                                                          }}>
+                                                                              ● LIVE DRS
+                                                                          </span>
+                                                                      )}
+                                                                  </div>
                                                               </button>
                                                           );
                                                       } else {
@@ -1296,7 +1562,7 @@ export default function Bookings() {
                                                                       cursor: 'pointer',
                                                                       boxShadow: '0 2px 10px rgba(245, 158, 11, 0.2)'
                                                                   }}
-                                                                  title="Click to Assign Vehicle & Driver to this booking"
+                                                                  title="Click to Assign Drivers & Vehicles and send to Live DRS"
                                                                 >
                                                                   <Car size={13} color="#fbbf24" />
                                                                   <span>+ Assign Car & Driver</span>
@@ -1738,337 +2004,860 @@ export default function Bookings() {
                 )}
             </AnimatePresence>
 
-            {/* ASSIGN DRIVER MODAL */}
+            {/* ASSIGN DRIVER & VEHICLES MODAL (UPGRADED UI + 1-CLICK COPY + 2-WAY DRS SYNC) */}
             <AnimatePresence>
                 {showAssignDriverModal && assigningBooking && (
                     <div style={{
                         position: 'fixed',
                         inset: 0,
-                        background: 'rgba(0,0,0,0.82)',
-                        backdropFilter: 'blur(8px)',
+                        background: 'rgba(2, 6, 23, 0.86)',
+                        backdropFilter: 'blur(10px)',
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
                         zIndex: 99999,
-                        padding: '20px'
+                        padding: '16px'
                     }}>
                         <motion.div
-                            initial={{ y: 20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            exit={{ y: 20, opacity: 0 }}
+                            initial={{ y: 20, opacity: 0, scale: 0.98 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            exit={{ y: 20, opacity: 0, scale: 0.98 }}
                             style={{
                                 width: '100%',
-                                maxWidth: '850px',
-                                maxHeight: '90vh',
-                                overflowY: 'auto',
-                                background: '#0b1120',
-                                border: '1px solid rgba(56, 189, 248, 0.3)',
-                                borderRadius: '16px',
-                                padding: '26px',
-                                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+                                maxWidth: '1120px',
+                                maxHeight: '92vh',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                background: 'linear-gradient(180deg, #0b1325 0%, #070d19 100%)',
+                                border: '1px solid rgba(56, 189, 248, 0.35)',
+                                borderRadius: '18px',
+                                boxShadow: '0 25px 60px -12px rgba(0, 0, 0, 0.85)',
+                                overflow: 'hidden'
                             }}
                         >
-                            {/* Header */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '14px' }}>
-                                <div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        <div style={{
-                                            width: '36px',
-                                            height: '36px',
-                                            borderRadius: '10px',
-                                            background: 'rgba(56, 189, 248, 0.15)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            color: '#38bdf8'
-                                        }}>
-                                            <Car size={20} />
-                                        </div>
-                                        <div>
-                                            <h2 style={{ color: 'white', margin: 0, fontSize: '18px', fontWeight: '800' }}>
-                                                Assign Drivers & Vehicles
+                            {/* Sticky Top Header */}
+                            <div style={{
+                                padding: '18px 24px',
+                                background: 'rgba(15, 23, 42, 0.9)',
+                                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: '12px'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <div style={{
+                                        width: '42px',
+                                        height: '42px',
+                                        borderRadius: '12px',
+                                        background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(37, 99, 235, 0.25))',
+                                        border: '1px solid rgba(56, 189, 248, 0.4)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: '#38bdf8'
+                                    }}>
+                                        <Car size={22} />
+                                    </div>
+                                    <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                            <h2 style={{ color: 'white', margin: 0, fontSize: '19px', fontWeight: '900', letterSpacing: '-0.3px' }}>
+                                                Assign Drivers, Vehicles & Tour Duties
                                             </h2>
-                                            <p style={{ margin: '2px 0 0 0', color: 'rgba(255,255,255,0.6)', fontSize: '12px' }}>
-                                                Booking: <strong style={{ color: '#38bdf8' }}>{assigningBooking.bookingCode || assigningBooking.bookingId}</strong> • Client: <strong style={{ color: 'white' }}>{assigningBooking.clientName}</strong> • {assigningBooking.vehicleType || 'Car'}
-                                            </p>
+                                            {Array.isArray(assigningBooking.drsDuties) && assigningBooking.drsDuties.length > 0 ? (
+                                                <span style={{
+                                                    background: 'rgba(16, 185, 129, 0.18)',
+                                                    color: '#34d399',
+                                                    border: '1px solid rgba(16, 185, 129, 0.45)',
+                                                    padding: '3px 10px',
+                                                    borderRadius: '20px',
+                                                    fontSize: '10.5px',
+                                                    fontWeight: '800',
+                                                    letterSpacing: '0.4px'
+                                                }}>
+                                                    🟢 LIVE IN DRS (2-WAY SYNC ACTIVE)
+                                                </span>
+                                            ) : (
+                                                <span style={{
+                                                    background: 'rgba(245, 158, 11, 0.18)',
+                                                    color: '#fbbf24',
+                                                    border: '1px solid rgba(245, 158, 11, 0.45)',
+                                                    padding: '3px 10px',
+                                                    borderRadius: '20px',
+                                                    fontSize: '10.5px',
+                                                    fontWeight: '800',
+                                                    letterSpacing: '0.4px'
+                                                }}>
+                                                    🟠 NOT IN LIVE DRS YET (SAVE BELOW TO PUSH TO DRS)
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '4px', fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>
+                                            <span>Booking: <strong style={{ color: '#38bdf8' }}>{assigningBooking.bookingCode || assigningBooking.bookingId}</strong></span>
+                                            <span>•</span>
+                                            <span>Guest: <strong style={{ color: 'white' }}>{assigningBooking.clientName}</strong> ({assigningBooking.mobileNumber || 'N/A'})</span>
+                                            <span>•</span>
+                                            <span>Trip Dates: <strong style={{ color: '#fbbf24' }}>{formatTripDate(assignItinerary[0]?.date || assigningBooking.travelStartDate)} → {formatTripDate(assignItinerary[assignItinerary.length - 1]?.date || assigningBooking.travelEndDate)} ({assignItinerary.length} {assignItinerary.length === 1 ? 'Day' : 'Days'})</strong></span>
+                                            <span>•</span>
+                                            <span>Booked Cab: <strong style={{ color: '#c084fc' }}>{assigningBooking.vehicleType || 'Innova Crysta'}</strong></span>
                                         </div>
                                     </div>
                                 </div>
                                 <button
                                     onClick={() => setShowAssignDriverModal(false)}
-                                    style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', padding: '4px' }}
+                                    style={{
+                                        background: 'rgba(255,255,255,0.06)',
+                                        border: '1px solid rgba(255,255,255,0.12)',
+                                        borderRadius: '8px',
+                                        color: 'rgba(255,255,255,0.75)',
+                                        cursor: 'pointer',
+                                        padding: '7px'
+                                    }}
                                 >
-                                    <X size={20} />
+                                    <X size={18} />
                                 </button>
                             </div>
 
-                            {/* Info Alert */}
-                            <div style={{
-                                background: 'rgba(2, 132, 199, 0.12)',
-                                border: '1px solid rgba(56, 189, 248, 0.3)',
-                                borderRadius: '10px',
-                                padding: '10px 14px',
-                                marginBottom: '18px',
-                                fontSize: '12px',
-                                color: '#7dd3fc',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
-                            }}>
-                                <span>⚡</span>
-                                <span>
-                                    <strong>Bidirectional DRS Sync:</strong> Assign a driver for each day of the itinerary below. If not confirmed yet, leave it as <em>"Assign Later"</em>. Drivers assigned here instantly shoot into DRS, and assignments changed in DRS automatically update here.
-                                </span>
-                            </div>
-
-                            {/* Trip Master Assignment (Quick Assign for All Days) */}
-                            {(() => {
-                                const allDrivers = driversList || [];
-                                return (
+                            {/* Scrollable Body */}
+                            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
+                                {/* Copy Feedback Toast Banner */}
+                                {copySuccessMsg && (
                                     <div style={{
-                                        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(30, 58, 138, 0.25))',
-                                        border: '1.5px solid rgba(245, 158, 11, 0.4)',
-                                        borderRadius: '12px',
-                                        padding: '16px',
-                                        marginBottom: '18px'
+                                        background: 'rgba(16, 185, 129, 0.18)',
+                                        border: '1px solid rgba(52, 211, 153, 0.5)',
+                                        borderRadius: '10px',
+                                        padding: '10px 16px',
+                                        marginBottom: '14px',
+                                        color: '#6ee7b7',
+                                        fontSize: '12.5px',
+                                        fontWeight: '800',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
                                     }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <span style={{ fontSize: '16px' }}>🚀</span>
-                                                <strong style={{ color: '#fbbf24', fontSize: '13.5px' }}>Trip Master Assignment (Applies to All Days)</strong>
-                                            </div>
-                                            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>
-                                                Sets vehicle and driver for entire trip at once
-                                            </span>
-                                        </div>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
-                                            <div>
-                                                <label style={{ display: 'block', color: 'rgba(255,255,255,0.85)', fontSize: '11.5px', fontWeight: '700', marginBottom: '4px' }}>
-                                                    Assign Driver (All Days)
-                                                </label>
-                                                <select
-                                                    value={masterDriverId}
-                                                    onChange={(e) => handleApplyMasterDriver(e.target.value)}
-                                                    className="premium-compact-input"
-                                                    style={{
-                                                        width: '100%',
-                                                        height: '40px',
-                                                        background: '#070d18',
-                                                        color: masterDriverId ? '#34d399' : 'white',
-                                                        border: '1px solid rgba(245, 158, 11, 0.5)',
-                                                        borderRadius: '8px',
-                                                        fontSize: '12.5px',
-                                                        fontWeight: '600'
-                                                    }}
-                                                >
-                                                    <option value="">-- Choose Driver for Whole Trip --</option>
-                                                    <optgroup label="Company Drivers">
-                                                        {allDrivers.map(drv => (
-                                                            <option key={drv._id} value={drv._id}>
-                                                                {drv.name} ({drv.mobile || drv.phone}) {drv.vehicleNumber ? `[${drv.vehicleNumber}]` : ''}
-                                                            </option>
-                                                        ))}
-                                                    </optgroup>
-                                                    <option value="__custom__">-- Other / Outsourced Driver --</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label style={{ display: 'block', color: 'rgba(255,255,255,0.85)', fontSize: '11.5px', fontWeight: '700', marginBottom: '4px' }}>
-                                                    Assigned Vehicle / Cab (All Days)
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="e.g. RJ27 TA 9822 (or Crysta)"
-                                                    value={masterVehicleNumber}
-                                                    onChange={(e) => handleApplyMasterVehicle(e.target.value)}
-                                                    style={{
-                                                        ...inputStyle,
-                                                        height: '40px',
-                                                        fontSize: '12.5px',
-                                                        border: '1px solid rgba(245, 158, 11, 0.5)',
-                                                        fontWeight: '600'
-                                                    }}
-                                                />
-                                            </div>
-                                        </div>
+                                        <CheckCircle size={16} color="#34d399" />
+                                        <span>{copySuccessMsg}</span>
                                     </div>
-                                );
-                            })()}
+                                )}
 
-                            {/* Day-Wise Itinerary List */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-                                {assignItinerary.map((day, idx) => {
+                                {/* Top Quick-Action & 1-Click Copy Bar */}
+                                {(() => {
                                     const allDrivers = driversList || [];
-                                    const isCustomDriver = day.driverId === 'custom' || (!allDrivers.some(d => String(d._id) === String(day.driverId)) && day.driverName && !day.driverId);
-
+                                    const allVehicles = vehiclesList || [];
                                     return (
-                                        <div
-                                            key={idx}
-                                            style={{
-                                                background: 'rgba(255,255,255,0.03)',
-                                                border: '1px solid rgba(255,255,255,0.08)',
-                                                borderRadius: '12px',
-                                                padding: '14px 16px',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                gap: '10px'
-                                            }}
-                                        >
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                        <div style={{
+                                            background: 'linear-gradient(135deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.85))',
+                                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                                            borderRadius: '14px',
+                                            padding: '14px 18px',
+                                            marginBottom: '18px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '12px'
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <span style={{
-                                                        background: '#1e3a8a',
-                                                        color: '#93c5fd',
-                                                        padding: '3px 10px',
-                                                        borderRadius: '6px',
-                                                        fontSize: '11px',
-                                                        fontWeight: '800'
-                                                    }}>
-                                                        Day {day.dayNo || idx + 1}
-                                                    </span>
-                                                    <span style={{ color: 'white', fontWeight: '700', fontSize: '13px' }}>
-                                                        {day.date ? new Date(day.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Date Pending'}
-                                                    </span>
-                                                    <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px' }}>•</span>
-                                                    <span style={{ color: '#fbbf24', fontSize: '12px', fontWeight: '600' }}>
-                                                        {day.time || '09:00 AM'}
-                                                    </span>
+                                                    <span style={{ fontSize: '16px' }}>⚡</span>
+                                                    <div>
+                                                        <strong style={{ color: 'white', fontSize: '13px' }}>
+                                                            Quick Fill & 1-Click Multi-Day Copy ({assignItinerary.length} Duty Days)
+                                                        </strong>
+                                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>
+                                                            Fill Day 1 below and click <strong>"Copy Day 1 to All Days"</strong> to copy Driver, Vehicle, Time & Guest Tour Details across all days in one click.
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '12.5px', fontWeight: '500' }}>
-                                                    {day.duty || day.description || 'City Tour / Transfer'}
-                                                </div>
+
+                                                {assignItinerary.length > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleCopyDayToAll(0, 'all')}
+                                                        style={{
+                                                            padding: '9px 16px',
+                                                            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                                                            color: '#090d16',
+                                                            border: 'none',
+                                                            borderRadius: '10px',
+                                                            fontWeight: '900',
+                                                            fontSize: '12px',
+                                                            cursor: 'pointer',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '7px',
+                                                            boxShadow: '0 4px 14px rgba(245, 158, 11, 0.35)'
+                                                        }}
+                                                        title="Copies Day 1's Driver, Vehicle, Time, Pickup & Guest Tour Details to all days"
+                                                    >
+                                                        <span>📋 1-Click Copy Day 1 to All {assignItinerary.length} Days ({formatTripDate(assignItinerary[0]?.date)} → {formatTripDate(assignItinerary[assignItinerary.length - 1]?.date)})</span>
+                                                    </button>
+                                                )}
                                             </div>
 
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '4px' }}>
-                                                {/* Driver Selector */}
+                                            {/* Optional Master Driver / Vehicle Quick Bar */}
+                                            <div style={{
+                                                display: 'grid',
+                                                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                                                gap: '12px',
+                                                paddingTop: '10px',
+                                                borderTop: '1px solid rgba(255,255,255,0.08)'
+                                            }}>
                                                 <div>
-                                                    <label style={{ display: 'block', color: 'rgba(255,255,255,0.6)', fontSize: '11px', fontWeight: '600', marginBottom: '4px' }}>
-                                                        Driver Assignment
+                                                    <label style={{ display: 'block', color: '#93c5fd', fontSize: '11px', fontWeight: '700', marginBottom: '4px' }}>
+                                                        Master Driver (Apply to All Days)
                                                     </label>
                                                     <select
-                                                        value={isCustomDriver ? '__custom__' : (day.driverId || '')}
-                                                        onChange={(e) => handleUpdateDayDriver(idx, e.target.value)}
+                                                        value={masterDriverId}
+                                                        onChange={(e) => handleApplyMasterDriver(e.target.value)}
                                                         className="premium-compact-input"
                                                         style={{
                                                             width: '100%',
-                                                            height: '38px',
+                                                            height: '36px',
                                                             background: '#070d18',
-                                                            color: day.driverName ? '#34d399' : 'rgba(255,255,255,0.7)',
-                                                            border: day.driverName ? '1px solid rgba(52, 211, 153, 0.4)' : '1px solid rgba(255,255,255,0.15)',
+                                                            color: masterDriverId ? '#34d399' : 'white',
+                                                            border: '1px solid rgba(56, 189, 248, 0.35)',
                                                             borderRadius: '8px',
-                                                            fontSize: '12px'
+                                                            fontSize: '12px',
+                                                            fontWeight: '600'
                                                         }}
                                                     >
-                                                        <option value="">-- Not Confirmed (Assign Later) --</option>
-                                                        <optgroup label="Company Drivers">
+                                                        <option value="">-- Select Fleet Driver for All Days --</option>
+                                                        <optgroup label="Company Fleet Drivers">
                                                             {allDrivers.map(drv => (
                                                                 <option key={drv._id} value={drv._id}>
                                                                     {drv.name} ({drv.mobile || drv.phone}) {drv.vehicleNumber ? `[${drv.vehicleNumber}]` : ''}
                                                                 </option>
                                                             ))}
                                                         </optgroup>
-                                                        <option value="__custom__">-- Other / Outsourced Driver --</option>
+                                                        <option value="__custom__">-- Custom / Outsourced Driver --</option>
                                                     </select>
                                                 </div>
 
-                                                {/* Vehicle Assignment */}
                                                 <div>
-                                                    <label style={{ display: 'block', color: 'rgba(255,255,255,0.6)', fontSize: '11px', fontWeight: '600', marginBottom: '4px' }}>
-                                                        Assigned Vehicle / Cab
+                                                    <label style={{ display: 'block', color: '#93c5fd', fontSize: '11px', fontWeight: '700', marginBottom: '4px' }}>
+                                                        Master Fleet Vehicle (Apply to All Days)
+                                                    </label>
+                                                    <select
+                                                        value={
+                                                            allVehicles.find(v => v.carNumber && v.carNumber.toLowerCase() === String(masterVehicleNumber).trim().toLowerCase())?._id || ''
+                                                        }
+                                                        onChange={(e) => handleApplyMasterVehicle(e.target.value)}
+                                                        className="premium-compact-input"
+                                                        style={{
+                                                            width: '100%',
+                                                            height: '36px',
+                                                            background: '#070d18',
+                                                            color: masterVehicleNumber ? '#38bdf8' : 'white',
+                                                            border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                            borderRadius: '8px',
+                                                            fontSize: '12px',
+                                                            fontWeight: '600'
+                                                        }}
+                                                    >
+                                                        <option value="">-- Select Fleet Vehicle for All Days --</option>
+                                                        {allVehicles.map(veh => (
+                                                            <option key={veh._id} value={veh._id}>
+                                                                {veh.carNumber} • {veh.carType || veh.model || 'Cab'}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label style={{ display: 'block', color: '#93c5fd', fontSize: '11px', fontWeight: '700', marginBottom: '4px' }}>
+                                                        Or Type Vehicle Number (All Days)
                                                     </label>
                                                     <input
                                                         type="text"
-                                                        placeholder="e.g. RJ14 PA 1234 (or Crysta)"
-                                                        value={day.vehicleNumber || ''}
-                                                        onChange={(e) => handleUpdateDayField(idx, 'vehicleNumber', e.target.value)}
+                                                        placeholder="e.g. RJ27 TA 9822"
+                                                        value={masterVehicleNumber}
+                                                        onChange={(e) => handleApplyMasterVehicle(e.target.value)}
                                                         style={{
                                                             ...inputStyle,
-                                                            height: '38px',
-                                                            fontSize: '12px'
+                                                            height: '36px',
+                                                            fontSize: '12px',
+                                                            border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                            fontWeight: '700'
                                                         }}
                                                     />
                                                 </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
 
-                                                {/* Custom Driver inputs if custom selected */}
-                                                {isCustomDriver && (
-                                                    <>
-                                                        <div>
-                                                            <label style={{ display: 'block', color: 'rgba(255,255,255,0.6)', fontSize: '11px', fontWeight: '600', marginBottom: '4px' }}>
-                                                                Driver Name
-                                                            </label>
+                                {/* Day-Wise Duty Cards */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                    {assignItinerary.map((day, idx) => {
+                                        const allDrivers = driversList || [];
+                                        const allVehicles = vehiclesList || [];
+                                        const matchedFleetDriver = allDrivers.find(d => String(d._id) === String(day.driverId));
+                                        const isCustomDriver = day.driverId === 'custom' || (!matchedFleetDriver && Boolean(day.driverName));
+                                        const matchedFleetVehicle = allVehicles.find(
+                                            v => String(v._id) === String(day.vehicleId) || (v.carNumber && day.vehicleNumber && v.carNumber.toLowerCase() === String(day.vehicleNumber).trim().toLowerCase())
+                                        );
+                                        const isDayAssigned = Boolean((day.driverName || matchedFleetDriver) && day.vehicleNumber);
+
+                                        return (
+                                            <div
+                                                key={idx}
+                                                style={{
+                                                    background: isDayAssigned ? 'rgba(16, 185, 129, 0.04)' : 'rgba(255,255,255,0.025)',
+                                                    border: isDayAssigned ? '1.5px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(255,255,255,0.1)',
+                                                    borderRadius: '14px',
+                                                    padding: '14px 16px',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    gap: '12px'
+                                                }}
+                                            >
+                                                {/* Day Card Header */}
+                                                <div style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    flexWrap: 'wrap',
+                                                    gap: '8px',
+                                                    paddingBottom: '10px',
+                                                    borderBottom: '1px solid rgba(255,255,255,0.07)'
+                                                }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                                        <span style={{
+                                                            background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                                                            color: 'white',
+                                                            padding: '4px 12px',
+                                                            borderRadius: '8px',
+                                                            fontSize: '11.5px',
+                                                            fontWeight: '900',
+                                                            letterSpacing: '0.4px'
+                                                        }}>
+                                                            DAY {day.dayNo || idx + 1}
+                                                        </span>
+                                                        <input
+                                                            type="date"
+                                                            value={day.date ? String(day.date).slice(0, 10) : ''}
+                                                            onChange={(e) => handleUpdateDayField(idx, 'date', e.target.value)}
+                                                            style={{
+                                                                background: '#070d18',
+                                                                color: 'white',
+                                                                border: '1px solid rgba(255,255,255,0.15)',
+                                                                borderRadius: '7px',
+                                                                padding: '4px 10px',
+                                                                fontSize: '12.5px',
+                                                                fontWeight: '800'
+                                                            }}
+                                                        />
+                                                        <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: '600' }}>
+                                                            ({day.date ? new Date(day.date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : 'Select Date'})
+                                                        </span>
+                                                        {isDayAssigned ? (
+                                                            <span style={{
+                                                                background: 'rgba(16, 185, 129, 0.15)',
+                                                                color: '#34d399',
+                                                                border: '1px solid rgba(16, 185, 129, 0.35)',
+                                                                padding: '2px 9px',
+                                                                borderRadius: '12px',
+                                                                fontSize: '10.5px',
+                                                                fontWeight: '800'
+                                                            }}>
+                                                                ✓ Ready for Live DRS ({day.driverName || matchedFleetDriver?.name} • {day.vehicleNumber})
+                                                            </span>
+                                                        ) : (
+                                                            <span style={{
+                                                                background: 'rgba(245, 158, 11, 0.12)',
+                                                                color: '#fbbf24',
+                                                                border: '1px solid rgba(245, 158, 11, 0.3)',
+                                                                padding: '2px 9px',
+                                                                borderRadius: '12px',
+                                                                fontSize: '10.5px',
+                                                                fontWeight: '700'
+                                                            }}>
+                                                                ⏳ Assign Driver & Vehicle Below
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Per-Day Copy & Delete Actions */}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                        {idx === 0 && assignItinerary.length > 1 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleCopyDayToAll(0, 'all')}
+                                                                style={{
+                                                                    padding: '5px 12px',
+                                                                    background: 'rgba(245, 158, 11, 0.18)',
+                                                                    color: '#fbbf24',
+                                                                    border: '1px solid rgba(245, 158, 11, 0.5)',
+                                                                    borderRadius: '7px',
+                                                                    fontSize: '11px',
+                                                                    fontWeight: '800',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                                title="Copy Day 1 data across all days"
+                                                            >
+                                                                📋 Copy Day 1 to All Days
+                                                            </button>
+                                                        )}
+                                                        {idx > 0 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleCopyPreviousDay(idx)}
+                                                                style={{
+                                                                    padding: '5px 10px',
+                                                                    background: 'rgba(56, 189, 248, 0.12)',
+                                                                    color: '#38bdf8',
+                                                                    border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                                    borderRadius: '7px',
+                                                                    fontSize: '11px',
+                                                                    fontWeight: '700',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                                title={`Copy Day ${idx} details into Day ${idx + 1}`}
+                                                            >
+                                                                ⬆️ Same as Day {idx}
+                                                            </button>
+                                                        )}
+                                                        {idx > 0 && idx < assignItinerary.length - 1 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleCopyDayToAll(idx, 'below')}
+                                                                style={{
+                                                                    padding: '5px 10px',
+                                                                    background: 'rgba(168, 85, 247, 0.15)',
+                                                                    color: '#c084fc',
+                                                                    border: '1px solid rgba(168, 85, 247, 0.4)',
+                                                                    borderRadius: '7px',
+                                                                    fontSize: '11px',
+                                                                    fontWeight: '700',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                                title="Useful when driver/car changes mid-trip: copies this day to all remaining days"
+                                                            >
+                                                                ⤵️ Copy to Day {idx + 2}–{assignItinerary.length}
+                                                            </button>
+                                                        )}
+                                                        {assignItinerary.length > 1 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveAssignDay(idx)}
+                                                                style={{
+                                                                    padding: '5px 8px',
+                                                                    background: 'rgba(239, 68, 68, 0.12)',
+                                                                    color: '#f87171',
+                                                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                                    borderRadius: '7px',
+                                                                    cursor: 'pointer',
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center'
+                                                                }}
+                                                                title="Remove this duty day"
+                                                            >
+                                                                <Trash2 size={13} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* 4-Step Grid: 1. Driver -> 2. Vehicle -> 3. Time & Pickup -> 4. Guest Tour Details */}
+                                                <div style={{
+                                                    display: 'grid',
+                                                    gridTemplateColumns: 'repeat(auto-fit, minmax(235px, 1fr))',
+                                                    gap: '12px'
+                                                }}>
+                                                    {/* STEP 1: ASSIGN DRIVER */}
+                                                    <div style={{
+                                                        background: 'rgba(15, 23, 42, 0.65)',
+                                                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                                                        borderRadius: '10px',
+                                                        padding: '10px 12px',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '7px'
+                                                    }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <span style={{
+                                                                background: '#10b981',
+                                                                color: '#052e16',
+                                                                width: '18px',
+                                                                height: '18px',
+                                                                borderRadius: '50%',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                fontSize: '10.5px',
+                                                                fontWeight: '900'
+                                                            }}>1</span>
+                                                            <span style={{ color: '#34d399', fontSize: '11.5px', fontWeight: '800', letterSpacing: '0.3px' }}>
+                                                                ASSIGN DRIVER
+                                                            </span>
+                                                        </div>
+
+                                                        <select
+                                                            value={isCustomDriver ? '__custom__' : (day.driverId || '')}
+                                                            onChange={(e) => handleUpdateDayDriver(idx, e.target.value)}
+                                                            className="premium-compact-input"
+                                                            style={{
+                                                                width: '100%',
+                                                                height: '35px',
+                                                                background: '#070d18',
+                                                                color: day.driverName ? '#34d399' : 'rgba(255,255,255,0.8)',
+                                                                border: '1px solid rgba(255,255,255,0.14)',
+                                                                borderRadius: '7px',
+                                                                fontSize: '12px',
+                                                                fontWeight: '600'
+                                                            }}
+                                                        >
+                                                            <option value="">-- Select Fleet Driver or Type Below --</option>
+                                                            <optgroup label="Company Fleet Drivers">
+                                                                {allDrivers.map(drv => (
+                                                                    <option key={drv._id} value={drv._id}>
+                                                                        {drv.name} ({drv.mobile || drv.phone}) {drv.vehicleNumber ? `[${drv.vehicleNumber}]` : ''}
+                                                                    </option>
+                                                                ))}
+                                                            </optgroup>
+                                                            <option value="__custom__">-- Custom / Outsourced Driver --</option>
+                                                        </select>
+
+                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                                                             <input
                                                                 type="text"
                                                                 placeholder="Driver Name"
                                                                 value={day.driverName || ''}
                                                                 onChange={(e) => handleUpdateDayField(idx, 'driverName', e.target.value)}
-                                                                style={{ ...inputStyle, height: '38px', fontSize: '12px' }}
+                                                                style={{
+                                                                    ...inputStyle,
+                                                                    height: '33px',
+                                                                    fontSize: '11.5px',
+                                                                    padding: '4px 8px'
+                                                                }}
                                                             />
-                                                        </div>
-                                                        <div>
-                                                            <label style={{ display: 'block', color: 'rgba(255,255,255,0.6)', fontSize: '11px', fontWeight: '600', marginBottom: '4px' }}>
-                                                                Driver Mobile
-                                                            </label>
                                                             <input
                                                                 type="text"
-                                                                placeholder="+91 Mobile"
+                                                                placeholder="Driver Mobile"
                                                                 value={day.driverPhone || ''}
                                                                 onChange={(e) => handleUpdateDayField(idx, 'driverPhone', e.target.value)}
-                                                                style={{ ...inputStyle, height: '38px', fontSize: '12px' }}
+                                                                style={{
+                                                                    ...inputStyle,
+                                                                    height: '33px',
+                                                                    fontSize: '11.5px',
+                                                                    padding: '4px 8px'
+                                                                }}
                                                             />
                                                         </div>
-                                                    </>
-                                                )}
+                                                    </div>
+
+                                                    {/* STEP 2: ASSIGN VEHICLE */}
+                                                    <div style={{
+                                                        background: 'rgba(15, 23, 42, 0.65)',
+                                                        border: '1px solid rgba(56, 189, 248, 0.25)',
+                                                        borderRadius: '10px',
+                                                        padding: '10px 12px',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '7px'
+                                                    }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <span style={{
+                                                                background: '#38bdf8',
+                                                                color: '#082f49',
+                                                                width: '18px',
+                                                                height: '18px',
+                                                                borderRadius: '50%',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                fontSize: '10.5px',
+                                                                fontWeight: '900'
+                                                            }}>2</span>
+                                                            <span style={{ color: '#38bdf8', fontSize: '11.5px', fontWeight: '800', letterSpacing: '0.3px' }}>
+                                                                ASSIGN VEHICLE
+                                                            </span>
+                                                        </div>
+
+                                                        <select
+                                                            value={matchedFleetVehicle ? matchedFleetVehicle._id : (day.vehicleNumber ? '__custom__' : '')}
+                                                            onChange={(e) => handleUpdateDayVehicleSelect(idx, e.target.value)}
+                                                            className="premium-compact-input"
+                                                            style={{
+                                                                width: '100%',
+                                                                height: '35px',
+                                                                background: '#070d18',
+                                                                color: day.vehicleNumber ? '#38bdf8' : 'rgba(255,255,255,0.8)',
+                                                                border: '1px solid rgba(255,255,255,0.14)',
+                                                                borderRadius: '7px',
+                                                                fontSize: '12px',
+                                                                fontWeight: '600'
+                                                            }}
+                                                        >
+                                                            <option value="">-- Select Fleet Vehicle or Type Below --</option>
+                                                            <optgroup label="Company Fleet Vehicles">
+                                                                {allVehicles.map(veh => (
+                                                                    <option key={veh._id} value={veh._id}>
+                                                                        {veh.carNumber} • {veh.carType || veh.model || 'Cab'}
+                                                                    </option>
+                                                                ))}
+                                                            </optgroup>
+                                                            <option value="__custom__">-- Custom / Outsourced Vehicle --</option>
+                                                        </select>
+
+                                                        <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '6px' }}>
+                                                            <input
+                                                                type="text"
+                                                                placeholder="Car No. (RJ27 TA 1234)"
+                                                                value={day.vehicleNumber || ''}
+                                                                onChange={(e) => handleUpdateDayField(idx, 'vehicleNumber', e.target.value.toUpperCase())}
+                                                                style={{
+                                                                    ...inputStyle,
+                                                                    height: '33px',
+                                                                    fontSize: '11.5px',
+                                                                    fontWeight: '700',
+                                                                    padding: '4px 8px'
+                                                                }}
+                                                            />
+                                                            <input
+                                                                type="text"
+                                                                placeholder="Car Type"
+                                                                value={day.vehicleType || ''}
+                                                                onChange={(e) => handleUpdateDayField(idx, 'vehicleType', e.target.value)}
+                                                                style={{
+                                                                    ...inputStyle,
+                                                                    height: '33px',
+                                                                    fontSize: '11.5px',
+                                                                    padding: '4px 8px'
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* STEP 3: REPORTING TIME & PICKUP */}
+                                                    <div style={{
+                                                        background: 'rgba(15, 23, 42, 0.65)',
+                                                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                                                        borderRadius: '10px',
+                                                        padding: '10px 12px',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '7px'
+                                                    }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                <span style={{
+                                                                    background: '#f59e0b',
+                                                                    color: '#451a03',
+                                                                    width: '18px',
+                                                                    height: '18px',
+                                                                    borderRadius: '50%',
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    fontSize: '10.5px',
+                                                                    fontWeight: '900'
+                                                                }}>3</span>
+                                                                <span style={{ color: '#fbbf24', fontSize: '11.5px', fontWeight: '800', letterSpacing: '0.3px' }}>
+                                                                    TIME & PICKUP / HOTEL
+                                                                </span>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const nextApg = !day.isApg;
+                                                                    handleUpdateDayField(idx, 'isApg', nextApg);
+                                                                    if (nextApg) handleUpdateDayField(idx, 'time', 'APG');
+                                                                    else if (day.time === 'APG') handleUpdateDayField(idx, 'time', '09:00 AM');
+                                                                }}
+                                                                style={{
+                                                                    padding: '2px 7px',
+                                                                    borderRadius: '5px',
+                                                                    fontSize: '10px',
+                                                                    fontWeight: '800',
+                                                                    cursor: 'pointer',
+                                                                    border: day.isApg ? '1px solid #f59e0b' : '1px solid rgba(255,255,255,0.15)',
+                                                                    background: day.isApg ? 'rgba(245, 158, 11, 0.25)' : 'rgba(255,255,255,0.05)',
+                                                                    color: day.isApg ? '#fbbf24' : 'rgba(255,255,255,0.6)'
+                                                                }}
+                                                                title="Toggle As Per Guest (APG)"
+                                                            >
+                                                                APG
+                                                            </button>
+                                                        </div>
+
+                                                        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                                                            <input
+                                                                type="text"
+                                                                placeholder="e.g. 09:00 AM"
+                                                                disabled={Boolean(day.isApg)}
+                                                                value={day.isApg ? 'APG (As Per Guest)' : (day.time || '')}
+                                                                onChange={(e) => handleUpdateDayField(idx, 'time', e.target.value)}
+                                                                style={{
+                                                                    ...inputStyle,
+                                                                    height: '35px',
+                                                                    fontSize: '12px',
+                                                                    fontWeight: '700',
+                                                                    color: day.isApg ? '#fbbf24' : 'white'
+                                                                }}
+                                                            />
+                                                        </div>
+
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Pickup / Hotel (e.g. Airport / Taj)"
+                                                            value={day.pickupPoint || ''}
+                                                            onChange={(e) => handleUpdateDayField(idx, 'pickupPoint', e.target.value)}
+                                                            style={{
+                                                                ...inputStyle,
+                                                                height: '33px',
+                                                                fontSize: '11.5px',
+                                                                padding: '4px 8px'
+                                                            }}
+                                                        />
+                                                    </div>
+
+                                                    {/* STEP 4: GUEST TOUR / DUTY DETAILS */}
+                                                    <div style={{
+                                                        background: 'rgba(15, 23, 42, 0.65)',
+                                                        border: '1px solid rgba(168, 85, 247, 0.25)',
+                                                        borderRadius: '10px',
+                                                        padding: '10px 12px',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '7px'
+                                                    }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <span style={{
+                                                                background: '#a855f7',
+                                                                color: '#2e1065',
+                                                                width: '18px',
+                                                                height: '18px',
+                                                                borderRadius: '50%',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                fontSize: '10.5px',
+                                                                fontWeight: '900'
+                                                            }}>4</span>
+                                                            <span style={{ color: '#c084fc', fontSize: '11.5px', fontWeight: '800', letterSpacing: '0.3px' }}>
+                                                                GUEST TOUR / DUTY DETAILS
+                                                            </span>
+                                                        </div>
+
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Enter Guest Tour / Sightseeing / Route..."
+                                                            value={day.duty || ''}
+                                                            onChange={(e) => handleUpdateDayField(idx, 'duty', e.target.value)}
+                                                            style={{
+                                                                ...inputStyle,
+                                                                height: '35px',
+                                                                fontSize: '12px',
+                                                                fontWeight: '600'
+                                                            }}
+                                                        />
+
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                                            {['Airport Pickup', 'Local Sightseeing', 'Nathdwara-Eklingji', 'Kumbhalgarh', 'Chittorgarh', 'Mount Abu', 'Departure Drop'].map(preset => (
+                                                                <button
+                                                                    key={preset}
+                                                                    type="button"
+                                                                    onClick={() => handleUpdateDayField(idx, 'duty', preset)}
+                                                                    style={{
+                                                                        padding: '2px 6px',
+                                                                        fontSize: '9.5px',
+                                                                        fontWeight: '700',
+                                                                        borderRadius: '4px',
+                                                                        cursor: 'pointer',
+                                                                        border: day.duty === preset ? '1px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
+                                                                        background: day.duty === preset ? 'rgba(168, 85, 247, 0.25)' : 'rgba(255,255,255,0.04)',
+                                                                        color: day.duty === preset ? '#e9d5ff' : 'rgba(255,255,255,0.65)'
+                                                                    }}
+                                                                >
+                                                                    {preset}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    })}
+                                </div>
                             </div>
 
-                            {/* Modal Footer */}
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
+                            {/* Sticky Footer */}
+                            <div style={{
+                                padding: '14px 24px',
+                                background: 'rgba(15, 23, 42, 0.95)',
+                                borderTop: '1px solid rgba(255,255,255,0.08)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: '10px'
+                            }}>
                                 <button
                                     type="button"
-                                    onClick={() => setShowAssignDriverModal(false)}
+                                    onClick={handleAddExtraAssignDay}
                                     style={{
-                                        padding: '10px 18px',
-                                        background: 'rgba(255,255,255,0.06)',
-                                        color: 'white',
-                                        border: '1px solid rgba(255,255,255,0.15)',
-                                        borderRadius: '8px',
-                                        cursor: 'pointer',
-                                        fontWeight: '600',
-                                        fontSize: '13px'
-                                    }}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleSaveDriverAssignments}
-                                    disabled={savingAssignment}
-                                    style={{
-                                        padding: '10px 22px',
-                                        background: '#2563eb',
-                                        color: 'white',
-                                        border: 'none',
+                                        padding: '9px 14px',
+                                        background: 'rgba(56, 189, 248, 0.12)',
+                                        color: '#38bdf8',
+                                        border: '1px solid rgba(56, 189, 248, 0.35)',
                                         borderRadius: '8px',
                                         cursor: 'pointer',
                                         fontWeight: '800',
-                                        fontSize: '13px',
+                                        fontSize: '12px',
                                         display: 'inline-flex',
                                         alignItems: 'center',
-                                        gap: '6px',
-                                        boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)'
+                                        gap: '6px'
                                     }}
                                 >
-                                    {savingAssignment ? (
-                                        <>Updating DRS...</>
-                                    ) : (
-                                        <>
-                                            <CheckCircle size={15} /> Confirm & Update DRS
-                                        </>
-                                    )}
+                                    <Plus size={14} /> Add Extra Duty Day
                                 </button>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowAssignDriverModal(false)}
+                                        style={{
+                                            padding: '10px 18px',
+                                            background: 'rgba(255,255,255,0.06)',
+                                            color: 'white',
+                                            border: '1px solid rgba(255,255,255,0.15)',
+                                            borderRadius: '9px',
+                                            cursor: 'pointer',
+                                            fontWeight: '700',
+                                            fontSize: '13px'
+                                        }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveDriverAssignments}
+                                        disabled={savingAssignment}
+                                        style={{
+                                            padding: '10px 24px',
+                                            background: 'linear-gradient(135deg, #10b981, #059669)',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '9px',
+                                            cursor: 'pointer',
+                                            fontWeight: '900',
+                                            fontSize: '13px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)'
+                                        }}
+                                    >
+                                        {savingAssignment ? (
+                                            <>Syncing to Live DRS...</>
+                                        ) : (
+                                            <>
+                                                <CheckCircle size={16} /> Done — Save & Send to Live DRS
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
                             </div>
                         </motion.div>
                     </div>

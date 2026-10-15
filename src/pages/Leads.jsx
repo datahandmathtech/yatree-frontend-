@@ -400,7 +400,7 @@ export default function Leads() {
     const matrixGstVal = parseFloat(matrixGstAmount) || 0;
     const matrixPackageVal = parseFloat(formData.totalAmount) || 0;
 
-    const matrixDaysVal = Math.max(1, formData.itinerary?.length || (formData.travelStartDate && formData.travelEndDate ? getDaysDifference(formData.travelStartDate, formData.travelEndDate) : 1));
+    const matrixDaysVal = Math.max(1, (formData.travelStartDate && formData.travelEndDate ? getDaysDifference(formData.travelStartDate, formData.travelEndDate) : 0) || formData.itinerary?.length || 1);
     const matrixTargetPerDayVal = parseFloat(matrixTargetPerDay) || 0;
 
     const matrixTotalCost = matrixFuelCost + matrixDriverSalaryVal + matrixNightHoldVal + matrixTollVal + matrixGstVal;
@@ -575,7 +575,7 @@ export default function Leads() {
         }
     };
 
-    // Auto-populate itinerary days when travel dates change
+    // Update travel dates without auto-generating day-wise itinerary
     const handleTravelDateChange = (field, value) => {
         setFormData(prev => {
             let sDate = field === 'travelStartDate' ? value : prev.travelStartDate;
@@ -589,51 +589,13 @@ export default function Leads() {
 
             const todayStr = toLocalDateString(new Date());
             const willBeFuture = (eDate && eDate >= todayStr) || (sDate && sDate >= todayStr);
-            const updated = {
+            return {
                 ...prev,
                 [field]: value,
                 travelStartDate: sDate,
                 travelEndDate: eDate,
                 status: (prev.status === 'Cancelled' && willBeFuture) ? 'New' : prev.status
             };
-
-            if (sDate && eDate) {
-                const daysCount = getDaysDifference(sDate, eDate);
-                const newItinerary = [];
-
-                for (let i = 0; i < daysCount; i++) {
-                    const dateStr = addDaysToDateString(sDate, i);
-
-                    // Keep existing day info if already entered
-                    const existingDay = prev.itinerary[i];
-                    const isApg = existingDay ? existingDay.isApg : false;
-                    const rate = existingDay ? (Number(existingDay.rate) || 0) : 0;
-                    const qty = existingDay ? (Number(existingDay.quantity || existingDay.vehicleCount) || updated.numberOfCars || 1) : (updated.numberOfCars || 1);
-
-                    newItinerary.push({
-                        dayNo: i + 1,
-                        date: dateStr,
-                        time: existingDay?.time || (isApg ? 'APG' : (i === 0 ? '09:00 AM' : '10:00 AM')),
-                        isApg: isApg,
-                        duty: existingDay?.duty || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
-                        description: existingDay?.description || existingDay?.duty || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
-                        vehicleType: existingDay?.vehicleType || updated.carType || 'Innova Crysta',
-                        vehicleCount: qty,
-                        quantity: qty,
-                        rate: rate,
-                        amount: existingDay ? (Number(existingDay.amount) || (qty * rate)) : (qty * rate)
-                    });
-                }
-
-                const total = newItinerary.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-                updated.itinerary = newItinerary;
-                if (total > 0) {
-                    updated.totalAmount = total;
-                } else if (prev.totalAmount) {
-                    updated.totalAmount = prev.totalAmount;
-                }
-            }
-            return updated;
         });
     };
 
@@ -673,7 +635,11 @@ export default function Leads() {
 
         updated[index] = row;
         const total = updated.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-        setFormData(prev => ({ ...prev, itinerary: updated, totalAmount: total }));
+        setFormData(prev => ({
+            ...prev,
+            itinerary: updated,
+            totalAmount: total > 0 ? total : prev.totalAmount
+        }));
     };
 
     const addAnotherDay = () => {
@@ -705,8 +671,7 @@ export default function Leads() {
         const updated = [...formData.itinerary, newDay];
         setFormData(prev => ({
             ...prev,
-            itinerary: updated,
-            travelEndDate: nextDate || prev.travelEndDate
+            itinerary: updated
         }));
     };
 
@@ -715,13 +680,10 @@ export default function Leads() {
             .filter((_, i) => i !== index)
             .map((d, i) => ({ ...d, dayNo: i + 1 }));
         const total = updated.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-        const lastDay = updated[updated.length - 1];
-        const newEndDate = lastDay?.date ? toLocalDateString(lastDay.date) : formData.travelStartDate;
         setFormData(prev => ({
             ...prev,
             itinerary: updated,
-            travelEndDate: newEndDate,
-            totalAmount: total
+            totalAmount: total > 0 ? total : prev.totalAmount
         }));
     };
 
@@ -831,22 +793,6 @@ export default function Leads() {
             setMatrixTargetPerDay('2500');
             setMatrixSimSalePrice('');
 
-            const initialItinerary = [
-                {
-                    dayNo: 1,
-                    date: today,
-                    time: '09:00 AM',
-                    isApg: false,
-                    duty: 'Airport Pickup & Local Sightseeing',
-                    description: 'Airport Pickup & Local Sightseeing',
-                    vehicleType: 'Innova Crysta',
-                    vehicleCount: 1,
-                    quantity: 1,
-                    rate: 0,
-                    amount: 0
-                }
-            ];
-
             setFormData({
                 bookingReference: 'Direct',
                 travelAgent: '',
@@ -877,7 +823,7 @@ export default function Leads() {
                     gstIncluded: true,
                     manualRemarks: localStorage.getItem('last_manual_inclusion_remarks') || ''
                 },
-                itinerary: initialItinerary,
+                itinerary: [],
                 extraCharges: [],
                 totalAmount: 0
             });
