@@ -530,7 +530,8 @@ export default function Bookings() {
         } else if (vehicleVal === '__custom__') {
             updated[index] = {
                 ...updated[index],
-                vehicleId: ''
+                vehicleId: 'custom',
+                vehicleNumber: updated[index].vehicleNumber || ''
             };
         } else {
             const found = allVehicles.find(v => String(v._id) === String(vehicleVal));
@@ -2004,14 +2005,14 @@ export default function Bookings() {
                 )}
             </AnimatePresence>
 
-            {/* ASSIGN DRIVER & VEHICLES MODAL (UPGRADED UI + 1-CLICK COPY + 2-WAY DRS SYNC) */}
+            {/* ASSIGN DRIVER & VEHICLES MODAL (SIMPLE, CLEAN ROW LAYOUT + 1-CLICK COPY) */}
             <AnimatePresence>
                 {showAssignDriverModal && assigningBooking && (
                     <div style={{
                         position: 'fixed',
                         inset: 0,
-                        background: 'rgba(2, 6, 23, 0.86)',
-                        backdropFilter: 'blur(10px)',
+                        background: 'rgba(2, 6, 23, 0.85)',
+                        backdropFilter: 'blur(8px)',
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
@@ -2019,26 +2020,26 @@ export default function Bookings() {
                         padding: '16px'
                     }}>
                         <motion.div
-                            initial={{ y: 20, opacity: 0, scale: 0.98 }}
-                            animate={{ y: 0, opacity: 1, scale: 1 }}
-                            exit={{ y: 20, opacity: 0, scale: 0.98 }}
+                            initial={{ y: 15, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: 15, opacity: 0 }}
                             style={{
                                 width: '100%',
-                                maxWidth: '1120px',
-                                maxHeight: '92vh',
+                                maxWidth: '1060px',
+                                maxHeight: '90vh',
                                 display: 'flex',
                                 flexDirection: 'column',
-                                background: 'linear-gradient(180deg, #0b1325 0%, #070d19 100%)',
-                                border: '1px solid rgba(56, 189, 248, 0.35)',
-                                borderRadius: '18px',
-                                boxShadow: '0 25px 60px -12px rgba(0, 0, 0, 0.85)',
+                                background: '#0b1325',
+                                border: '1px solid rgba(56, 189, 248, 0.3)',
+                                borderRadius: '16px',
+                                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.85)',
                                 overflow: 'hidden'
                             }}
                         >
-                            {/* Sticky Top Header */}
+                            {/* Simple Top Header */}
                             <div style={{
-                                padding: '18px 24px',
-                                background: 'rgba(15, 23, 42, 0.9)',
+                                padding: '16px 22px',
+                                background: '#0f172a',
                                 borderBottom: '1px solid rgba(255,255,255,0.08)',
                                 display: 'flex',
                                 justifyContent: 'space-between',
@@ -2048,246 +2049,137 @@ export default function Bookings() {
                             }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                     <div style={{
-                                        width: '42px',
-                                        height: '42px',
-                                        borderRadius: '12px',
-                                        background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(37, 99, 235, 0.25))',
-                                        border: '1px solid rgba(56, 189, 248, 0.4)',
+                                        width: '38px',
+                                        height: '38px',
+                                        borderRadius: '10px',
+                                        background: 'rgba(56, 189, 248, 0.15)',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         color: '#38bdf8'
                                     }}>
-                                        <Car size={22} />
+                                        <Car size={20} />
                                     </div>
                                     <div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                                            <h2 style={{ color: 'white', margin: 0, fontSize: '19px', fontWeight: '900', letterSpacing: '-0.3px' }}>
-                                                Assign Drivers, Vehicles & Tour Duties
+                                            <h2 style={{ color: 'white', margin: 0, fontSize: '17px', fontWeight: '800' }}>
+                                                Assign Drivers & Vehicles
                                             </h2>
                                             {Array.isArray(assigningBooking.drsDuties) && assigningBooking.drsDuties.length > 0 ? (
                                                 <span style={{
                                                     background: 'rgba(16, 185, 129, 0.18)',
                                                     color: '#34d399',
-                                                    border: '1px solid rgba(16, 185, 129, 0.45)',
-                                                    padding: '3px 10px',
-                                                    borderRadius: '20px',
-                                                    fontSize: '10.5px',
-                                                    fontWeight: '800',
-                                                    letterSpacing: '0.4px'
+                                                    border: '1px solid rgba(16, 185, 129, 0.4)',
+                                                    padding: '2px 9px',
+                                                    borderRadius: '12px',
+                                                    fontSize: '10px',
+                                                    fontWeight: '800'
                                                 }}>
-                                                    🟢 LIVE IN DRS (2-WAY SYNC ACTIVE)
+                                                    ● Live in DRS
                                                 </span>
                                             ) : (
                                                 <span style={{
-                                                    background: 'rgba(245, 158, 11, 0.18)',
+                                                    background: 'rgba(245, 158, 11, 0.15)',
                                                     color: '#fbbf24',
-                                                    border: '1px solid rgba(245, 158, 11, 0.45)',
-                                                    padding: '3px 10px',
-                                                    borderRadius: '20px',
-                                                    fontSize: '10.5px',
-                                                    fontWeight: '800',
-                                                    letterSpacing: '0.4px'
+                                                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                                                    padding: '2px 9px',
+                                                    borderRadius: '12px',
+                                                    fontSize: '10px',
+                                                    fontWeight: '800'
                                                 }}>
-                                                    🟠 NOT IN LIVE DRS YET (SAVE BELOW TO PUSH TO DRS)
+                                                    Pending DRS Push
                                                 </span>
                                             )}
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '4px', fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>
-                                            <span>Booking: <strong style={{ color: '#38bdf8' }}>{assigningBooking.bookingCode || assigningBooking.bookingId}</strong></span>
-                                            <span>•</span>
-                                            <span>Guest: <strong style={{ color: 'white' }}>{assigningBooking.clientName}</strong> ({assigningBooking.mobileNumber || 'N/A'})</span>
-                                            <span>•</span>
-                                            <span>Trip Dates: <strong style={{ color: '#fbbf24' }}>{formatTripDate(assignItinerary[0]?.date || assigningBooking.travelStartDate)} → {formatTripDate(assignItinerary[assignItinerary.length - 1]?.date || assigningBooking.travelEndDate)} ({assignItinerary.length} {assignItinerary.length === 1 ? 'Day' : 'Days'})</strong></span>
-                                            <span>•</span>
-                                            <span>Booked Cab: <strong style={{ color: '#c084fc' }}>{assigningBooking.vehicleType || 'Innova Crysta'}</strong></span>
+                                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.65)', marginTop: '2px' }}>
+                                            Booking: <strong style={{ color: '#38bdf8' }}>{assigningBooking.bookingCode || assigningBooking.bookingId}</strong> • Guest: <strong style={{ color: 'white' }}>{assigningBooking.clientName}</strong> • Dates: <strong style={{ color: '#fbbf24' }}>{formatTripDate(assignItinerary[0]?.date || assigningBooking.travelStartDate)} to {formatTripDate(assignItinerary[assignItinerary.length - 1]?.date || assigningBooking.travelEndDate)} ({assignItinerary.length} Days)</strong> • Cab: <strong style={{ color: 'white' }}>{assigningBooking.vehicleType || 'Car'}</strong>
                                         </div>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => setShowAssignDriverModal(false)}
-                                    style={{
-                                        background: 'rgba(255,255,255,0.06)',
-                                        border: '1px solid rgba(255,255,255,0.12)',
-                                        borderRadius: '8px',
-                                        color: 'rgba(255,255,255,0.75)',
-                                        cursor: 'pointer',
-                                        padding: '7px'
-                                    }}
-                                >
-                                    <X size={18} />
-                                </button>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    {assignItinerary.length > 1 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleCopyDayToAll(0, 'all')}
+                                            style={{
+                                                padding: '8px 14px',
+                                                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                                                color: '#090d16',
+                                                border: 'none',
+                                                borderRadius: '8px',
+                                                fontWeight: '900',
+                                                fontSize: '12px',
+                                                cursor: 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)'
+                                            }}
+                                            title="Fill Day 1 and click here to copy same Driver, Vehicle, Time & Tour to all days"
+                                        >
+                                            📋 Copy Day 1 to All {assignItinerary.length} Days
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => setShowAssignDriverModal(false)}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.06)',
+                                            border: '1px solid rgba(255,255,255,0.12)',
+                                            borderRadius: '8px',
+                                            color: 'rgba(255,255,255,0.75)',
+                                            cursor: 'pointer',
+                                            padding: '6px'
+                                        }}
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
                             </div>
 
-                            {/* Scrollable Body */}
-                            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
-                                {/* Copy Feedback Toast Banner */}
+                            {/* Body */}
+                            <div style={{ padding: '16px 22px', overflowY: 'auto', flex: 1 }}>
                                 {copySuccessMsg && (
                                     <div style={{
-                                        background: 'rgba(16, 185, 129, 0.18)',
-                                        border: '1px solid rgba(52, 211, 153, 0.5)',
-                                        borderRadius: '10px',
-                                        padding: '10px 16px',
-                                        marginBottom: '14px',
+                                        background: 'rgba(16, 185, 129, 0.16)',
+                                        border: '1px solid rgba(52, 211, 153, 0.45)',
+                                        borderRadius: '8px',
+                                        padding: '8px 14px',
+                                        marginBottom: '12px',
                                         color: '#6ee7b7',
-                                        fontSize: '12.5px',
-                                        fontWeight: '800',
+                                        fontSize: '12px',
+                                        fontWeight: '700',
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: '8px'
                                     }}>
-                                        <CheckCircle size={16} color="#34d399" />
+                                        <CheckCircle size={15} color="#34d399" />
                                         <span>{copySuccessMsg}</span>
                                     </div>
                                 )}
 
-                                {/* Top Quick-Action & 1-Click Copy Bar */}
-                                {(() => {
-                                    const allDrivers = driversList || [];
-                                    const allVehicles = vehiclesList || [];
-                                    return (
-                                        <div style={{
-                                            background: 'linear-gradient(135deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.85))',
-                                            border: '1px solid rgba(56, 189, 248, 0.3)',
-                                            borderRadius: '14px',
-                                            padding: '14px 18px',
-                                            marginBottom: '18px',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            gap: '12px'
-                                        }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <span style={{ fontSize: '16px' }}>⚡</span>
-                                                    <div>
-                                                        <strong style={{ color: 'white', fontSize: '13px' }}>
-                                                            Quick Fill & 1-Click Multi-Day Copy ({assignItinerary.length} Duty Days)
-                                                        </strong>
-                                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>
-                                                            Fill Day 1 below and click <strong>"Copy Day 1 to All Days"</strong> to copy Driver, Vehicle, Time & Guest Tour Details across all days in one click.
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                {/* Column Headers */}
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '125px 1.2fr 1.2fr 150px 1.5fr auto',
+                                    gap: '10px',
+                                    padding: '0 12px 8px 12px',
+                                    fontSize: '11px',
+                                    fontWeight: '800',
+                                    color: '#94a3b8',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.4px'
+                                }}>
+                                    <div>Day & Date</div>
+                                    <div style={{ color: '#34d399' }}>1. Assign Driver</div>
+                                    <div style={{ color: '#38bdf8' }}>2. Assign Vehicle</div>
+                                    <div style={{ color: '#fbbf24' }}>3. Time</div>
+                                    <div style={{ color: '#c084fc' }}>4. Guest Tour / Duty Details</div>
+                                    <div style={{ textAlign: 'right' }}>Action</div>
+                                </div>
 
-                                                {assignItinerary.length > 1 && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleCopyDayToAll(0, 'all')}
-                                                        style={{
-                                                            padding: '9px 16px',
-                                                            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                                                            color: '#090d16',
-                                                            border: 'none',
-                                                            borderRadius: '10px',
-                                                            fontWeight: '900',
-                                                            fontSize: '12px',
-                                                            cursor: 'pointer',
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '7px',
-                                                            boxShadow: '0 4px 14px rgba(245, 158, 11, 0.35)'
-                                                        }}
-                                                        title="Copies Day 1's Driver, Vehicle, Time, Pickup & Guest Tour Details to all days"
-                                                    >
-                                                        <span>📋 1-Click Copy Day 1 to All {assignItinerary.length} Days ({formatTripDate(assignItinerary[0]?.date)} → {formatTripDate(assignItinerary[assignItinerary.length - 1]?.date)})</span>
-                                                    </button>
-                                                )}
-                                            </div>
-
-                                            {/* Optional Master Driver / Vehicle Quick Bar */}
-                                            <div style={{
-                                                display: 'grid',
-                                                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                                                gap: '12px',
-                                                paddingTop: '10px',
-                                                borderTop: '1px solid rgba(255,255,255,0.08)'
-                                            }}>
-                                                <div>
-                                                    <label style={{ display: 'block', color: '#93c5fd', fontSize: '11px', fontWeight: '700', marginBottom: '4px' }}>
-                                                        Master Driver (Apply to All Days)
-                                                    </label>
-                                                    <select
-                                                        value={masterDriverId}
-                                                        onChange={(e) => handleApplyMasterDriver(e.target.value)}
-                                                        className="premium-compact-input"
-                                                        style={{
-                                                            width: '100%',
-                                                            height: '36px',
-                                                            background: '#070d18',
-                                                            color: masterDriverId ? '#34d399' : 'white',
-                                                            border: '1px solid rgba(56, 189, 248, 0.35)',
-                                                            borderRadius: '8px',
-                                                            fontSize: '12px',
-                                                            fontWeight: '600'
-                                                        }}
-                                                    >
-                                                        <option value="">-- Select Fleet Driver for All Days --</option>
-                                                        <optgroup label="Company Fleet Drivers">
-                                                            {allDrivers.map(drv => (
-                                                                <option key={drv._id} value={drv._id}>
-                                                                    {drv.name} ({drv.mobile || drv.phone}) {drv.vehicleNumber ? `[${drv.vehicleNumber}]` : ''}
-                                                                </option>
-                                                            ))}
-                                                        </optgroup>
-                                                        <option value="__custom__">-- Custom / Outsourced Driver --</option>
-                                                    </select>
-                                                </div>
-
-                                                <div>
-                                                    <label style={{ display: 'block', color: '#93c5fd', fontSize: '11px', fontWeight: '700', marginBottom: '4px' }}>
-                                                        Master Fleet Vehicle (Apply to All Days)
-                                                    </label>
-                                                    <select
-                                                        value={
-                                                            allVehicles.find(v => v.carNumber && v.carNumber.toLowerCase() === String(masterVehicleNumber).trim().toLowerCase())?._id || ''
-                                                        }
-                                                        onChange={(e) => handleApplyMasterVehicle(e.target.value)}
-                                                        className="premium-compact-input"
-                                                        style={{
-                                                            width: '100%',
-                                                            height: '36px',
-                                                            background: '#070d18',
-                                                            color: masterVehicleNumber ? '#38bdf8' : 'white',
-                                                            border: '1px solid rgba(56, 189, 248, 0.35)',
-                                                            borderRadius: '8px',
-                                                            fontSize: '12px',
-                                                            fontWeight: '600'
-                                                        }}
-                                                    >
-                                                        <option value="">-- Select Fleet Vehicle for All Days --</option>
-                                                        {allVehicles.map(veh => (
-                                                            <option key={veh._id} value={veh._id}>
-                                                                {veh.carNumber} • {veh.carType || veh.model || 'Cab'}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-
-                                                <div>
-                                                    <label style={{ display: 'block', color: '#93c5fd', fontSize: '11px', fontWeight: '700', marginBottom: '4px' }}>
-                                                        Or Type Vehicle Number (All Days)
-                                                    </label>
-                                                    <input
-                                                        type="text"
-                                                        placeholder="e.g. RJ27 TA 9822"
-                                                        value={masterVehicleNumber}
-                                                        onChange={(e) => handleApplyMasterVehicle(e.target.value)}
-                                                        style={{
-                                                            ...inputStyle,
-                                                            height: '36px',
-                                                            fontSize: '12px',
-                                                            border: '1px solid rgba(56, 189, 248, 0.35)',
-                                                            fontWeight: '700'
-                                                        }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-
-                                {/* Day-Wise Duty Cards */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                {/* Clean Day Rows */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                     {assignItinerary.map((day, idx) => {
                                         const allDrivers = driversList || [];
                                         const allVehicles = vehiclesList || [];
@@ -2296,485 +2188,230 @@ export default function Bookings() {
                                         const matchedFleetVehicle = allVehicles.find(
                                             v => String(v._id) === String(day.vehicleId) || (v.carNumber && day.vehicleNumber && v.carNumber.toLowerCase() === String(day.vehicleNumber).trim().toLowerCase())
                                         );
-                                        const isDayAssigned = Boolean((day.driverName || matchedFleetDriver) && day.vehicleNumber);
+                                        const isCustomVehicle = day.vehicleId === 'custom' || (!matchedFleetVehicle && Boolean(day.vehicleNumber));
 
                                         return (
                                             <div
                                                 key={idx}
                                                 style={{
-                                                    background: isDayAssigned ? 'rgba(16, 185, 129, 0.04)' : 'rgba(255,255,255,0.025)',
-                                                    border: isDayAssigned ? '1.5px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(255,255,255,0.1)',
-                                                    borderRadius: '14px',
-                                                    padding: '14px 16px',
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    gap: '12px'
+                                                    background: 'rgba(15, 23, 42, 0.75)',
+                                                    border: (day.driverName && day.vehicleNumber) ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(255,255,255,0.1)',
+                                                    borderRadius: '10px',
+                                                    padding: '10px 12px',
+                                                    display: 'grid',
+                                                    gridTemplateColumns: '125px 1.2fr 1.2fr 150px 1.5fr auto',
+                                                    gap: '10px',
+                                                    alignItems: 'start'
                                                 }}
                                             >
-                                                {/* Day Card Header */}
-                                                <div style={{
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'center',
-                                                    flexWrap: 'wrap',
-                                                    gap: '8px',
-                                                    paddingBottom: '10px',
-                                                    borderBottom: '1px solid rgba(255,255,255,0.07)'
-                                                }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                                {/* Day & Date */}
+                                                <div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                                                         <span style={{
-                                                            background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                                                            color: 'white',
-                                                            padding: '4px 12px',
-                                                            borderRadius: '8px',
-                                                            fontSize: '11.5px',
-                                                            fontWeight: '900',
-                                                            letterSpacing: '0.4px'
+                                                            background: '#1e3a8a',
+                                                            color: '#93c5fd',
+                                                            padding: '2px 7px',
+                                                            borderRadius: '5px',
+                                                            fontSize: '10.5px',
+                                                            fontWeight: '800'
                                                         }}>
-                                                            DAY {day.dayNo || idx + 1}
+                                                            Day {day.dayNo || idx + 1}
                                                         </span>
-                                                        <input
-                                                            type="date"
-                                                            value={day.date ? String(day.date).slice(0, 10) : ''}
-                                                            onChange={(e) => handleUpdateDayField(idx, 'date', e.target.value)}
-                                                            style={{
-                                                                background: '#070d18',
-                                                                color: 'white',
-                                                                border: '1px solid rgba(255,255,255,0.15)',
-                                                                borderRadius: '7px',
-                                                                padding: '4px 10px',
-                                                                fontSize: '12.5px',
-                                                                fontWeight: '800'
-                                                            }}
-                                                        />
-                                                        <span style={{ color: '#94a3b8', fontSize: '12px', fontWeight: '600' }}>
-                                                            ({day.date ? new Date(day.date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : 'Select Date'})
-                                                        </span>
-                                                        {isDayAssigned ? (
-                                                            <span style={{
-                                                                background: 'rgba(16, 185, 129, 0.15)',
-                                                                color: '#34d399',
-                                                                border: '1px solid rgba(16, 185, 129, 0.35)',
-                                                                padding: '2px 9px',
-                                                                borderRadius: '12px',
-                                                                fontSize: '10.5px',
-                                                                fontWeight: '800'
-                                                            }}>
-                                                                ✓ Ready for Live DRS ({day.driverName || matchedFleetDriver?.name} • {day.vehicleNumber})
-                                                            </span>
-                                                        ) : (
-                                                            <span style={{
-                                                                background: 'rgba(245, 158, 11, 0.12)',
-                                                                color: '#fbbf24',
-                                                                border: '1px solid rgba(245, 158, 11, 0.3)',
-                                                                padding: '2px 9px',
-                                                                borderRadius: '12px',
-                                                                fontSize: '10.5px',
-                                                                fontWeight: '700'
-                                                            }}>
-                                                                ⏳ Assign Driver & Vehicle Below
-                                                            </span>
-                                                        )}
                                                     </div>
-
-                                                    {/* Per-Day Copy & Delete Actions */}
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                        {idx === 0 && assignItinerary.length > 1 && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleCopyDayToAll(0, 'all')}
-                                                                style={{
-                                                                    padding: '5px 12px',
-                                                                    background: 'rgba(245, 158, 11, 0.18)',
-                                                                    color: '#fbbf24',
-                                                                    border: '1px solid rgba(245, 158, 11, 0.5)',
-                                                                    borderRadius: '7px',
-                                                                    fontSize: '11px',
-                                                                    fontWeight: '800',
-                                                                    cursor: 'pointer'
-                                                                }}
-                                                                title="Copy Day 1 data across all days"
-                                                            >
-                                                                📋 Copy Day 1 to All Days
-                                                            </button>
-                                                        )}
-                                                        {idx > 0 && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleCopyPreviousDay(idx)}
-                                                                style={{
-                                                                    padding: '5px 10px',
-                                                                    background: 'rgba(56, 189, 248, 0.12)',
-                                                                    color: '#38bdf8',
-                                                                    border: '1px solid rgba(56, 189, 248, 0.35)',
-                                                                    borderRadius: '7px',
-                                                                    fontSize: '11px',
-                                                                    fontWeight: '700',
-                                                                    cursor: 'pointer'
-                                                                }}
-                                                                title={`Copy Day ${idx} details into Day ${idx + 1}`}
-                                                            >
-                                                                ⬆️ Same as Day {idx}
-                                                            </button>
-                                                        )}
-                                                        {idx > 0 && idx < assignItinerary.length - 1 && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleCopyDayToAll(idx, 'below')}
-                                                                style={{
-                                                                    padding: '5px 10px',
-                                                                    background: 'rgba(168, 85, 247, 0.15)',
-                                                                    color: '#c084fc',
-                                                                    border: '1px solid rgba(168, 85, 247, 0.4)',
-                                                                    borderRadius: '7px',
-                                                                    fontSize: '11px',
-                                                                    fontWeight: '700',
-                                                                    cursor: 'pointer'
-                                                                }}
-                                                                title="Useful when driver/car changes mid-trip: copies this day to all remaining days"
-                                                            >
-                                                                ⤵️ Copy to Day {idx + 2}–{assignItinerary.length}
-                                                            </button>
-                                                        )}
-                                                        {assignItinerary.length > 1 && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleRemoveAssignDay(idx)}
-                                                                style={{
-                                                                    padding: '5px 8px',
-                                                                    background: 'rgba(239, 68, 68, 0.12)',
-                                                                    color: '#f87171',
-                                                                    border: '1px solid rgba(239, 68, 68, 0.3)',
-                                                                    borderRadius: '7px',
-                                                                    cursor: 'pointer',
-                                                                    display: 'inline-flex',
-                                                                    alignItems: 'center'
-                                                                }}
-                                                                title="Remove this duty day"
-                                                            >
-                                                                <Trash2 size={13} />
-                                                            </button>
-                                                        )}
+                                                    <div style={{ color: 'white', fontSize: '12.5px', fontWeight: '700' }}>
+                                                        {day.date ? new Date(day.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Pending'}
                                                     </div>
                                                 </div>
 
-                                                {/* 4-Step Grid: 1. Driver -> 2. Vehicle -> 3. Time & Pickup -> 4. Guest Tour Details */}
-                                                <div style={{
-                                                    display: 'grid',
-                                                    gridTemplateColumns: 'repeat(auto-fit, minmax(235px, 1fr))',
-                                                    gap: '12px'
-                                                }}>
-                                                    {/* STEP 1: ASSIGN DRIVER */}
-                                                    <div style={{
-                                                        background: 'rgba(15, 23, 42, 0.65)',
-                                                        border: '1px solid rgba(16, 185, 129, 0.25)',
-                                                        borderRadius: '10px',
-                                                        padding: '10px 12px',
-                                                        display: 'flex',
-                                                        flexDirection: 'column',
-                                                        gap: '7px'
-                                                    }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                            <span style={{
-                                                                background: '#10b981',
-                                                                color: '#052e16',
-                                                                width: '18px',
-                                                                height: '18px',
-                                                                borderRadius: '50%',
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                fontSize: '10.5px',
-                                                                fontWeight: '900'
-                                                            }}>1</span>
-                                                            <span style={{ color: '#34d399', fontSize: '11.5px', fontWeight: '800', letterSpacing: '0.3px' }}>
-                                                                ASSIGN DRIVER
-                                                            </span>
-                                                        </div>
+                                                {/* 1. Assign Driver */}
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                    <select
+                                                        value={isCustomDriver ? '__custom__' : (day.driverId || '')}
+                                                        onChange={(e) => handleUpdateDayDriver(idx, e.target.value)}
+                                                        className="premium-compact-input"
+                                                        style={{
+                                                            width: '100%',
+                                                            height: '36px',
+                                                            background: '#070d18',
+                                                            color: day.driverName ? '#34d399' : 'rgba(255,255,255,0.8)',
+                                                            border: day.driverName ? '1px solid rgba(52, 211, 153, 0.4)' : '1px solid rgba(255,255,255,0.15)',
+                                                            borderRadius: '7px',
+                                                            fontSize: '12px',
+                                                            fontWeight: '600'
+                                                        }}
+                                                    >
+                                                        <option value="">-- Select Driver --</option>
+                                                        <optgroup label="Company Drivers">
+                                                            {allDrivers.map(drv => (
+                                                                <option key={drv._id} value={drv._id}>
+                                                                    {drv.name} ({drv.mobile || drv.phone})
+                                                                </option>
+                                                            ))}
+                                                        </optgroup>
+                                                        <option value="__custom__">+ Other / Outsourced Driver</option>
+                                                    </select>
 
-                                                        <select
-                                                            value={isCustomDriver ? '__custom__' : (day.driverId || '')}
-                                                            onChange={(e) => handleUpdateDayDriver(idx, e.target.value)}
-                                                            className="premium-compact-input"
-                                                            style={{
-                                                                width: '100%',
-                                                                height: '35px',
-                                                                background: '#070d18',
-                                                                color: day.driverName ? '#34d399' : 'rgba(255,255,255,0.8)',
-                                                                border: '1px solid rgba(255,255,255,0.14)',
-                                                                borderRadius: '7px',
-                                                                fontSize: '12px',
-                                                                fontWeight: '600'
-                                                            }}
-                                                        >
-                                                            <option value="">-- Select Fleet Driver or Type Below --</option>
-                                                            <optgroup label="Company Fleet Drivers">
-                                                                {allDrivers.map(drv => (
-                                                                    <option key={drv._id} value={drv._id}>
-                                                                        {drv.name} ({drv.mobile || drv.phone}) {drv.vehicleNumber ? `[${drv.vehicleNumber}]` : ''}
-                                                                    </option>
-                                                                ))}
-                                                            </optgroup>
-                                                            <option value="__custom__">-- Custom / Outsourced Driver --</option>
-                                                        </select>
-
-                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                                                    {isCustomDriver && (
+                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
                                                             <input
                                                                 type="text"
                                                                 placeholder="Driver Name"
                                                                 value={day.driverName || ''}
                                                                 onChange={(e) => handleUpdateDayField(idx, 'driverName', e.target.value)}
-                                                                style={{
-                                                                    ...inputStyle,
-                                                                    height: '33px',
-                                                                    fontSize: '11.5px',
-                                                                    padding: '4px 8px'
-                                                                }}
+                                                                style={{ ...inputStyle, height: '32px', fontSize: '11.5px', padding: '4px 8px' }}
                                                             />
                                                             <input
                                                                 type="text"
-                                                                placeholder="Driver Mobile"
+                                                                placeholder="Mobile No."
                                                                 value={day.driverPhone || ''}
                                                                 onChange={(e) => handleUpdateDayField(idx, 'driverPhone', e.target.value)}
-                                                                style={{
-                                                                    ...inputStyle,
-                                                                    height: '33px',
-                                                                    fontSize: '11.5px',
-                                                                    padding: '4px 8px'
-                                                                }}
+                                                                style={{ ...inputStyle, height: '32px', fontSize: '11.5px', padding: '4px 8px' }}
                                                             />
                                                         </div>
-                                                    </div>
+                                                    )}
+                                                </div>
 
-                                                    {/* STEP 2: ASSIGN VEHICLE */}
-                                                    <div style={{
-                                                        background: 'rgba(15, 23, 42, 0.65)',
-                                                        border: '1px solid rgba(56, 189, 248, 0.25)',
-                                                        borderRadius: '10px',
-                                                        padding: '10px 12px',
-                                                        display: 'flex',
-                                                        flexDirection: 'column',
-                                                        gap: '7px'
-                                                    }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                            <span style={{
-                                                                background: '#38bdf8',
-                                                                color: '#082f49',
-                                                                width: '18px',
-                                                                height: '18px',
-                                                                borderRadius: '50%',
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                fontSize: '10.5px',
-                                                                fontWeight: '900'
-                                                            }}>2</span>
-                                                            <span style={{ color: '#38bdf8', fontSize: '11.5px', fontWeight: '800', letterSpacing: '0.3px' }}>
-                                                                ASSIGN VEHICLE
-                                                            </span>
-                                                        </div>
-
-                                                        <select
-                                                            value={matchedFleetVehicle ? matchedFleetVehicle._id : (day.vehicleNumber ? '__custom__' : '')}
-                                                            onChange={(e) => handleUpdateDayVehicleSelect(idx, e.target.value)}
-                                                            className="premium-compact-input"
-                                                            style={{
-                                                                width: '100%',
-                                                                height: '35px',
-                                                                background: '#070d18',
-                                                                color: day.vehicleNumber ? '#38bdf8' : 'rgba(255,255,255,0.8)',
-                                                                border: '1px solid rgba(255,255,255,0.14)',
-                                                                borderRadius: '7px',
-                                                                fontSize: '12px',
-                                                                fontWeight: '600'
-                                                            }}
-                                                        >
-                                                            <option value="">-- Select Fleet Vehicle or Type Below --</option>
-                                                            <optgroup label="Company Fleet Vehicles">
-                                                                {allVehicles.map(veh => (
-                                                                    <option key={veh._id} value={veh._id}>
-                                                                        {veh.carNumber} • {veh.carType || veh.model || 'Cab'}
-                                                                    </option>
-                                                                ))}
-                                                            </optgroup>
-                                                            <option value="__custom__">-- Custom / Outsourced Vehicle --</option>
-                                                        </select>
-
-                                                        <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '6px' }}>
-                                                            <input
-                                                                type="text"
-                                                                placeholder="Car No. (RJ27 TA 1234)"
-                                                                value={day.vehicleNumber || ''}
-                                                                onChange={(e) => handleUpdateDayField(idx, 'vehicleNumber', e.target.value.toUpperCase())}
-                                                                style={{
-                                                                    ...inputStyle,
-                                                                    height: '33px',
-                                                                    fontSize: '11.5px',
-                                                                    fontWeight: '700',
-                                                                    padding: '4px 8px'
-                                                                }}
-                                                            />
-                                                            <input
-                                                                type="text"
-                                                                placeholder="Car Type"
-                                                                value={day.vehicleType || ''}
-                                                                onChange={(e) => handleUpdateDayField(idx, 'vehicleType', e.target.value)}
-                                                                style={{
-                                                                    ...inputStyle,
-                                                                    height: '33px',
-                                                                    fontSize: '11.5px',
-                                                                    padding: '4px 8px'
-                                                                }}
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    {/* STEP 3: REPORTING TIME & PICKUP */}
-                                                    <div style={{
-                                                        background: 'rgba(15, 23, 42, 0.65)',
-                                                        border: '1px solid rgba(245, 158, 11, 0.25)',
-                                                        borderRadius: '10px',
-                                                        padding: '10px 12px',
-                                                        display: 'flex',
-                                                        flexDirection: 'column',
-                                                        gap: '7px'
-                                                    }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                <span style={{
-                                                                    background: '#f59e0b',
-                                                                    color: '#451a03',
-                                                                    width: '18px',
-                                                                    height: '18px',
-                                                                    borderRadius: '50%',
-                                                                    display: 'inline-flex',
-                                                                    alignItems: 'center',
-                                                                    justifyContent: 'center',
-                                                                    fontSize: '10.5px',
-                                                                    fontWeight: '900'
-                                                                }}>3</span>
-                                                                <span style={{ color: '#fbbf24', fontSize: '11.5px', fontWeight: '800', letterSpacing: '0.3px' }}>
-                                                                    TIME & PICKUP / HOTEL
-                                                                </span>
-                                                            </div>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    const nextApg = !day.isApg;
-                                                                    handleUpdateDayField(idx, 'isApg', nextApg);
-                                                                    if (nextApg) handleUpdateDayField(idx, 'time', 'APG');
-                                                                    else if (day.time === 'APG') handleUpdateDayField(idx, 'time', '09:00 AM');
-                                                                }}
-                                                                style={{
-                                                                    padding: '2px 7px',
-                                                                    borderRadius: '5px',
-                                                                    fontSize: '10px',
-                                                                    fontWeight: '800',
-                                                                    cursor: 'pointer',
-                                                                    border: day.isApg ? '1px solid #f59e0b' : '1px solid rgba(255,255,255,0.15)',
-                                                                    background: day.isApg ? 'rgba(245, 158, 11, 0.25)' : 'rgba(255,255,255,0.05)',
-                                                                    color: day.isApg ? '#fbbf24' : 'rgba(255,255,255,0.6)'
-                                                                }}
-                                                                title="Toggle As Per Guest (APG)"
-                                                            >
-                                                                APG
-                                                            </button>
-                                                        </div>
-
-                                                        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                                                            <input
-                                                                type="text"
-                                                                placeholder="e.g. 09:00 AM"
-                                                                disabled={Boolean(day.isApg)}
-                                                                value={day.isApg ? 'APG (As Per Guest)' : (day.time || '')}
-                                                                onChange={(e) => handleUpdateDayField(idx, 'time', e.target.value)}
-                                                                style={{
-                                                                    ...inputStyle,
-                                                                    height: '35px',
-                                                                    fontSize: '12px',
-                                                                    fontWeight: '700',
-                                                                    color: day.isApg ? '#fbbf24' : 'white'
-                                                                }}
-                                                            />
-                                                        </div>
-
-                                                        <input
-                                                            type="text"
-                                                            placeholder="Pickup / Hotel (e.g. Airport / Taj)"
-                                                            value={day.pickupPoint || ''}
-                                                            onChange={(e) => handleUpdateDayField(idx, 'pickupPoint', e.target.value)}
-                                                            style={{
-                                                                ...inputStyle,
-                                                                height: '33px',
-                                                                fontSize: '11.5px',
-                                                                padding: '4px 8px'
-                                                            }}
-                                                        />
-                                                    </div>
-
-                                                    {/* STEP 4: GUEST TOUR / DUTY DETAILS */}
-                                                    <div style={{
-                                                        background: 'rgba(15, 23, 42, 0.65)',
-                                                        border: '1px solid rgba(168, 85, 247, 0.25)',
-                                                        borderRadius: '10px',
-                                                        padding: '10px 12px',
-                                                        display: 'flex',
-                                                        flexDirection: 'column',
-                                                        gap: '7px'
-                                                    }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                            <span style={{
-                                                                background: '#a855f7',
-                                                                color: '#2e1065',
-                                                                width: '18px',
-                                                                height: '18px',
-                                                                borderRadius: '50%',
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                fontSize: '10.5px',
-                                                                fontWeight: '900'
-                                                            }}>4</span>
-                                                            <span style={{ color: '#c084fc', fontSize: '11.5px', fontWeight: '800', letterSpacing: '0.3px' }}>
-                                                                GUEST TOUR / DUTY DETAILS
-                                                            </span>
-                                                        </div>
-
-                                                        <input
-                                                            type="text"
-                                                            placeholder="Enter Guest Tour / Sightseeing / Route..."
-                                                            value={day.duty || ''}
-                                                            onChange={(e) => handleUpdateDayField(idx, 'duty', e.target.value)}
-                                                            style={{
-                                                                ...inputStyle,
-                                                                height: '35px',
-                                                                fontSize: '12px',
-                                                                fontWeight: '600'
-                                                            }}
-                                                        />
-
-                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                                            {['Airport Pickup', 'Local Sightseeing', 'Nathdwara-Eklingji', 'Kumbhalgarh', 'Chittorgarh', 'Mount Abu', 'Departure Drop'].map(preset => (
-                                                                <button
-                                                                    key={preset}
-                                                                    type="button"
-                                                                    onClick={() => handleUpdateDayField(idx, 'duty', preset)}
-                                                                    style={{
-                                                                        padding: '2px 6px',
-                                                                        fontSize: '9.5px',
-                                                                        fontWeight: '700',
-                                                                        borderRadius: '4px',
-                                                                        cursor: 'pointer',
-                                                                        border: day.duty === preset ? '1px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
-                                                                        background: day.duty === preset ? 'rgba(168, 85, 247, 0.25)' : 'rgba(255,255,255,0.04)',
-                                                                        color: day.duty === preset ? '#e9d5ff' : 'rgba(255,255,255,0.65)'
-                                                                    }}
-                                                                >
-                                                                    {preset}
-                                                                </button>
+                                                {/* 2. Assign Vehicle */}
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                    <select
+                                                        value={matchedFleetVehicle ? matchedFleetVehicle._id : (isCustomVehicle ? '__custom__' : '')}
+                                                        onChange={(e) => handleUpdateDayVehicleSelect(idx, e.target.value)}
+                                                        className="premium-compact-input"
+                                                        style={{
+                                                            width: '100%',
+                                                            height: '36px',
+                                                            background: '#070d18',
+                                                            color: day.vehicleNumber ? '#38bdf8' : 'rgba(255,255,255,0.8)',
+                                                            border: day.vehicleNumber ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(255,255,255,0.15)',
+                                                            borderRadius: '7px',
+                                                            fontSize: '12px',
+                                                            fontWeight: '600'
+                                                        }}
+                                                    >
+                                                        <option value="">-- Select Vehicle --</option>
+                                                        <optgroup label="Company Vehicles">
+                                                            {allVehicles.map(veh => (
+                                                                <option key={veh._id} value={veh._id}>
+                                                                    {veh.carNumber} ({veh.carType || veh.model || 'Cab'})
+                                                                </option>
                                                             ))}
-                                                        </div>
-                                                    </div>
+                                                        </optgroup>
+                                                        <option value="__custom__">+ Other / Outsourced Vehicle</option>
+                                                    </select>
+
+                                                    {isCustomVehicle && (
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Enter Car No. (e.g. RJ27 TA 1234)"
+                                                            value={day.vehicleNumber || ''}
+                                                            onChange={(e) => handleUpdateDayField(idx, 'vehicleNumber', e.target.value.toUpperCase())}
+                                                            style={{ ...inputStyle, height: '32px', fontSize: '11.5px', fontWeight: '700', padding: '4px 8px' }}
+                                                        />
+                                                    )}
+                                                </div>
+
+                                                {/* 3. Time */}
+                                                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="09:00 AM"
+                                                        disabled={Boolean(day.isApg)}
+                                                        value={day.isApg ? 'APG' : (day.time || '')}
+                                                        onChange={(e) => handleUpdateDayField(idx, 'time', e.target.value)}
+                                                        style={{
+                                                            ...inputStyle,
+                                                            height: '36px',
+                                                            fontSize: '12px',
+                                                            fontWeight: '700',
+                                                            padding: '4px 8px',
+                                                            color: day.isApg ? '#fbbf24' : 'white'
+                                                        }}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const nextApg = !day.isApg;
+                                                            handleUpdateDayField(idx, 'isApg', nextApg);
+                                                            if (nextApg) handleUpdateDayField(idx, 'time', 'APG');
+                                                            else if (day.time === 'APG') handleUpdateDayField(idx, 'time', '09:00 AM');
+                                                        }}
+                                                        style={{
+                                                            height: '36px',
+                                                            padding: '0 8px',
+                                                            borderRadius: '7px',
+                                                            fontSize: '10px',
+                                                            fontWeight: '800',
+                                                            cursor: 'pointer',
+                                                            border: day.isApg ? '1px solid #f59e0b' : '1px solid rgba(255,255,255,0.15)',
+                                                            background: day.isApg ? 'rgba(245, 158, 11, 0.25)' : 'rgba(255,255,255,0.05)',
+                                                            color: day.isApg ? '#fbbf24' : 'rgba(255,255,255,0.6)'
+                                                        }}
+                                                        title="As Per Guest (APG)"
+                                                    >
+                                                        APG
+                                                    </button>
+                                                </div>
+
+                                                {/* 4. Guest Tour / Duty Details */}
+                                                <div>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Guest Tour / Route / Pickup Details..."
+                                                        value={day.duty || ''}
+                                                        onChange={(e) => handleUpdateDayField(idx, 'duty', e.target.value)}
+                                                        style={{
+                                                            ...inputStyle,
+                                                            height: '36px',
+                                                            fontSize: '12px',
+                                                            fontWeight: '600',
+                                                            padding: '4px 10px'
+                                                        }}
+                                                    />
+                                                </div>
+
+                                                {/* Row Copy Action */}
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '36px' }}>
+                                                    {idx === 0 && assignItinerary.length > 1 ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleCopyDayToAll(0, 'all')}
+                                                            style={{
+                                                                padding: '6px 10px',
+                                                                background: 'rgba(245, 158, 11, 0.18)',
+                                                                color: '#fbbf24',
+                                                                border: '1px solid rgba(245, 158, 11, 0.45)',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: '800',
+                                                                cursor: 'pointer',
+                                                                whiteSpace: 'nowrap'
+                                                            }}
+                                                            title="Copy Day 1 data to all days"
+                                                        >
+                                                            Copy All ↓
+                                                        </button>
+                                                    ) : idx > 0 && idx < assignItinerary.length - 1 ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleCopyDayToAll(idx, 'below')}
+                                                            style={{
+                                                                padding: '6px 10px',
+                                                                background: 'rgba(56, 189, 248, 0.12)',
+                                                                color: '#38bdf8',
+                                                                border: '1px solid rgba(56, 189, 248, 0.3)',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: '700',
+                                                                cursor: 'pointer',
+                                                                whiteSpace: 'nowrap'
+                                                            }}
+                                                            title="Copy this day's changes to remaining days below"
+                                                        >
+                                                            Copy ↓
+                                                        </button>
+                                                    ) : (
+                                                        <span style={{ width: '58px' }} />
+                                                    )}
                                                 </div>
                                             </div>
                                         );
@@ -2782,82 +2419,59 @@ export default function Bookings() {
                                 </div>
                             </div>
 
-                            {/* Sticky Footer */}
+                            {/* Simple Footer */}
                             <div style={{
-                                padding: '14px 24px',
-                                background: 'rgba(15, 23, 42, 0.95)',
+                                padding: '14px 22px',
+                                background: '#0f172a',
                                 borderTop: '1px solid rgba(255,255,255,0.08)',
                                 display: 'flex',
-                                justifyContent: 'space-between',
+                                justifyContent: 'flex-end',
                                 alignItems: 'center',
-                                flexWrap: 'wrap',
                                 gap: '10px'
                             }}>
                                 <button
                                     type="button"
-                                    onClick={handleAddExtraAssignDay}
+                                    onClick={() => setShowAssignDriverModal(false)}
                                     style={{
-                                        padding: '9px 14px',
-                                        background: 'rgba(56, 189, 248, 0.12)',
-                                        color: '#38bdf8',
-                                        border: '1px solid rgba(56, 189, 248, 0.35)',
+                                        padding: '9px 18px',
+                                        background: 'rgba(255,255,255,0.06)',
+                                        color: 'white',
+                                        border: '1px solid rgba(255,255,255,0.15)',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontWeight: '700',
+                                        fontSize: '13px'
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleSaveDriverAssignments}
+                                    disabled={savingAssignment}
+                                    style={{
+                                        padding: '9px 22px',
+                                        background: 'linear-gradient(135deg, #10b981, #059669)',
+                                        color: 'white',
+                                        border: 'none',
                                         borderRadius: '8px',
                                         cursor: 'pointer',
                                         fontWeight: '800',
-                                        fontSize: '12px',
+                                        fontSize: '13px',
                                         display: 'inline-flex',
                                         alignItems: 'center',
-                                        gap: '6px'
+                                        gap: '7px',
+                                        boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)'
                                     }}
                                 >
-                                    <Plus size={14} /> Add Extra Duty Day
+                                    {savingAssignment ? (
+                                        <>Saving...</>
+                                    ) : (
+                                        <>
+                                            <CheckCircle size={15} /> Done — Save & Send to Live DRS
+                                        </>
+                                    )}
                                 </button>
-
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowAssignDriverModal(false)}
-                                        style={{
-                                            padding: '10px 18px',
-                                            background: 'rgba(255,255,255,0.06)',
-                                            color: 'white',
-                                            border: '1px solid rgba(255,255,255,0.15)',
-                                            borderRadius: '9px',
-                                            cursor: 'pointer',
-                                            fontWeight: '700',
-                                            fontSize: '13px'
-                                        }}
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleSaveDriverAssignments}
-                                        disabled={savingAssignment}
-                                        style={{
-                                            padding: '10px 24px',
-                                            background: 'linear-gradient(135deg, #10b981, #059669)',
-                                            color: 'white',
-                                            border: 'none',
-                                            borderRadius: '9px',
-                                            cursor: 'pointer',
-                                            fontWeight: '900',
-                                            fontSize: '13px',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)'
-                                        }}
-                                    >
-                                        {savingAssignment ? (
-                                            <>Syncing to Live DRS...</>
-                                        ) : (
-                                            <>
-                                                <CheckCircle size={16} /> Done — Save & Send to Live DRS
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
                             </div>
                         </motion.div>
                     </div>
