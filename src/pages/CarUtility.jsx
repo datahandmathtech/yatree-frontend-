@@ -25,6 +25,7 @@ const CarUtility = () => {
     // Core state
     const [vehicles, setVehicles] = useState([]);
     const [allBorderEntries, setAllBorderEntries] = useState([]);
+    const [allServiceEntries, setAllServiceEntries] = useState([]);
     const [drivers, setDrivers] = useState([]);
     const [bankAccounts, setBankAccounts] = useState([]);
     const [bookings, setBookings] = useState([]);
@@ -199,9 +200,10 @@ const CarUtility = () => {
         try {
             const token = JSON.parse(localStorage.getItem('userInfo')).token;
             const headers = { Authorization: `Bearer ${token}` };
-            const [vehRes, borderRes, dvrRes, banksRes, bookingsRes] = await Promise.all([
+            const [vehRes, borderRes, servicesRes, dvrRes, banksRes, bookingsRes] = await Promise.all([
                 axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false&type=fleet`, { headers }),
                 axios.get(`/api/admin/border-tax/${selectedCompany._id}`, { headers }),
+                axios.get(`/api/admin/maintenance/${selectedCompany._id}?type=driver_services`, { headers }),
                 axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&driverType=All`, { headers }),
                 axios.get(`/api/banks/company/${selectedCompany._id}`, { headers }).catch(() => axios.get(`/api/admin/bank-accounts/${selectedCompany._id}`, { headers })).catch(() => ({ data: [] })),
                 axios.get(`/api/bookings/${selectedCompany._id}?usePagination=false`, { headers }).catch(() => ({ data: [] }))
@@ -213,8 +215,19 @@ const CarUtility = () => {
                 return vCompId === targetCompanyId && v.isOutsideCar !== true && typeof v.carNumber === 'string' && !v.carNumber.includes('#');
             });
 
+            // Strict client-side filter: Guarantee NO mechanical workshop repair ever leaks into Car Utility
+            const safeServices = (servicesRes.data || []).filter(r => {
+                const cat = String(r.category || '').toLowerCase();
+                const desc = String(r.description || '').toLowerCase();
+                if (/engine|clutch|gear|suspension|brake|timing belt|radiator|alternator|overhaul|periodic service|general servicing|oil filter|air filter|fuel filter/i.test(cat + ' ' + desc)) {
+                    return false;
+                }
+                return true;
+            });
+
             setVehicles(filteredVehs);
             setAllBorderEntries(borderRes.data || []);
+            setAllServiceEntries(safeServices);
             setDrivers(dvrRes.data.drivers || []);
             setBankAccounts(Array.isArray(banksRes.data) ? banksRes.data : (banksRes.data?.bankAccounts || []));
             setBookings(bookingsRes.data?.bookings || bookingsRes.data || []);
@@ -277,6 +290,38 @@ const CarUtility = () => {
             return true;
         } catch (err) { 
             setMessage({ type: 'error', text: err.response?.data?.message || 'Error recording tax' }); 
+            return false;
+        } finally { 
+            setSubmitting(false); 
+        }
+    };
+
+    const handleAddService = async (vId, formData) => {
+        const targetId = vId || selectedVehicleId;
+        if (!targetId || targetId === 'new') return alert('Please select a vehicle');
+        setSubmitting(true);
+        try {
+            const token = JSON.parse(localStorage.getItem('userInfo')).token;
+            if (formData instanceof FormData) {
+                if (!formData.get('vehicleId')) formData.append('vehicleId', targetId);
+                formData.append('maintenanceType', 'Driver Services');
+            }
+            await axios.post('/api/admin/maintenance', formData, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    companyid: selectedCompany._id
+                }
+            });
+            setMessage({ type: 'success', text: 'Other Expense Recorded Successfully!' });
+            setTimeout(() => { 
+                setMessage({ type: '', text: '' }); 
+                fetchAllData(); 
+                if (selectedVehicleId === 'new') setSelectedVehicleId(null);
+            }, 1500);
+            return true;
+        } catch (err) { 
+            console.error('Add other expense error:', err.response?.data || err.message);
+            setMessage({ type: 'error', text: err.response?.data?.message || 'Error recording expense' }); 
             return false;
         } finally { 
             setSubmitting(false); 
@@ -359,22 +404,43 @@ const CarUtility = () => {
             return (e.vehicle?._id === vId || e.vehicle === vId) && (m + 1) === selectedMonth && y === calendarYear;
         });
 
+        const sFilt = allServiceEntries.filter(e => {
+            const { m, y } = getISTMonthYear(e.billDate || e.date);
+            const calendarYear = (selectedMonth >= 1 && selectedMonth <= 3) ? selectedYear + 1 : selectedYear;
+            return (e.vehicle?._id === vId || e.vehicle === vId) && (m + 1) === selectedMonth && y === calendarYear;
+        });
+
         return {
             fastag: fFilt.reduce((s, h) => s + (Number(h.amount) || 0), 0),
             border: bFilt.reduce((s, e) => s + (Number(e.amount) || 0), 0),
+            service: sFilt.reduce((s, e) => s + (Number(e.amount) || 0), 0),
             total: fFilt.reduce((s, h) => s + (Number(h.amount) || 0), 0) + 
-                   bFilt.reduce((s, e) => s + (Number(e.amount) || 0), 0),
-            items: { fastag: fFilt, border: bFilt }
+                   bFilt.reduce((s, e) => s + (Number(e.amount) || 0), 0) +
+                   sFilt.reduce((s, e) => s + (Number(e.amount) || 0), 0),
+            items: { fastag: fFilt, border: bFilt, service: sFilt }
         };
-    }, [vehicles, allBorderEntries, selectedMonth, selectedYear]);
+    }, [vehicles, allBorderEntries, allServiceEntries, selectedMonth, selectedYear]);
 
-    // Construct unified chronological chronological logs for ALL vehicles
+    // Construct unified chronological logs for ALL vehicles
     const unifiedUtilityLogs = useMemo(() => {
         const logs = [];
         vehicles.forEach(v => {
             const act = getVehicleActivity(v._id);
             act.items.fastag.forEach(x => logs.push({ ...x, type: 'fastag', typeLabel: 'Fastag', car: v.carNumber, carModel: v.model, color: '#38bdf8', icon: CreditCard, vehicleId: v._id }));
             act.items.border.forEach(x => logs.push({ ...x, type: 'border', typeLabel: 'Border Tax', car: v.carNumber, carModel: v.model, color: '#fbbf24', icon: Shield, vehicleId: v._id }));
+            act.items.service.forEach(x => logs.push({ 
+                ...x, 
+                type: 'services', 
+                typeLabel: 'Other Expense', 
+                car: v.carNumber, 
+                carModel: v.model, 
+                color: '#10b981', 
+                icon: Droplets, 
+                vehicleId: v._id,
+                date: x.billDate || x.date,
+                remarks: x.remarks || x.description || '',
+                category: x.category || 'Other Misc'
+            }));
         });
         // Sort newest first
         return logs.sort((a, b) => new Date(b.date || b.billDate) - new Date(a.date || a.billDate));
@@ -382,7 +448,7 @@ const CarUtility = () => {
 
     // Period Totals (respects Vehicle Filter)
     const globalStats = useMemo(() => {
-        let f = 0, b = 0;
+        let f = 0, b = 0, s = 0;
         
         const vehiclesToProcess = filterVehicle === 'All' 
             ? vehicles 
@@ -390,11 +456,11 @@ const CarUtility = () => {
 
         vehiclesToProcess.forEach(v => {
             const act = getVehicleActivity(v._id);
-            f += act.fastag; b += act.border;
+            f += act.fastag; b += act.border; s += act.service;
         });
         return { 
-            f, b, 
-            t: f + b,
+            f, b, s,
+            t: f + b + s,
             lowBalanceCount: vehicles.filter(v => (v.fastagBalance || 0) < 500).length
         };
     }, [vehicles, getVehicleActivity, filterVehicle]);
@@ -523,9 +589,10 @@ const CarUtility = () => {
                 </header>
 
                 {/* Big Stats Row */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '35px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '35px' }}>
                     <SummaryStat label="Fastag Paid" val={globalStats.f} col="#38bdf8" icon={CreditCard} desc="Total Highway Tolls" />
                     <SummaryStat label="Border Tax" val={globalStats.b} col="#fbbf24" icon={Shield} desc="State Entry Permits" />
+                    <SummaryStat label="Other Expenses" val={globalStats.s} col="#10b981" icon={Droplets} desc="Car Wash, Puncture & Misc" />
                     <SummaryStat label="Month Total" val={globalStats.t} col="#a855f7" icon={TrendingUp} isDark desc="Total Utility Budget" />
                 </div>
 
@@ -560,6 +627,7 @@ const CarUtility = () => {
                                         <option value="All" style={{ background: '#0f172a' }}>All Utility Types</option>
                                         <option value="fastag" style={{ background: '#0f172a' }}>Fastag tolls {filterVehicle !== 'All' ? `(${unifiedUtilityLogs.filter(l => l.type === 'fastag' && l.vehicleId === filterVehicle).length})` : ''}</option>
                                         <option value="border" style={{ background: '#0f172a' }}>Border tax permits {filterVehicle !== 'All' ? `(${unifiedUtilityLogs.filter(l => l.type === 'border' && l.vehicleId === filterVehicle).length})` : ''}</option>
+                                        <option value="services" style={{ background: '#0f172a' }}>Other expenses {filterVehicle !== 'All' ? `(${unifiedUtilityLogs.filter(l => l.type === 'services' && l.vehicleId === filterVehicle).length})` : ''}</option>
                                     </select>
                                 </div>
 
@@ -662,7 +730,7 @@ const CarUtility = () => {
                                                                 <Edit2 size={14} />
                                                             </button>
                                                             <button 
-                                                                onClick={() => handleDeleteRecord(log.type === 'fastag' ? `vehicles/${log.vehicleId}/fastag-recharge` : 'border-tax', log._id)} 
+                                                                onClick={() => handleDeleteRecord(log.type === 'fastag' ? `vehicles/${log.vehicleId}/fastag-recharge` : log.type === 'border' ? 'border-tax' : 'maintenance', log._id)} 
                                                                 style={{ background: 'rgba(244, 63, 94, 0.08)', color: '#f43f5e', border: 'none', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
                                                                 title="Delete"
                                                             >
@@ -720,13 +788,14 @@ const CarUtility = () => {
                                                 <th style={{ padding: '18px 25px', textAlign: 'right', fontSize: '11px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Fastag Balance</th>
                                                 <th style={{ padding: '18px 25px', textAlign: 'right', fontSize: '11px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Fastag (Month)</th>
                                                 <th style={{ padding: '18px 25px', textAlign: 'right', fontSize: '11px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Border (Month)</th>
+                                                <th style={{ padding: '18px 25px', textAlign: 'right', fontSize: '11px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Other (Month)</th>
                                                 <th style={{ padding: '18px 25px', textAlign: 'right', fontSize: '11px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Total (Month)</th>
                                                 <th style={{ padding: '18px 25px', textAlign: 'right', fontSize: '11px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Action</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {loading ? (
-                                                <tr><td colSpan="6" style={{ padding: '100px', textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }}></div></td></tr>
+                                                <tr><td colSpan="7" style={{ padding: '100px', textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }}></div></td></tr>
                                             ) : filteredVehicles.map(v => {
                                                 const act = getVehicleActivity(v._id);
                                                 const hasLowBalance = (v.fastagBalance || 0) < 500;
@@ -755,6 +824,9 @@ const CarUtility = () => {
                                                         </td>
                                                         <td style={{ padding: '18px 25px', textAlign: 'right', fontWeight: '700', color: 'rgba(255,255,255,0.8)' }}>
                                                             ₹{act.border.toLocaleString()}
+                                                        </td>
+                                                        <td style={{ padding: '18px 25px', textAlign: 'right', fontWeight: '700', color: 'rgba(255,255,255,0.8)' }}>
+                                                            ₹{act.service.toLocaleString()}
                                                         </td>
                                                         <td style={{ padding: '18px 25px', textAlign: 'right', fontWeight: '950', fontSize: '15px', color: '#10b981' }}>
                                                             ₹{act.total.toLocaleString()}
@@ -822,6 +894,12 @@ const CarUtility = () => {
                                                 desc={`${allBorderEntries.filter(e => (e.vehicle?._id === detailVehicleId || e.vehicle === detailVehicleId)).length} Total Logs`}
                                             />
                                             <DetailStat 
+                                                label="Other Expenses" 
+                                                val={getVehicleActivity(detailVehicleId).service} 
+                                                icon={Droplets} col="#10b981" 
+                                                desc={`${allServiceEntries.filter(e => (e.vehicle?._id === detailVehicleId || e.vehicle === detailVehicleId)).length} Total Logs`}
+                                            />
+                                            <DetailStat 
                                                 label="Total Current" 
                                                 val={getVehicleActivity(detailVehicleId).total} 
                                                 icon={TrendingUp} col="#a855f7" isDark 
@@ -834,7 +912,8 @@ const CarUtility = () => {
                                 <div style={{ display: 'flex', gap: '10px', marginBottom: '30px', background: 'rgba(255,255,255,0.03)', padding: '6px', borderRadius: '18px', width: 'fit-content', border: '1px solid rgba(255,255,255,0.05)' }}>
                                     {[
                                         { id: 'fastag', label: 'Fastag Logs', icon: CreditCard, color: '#38bdf8' },
-                                        { id: 'border', label: 'Border Permits', icon: Shield, color: '#fbbf24' }
+                                        { id: 'border', label: 'Border Permits', icon: Shield, color: '#fbbf24' },
+                                        { id: 'services', label: 'Other Expenses', icon: Droplets, color: '#10b981' }
                                     ].map(t => (
                                         <button
                                             key={t.id}
@@ -855,14 +934,14 @@ const CarUtility = () => {
                                     <ManagerHub
                                         key={activeUtility}
                                         type={activeUtility}
-                                        color="#fbbf24"
+                                        color={activeUtility === 'fastag' ? '#38bdf8' : activeUtility === 'border' ? '#fbbf24' : '#10b981'}
                                         act={getVehicleActivity(detailVehicleId)}
                                         drivers={drivers}
                                         getImageUrl={getImageUrl}
                                         hideForm={true}
-                                        onAdd={(vId, data, file) => activeUtility === 'fastag' ? handleRecharge(vId, data, file) : handleAddTax(vId, data, file)}
-                                        onUpdate={(id, data) => handleUpdateRecord(activeUtility === 'fastag' ? `vehicles/${detailVehicleId}/fastag-recharge` : 'border-tax', id, data)}
-                                        onDelete={id => handleDeleteRecord(activeUtility === 'fastag' ? `vehicles/${detailVehicleId}/fastag-recharge` : 'border-tax', id)}
+                                        onAdd={(vId, data, file) => activeUtility === 'fastag' ? handleRecharge(vId, data, file) : activeUtility === 'border' ? handleAddTax(vId, data, file) : handleAddService(vId, data, file)}
+                                        onUpdate={(id, data) => handleUpdateRecord(activeUtility === 'fastag' ? `vehicles/${detailVehicleId}/fastag-recharge` : activeUtility === 'border' ? 'border-tax' : 'maintenance', id, data)}
+                                        onDelete={id => handleDeleteRecord(activeUtility === 'fastag' ? `vehicles/${detailVehicleId}/fastag-recharge` : activeUtility === 'border' ? 'border-tax' : 'maintenance', id)}
                                         setViewingImage={setViewingImage}
                                         submitting={submitting}
                                         vehicle={detailVehicle}
@@ -908,15 +987,16 @@ const CarUtility = () => {
                                 {/* Tabbed Navigation */}
                                 <div style={{ display: 'flex', gap: '10px', padding: '8px', background: 'rgba(255,255,255,0.03)', borderRadius: '20px', marginBottom: '30px', border: '1px solid rgba(255,255,255,0.06)', width: 'fit-content', margin: '0 auto 30px auto' }}>
                                     {[
-                                        { id: 'fastag', label: 'Fastag', icon: CreditCard },
-                                        { id: 'border', label: 'Border Tax', icon: Shield }
+                                        { id: 'fastag', label: 'Fastag', icon: CreditCard, color: '#38bdf8' },
+                                        { id: 'border', label: 'Border Tax', icon: Shield, color: '#fbbf24' },
+                                        { id: 'services', label: 'Other Expense', icon: Droplets, color: '#10b981' }
                                     ].map(tab => (
                                         <button
                                             key={tab.id}
                                             onClick={() => setActiveUtility(tab.id)}
                                             style={{
                                                 padding: '14px 25px', borderRadius: '14px', border: 'none', cursor: 'pointer',
-                                                background: (activeUtility || 'fastag') === tab.id ? '#fbbf24' : 'transparent',
+                                                background: (activeUtility || 'fastag') === tab.id ? tab.color : 'transparent',
                                                 color: (activeUtility || 'fastag') === tab.id ? '#000' : 'rgba(255,255,255,0.4)',
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                                                 fontWeight: '1000', fontSize: '13px', transition: '0.3s cubic-bezier(0.4, 0, 0.2, 1)'
@@ -928,12 +1008,13 @@ const CarUtility = () => {
                                 </div>
                                 <ManagerHub
                                     key={activeUtility || 'fastag'}
-                                    type={activeUtility || 'fastag'} color="#fbbf24"
-                                    act={selectedVehicleId === 'new' ? { items: { fastag: [], border: [] } } : getVehicleActivity(selectedVehicleId)}
+                                    type={activeUtility || 'fastag'} 
+                                    color={activeUtility === 'fastag' ? '#38bdf8' : activeUtility === 'border' ? '#fbbf24' : '#10b981'}
+                                    act={selectedVehicleId === 'new' ? { items: { fastag: [], border: [], service: [] } } : getVehicleActivity(selectedVehicleId)}
                                     drivers={drivers} getImageUrl={getImageUrl}
-                                    onAdd={(vId, data, file) => (activeUtility || 'fastag') === 'fastag' ? handleRecharge(vId, data, file) : handleAddTax(vId, data, file)}
-                                    onUpdate={(id, data) => handleUpdateRecord((activeUtility || 'fastag') === 'fastag' ? `vehicles/${selectedVehicleId}/fastag-recharge` : 'border-tax', id, data)}
-                                    onDelete={id => handleDeleteRecord((activeUtility || 'fastag') === 'fastag' ? `vehicles/${selectedVehicleId}/fastag-recharge` : 'border-tax', id)}
+                                    onAdd={(vId, data, file) => (activeUtility || 'fastag') === 'fastag' ? handleRecharge(vId, data, file) : (activeUtility || 'fastag') === 'border' ? handleAddTax(vId, data, file) : handleAddService(vId, data, file)}
+                                    onUpdate={(id, data) => handleUpdateRecord((activeUtility || 'fastag') === 'fastag' ? `vehicles/${selectedVehicleId}/fastag-recharge` : (activeUtility || 'fastag') === 'border' ? 'border-tax' : 'maintenance', id, data)}
+                                    onDelete={id => handleDeleteRecord((activeUtility || 'fastag') === 'fastag' ? `vehicles/${selectedVehicleId}/fastag-recharge` : (activeUtility || 'fastag') === 'border' ? 'border-tax' : 'maintenance', id)}
                                     setViewingImage={setViewingImage} submitting={submitting} vehicle={vehicles.find(v => v._id === selectedVehicleId)} allVehicles={vehicles} companyId={selectedCompany?._id}
                                     selectedMonth={selectedMonth}
                                     selectedYear={selectedYear}
@@ -1033,7 +1114,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
     };
 
     // List of logs depending on active utility type
-    const hist = type === 'fastag' ? act.items.fastag : (act.items.border || []);
+    const hist = type === 'fastag' ? (act.items?.fastag || []) : type === 'border' ? (act.items?.border || []) : (act.items?.service || []);
 
     useEffect(() => {
         if (vehicle) setForm(prev => ({ ...prev, vehicleId: vehicle._id }));
@@ -1055,8 +1136,9 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
             const isGuest = editingItem.paidBy === 'Guest' || editingItem.paymentSource === 'Guest';
             setForm({
                 amount: editingItem.amount || '',
-                remarks: editingItem.remarks || '',
+                remarks: editingItem.remarks || editingItem.description || '',
                 borderName: editingItem.borderName || '',
+                category: editingItem.category || (type === 'services' ? 'Car Wash' : ''),
                 date: toISTDateString(editingItem.date || editingItem.billDate || ''),
                 billDate: toISTDateString(editingItem.billDate || editingItem.date || ''),
                 validTill: toISTDateString(editingItem.validTill || ''),
@@ -1080,6 +1162,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 amount: '', 
                 remarks: '', 
                 borderName: '', 
+                category: type === 'services' ? 'Car Wash' : '',
                 date: defaultDate, 
                 billDate: defaultDate, 
                 validTill: '',
@@ -1126,7 +1209,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 } else {
                     success = await onAdd(targetVehicleId, formData);
                 }
-            } else {
+            } else if (type === 'border') {
                 const fd = new FormData();
                 Object.keys(form).forEach(k => {
                     if (form[k] !== undefined && form[k] !== null && !['date', 'billDate', 'vehicleId'].includes(k)) {
@@ -1140,7 +1223,37 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 fd.append('paidBy', form.paidBy || 'Company');
                 fd.append('paymentSource', form.paidBy === 'Guest' ? 'Guest' : 'Office');
 
-                if (file) fd.append(type === 'border' ? 'receiptPhoto' : 'billPhoto', file);
+                if (file) fd.append('receiptPhoto', file);
+
+                if (editingItem) {
+                    success = await onUpdate(editingItem._id, fd);
+                } else {
+                    success = await onAdd(targetVehicleId, fd);
+                }
+            } else {
+                // type === 'services' (Other Expense)
+                const fd = new FormData();
+                Object.keys(form).forEach(k => {
+                    if (form[k] !== undefined && form[k] !== null && !['date', 'billDate', 'vehicleId'].includes(k)) {
+                        fd.append(k, form[k]);
+                    }
+                });
+                fd.append('date', finalDate);
+                fd.append('billDate', finalDate);
+                fd.append('maintenanceType', 'Driver Services'); // Strict isolation tag
+                fd.append('category', form.category || 'Car Wash');
+                fd.append('description', form.remarks || '');
+                fd.append('remarks', form.remarks || '');
+                if (companyId) fd.append('companyId', companyId);
+                fd.append('vehicleId', targetVehicleId);
+                fd.append('paidBy', form.paidBy || 'Company');
+                fd.append('paymentSource', form.paidBy === 'Guest' ? 'Guest' : 'Office');
+                if (form.driverId) fd.append('driverId', form.driverId);
+
+                if (file) {
+                    fd.append('billPhoto', file);
+                    fd.append('receiptPhoto', file);
+                }
 
                 if (editingItem) {
                     success = await onUpdate(editingItem._id, fd);
@@ -1158,6 +1271,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                     amount: '',
                     remarks: '',
                     borderName: '',
+                    category: type === 'services' ? 'Car Wash' : '',
                     date: defaultDate,
                     billDate: defaultDate,
                     validTill: '',
@@ -1190,7 +1304,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                         </div>
                         <div>
                             <h3 style={{ margin: '0 0 4px 0', fontSize: '24px', fontWeight: '950', letterSpacing: '-0.5px' }}>
-                                {editingItem ? 'Edit' : 'New'} {type === 'fastag' ? 'Recharge' : 'Border Permit'}
+                                {editingItem ? 'Edit' : 'New'} {type === 'fastag' ? 'Recharge' : type === 'border' ? 'Border Permit' : 'Other Expense'}
                             </h3>
                             <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
                                 Fill out the details below to log the utility entry.
@@ -1207,6 +1321,38 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                                     value={form.vehicleId}
                                     onChange={(val) => setForm({ ...form, vehicleId: val })}
                                     placeholder="Search Vehicle..."
+                                />
+                            </div>
+                        )}
+
+                        {type === 'services' && (
+                            <div className="premium-input-container">
+                                <label>Expense Category</label>
+                                <select
+                                    value={form.category || 'Car Wash'}
+                                    onChange={e => setForm({ ...form, category: e.target.value })}
+                                    style={{ color: '#fff', background: 'transparent', cursor: 'pointer', fontWeight: '800' }}
+                                >
+                                    <option value="Car Wash" style={{ background: '#0f172a' }}>🚿 Car Wash / Cleaning</option>
+                                    <option value="Puncture / Tyre" style={{ background: '#0f172a' }}>🛞 Puncture / Tyre Repair</option>
+                                    <option value="Cleaning Supplies" style={{ background: '#0f172a' }}>🧼 Cleaning Supplies / Tissues / Perfume</option>
+                                    <option value="Challan / Penalty" style={{ background: '#0f172a' }}>🚨 Traffic Challan / Penalty</option>
+                                    <option value="Other Misc" style={{ background: '#0f172a' }}>📝 Other Misc Operational Expense</option>
+                                </select>
+                            </div>
+                        )}
+
+                        {type === 'services' && (
+                            <div className="premium-input-container">
+                                <label>Driver (Optional)</label>
+                                <SearchableSelect 
+                                    options={[
+                                        { value: '', label: 'None / Office Staff' },
+                                        ...drivers.map(d => ({ value: d._id, label: `${d.name} (${d.phone || 'Driver'})` }))
+                                    ]}
+                                    value={form.driverId || ''}
+                                    onChange={(val) => setForm({ ...form, driverId: val })}
+                                    placeholder="Select Driver (optional)..."
                                 />
                             </div>
                         )}
