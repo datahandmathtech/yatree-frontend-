@@ -469,6 +469,10 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                 setAdvanceMessage({ type: '', text: '' });
                 fetchSalaries();
                 fetchAdvanceData();
+                if (showDetailModal && selectedDriverDetails) {
+                    const curDriverId = selectedDriverDetails.driver?._id || selectedDriverDetails.driver;
+                    if (curDriverId) fetchDriverDetails(curDriverId);
+                }
             }, 1500);
         } catch (err) {
             setAdvanceMessage({ type: 'error', text: err.response?.data?.message || 'Operation failed' });
@@ -512,6 +516,10 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
             });
             fetchSalaries();
             fetchAdvanceData();
+            if (showDetailModal && selectedDriverDetails) {
+                const curDriverId = selectedDriverDetails.driver?._id || selectedDriverDetails.driver;
+                if (curDriverId) fetchDriverDetails(curDriverId);
+            }
         } catch (err) {
             console.error('Failed to delete advance:', err);
             alert('Failed to delete advance record');
@@ -2616,7 +2624,14 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                                 <tbody>
                                                     {det?.advances?.map((adv, idx) => (
                                                         <tr key={adv._id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                            <td style={{ padding: '12px', color: 'white' }}>{formatDateIST(adv.date)}</td>
+                                                            <td style={{ padding: '12px', color: 'white' }}>
+                                                                {formatDateIST(adv.date)}
+                                                                {adv.month && (
+                                                                    <span style={{ marginLeft: '8px', fontSize: '10px', background: 'rgba(56,189,248,0.12)', color: '#38bdf8', padding: '2px 6px', borderRadius: '4px', fontWeight: '700', border: '1px solid rgba(56,189,248,0.25)' }}>
+                                                                        {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][(adv.month || 1) - 1]} {adv.year || ''} Hisab
+                                                                    </span>
+                                                                )}
+                                                            </td>
                                                             <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{adv.remark}</td>
                                                             <td style={{ padding: '12px', textAlign: 'right', color: '#f43f5e', fontWeight: '700' }}>₹{adv.amount}</td>
                                                             <td style={{ padding: '12px', textAlign: 'center' }}>
