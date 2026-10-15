@@ -6,7 +6,8 @@ import {
     Car, Search, FileText, CheckCircle, IndianRupee,
     ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight,
     Receipt, Download, Eye, Calendar, MapPin, User, Phone,
-    Clock, ShieldCheck, AlertCircle, X, ChevronUp, Edit
+    Clock, ShieldCheck, AlertCircle, X, ChevronUp, Edit,
+    Plus, CreditCard, Hourglass
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SEO from '../components/SEO';
@@ -14,6 +15,8 @@ import { generateBookingConfirmationPDF } from '../utils/bookingConfirmationPdf'
 import { generateTaxInvoicePDF } from '../utils/taxInvoicePdf';
 import ClientLedgerDrawer from '../components/common/ClientLedgerDrawer';
 import EditInvoiceModal from '../components/common/EditInvoiceModal';
+import EditBookingModal from '../components/common/EditBookingModal';
+import BankSelector from '../components/common/BankSelector';
 import { getFinancialYear, getAvailableFinancialYears } from '../utils/istUtils';
 
 const MONTH_TABS = [
@@ -35,8 +38,20 @@ export default function CompletedBookings() {
     const [loading, setLoading] = useState(false);
     const [ledgerModalBooking, setLedgerModalBooking] = useState(null);
     const [invoiceModalBooking, setInvoiceModalBooking] = useState(null);
+    const [editingBooking, setEditingBooking] = useState(null);
     const [viewItineraryBooking, setViewItineraryBooking] = useState(null);
     const [downloadPdfModalBooking, setDownloadPdfModalBooking] = useState(null);
+
+    // Record Payment Modal State
+    const [paymentModalBooking, setPaymentModalBooking] = useState(null);
+    const [paymentAmount, setPaymentAmount] = useState('');
+    const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+    const [paymentMode, setPaymentMode] = useState('Cash');
+    const [paymentRef, setPaymentRef] = useState('');
+    const [bankAccounts, setBankAccounts] = useState([]);
+    const [bankAccountId, setBankAccountId] = useState('');
+    const [savingPayment, setSavingPayment] = useState(false);
+
     const [selectedFy, setSelectedFy] = useState('FY 26-27');
     const [selectedMonth, setSelectedMonth] = useState('All Months');
     const [searchTerm, setSearchTerm] = useState('');
@@ -54,10 +69,25 @@ export default function CompletedBookings() {
     useEffect(() => {
         if (selectedCompany?._id) {
             fetchCompletedBookings();
+            fetchBankAccounts();
         } else {
             setBookings([]);
         }
     }, [selectedCompany]);
+
+    const fetchBankAccounts = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            const { data } = await axios.get(`/api/banks/company/${selectedCompany._id}`);
+            setBankAccounts(data || []);
+            if (data && data.length > 0) {
+                const def = data.find(b => b.isDefault) || data[0];
+                setBankAccountId(def._id);
+            }
+        } catch (err) {
+            console.error('Error fetching bank accounts:', err);
+        }
+    };
 
     const fetchCompletedBookings = async () => {
         try {
@@ -91,6 +121,9 @@ export default function CompletedBookings() {
                     }
 
                     const displayCode = b.clientCode || b.bookingCode || b.bookingId || 'BKG';
+                    const pkgAmt = Number(b.totalAmount || b.packagePrice) || 0;
+                    const advAmt = Number(b.advancePaid) || 0;
+                    const balAmt = b.balanceDue !== undefined ? Math.max(0, Number(b.balanceDue)) : Math.max(0, pkgAmt - advAmt);
 
                     return {
                         ...b,
@@ -102,8 +135,10 @@ export default function CompletedBookings() {
                         guestName: b.clientName || b.guestName || 'Valued Guest',
                         clientName: b.clientName || b.guestName || 'Valued Guest',
                         mobileNumber: b.mobileNumber || '',
-                        packagePrice: Number(b.totalAmount) || 0,
-                        totalAmount: Number(b.totalAmount) || 0,
+                        packagePrice: pkgAmt,
+                        totalAmount: pkgAmt,
+                        advancePaid: advAmt,
+                        balanceDue: balAmt,
                         vehicleType: b.vehicleType || 'Commercial Vehicle',
                         vehicleNumbers: vehNums,
                         primaryVehicleNumber: vehNums[0] || b.vehicleNumber || '',
@@ -124,6 +159,42 @@ export default function CompletedBookings() {
             setBookings([]);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleOpenPaymentModal = (bkg) => {
+        if (!bkg) return;
+        const pkg = Number(bkg.packagePrice || bkg.totalAmount) || 0;
+        const adv = Number(bkg.advancePaid) || 0;
+        const due = bkg.balanceDue !== undefined ? Math.max(0, Number(bkg.balanceDue)) : Math.max(0, pkg - adv);
+        setPaymentModalBooking(bkg);
+        setPaymentAmount(due > 0 ? String(due) : '');
+        setPaymentRef('');
+    };
+
+    const handleRecordPayment = async (e) => {
+        e.preventDefault();
+        if (!paymentModalBooking) return;
+        try {
+            setSavingPayment(true);
+            const isCash = paymentMode === 'Cash' || paymentMode === 'Driver Cash';
+            await axios.post(`/api/bookings/${paymentModalBooking._id}/payment`, {
+                amount: Number(paymentAmount),
+                paymentMode,
+                paymentReference: paymentRef,
+                paymentDate,
+                bankAccountId: !isCash ? bankAccountId : undefined
+            });
+            setPaymentModalBooking(null);
+            setPaymentAmount('');
+            setPaymentRef('');
+            await fetchCompletedBookings();
+            alert('Balance payment recorded! Tax Invoice is now ready.');
+        } catch (error) {
+            console.error('Error recording payment:', error);
+            alert(error.response?.data?.message || 'Failed to record payment');
+        } finally {
+            setSavingPayment(false);
         }
     };
 
@@ -189,7 +260,7 @@ export default function CompletedBookings() {
             let valA = a[sortField];
             let valB = b[sortField];
 
-            if (sortField === 'packagePrice' || sortField === 'totalAmount') {
+            if (sortField === 'packagePrice' || sortField === 'totalAmount' || sortField === 'advancePaid' || sortField === 'balanceDue') {
                 valA = Number(valA) || 0;
                 valB = Number(valB) || 0;
             } else if (sortField === 'travelEndDate' || sortField === 'travelStartDate' || sortField === 'createdAt') {
@@ -210,11 +281,25 @@ export default function CompletedBookings() {
     const kpiStats = useMemo(() => {
         const totalRides = processedBookings.length;
         const packageValue = processedBookings.reduce((sum, b) => sum + (Number(b.packagePrice || b.totalAmount) || 0), 0);
-        const taxInvoices = totalRides;
+        const receivedAmount = processedBookings.reduce((sum, b) => sum + (Number(b.advancePaid) || 0), 0);
+        const balanceDue = processedBookings.reduce((sum, b) => {
+            const pkg = Number(b.packagePrice || b.totalAmount) || 0;
+            const adv = Number(b.advancePaid) || 0;
+            const bal = Math.max(0, pkg - adv);
+            return sum + bal;
+        }, 0);
+        const taxInvoices = processedBookings.filter(b => {
+            const pkg = Number(b.packagePrice || b.totalAmount) || 0;
+            const adv = Number(b.advancePaid) || 0;
+            const bal = Math.max(0, pkg - adv);
+            return bal <= 0;
+        }).length;
 
         return {
             totalRides,
             packageValue,
+            receivedAmount,
+            balanceDue,
             taxInvoices
         };
     }, [processedBookings]);
@@ -242,11 +327,11 @@ export default function CompletedBookings() {
             bookingId: bkg.bookingId || bkg.bookingCode,
             billTo: {
                 name: bkg.guestName || bkg.clientName,
-                companyName: '',
+                companyName: bkg.client?.name || '',
                 mobile: bkg.mobileNumber || '',
-                email: '',
-                address: 'Local Fleet Service',
-                gstin: '',
+                email: bkg.email || '',
+                address: bkg.client?.address || 'Local Fleet Service',
+                gstin: bkg.gstin || bkg.client?.gstNumber || '',
                 placeOfSupply: 'Rajasthan (08)'
             },
             items: [
@@ -258,10 +343,10 @@ export default function CompletedBookings() {
                     amount: bkg.packagePrice || bkg.totalAmount || 0
                 }
             ],
-            gstMode: 'GST Inclusive',
-            gstRate: 5,
+            gstMode: bkg.gstMode || 'GST Inclusive',
+            gstRate: bkg.gstRate || 5,
             isInterState: false,
-            advanceAdjusted: bkg.packagePrice || bkg.totalAmount || 0,
+            advanceAdjusted: bkg.advancePaid || bkg.packagePrice || bkg.totalAmount || 0,
             notes: 'Completed ride tax invoice generated automatically.'
         };
 
@@ -502,8 +587,8 @@ export default function CompletedBookings() {
             {/* 3. KPI Metric Cards */}
             <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                gap: '16px',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+                gap: '14px',
                 marginBottom: '26px'
             }}>
                 {/* Total Completed Rides */}
@@ -511,14 +596,14 @@ export default function CompletedBookings() {
                     background: 'rgba(13, 21, 38, 0.7)',
                     border: '1px solid rgba(255, 255, 255, 0.07)',
                     borderRadius: '16px',
-                    padding: '18px 22px',
+                    padding: '16px 20px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '16px'
+                    gap: '14px'
                 }}>
                     <div style={{
-                        width: '46px',
-                        height: '46px',
+                        width: '42px',
+                        height: '42px',
                         borderRadius: '12px',
                         background: 'rgba(52, 211, 153, 0.15)',
                         border: '1px solid rgba(52, 211, 153, 0.25)',
@@ -527,13 +612,13 @@ export default function CompletedBookings() {
                         justifyContent: 'center',
                         color: '#34d399'
                     }}>
-                        <CheckCircle size={22} />
+                        <CheckCircle size={20} />
                     </div>
                     <div>
-                        <div style={{ fontSize: '12px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
+                        <div style={{ fontSize: '11.5px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
                             Completed Rides
                         </div>
-                        <div style={{ fontSize: '24px', fontWeight: '900', color: '#ffffff', marginTop: '2px' }}>
+                        <div style={{ fontSize: '21px', fontWeight: '900', color: '#ffffff', marginTop: '2px' }}>
                             {kpiStats.totalRides}
                         </div>
                     </div>
@@ -544,14 +629,14 @@ export default function CompletedBookings() {
                     background: 'rgba(13, 21, 38, 0.7)',
                     border: '1px solid rgba(255, 255, 255, 0.07)',
                     borderRadius: '16px',
-                    padding: '18px 22px',
+                    padding: '16px 20px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '16px'
+                    gap: '14px'
                 }}>
                     <div style={{
-                        width: '46px',
-                        height: '46px',
+                        width: '42px',
+                        height: '42px',
                         borderRadius: '12px',
                         background: 'rgba(251, 191, 36, 0.15)',
                         border: '1px solid rgba(251, 191, 36, 0.25)',
@@ -560,14 +645,80 @@ export default function CompletedBookings() {
                         justifyContent: 'center',
                         color: '#fbbf24'
                     }}>
-                        <IndianRupee size={22} />
+                        <IndianRupee size={20} />
                     </div>
                     <div>
-                        <div style={{ fontSize: '12px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
+                        <div style={{ fontSize: '11.5px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
                             Total Tour Value
                         </div>
-                        <div style={{ fontSize: '24px', fontWeight: '900', color: '#ffffff', marginTop: '2px' }}>
+                        <div style={{ fontSize: '21px', fontWeight: '900', color: '#ffffff', marginTop: '2px' }}>
                             ₹{kpiStats.packageValue.toLocaleString('en-IN')}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Received Amount */}
+                <div style={{
+                    background: 'rgba(13, 21, 38, 0.7)',
+                    border: '1px solid rgba(255, 255, 255, 0.07)',
+                    borderRadius: '16px',
+                    padding: '16px 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px'
+                }}>
+                    <div style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: '12px',
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#34d399'
+                    }}>
+                        <CreditCard size={20} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '11.5px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
+                            Received Amount
+                        </div>
+                        <div style={{ fontSize: '21px', fontWeight: '900', color: '#34d399', marginTop: '2px' }}>
+                            ₹{kpiStats.receivedAmount.toLocaleString('en-IN')}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Balance Due */}
+                <div style={{
+                    background: 'rgba(13, 21, 38, 0.7)',
+                    border: '1px solid rgba(255, 255, 255, 0.07)',
+                    borderRadius: '16px',
+                    padding: '16px 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px'
+                }}>
+                    <div style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: '12px',
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#f87171'
+                    }}>
+                        <Hourglass size={20} />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: '11.5px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
+                            Balance Pending
+                        </div>
+                        <div style={{ fontSize: '21px', fontWeight: '900', color: kpiStats.balanceDue > 0 ? '#f87171' : '#34d399', marginTop: '2px' }}>
+                            ₹{kpiStats.balanceDue.toLocaleString('en-IN')}
                         </div>
                     </div>
                 </div>
@@ -577,14 +728,14 @@ export default function CompletedBookings() {
                     background: 'rgba(13, 21, 38, 0.7)',
                     border: '1px solid rgba(255, 255, 255, 0.07)',
                     borderRadius: '16px',
-                    padding: '18px 22px',
+                    padding: '16px 20px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '16px'
+                    gap: '14px'
                 }}>
                     <div style={{
-                        width: '46px',
-                        height: '46px',
+                        width: '42px',
+                        height: '42px',
                         borderRadius: '12px',
                         background: 'rgba(59, 130, 246, 0.15)',
                         border: '1px solid rgba(59, 130, 246, 0.25)',
@@ -593,13 +744,13 @@ export default function CompletedBookings() {
                         justifyContent: 'center',
                         color: '#60a5fa'
                     }}>
-                        <Receipt size={22} />
+                        <Receipt size={20} />
                     </div>
                     <div>
-                        <div style={{ fontSize: '12px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
-                            Invoices Ready
+                        <div style={{ fontSize: '11.5px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
+                            Invoices Ready (Paid)
                         </div>
-                        <div style={{ fontSize: '24px', fontWeight: '900', color: '#ffffff', marginTop: '2px' }}>
+                        <div style={{ fontSize: '21px', fontWeight: '900', color: '#ffffff', marginTop: '2px' }}>
                             {kpiStats.taxInvoices}
                         </div>
                     </div>
@@ -644,9 +795,6 @@ export default function CompletedBookings() {
                                         Guest & Contact <ArrowUpDown size={12} />
                                     </div>
                                 </th>
-                                <th style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)' }}>
-                                    Vehicle & Route
-                                </th>
                                 <th
                                     onClick={() => handleSort('travelStartDate')}
                                     style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none' }}
@@ -663,25 +811,44 @@ export default function CompletedBookings() {
                                         Package Price (₹) <ArrowUpDown size={12} />
                                     </div>
                                 </th>
+                                <th
+                                    onClick={() => handleSort('advancePaid')}
+                                    style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none' }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        Received (₹) <ArrowUpDown size={12} />
+                                    </div>
+                                </th>
+                                <th
+                                    onClick={() => handleSort('balanceDue')}
+                                    style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none' }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        Balance Due (₹) <ArrowUpDown size={12} />
+                                    </div>
+                                </th>
                                 <th style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textAlign: 'center' }}>
-                                    Itinerary (Scene)
+                                    Account & Edit
                                 </th>
                                 <th style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textAlign: 'right' }}>
-                                    Actions
+                                    Tax Invoice
                                 </th>
                             </tr>
                         </thead>
                         <tbody>
                             {paginatedBookings.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} style={{ padding: '48px 16px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
+                                    <td colSpan={9} style={{ padding: '48px 16px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
                                         No completed bookings found for {selectedMonth} {selectedFy}.
                                     </td>
                                 </tr>
                             ) : (
                                 paginatedBookings.map((bkg, idx) => {
                                     const serialNo = (currentPage - 1) * itemsPerPage + idx + 1;
-                                    const bal = (bkg.packagePrice || bkg.totalAmount || 0) - (bkg.advancePaid || 0);
+                                    const pkgPrice = Number(bkg.packagePrice || bkg.totalAmount) || 0;
+                                    const recAmt = Number(bkg.advancePaid) || 0;
+                                    const bal = Math.max(0, pkgPrice - recAmt);
+                                    const isPaymentDone = bal <= 0;
                                     const daysCount = Array.isArray(bkg.itinerary) && bkg.itinerary.length > 0 
                                         ? bkg.itinerary.length 
                                         : 1;
@@ -741,85 +908,6 @@ export default function CompletedBookings() {
                                                 )}
                                             </td>
 
-                                            {/* Vehicle & Route */}
-                                            <td style={{ padding: '14px 16px', minWidth: '240px', maxWidth: '360px' }}>
-                                                {/* Vehicle row: Type + Plate Number Badge + Driver Badge */}
-                                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                                        <Car size={13} color="#60a5fa" />
-                                                        <span style={{ fontSize: '13px', fontWeight: '700', color: '#60a5fa' }}>
-                                                            {bkg.vehicleType || 'Commercial Vehicle'}
-                                                        </span>
-                                                    </div>
-                                                    {bkg.primaryVehicleNumber ? (
-                                                        <span style={{
-                                                            background: 'rgba(59, 130, 246, 0.15)',
-                                                            border: '1px solid rgba(59, 130, 246, 0.35)',
-                                                            color: '#93c5fd',
-                                                            fontSize: '11px',
-                                                            fontWeight: '800',
-                                                            padding: '1px 6px',
-                                                            borderRadius: '4px',
-                                                            fontFamily: 'monospace',
-                                                            letterSpacing: '0.3px',
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '3px'
-                                                        }} title={bkg.vehicleNumbers?.length > 1 ? `Vehicles: ${bkg.vehicleNumbers.join(', ')}` : `Vehicle Plate: ${bkg.primaryVehicleNumber}`}>
-                                                            🚗 {bkg.primaryVehicleNumber}
-                                                            {bkg.vehicleNumbers?.length > 1 && (
-                                                                <span style={{ opacity: 0.7, fontSize: '10px' }}>+{bkg.vehicleNumbers.length - 1}</span>
-                                                            )}
-                                                        </span>
-                                                    ) : null}
-                                                    {bkg.primaryDriverName ? (
-                                                        <span style={{
-                                                            background: 'rgba(52, 211, 153, 0.12)',
-                                                            border: '1px solid rgba(52, 211, 153, 0.3)',
-                                                            color: '#34d399',
-                                                            fontSize: '11px',
-                                                            fontWeight: '700',
-                                                            padding: '1px 6px',
-                                                            borderRadius: '4px',
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '3px'
-                                                        }} title={bkg.driverNames?.length > 1 ? `Drivers: ${bkg.driverNames.join(', ')}` : `Driver: ${bkg.primaryDriverName}`}>
-                                                            👤 {bkg.primaryDriverName}
-                                                            {bkg.driverNames?.length > 1 && (
-                                                                <span style={{ opacity: 0.7, fontSize: '10px' }}>+{bkg.driverNames.length - 1}</span>
-                                                            )}
-                                                        </span>
-                                                    ) : null}
-                                                </div>
-
-                                                {/* Route row: Actual Duties / Route */}
-                                                <div style={{
-                                                    fontSize: '11.5px',
-                                                    color: 'rgba(255,255,255,0.7)',
-                                                    marginTop: '5px',
-                                                    display: 'flex',
-                                                    alignItems: 'flex-start',
-                                                    gap: '5px',
-                                                    lineHeight: '1.4'
-                                                }}>
-                                                    <MapPin size={12} color="#f87171" style={{ flexShrink: 0, marginTop: '2px' }} />
-                                                    <span
-                                                        style={{
-                                                            overflow: 'hidden',
-                                                            textOverflow: 'ellipsis',
-                                                            display: '-webkit-box',
-                                                            WebkitLineClamp: 2,
-                                                            WebkitBoxOrient: 'vertical',
-                                                            wordBreak: 'break-word'
-                                                        }}
-                                                        title={bkg.routeSummary || 'Tour Package / Sightseeing'}
-                                                    >
-                                                        {bkg.routeSummary || 'Tour Package / Sightseeing'}
-                                                    </span>
-                                                </div>
-                                            </td>
-
                                             {/* Trip Dates */}
                                             <td style={{ padding: '14px 16px' }}>
                                                 <div style={{ fontSize: '12.5px', fontWeight: '600', color: 'rgba(255,255,255,0.9)' }}>
@@ -830,132 +918,207 @@ export default function CompletedBookings() {
                                                 </div>
                                             </td>
 
-                                            {/* Package Price & Accounts */}
+                                            {/* Package Price */}
                                             <td style={{ padding: '14px 16px' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                    <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#ffffff' }}>
-                                                        ₹{Number(bkg.packagePrice || bkg.totalAmount || 0).toLocaleString('en-IN')}
-                                                    </span>
+                                                <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#ffffff' }}>
+                                                    ₹{pkgPrice.toLocaleString('en-IN')}
+                                                </span>
+                                            </td>
+
+                                            {/* Received Amount */}
+                                            <td style={{ padding: '14px 16px' }}>
+                                                <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#34d399' }}>
+                                                    ₹{recAmt.toLocaleString('en-IN')}
+                                                </span>
+                                            </td>
+
+                                            {/* Balance Due */}
+                                            <td style={{ padding: '14px 16px' }}>
+                                                {bal > 0 ? (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                        <span style={{ fontSize: '13.5px', fontWeight: '900', color: '#f87171' }}>
+                                                            ₹{bal.toLocaleString('en-IN')}
+                                                        </span>
+                                                        <span style={{
+                                                            fontSize: '9.5px',
+                                                            fontWeight: '800',
+                                                            color: '#fbbf24',
+                                                            background: 'rgba(245, 158, 11, 0.15)',
+                                                            border: '1px solid rgba(245, 158, 11, 0.35)',
+                                                            padding: '1px 6px',
+                                                            borderRadius: '4px',
+                                                            width: 'fit-content'
+                                                        }}>
+                                                            Pending
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                        <span style={{ fontSize: '13px', fontWeight: '800', color: '#34d399' }}>
+                                                            ₹0
+                                                        </span>
+                                                        <span style={{
+                                                            fontSize: '9.5px',
+                                                            fontWeight: '800',
+                                                            color: '#34d399',
+                                                            background: 'rgba(16, 185, 129, 0.15)',
+                                                            border: '1px solid rgba(16, 185, 129, 0.35)',
+                                                            padding: '1px 6px',
+                                                            borderRadius: '4px',
+                                                            width: 'fit-content'
+                                                        }}>
+                                                            ✓ Payment Done
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </td>
+
+                                            {/* Account & Edit */}
+                                            <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                                                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                                     <button
                                                         type="button"
                                                         onClick={() => setLedgerModalBooking(bkg)}
-                                                        title="View Accounts Ledger"
+                                                        title="Open Client Account Ledger & Payment Statement"
                                                         style={{
-                                                            padding: '3px 10px',
-                                                            background: bal > 0 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)',
-                                                            border: `1px solid ${bal > 0 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(34, 197, 94, 0.4)'}`,
+                                                            padding: '5px 12px',
+                                                            background: '#2563eb',
+                                                            border: 'none',
                                                             borderRadius: '20px',
-                                                            color: bal > 0 ? '#ef4444' : '#4ade80',
-                                                            fontSize: '10.5px',
-                                                            fontWeight: '800',
+                                                            color: '#ffffff',
+                                                            fontSize: '11px',
+                                                            fontWeight: '700',
                                                             cursor: 'pointer',
+                                                            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
                                                             whiteSpace: 'nowrap'
                                                         }}
                                                     >
-                                                        {bal > 0 ? `Bal ₹${bal.toLocaleString('en-IN')}` : 'Accounts'}
+                                                        Accounts
+                                                    </button>
+
+                                                    {bal > 0 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleOpenPaymentModal(bkg)}
+                                                            title="Record remaining balance payment"
+                                                            style={{
+                                                                padding: '5px 11px',
+                                                                background: 'rgba(34, 197, 94, 0.18)',
+                                                                border: '1px solid rgba(34, 197, 94, 0.45)',
+                                                                borderRadius: '20px',
+                                                                color: '#4ade80',
+                                                                fontSize: '11px',
+                                                                fontWeight: '800',
+                                                                cursor: 'pointer',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '4px',
+                                                                whiteSpace: 'nowrap'
+                                                            }}
+                                                        >
+                                                            <Plus size={12} />
+                                                            <span>Pay ₹{bal.toLocaleString('en-IN')}</span>
+                                                        </button>
+                                                    )}
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditingBooking(bkg)}
+                                                        title="Edit Booking & Account Details"
+                                                        style={{
+                                                            padding: '5px 10px',
+                                                            background: 'rgba(167, 139, 250, 0.14)',
+                                                            border: '1px solid rgba(167, 139, 250, 0.35)',
+                                                            borderRadius: '8px',
+                                                            color: '#c4b5fd',
+                                                            fontSize: '11px',
+                                                            fontWeight: '700',
+                                                            cursor: 'pointer',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                            whiteSpace: 'nowrap'
+                                                        }}
+                                                    >
+                                                        <Edit size={12} />
+                                                        <span>Edit</span>
                                                     </button>
                                                 </div>
                                             </td>
 
-                                            {/* Itinerary (Scene) */}
-                                            <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setViewItineraryBooking(bkg)}
-                                                    style={{
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '5px',
-                                                        background: 'rgba(59, 130, 246, 0.15)',
-                                                        border: '1px solid rgba(59, 130, 246, 0.35)',
-                                                        borderRadius: '8px',
-                                                        padding: '5px 12px',
-                                                        color: '#60a5fa',
-                                                        fontSize: '11.5px',
-                                                        fontWeight: '700',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.15s'
-                                                    }}
-                                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.28)'}
-                                                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)'}
-                                                >
-                                                    <Eye size={13} />
-                                                    <span>View Scene</span>
-                                                </button>
-                                            </td>
-
-                                            {/* Actions: Download PDF & Edit Invoice */}
+                                            {/* Tax Invoice (Appears ONLY when payment is done) */}
                                             <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
-                                                    {/* PDF Download Button */}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setDownloadPdfModalBooking(bkg)}
-                                                        style={{
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '5px',
-                                                            background: 'rgba(251, 191, 36, 0.15)',
-                                                            border: '1px solid rgba(251, 191, 36, 0.4)',
-                                                            borderRadius: '8px',
-                                                            padding: '5px 11px',
-                                                            color: '#fbbf24',
-                                                            fontSize: '11.5px',
-                                                            fontWeight: '800',
-                                                            cursor: 'pointer',
-                                                            transition: 'all 0.15s'
-                                                        }}
-                                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(251, 191, 36, 0.28)'}
-                                                        onMouseLeave={e => e.currentTarget.style.background = 'rgba(251, 191, 36, 0.15)'}
-                                                        title="Download Tour Itinerary or Tax Invoice PDF"
-                                                    >
-                                                        <Download size={13} />
-                                                        <span>PDF</span>
-                                                    </button>
+                                                    {isPaymentDone ? (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDownloadInvoice(bkg)}
+                                                                style={{
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '5px',
+                                                                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                                                                    border: '1px solid rgba(56, 189, 248, 0.4)',
+                                                                    borderRadius: '8px',
+                                                                    padding: '6px 12px',
+                                                                    color: '#ffffff',
+                                                                    fontSize: '11.5px',
+                                                                    fontWeight: '800',
+                                                                    cursor: 'pointer',
+                                                                    boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)'
+                                                                }}
+                                                                title="Payment Done — Download Official GST Tax Invoice"
+                                                            >
+                                                                <Receipt size={13} />
+                                                                <span>Tax Invoice</span>
+                                                            </button>
 
-                                                    {/* Edit Invoice Button */}
-                                                    {bkg.invoiceGenerated ? (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setInvoiceModalBooking(bkg)}
-                                                            style={{
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                gap: '4px',
-                                                                background: '#0284c7',
-                                                                border: 'none',
-                                                                borderRadius: '8px',
-                                                                padding: '5px 10px',
-                                                                color: '#ffffff',
-                                                                fontSize: '11px',
-                                                                fontWeight: '700',
-                                                                cursor: 'pointer'
-                                                            }}
-                                                        >
-                                                            <Edit size={12} />
-                                                            <span>Invoice</span>
-                                                        </button>
+                                                            {bkg.invoiceGenerated && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setInvoiceModalBooking(bkg)}
+                                                                    style={{
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '4px',
+                                                                        background: 'rgba(255,255,255,0.06)',
+                                                                        border: '1px solid rgba(255,255,255,0.15)',
+                                                                        borderRadius: '8px',
+                                                                        padding: '6px 10px',
+                                                                        color: '#38bdf8',
+                                                                        fontSize: '11px',
+                                                                        fontWeight: '700',
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                    title="Edit Tax Invoice"
+                                                                >
+                                                                    <Edit size={12} />
+                                                                </button>
+                                                            )}
+                                                        </>
                                                     ) : (
                                                         <button
                                                             type="button"
-                                                            onClick={() => handleDownloadInvoice(bkg)}
+                                                            onClick={() => handleOpenPaymentModal(bkg)}
                                                             style={{
                                                                 display: 'inline-flex',
                                                                 alignItems: 'center',
-                                                                gap: '4px',
-                                                                background: 'rgba(255,255,255,0.06)',
-                                                                border: '1px solid rgba(255,255,255,0.12)',
+                                                                gap: '5px',
+                                                                background: 'rgba(245, 158, 11, 0.12)',
+                                                                border: '1px dashed rgba(245, 158, 11, 0.45)',
                                                                 borderRadius: '8px',
                                                                 padding: '5px 10px',
-                                                                color: 'rgba(255,255,255,0.7)',
+                                                                color: '#fbbf24',
                                                                 fontSize: '11px',
-                                                                fontWeight: '600',
-                                                                cursor: 'pointer'
+                                                                fontWeight: '700',
+                                                                cursor: 'pointer',
+                                                                whiteSpace: 'nowrap'
                                                             }}
-                                                            title="Generate & Download Tax Invoice"
+                                                            title="Tax Invoice unlocks automatically once balance payment is completed"
                                                         >
-                                                            <Receipt size={12} />
-                                                            <span>Invoice</span>
+                                                            <Clock size={12} />
+                                                            <span>Clear Balance for Invoice</span>
                                                         </button>
                                                     )}
                                                 </div>
@@ -1586,6 +1749,120 @@ export default function CompletedBookings() {
                 <ClientLedgerDrawer 
                     booking={ledgerModalBooking} 
                     onClose={() => setLedgerModalBooking(null)}
+                    onAddEntry={() => {
+                        const bkg = ledgerModalBooking;
+                        const pkg = Number(bkg.packagePrice || bkg.totalAmount) || 0;
+                        const adv = Number(bkg.advancePaid) || 0;
+                        const bal = Math.max(0, pkg - adv);
+                        if (bal <= 0) {
+                            alert('Booking is already fully paid and settled.');
+                            return;
+                        }
+                        setLedgerModalBooking(null);
+                        handleOpenPaymentModal(bkg);
+                    }}
+                />
+            )}
+
+            {/* RECORD PAYMENT MODAL */}
+            <AnimatePresence>
+                {paymentModalBooking && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999999, padding: '20px' }}>
+                        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} style={{ width: '100%', maxWidth: '480px', background: '#0b1120', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '24px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                <div>
+                                    <h2 style={{ color: 'white', margin: 0, fontSize: '18px', fontWeight: '800' }}>Record Balance Payment</h2>
+                                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginTop: '3px' }}>
+                                        Booking: <strong style={{ color: '#fbbf24' }}>{paymentModalBooking.bookingId}</strong> • Guest: <strong style={{ color: 'white' }}>{paymentModalBooking.guestName}</strong>
+                                    </div>
+                                </div>
+                                <button onClick={() => setPaymentModalBooking(null)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}><X size={18} /></button>
+                            </div>
+                            <form onSubmit={handleRecordPayment} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                <div>
+                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Amount to Receive (₹)</label>
+                                    <input
+                                        required
+                                        type="number"
+                                        min="1"
+                                        value={paymentAmount}
+                                        onChange={e => setPaymentAmount(e.target.value)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '10px 14px',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(255,255,255,0.12)',
+                                            background: 'rgba(0,0,0,0.3)',
+                                            color: 'white',
+                                            outline: 'none',
+                                            fontSize: '13px'
+                                        }}
+                                        placeholder="Amount"
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Payment Mode</label>
+                                    <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} className="premium-compact-input" style={{ width: '100%', height: '40px' }}>
+                                        <option value="Cash">💵 Cash to Company (Cash Book)</option>
+                                        <option value="Driver Cash">💵 Driver Cash in Hand (Cash Book)</option>
+                                        <option value="UPI / QR Code">📱 UPI / QR Code (Bank Account)</option>
+                                        <option value="Bank Transfer / NEFT">🏦 Bank Transfer / NEFT</option>
+                                    </select>
+                                </div>
+                                {(paymentMode === 'Cash' || paymentMode === 'Driver Cash') ? (
+                                    <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.25)', color: '#4ade80', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span>💵 <strong>Synced to Cash Book:</strong> Amount will be credited to physical Cash in Hand.</span>
+                                    </div>
+                                ) : (
+                                    <BankSelector
+                                        bankAccounts={bankAccounts}
+                                        value={bankAccountId}
+                                        onChange={setBankAccountId}
+                                        amount={paymentAmount}
+                                        label="Credit to Bank Account"
+                                        required
+                                    />
+                                )}
+                                <div>
+                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Reference / UTR (Optional)</label>
+                                    <input
+                                        type="text"
+                                        value={paymentRef}
+                                        onChange={e => setPaymentRef(e.target.value)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '10px 14px',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(255,255,255,0.12)',
+                                            background: 'rgba(0,0,0,0.3)',
+                                            color: 'white',
+                                            outline: 'none',
+                                            fontSize: '13px'
+                                        }}
+                                        placeholder="UTR or Transaction ID"
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                    <button type="button" onClick={() => setPaymentModalBooking(null)} style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                                    <button type="submit" disabled={savingPayment} style={{ flex: 1, padding: '10px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '800' }}>
+                                        {savingPayment ? 'Saving...' : 'Save Payment & Unlock Invoice'}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {editingBooking && (
+                <EditBookingModal
+                    booking={editingBooking}
+                    onClose={() => setEditingBooking(null)}
+                    onSuccess={() => {
+                        setEditingBooking(null);
+                        fetchCompletedBookings();
+                        alert('Completed booking updated successfully!');
+                    }}
                 />
             )}
 
