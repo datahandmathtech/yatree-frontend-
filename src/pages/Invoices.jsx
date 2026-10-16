@@ -13,10 +13,10 @@ import SEO from '../components/SEO';
 import { generateTaxInvoicePDF } from '../utils/taxInvoicePdf';
 
 const MONTH_TABS = [
-    'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'
+    'All Months', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'
 ];
 
-// Baseline Data exactly matching media_1788930365517.png with payment received (credit) tracking
+// Baseline Data
 const BASELINE_INVOICES = [];
 
 export default function Invoices() {
@@ -30,7 +30,7 @@ export default function Invoices() {
     const [invoices, setInvoices] = useState(BASELINE_INVOICES);
     const [loading, setLoading] = useState(false);
     const [selectedFy, setSelectedFy] = useState('FY 26-27');
-    const [selectedMonth, setSelectedMonth] = useState('Sep');
+    const [selectedMonth, setSelectedMonth] = useState('All Months');
     const [searchTerm, setSearchTerm] = useState('');
     const [showFyDropdown, setShowFyDropdown] = useState(false);
 
@@ -87,20 +87,23 @@ export default function Invoices() {
                     const collected = inv.status === 'Paid'
                         ? (Number(inv.totalAmount) || 0)
                         : (Number(inv.advanceAdjusted) || (inv.booking && Number(inv.booking.advancePaid)) || 0);
+                    const bkgCode = inv.bookingId || inv.booking?.clientCode || inv.booking?.bookingId || '';
                     return {
                         _id: inv._id,
                         date: dStr,
                         rawDate: inv.invoiceDate,
-                        particulars: inv.billTo?.name || inv.clientName || 'Valued Guest',
+                        particulars: inv.billTo?.name || inv.booking?.clientName || inv.clientName || 'Valued Guest',
                         vchType: inv.voucherType || 'Sales',
                         vchNo: inv.invoiceNumber ? inv.invoiceNumber.replace(/^.*?-/, '') : String(117 + idx),
+                        fullInvoiceNo: inv.invoiceNumber || `INV-${117 + idx}`,
                         debitAmount: Number(inv.totalAmount) || 0,
                         creditAmount: collected,
                         taxableValue: Number(inv.taxableAmount) || (Number(inv.totalAmount) * 0.9523),
                         gstValue: Number(inv.totalTaxAmount) || (Number(inv.totalAmount) * 0.0476),
-                        bookingId: inv.bookingId || '',
-                        mobile: inv.billTo?.mobile || '',
-                        status: inv.status || 'Issued'
+                        bookingId: bkgCode,
+                        mobile: inv.billTo?.mobile || inv.booking?.mobileNumber || '',
+                        status: inv.status || 'Issued',
+                        rawInvoice: inv
                     };
                 });
                 setInvoices(mapped);
@@ -260,15 +263,63 @@ export default function Invoices() {
         generateTaxInvoicePDF(mockInvoiceData, selectedCompany);
     };
 
+    const handleDownloadRowPdf = (inv) => {
+        const raw = inv.rawInvoice || {};
+        const pdfData = {
+            invoiceNumber: inv.fullInvoiceNo || raw.invoiceNumber || `INV-${inv.vchNo}`,
+            date: raw.invoiceDate || inv.rawDate || new Date().toISOString(),
+            bookingId: inv.bookingId || raw.bookingId || '',
+            billTo: {
+                name: inv.particulars || raw.billTo?.name || 'Valued Guest',
+                companyName: raw.billTo?.companyName || '',
+                mobile: inv.mobile || raw.billTo?.mobile || '',
+                email: raw.billTo?.email || '',
+                address: raw.billTo?.address || 'Local Fleet Service',
+                gstin: raw.billTo?.gstin || '',
+                placeOfSupply: raw.billTo?.placeOfSupply || 'Rajasthan (08)'
+            },
+            items: Array.isArray(raw.items) && raw.items.length > 0
+                ? raw.items
+                : [
+                    {
+                        description: `${raw.booking?.vehicleType || 'Commercial Vehicle'} Rental & Travel Service`,
+                        sacCode: '996601',
+                        quantity: 1,
+                        rate: Number(inv.debitAmount) || 0,
+                        amount: Number(inv.debitAmount) || 0
+                    }
+                ],
+            gstMode: raw.gstMode || 'GST Inclusive',
+            gstRate: raw.gstRate || 5,
+            isInterState: Boolean(raw.isInterState),
+            advanceAdjusted: Number(inv.creditAmount) || 0,
+            notes: raw.notes || 'Official Tax Invoice'
+        };
+        generateTaxInvoicePDF(pdfData, selectedCompany);
+    };
+
     // Filter & Sort Invoices for List mode
     const filteredInvoices = useMemo(() => {
         let list = [...invoices];
+
+        if (selectedMonth && selectedMonth !== 'All Months') {
+            list = list.filter(i => {
+                if (!i.rawDate) return false;
+                const d = new Date(i.rawDate);
+                if (isNaN(d.getTime())) return false;
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                return months[d.getMonth()] === selectedMonth;
+            });
+        }
+
         if (searchTerm.trim()) {
             const term = searchTerm.toLowerCase();
             list = list.filter(i =>
                 (i.vchNo && i.vchNo.toLowerCase().includes(term)) ||
+                (i.fullInvoiceNo && i.fullInvoiceNo.toLowerCase().includes(term)) ||
                 (i.particulars && i.particulars.toLowerCase().includes(term)) ||
-                (i.bookingId && i.bookingId.toLowerCase().includes(term))
+                (i.bookingId && i.bookingId.toLowerCase().includes(term)) ||
+                (i.mobile && i.mobile.toLowerCase().includes(term))
             );
         }
 
@@ -288,20 +339,19 @@ export default function Invoices() {
         });
 
         return list;
-    }, [invoices, searchTerm, sortField, sortAsc]);
+    }, [invoices, selectedMonth, searchTerm, sortField, sortAsc]);
 
-    // KPI Summary Calculations (Matching media_1788930365517.png)
+    // KPI Summary Calculations
     const kpiSummary = useMemo(() => {
-        // In screenshot: 8 total invoices, Taxable ₹46,525.42, GST ₹8,374.58, Invoice Amount ₹54,900.00
         const totalDebit = filteredInvoices.reduce((acc, curr) => acc + (Number(curr.debitAmount) || 0), 0);
         const totalTaxable = filteredInvoices.reduce((acc, curr) => acc + (Number(curr.taxableValue) || 0), 0);
         const totalGst = filteredInvoices.reduce((acc, curr) => acc + (Number(curr.gstValue) || 0), 0);
 
         return {
-            totalInvoices: filteredInvoices.length === 9 ? 8 : filteredInvoices.length,
-            taxableValue: totalTaxable > 0 ? totalTaxable : 46525.42,
-            gstValue: totalGst > 0 ? totalGst : 8374.58,
-            invoiceAmount: totalDebit > 0 ? totalDebit : 54900.00
+            totalInvoices: filteredInvoices.length,
+            taxableValue: totalTaxable,
+            gstValue: totalGst,
+            invoiceAmount: totalDebit
         };
     }, [filteredInvoices]);
 
@@ -1241,12 +1291,15 @@ export default function Invoices() {
                                         Credit Amount (₹) <ArrowUpDown size={12} />
                                     </div>
                                 </th>
+                                <th style={{ padding: '14px 18px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textAlign: 'right' }}>
+                                    Tax Invoice
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredInvoices.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} style={{ padding: '48px 16px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
+                                    <td colSpan={8} style={{ padding: '48px 16px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
                                         No tax invoices found. Click <strong>+ Add Invoice</strong> to create one.
                                     </td>
                                 </tr>
@@ -1271,9 +1324,14 @@ export default function Invoices() {
                                             {inv.date}
                                         </td>
 
-                                        {/* Particulars */}
+                                        {/* Particulars & Booking ID */}
                                         <td style={{ padding: '14px 18px', fontSize: '13px', fontWeight: '600', color: '#ffffff' }}>
-                                            {inv.particulars}
+                                            <div>{inv.particulars}</div>
+                                            {inv.bookingId && (
+                                                <div style={{ fontSize: '11px', color: '#fbbf24', fontWeight: '700', marginTop: '2px', fontFamily: 'monospace' }}>
+                                                    {inv.bookingId} {inv.mobile && inv.mobile !== 'N/A' ? `• ${inv.mobile}` : ''}
+                                                </div>
+                                            )}
                                         </td>
 
                                         {/* Vch Type */}
@@ -1301,11 +1359,37 @@ export default function Invoices() {
                                         }}>
                                             {Number(inv.creditAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                         </td>
+
+                                        {/* Tax Invoice Download */}
+                                        <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDownloadRowPdf(inv)}
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '5px',
+                                                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                                                    border: '1px solid rgba(56, 189, 248, 0.4)',
+                                                    borderRadius: '8px',
+                                                    padding: '6px 12px',
+                                                    color: '#ffffff',
+                                                    fontSize: '11.5px',
+                                                    fontWeight: '800',
+                                                    cursor: 'pointer',
+                                                    whiteSpace: 'nowrap'
+                                                }}
+                                                title="Download Official GST Tax Invoice PDF"
+                                            >
+                                                <Receipt size={13} />
+                                                <span>Tax Invoice</span>
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))
                             )}
 
-                            {/* Bottom Total Row matching media_1788930365517.png */}
+                            {/* Bottom Total Row */}
                             {filteredInvoices.length > 0 && (
                                 <tr style={{
                                     background: 'rgba(0, 0, 0, 0.4)',
@@ -1322,6 +1406,7 @@ export default function Invoices() {
                                     <td style={{ padding: '16px 18px', fontSize: '14px', color: '#34d399', textAlign: 'right', fontWeight: '900' }}>
                                         {Number(tableTotalCredit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                     </td>
+                                    <td></td>
                                 </tr>
                             )}
                         </tbody>

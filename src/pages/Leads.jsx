@@ -218,6 +218,7 @@ export default function Leads() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [monthFilter, setMonthFilter] = useState('All');
+    const [fyLeadMonthFilter, setFyLeadMonthFilter] = useState('All'); // FY Month filter (Daily Breakdown Lead Arrival Month)
     const [sourceFilter, setSourceFilter] = useState('All');
     const [priorityFilter, setPriorityFilter] = useState('All');
     const [salesPersonFilter, setSalesPersonFilter] = useState('All');
@@ -458,23 +459,17 @@ export default function Leads() {
             fetchTravelAgents();
             fetchCompanyBanks();
         }
-    }, [selectedCompany, monthFilter, selectedFy, dateFilterType]);
+    }, [selectedCompany]);
 
     const fetchLeads = async () => {
         try {
             setLoading(true);
-            let url = `/api/leads/${selectedCompany._id}?status=All&dateType=${dateFilterType}`;
-            if (monthFilter && monthFilter !== 'All') {
-                url += `&month=${monthFilter}`;
-            }
-            if (selectedFy && selectedFy !== 'All FY') {
-                url += `&fy=${encodeURIComponent(selectedFy)}`;
-            }
+            let url = `/api/leads/${selectedCompany._id}?status=All`;
             if (searchTerm) {
                 url += `&search=${encodeURIComponent(searchTerm)}`;
             }
             const { data } = await axios.get(url);
-            setLeads(data);
+            setLeads(data || []);
         } catch (error) {
             console.error('Error fetching leads:', error);
         } finally {
@@ -594,7 +589,7 @@ export default function Leads() {
                 [field]: value,
                 travelStartDate: sDate,
                 travelEndDate: eDate,
-                status: (prev.status === 'Cancelled' && willBeFuture) ? 'New' : prev.status
+                status: (prev.status === 'Cancelled' && prev.priority !== 'Lost' && willBeFuture) ? 'New' : prev.status
             };
         });
     };
@@ -708,6 +703,10 @@ export default function Leads() {
             setPreviewClientCode(lead.clientCode || lead.leadId || '');
             const sDate = toLocalDateString(lead.travelStartDate);
             const eDate = toLocalDateString(lead.travelEndDate);
+            const todayStr = toLocalDateString(new Date());
+            const isConfirmedLead = (lead.status === 'Confirmed' || lead.status === 'Converted' || !!lead.bookingId || Number(lead.advancePayment) > 0) && lead.status !== 'Cancelled' && lead.status !== 'Lost' && lead.priority !== 'Lost';
+            const endOrStart = eDate || sDate;
+            const isAutoLost = lead.status === 'Lost' || lead.priority === 'Lost' || lead.status === 'Cancelled' || (!isConfirmedLead && endOrStart && endOrStart < todayStr);
             setFormData({
                 bookingReference: lead.bookingReference || 'Direct',
                 travelAgent: lead.travelAgent || '',
@@ -728,13 +727,8 @@ export default function Leads() {
                 numberOfCars: lead.numberOfCars || 1,
                 gstMode: lead.gstMode || 'GST Inclusive',
                 gstRate: lead.gstRate || 5,
-                status: (() => {
-                    const todayStr = toLocalDateString(new Date());
-                    const isFuture = (eDate && eDate >= todayStr) || (sDate && sDate >= todayStr);
-                    if (lead.status === 'Cancelled' && isFuture) return 'New';
-                    return lead.status || 'New';
-                })(),
-                priority: lead.priority || 'Unassigned',
+                status: isAutoLost ? 'Lost' : (lead.status || 'New'),
+                priority: isAutoLost ? 'Lost' : (lead.priority || 'Unassigned'),
                 notes: lead.notes || '',
                 specialRemarks: lead.specialRemarks || '',
                 inclusions: {
@@ -814,6 +808,7 @@ export default function Leads() {
                 gstMode: 'GST Inclusive',
                 gstRate: 5,
                 status: 'New',
+                priority: 'Unassigned',
                 notes: '',
                 specialRemarks: '',
                 inclusions: {
@@ -857,8 +852,13 @@ export default function Leads() {
                 perDayProfit: Math.round(matrixPerDayProfit)
             };
 
+            const finalStatus = formData.priority === 'Lost'
+                ? 'Lost'
+                : (editingLead && editingLead.status === 'Lost' && formData.priority !== 'Lost' ? 'New' : formData.status);
+
             const payload = {
                 ...formData,
+                status: finalStatus,
                 vehicleMatrix: finalVehicleMatrix,
                 clientName: finalClientName,
                 mobileNumber: finalMobileNumber,
@@ -889,6 +889,7 @@ export default function Leads() {
         try {
             await axios.put(`/api/leads/single/${lead._id}`, {
                 status: 'New',
+                priority: lead.priority === 'Lost' ? 'Unassigned' : (lead.priority || 'Unassigned'),
                 notes: `${lead.notes ? lead.notes + ' | ' : ''}Reopened to Active enquiries`
             });
             fetchLeads();
@@ -1266,6 +1267,108 @@ export default function Leads() {
         }
     };
 
+    // Helper to safely parse lead date to year, month index, and day
+    const parseLeadDateInfo = (rawDate) => {
+        if (!rawDate) return null;
+        if (typeof rawDate === 'string' && rawDate.length >= 10) {
+            const parts = rawDate.slice(0, 10).split('-');
+            if (parts.length === 3) {
+                const yr = parseInt(parts[0], 10);
+                const mo = parseInt(parts[1], 10) - 1;
+                const dy = parseInt(parts[2], 10);
+                if (!isNaN(yr) && !isNaN(mo) && !isNaN(dy)) {
+                    return { year: yr, monthIdx: mo, day: dy };
+                }
+            }
+        }
+        const d = new Date(rawDate);
+        if (isNaN(d.getTime())) return null;
+        return {
+            year: d.getFullYear(),
+            monthIdx: d.getMonth(),
+            day: d.getDate()
+        };
+    };
+
+    // Helper: check if lead is confirmed / advance arrived
+    const isLeadConfirmed = (lead) => {
+        if (!lead) return false;
+        if (lead.status === 'Cancelled' || lead.status === 'Lost' || lead.priority === 'Lost') return false;
+        return lead.status === 'Confirmed' || lead.status === 'Completed' || lead.status === 'Converted' || !!lead.bookingId || Number(lead.advancePayment) > 0;
+    };
+
+    // Helper: check if a confirmed lead's ride date has completed (travelEndDate < today)
+    const isLeadRideCompleted = (lead) => {
+        if (!lead || !isLeadConfirmed(lead)) return false;
+        if (lead.status === 'Completed') return true;
+        const todayStr = toLocalDateString(new Date());
+        const eDateStr = toLocalDateString(lead.travelEndDate || lead.travelStartDate);
+        return !!(eDateStr && eDateStr < todayStr);
+    };
+
+    // Helper: check if lead is Lost (Cancelled, manually set to Lost, or unconfirmed with past travel date)
+    const isLeadLost = (lead) => {
+        if (!lead) return false;
+        if (lead.priority === 'Lost' || lead.status === 'Lost' || lead.status === 'Cancelled') return true;
+        if (isLeadConfirmed(lead)) return false;
+        const todayStr = toLocalDateString(new Date());
+        const eDateStr = toLocalDateString(lead.travelEndDate || lead.travelStartDate);
+        if (eDateStr && eDateStr < todayStr) return true;
+        return false;
+    };
+
+    // FY Month Lead Arrival Counts (working 100% according to Daily Breakdown logic)
+    const fyMonthLeadCounts = useMemo(() => {
+        const sourceList = (leads && leads.length > 0) ? leads : sidebarLeads;
+        const validLeads = sourceList || [];
+        const byMonth = {};
+        let totalFyLeads = 0;
+
+        SIDEBAR_MONTH_OPTIONS.forEach(opt => {
+            const count = validLeads.filter(l => {
+                const d = parseLeadDateInfo(l.leadDate || l.createdAt);
+                return d && d.year === opt.year && d.monthIdx === opt.monthIdx;
+            }).length;
+            byMonth[opt.label] = count;
+            totalFyLeads += count;
+        });
+
+        return { byMonth, totalFyLeads };
+    }, [leads, sidebarLeads, SIDEBAR_MONTH_OPTIONS]);
+
+    // Base leads for the selected period:
+    // - If fyLeadMonthFilter !== 'All': filters by Lead Arrival Month (Daily Breakdown logic: leadDate || createdAt)
+    // - Else if monthFilter !== 'All': strictly filters by Travel Month (travelStartDate || leadDate || createdAt)
+    // - Else: filters by selectedFy
+    const basePeriodLeads = useMemo(() => {
+        return (leads || []).filter(lead => {
+            if (fyLeadMonthFilter && fyLeadMonthFilter !== 'All') {
+                const activeFyOpt = SIDEBAR_MONTH_OPTIONS.find(o => o.label === fyLeadMonthFilter);
+                if (activeFyOpt) {
+                    const d = parseLeadDateInfo(lead.leadDate || lead.createdAt);
+                    return !!(d && d.year === activeFyOpt.year && d.monthIdx === activeFyOpt.monthIdx);
+                }
+            }
+
+            if (monthFilter && monthFilter !== 'All') {
+                const activeTabOpt = SIDEBAR_MONTH_OPTIONS.find(o => o.tab === monthFilter);
+                const d = parseLeadDateInfo(lead.travelStartDate || lead.leadDate || lead.createdAt);
+                if (!d || !activeTabOpt) return false;
+                if (selectedFy && selectedFy !== 'All FY') {
+                    return d.year === activeTabOpt.year && d.monthIdx === activeTabOpt.monthIdx;
+                }
+                return d.monthIdx === activeTabOpt.monthIdx;
+            }
+
+            if (selectedFy && selectedFy !== 'All FY') {
+                const itemFy = getFinancialYear(lead.travelStartDate || lead.travelEndDate || lead.leadDate || lead.createdAt);
+                if (itemFy && itemFy !== selectedFy) return false;
+            }
+
+            return true;
+        });
+    }, [leads, fyLeadMonthFilter, monthFilter, selectedFy, SIDEBAR_MONTH_OPTIONS]);
+
     // Calculate month-wise breakdown across All, Confirmed, Cancelled, Lost, and Open
     const statusCounts = useMemo(() => {
         let totalCount = 0;
@@ -1279,20 +1382,21 @@ export default function Leads() {
         let openCount = 0;
         let openAmt = 0;
 
-        (leads || []).forEach(lead => {
+        (basePeriodLeads || []).forEach(lead => {
             const amt = Number(lead.totalAmount) || 0;
             totalCount += 1;
             totalAmt += amt;
 
-            if (lead.status === 'Confirmed' || lead.bookingId) {
+            if (isLeadConfirmed(lead)) {
                 confirmedCount += 1;
                 confirmedAmt += amt;
-            } else if (lead.status === 'Cancelled') {
-                cancelledCount += 1;
-                cancelledAmt += amt;
-            } else if (lead.status === 'Lost') {
+            } else if (isLeadLost(lead)) {
                 lostCount += 1;
                 lostAmt += amt;
+                if (lead.status === 'Cancelled') {
+                    cancelledCount += 1;
+                    cancelledAmt += amt;
+                }
             } else {
                 openCount += 1;
                 openAmt += amt;
@@ -1306,35 +1410,116 @@ export default function Leads() {
             lost: { count: lostCount, amount: lostAmt },
             open: { count: openCount, amount: openAmt }
         };
-    }, [leads]);
+    }, [basePeriodLeads]);
 
-    // All leads for the month are shown (Confirmed, Cancelled, Lost, Open)
-    // Filterable by status and sequentially sorted by Lead ID / Client Code
+    // Priority / Interest Level counts and total values (including Lost and Sold leads)
+    const priorityCounts = useMemo(() => {
+        let allCount = 0;
+        let allAmount = 0;
+        let hot = 0;
+        let hotAmount = 0;
+        let warm = 0;
+        let warmAmount = 0;
+        let cold = 0;
+        let coldAmount = 0;
+        let lost = 0;
+        let lostAmount = 0;
+        let sold = 0;
+        let soldAmount = 0;
+
+        (basePeriodLeads || []).forEach(lead => {
+            if (sourceFilter !== 'All' && lead.source !== sourceFilter) return;
+            if (salesPersonFilter !== 'All' && lead.salesPerson !== salesPersonFilter) return;
+
+            if (searchTerm && searchTerm.trim()) {
+                const q = searchTerm.trim().toLowerCase();
+                const matches =
+                    (lead.clientName || '').toLowerCase().includes(q) ||
+                    (lead.travelAgentName || '').toLowerCase().includes(q) ||
+                    (lead.mobileNumber || '').toLowerCase().includes(q) ||
+                    (lead.travelAgentMobile || '').toLowerCase().includes(q) ||
+                    (lead.clientCode || lead.leadId || '').toLowerCase().includes(q) ||
+                    (lead.source || '').toLowerCase().includes(q) ||
+                    (lead.salesPerson || '').toLowerCase().includes(q);
+                if (!matches) return;
+            }
+
+            const amt = Number(lead.totalAmount) || 0;
+            allCount += 1;
+            allAmount += amt;
+
+            const lostLead = isLeadLost(lead);
+            const confirmedLead = isLeadConfirmed(lead);
+
+            if (confirmedLead) {
+                sold += 1;
+                soldAmount += amt;
+            } else if (lostLead) {
+                lost += 1;
+                lostAmount += amt;
+            } else {
+                // Only upcoming unconfirmed leads without advance count in Hot / Warm / Cold
+                if (lead.priority === 'Hot') {
+                    hot += 1;
+                    hotAmount += amt;
+                } else if (lead.priority === 'Warm') {
+                    warm += 1;
+                    warmAmount += amt;
+                } else if (lead.priority === 'Cold') {
+                    cold += 1;
+                    coldAmount += amt;
+                }
+            }
+        });
+
+        return {
+            All: allCount,
+            allAmount,
+            Hot: hot,
+            hotAmount,
+            Warm: warm,
+            warmAmount,
+            Cold: cold,
+            coldAmount,
+            Lost: lost,
+            lostAmount,
+            Sold: sold,
+            soldAmount
+        };
+    }, [basePeriodLeads, sourceFilter, salesPersonFilter, searchTerm]);
+
+    // All leads for the selected period are shown, filterable by status/priority and sorted sequentially
     const filteredLeads = useMemo(() => {
-        const filtered = (leads || []).filter(lead => {
-            // Status Filter: Shows all leads received in month, with tab switching for Confirmed, Cancelled, Lost, Open
+        const filtered = (basePeriodLeads || []).filter(lead => {
+            const lostLead = isLeadLost(lead);
+            const confirmedLead = isLeadConfirmed(lead);
+
+            // Status Filter
             if (statusFilter === 'Confirmed') {
-                if (lead.status !== 'Confirmed' && !lead.bookingId) return false;
+                if (!confirmedLead) return false;
             } else if (statusFilter === 'Cancelled') {
                 if (lead.status !== 'Cancelled') return false;
             } else if (statusFilter === 'Lost') {
-                if (lead.status !== 'Lost') return false;
+                if (!lostLead) return false;
             } else if (statusFilter === 'Open') {
-                if (lead.status === 'Confirmed' || lead.bookingId || lead.status === 'Cancelled' || lead.status === 'Lost') return false;
-            }
-
-            // Financial Year filter
-            if (selectedFy && selectedFy !== 'All FY') {
-                const itemFy = getFinancialYear(lead.travelStartDate || lead.travelEndDate || lead.leadDate || lead.createdAt);
-                if (itemFy && itemFy !== selectedFy) return false;
+                if (confirmedLead || lostLead) return false;
             }
 
             if (sourceFilter !== 'All' && lead.source !== sourceFilter) return false;
             if (salesPersonFilter !== 'All' && lead.salesPerson !== salesPersonFilter) return false;
 
-            if (priorityFilter !== 'All') {
+            // Priority / Interest Level Filter:
+            // - All Levels: shows ALL leads (Lost, Confirmed/Sold, Upcoming Open)
+            // - Sold: shows all Confirmed & Completed rides for the selected month
+            // - Lost: shows all Lost leads (Cancelled + Past travel date without advance + Manually marked Lost)
+            // - Hot / Warm / Cold: shows ONLY upcoming leads without advance (!lostLead && !confirmedLead)
+            if (priorityFilter === 'Sold') {
+                if (!confirmedLead) return false;
+            } else if (priorityFilter === 'Lost') {
+                if (!lostLead) return false;
+            } else if (priorityFilter !== 'All') {
                 const leadPriority = lead.priority || 'Unassigned';
-                if (leadPriority !== priorityFilter) return false;
+                if (lostLead || confirmedLead || leadPriority !== priorityFilter) return false;
             }
 
             // Instant Live Search by Name / Phone / Agent / Code / Salesperson
@@ -1401,7 +1586,7 @@ export default function Leads() {
         });
 
         return filtered;
-    }, [leads, statusFilter, sourceFilter, salesPersonFilter, searchTerm, priorityFilter, selectedFy, sortField, sortOrder]);
+    }, [basePeriodLeads, statusFilter, sourceFilter, salesPersonFilter, searchTerm, priorityFilter, sortField, sortOrder]);
 
     // Unique sales persons
     const salesPersonsList = useMemo(() => {
@@ -1409,29 +1594,6 @@ export default function Leads() {
         leads.forEach(l => { if (l.salesPerson) set.add(l.salesPerson); });
         return Array.from(set);
     }, [leads]);
-
-    // Helper to safely parse lead date to year, month index, and day
-    const parseLeadDateInfo = (rawDate) => {
-        if (!rawDate) return null;
-        if (typeof rawDate === 'string' && rawDate.length >= 10) {
-            const parts = rawDate.slice(0, 10).split('-');
-            if (parts.length === 3) {
-                const yr = parseInt(parts[0], 10);
-                const mo = parseInt(parts[1], 10) - 1;
-                const dy = parseInt(parts[2], 10);
-                if (!isNaN(yr) && !isNaN(mo) && !isNaN(dy)) {
-                    return { year: yr, monthIdx: mo, day: dy };
-                }
-            }
-        }
-        const d = new Date(rawDate);
-        if (isNaN(d.getTime())) return null;
-        return {
-            year: d.getFullYear(),
-            monthIdx: d.getMonth(),
-            day: d.getDate()
-        };
-    };
 
     // Calculate Right Sidebar daily breakdown and totals
     const sidebarStats = useMemo(() => {
@@ -1446,7 +1608,7 @@ export default function Leads() {
         const dailyList = [];
 
         // Pre-process leads to avoid redundant filtering (keep all generated leads for accurate daily tally)
-        const allLeadsInMonth = (sourceList || []).filter(l => l.status !== 'Lost');
+        const allLeadsInMonth = sourceList || [];
 
         const now = new Date();
         const isCurrentMonth = now.getFullYear() === year && now.getMonth() === monthIdx;
@@ -1459,7 +1621,7 @@ export default function Leads() {
             });
             const convLeads = allLeadsInMonth.filter(l => {
                 // MUST BE CONFIRMED TO COUNT AS A CONVERSION (EXCLUDE CANCELLED OR LOST)
-                if (l.status === 'Cancelled' || l.status === 'Lost') return false;
+                if (l.status === 'Cancelled' || l.status === 'Lost' || l.priority === 'Lost') return false;
                 if (l.status !== 'Confirmed' && l.status !== 'Converted') return false;
                 
                 // Use advanceDate if available, otherwise updatedAt
@@ -1497,7 +1659,7 @@ export default function Leads() {
             totalConversionsAmt,
             dailyList
         };
-    }, [sidebarLeads, leads, selectedSidebarMonth]);
+    }, [sidebarLeads, leads, selectedSidebarMonth, SIDEBAR_MONTH_OPTIONS]);
 
     // KPI Summary Calculations
     const kpiData = useMemo(() => {
@@ -1545,14 +1707,18 @@ export default function Leads() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Confirmed leads of this month
-        const confirmedMonthLeads = (leads || []).filter(l => l.status === 'Confirmed' || l.bookingId);
+        // Confirmed leads of this month/period
+        const confirmedMonthLeads = (basePeriodLeads || []).filter(l => isLeadConfirmed(l));
 
         const list = confirmedMonthLeads.map(l => {
             const matchedBkg = (companyBookings || []).find(b => 
                 (l.bookingId && (b._id === l.bookingId || b.bookingId === l.bookingId)) ||
                 (l.clientCode && b.clientCode === l.clientCode)
             );
+            const effEndRaw = l.travelEndDate || matchedBkg?.travelEndDate || l.travelStartDate || matchedBkg?.travelStartDate;
+            const effEnd = effEndRaw ? new Date(effEndRaw) : null;
+            if (effEnd) effEnd.setHours(23, 59, 59, 999);
+            const isComp = matchedBkg?.bookingStatus === 'Completed' || l.status === 'Completed' || !!(effEnd && effEnd < today);
             return {
                 _id: matchedBkg?._id || l._id,
                 bookingId: matchedBkg?.bookingId || l.bookingId || l.clientCode || l.leadId || 'BKG',
@@ -1565,12 +1731,12 @@ export default function Leads() {
                 numberOfCars: l.numberOfCars || matchedBkg?.numberOfCars || 1,
                 totalAmount: Number(l.totalAmount || matchedBkg?.totalAmount) || 0,
                 advancePaid: Number(matchedBkg?.advancePaid || l.advancePayment) || 0,
-                bookingStatus: 'Confirmed',
+                bookingStatus: isComp ? 'Completed' : 'Confirmed',
                 isLead: !matchedBkg
             };
         });
 
-        const cancelledLeads = (leads || []).filter(l => l.status === 'Cancelled' || l.status === 'Lost');
+        const cancelledLeads = (basePeriodLeads || []).filter(l => l.status === 'Cancelled' || l.status === 'Lost' || l.priority === 'Lost');
         const formattedCancelledLeads = cancelledLeads.map(l => ({
             _id: l._id,
             bookingId: l.leadId || l.clientCode || 'LEAD',
@@ -1583,7 +1749,7 @@ export default function Leads() {
             numberOfCars: l.numberOfCars || 1,
             totalAmount: Number(l.totalAmount) || 0,
             advancePaid: Number(l.advancePayment) || 0,
-            bookingStatus: l.status || 'Cancelled',
+            bookingStatus: (l.priority === 'Lost' || l.status === 'Lost') ? 'Lost' : (l.status || 'Cancelled'),
             isLead: true
         }));
 
@@ -1628,7 +1794,7 @@ export default function Leads() {
             completedList,
             cancelledList: formattedCancelledLeads
         };
-    }, [companyBookings, leads]);
+    }, [companyBookings, basePeriodLeads]);
 
     const displayedModalBookings = useMemo(() => {
         let baseList = [];
@@ -2062,6 +2228,8 @@ export default function Leads() {
                                             key={fy}
                                             onClick={() => {
                                                 setSelectedFy(fy);
+                                                setFyLeadMonthFilter('All');
+                                                setCustomSidebarMonth(null);
                                                 setShowFyDropdown(false);
                                             }}
                                             style={{
@@ -2088,7 +2256,7 @@ export default function Leads() {
                         )}
                     </div>
 
-                    {/* Month Pills Container */}
+                    {/* Month Pills Container (Strictly filters by Travel Month) */}
                     <div style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -2098,12 +2266,13 @@ export default function Leads() {
                         scrollbarWidth: 'none'
                     }}>
                         {MONTH_TABS.map(m => {
-                            const isActive = monthFilter === m;
+                            const isActive = monthFilter === m && fyLeadMonthFilter === 'All';
                             return (
                                 <button
                                     key={m}
                                     onClick={() => {
                                         setCustomSidebarMonth(null);
+                                        setFyLeadMonthFilter('All');
                                         setMonthFilter(m);
                                         setCurrentPage(1);
                                     }}
@@ -2137,7 +2306,7 @@ export default function Leads() {
 
 
 
-                    {/* 3. Filter Bar: Search + Sales Person Dropdown + Source Dropdown */}
+                    {/* 3. Filter Bar: Search + FY Month (Daily Breakdown) + Sales Person Dropdown + Source Dropdown */}
                     <div className="glass-card" style={{
                         padding: '14px 18px',
                         marginBottom: '18px',
@@ -2148,7 +2317,7 @@ export default function Leads() {
                         gap: '12px'
                     }}>
                         {/* Instant Live Search Input */}
-                        <form onSubmit={(e) => { e.preventDefault(); fetchLeads(); }} style={{ flex: '1 1 320px', display: 'flex', gap: '8px' }}>
+                        <form onSubmit={(e) => { e.preventDefault(); fetchLeads(); }} style={{ flex: '1 1 280px', display: 'flex', gap: '8px' }}>
                             <div style={{ position: 'relative', width: '100%' }}>
                                 <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
                                 <input
@@ -2200,6 +2369,40 @@ export default function Leads() {
 
                 {/* Filters */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    {/* FY Month Filter */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0,0,0,0.3)', padding: '6px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <Calendar size={14} color="#fbbf24" />
+                        <select
+                            value={fyLeadMonthFilter}
+                            onChange={e => {
+                                const val = e.target.value;
+                                setFyLeadMonthFilter(val);
+                                if (val !== 'All') {
+                                    setMonthFilter('All');
+                                    setCustomSidebarMonth(val);
+                                } else {
+                                    setCustomSidebarMonth(null);
+                                }
+                                setCurrentPage(1);
+                            }}
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'white',
+                                fontSize: '12px',
+                                outline: 'none',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <option value="All" style={{ background: '#0f172a' }}>Filter by FY Month</option>
+                            {SIDEBAR_MONTH_OPTIONS.map(opt => (
+                                <option key={opt.label} value={opt.label} style={{ background: '#0f172a' }}>
+                                    {opt.label} ({fyMonthLeadCounts.byMonth[opt.label] || 0})
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
                     {/* Sales Person Filter */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0,0,0,0.3)', padding: '6px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
                         <Users size={14} color="#38bdf8" />
@@ -2252,28 +2455,50 @@ export default function Leads() {
                 </div>
             </div>
 
-            {/* Priority / Interest Level Filter */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '18px', flexWrap: 'wrap', padding: '0 4px' }}>
-                <button 
-                    onClick={() => { setPriorityFilter('All'); setCurrentPage(1); }}
-                    style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800', border: priorityFilter === 'All' ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)', background: priorityFilter === 'All' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.05)', color: priorityFilter === 'All' ? '#38bdf8' : 'white', cursor: 'pointer', transition: 'all 0.2s' }}>
-                    All Levels
-                </button>
-                <button 
-                    onClick={() => { setPriorityFilter('Hot'); setCurrentPage(1); }}
-                    style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800', border: priorityFilter === 'Hot' ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)', background: priorityFilter === 'Hot' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(255,255,255,0.05)', color: priorityFilter === 'Hot' ? '#fbbf24' : 'white', cursor: 'pointer', transition: 'all 0.2s' }}>
-                    🔥 Hot
-                </button>
-                <button 
-                    onClick={() => { setPriorityFilter('Warm'); setCurrentPage(1); }}
-                    style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800', border: priorityFilter === 'Warm' ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)', background: priorityFilter === 'Warm' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.05)', color: priorityFilter === 'Warm' ? '#38bdf8' : 'white', cursor: 'pointer', transition: 'all 0.2s' }}>
-                    ☀️ Warm
-                </button>
-                <button 
-                    onClick={() => { setPriorityFilter('Cold'); setCurrentPage(1); }}
-                    style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800', border: priorityFilter === 'Cold' ? '1px solid #94a3b8' : '1px solid rgba(255,255,255,0.1)', background: priorityFilter === 'Cold' ? 'rgba(148, 163, 184, 0.15)' : 'rgba(255,255,255,0.05)', color: priorityFilter === 'Cold' ? '#94a3b8' : 'white', cursor: 'pointer', transition: 'all 0.2s' }}>
-                    ❄️ Cold
-                </button>
+            {/* Priority / Interest Level Filter Boxes with Count & Value */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', padding: '0 4px' }}>
+                {[
+                    { key: 'All', label: 'All Levels', count: priorityCounts.All, amount: priorityCounts.allAmount, color: '#38bdf8', activeBg: 'rgba(56, 189, 248, 0.14)' },
+                    { key: 'Hot', label: '🔥 Hot', count: priorityCounts.Hot, amount: priorityCounts.hotAmount, color: '#fbbf24', activeBg: 'rgba(251, 191, 36, 0.14)' },
+                    { key: 'Warm', label: '☀️ Warm', count: priorityCounts.Warm, amount: priorityCounts.warmAmount, color: '#38bdf8', activeBg: 'rgba(56, 189, 248, 0.14)' },
+                    { key: 'Cold', label: '❄️ Cold', count: priorityCounts.Cold, amount: priorityCounts.coldAmount, color: '#94a3b8', activeBg: 'rgba(148, 163, 184, 0.14)' },
+                    { key: 'Lost', label: '❌ Lost', count: priorityCounts.Lost, amount: priorityCounts.lostAmount, color: '#f87171', activeBg: 'rgba(239, 68, 68, 0.14)' },
+                    { key: 'Sold', label: '✅ Sold', count: priorityCounts.Sold, amount: priorityCounts.soldAmount, color: '#34d399', activeBg: 'rgba(16, 185, 129, 0.14)' }
+                ].map(box => {
+                    const isActive = priorityFilter === box.key;
+                    return (
+                        <button
+                            key={box.key}
+                            onClick={() => { setPriorityFilter(box.key); setCurrentPage(1); }}
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '6px 12px',
+                                borderRadius: '8px',
+                                border: isActive ? `1px solid ${box.color}` : '1px solid rgba(255,255,255,0.1)',
+                                background: isActive ? box.activeBg : 'rgba(255,255,255,0.04)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <span style={{ fontSize: '11.5px', fontWeight: '800', color: isActive ? box.color : '#ffffff' }}>
+                                {box.label} ({box.count})
+                            </span>
+                            <span style={{
+                                padding: '2px 7px',
+                                borderRadius: '5px',
+                                fontSize: '11px',
+                                fontWeight: '800',
+                                background: 'rgba(0,0,0,0.35)',
+                                color: box.color,
+                                border: '1px solid rgba(255,255,255,0.06)'
+                            }}>
+                                ₹{Number(box.amount || 0).toLocaleString('en-IN')}
+                            </span>
+                        </button>
+                    );
+                })}
             </div>
 
             {/* 4. Leads Table Matching Reference Design */}
@@ -2344,6 +2569,9 @@ export default function Leads() {
                             </tr>
                         ) : paginatedLeads.map((lead) => {
                             const travelInfo = formatTravelMonth(lead.travelStartDate, lead.travelEndDate);
+                            const leadLost = isLeadLost(lead);
+                            const leadConfirmed = isLeadConfirmed(lead);
+                            const leadRideCompleted = isLeadRideCompleted(lead);
 
                             return (
                                 <tr key={lead._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.15s ease' }}>
@@ -2371,10 +2599,10 @@ export default function Leads() {
                                                 <User size={15} color="#38bdf8" />
                                                 <span>{lead.clientCode || lead.leadId || 'N/A'}</span>
                                             </div>
-                                            {lead.priority && lead.priority !== 'Unassigned' && (
+                                            {((lead.priority && lead.priority !== 'Unassigned') || leadLost) && (
                                                 <div style={{ marginTop: '4px', display: 'flex' }}>
-                                                    <div style={{ fontSize: '9px', fontWeight: '800', display: 'inline-block', padding: '2px 6px', borderRadius: '10px', background: lead.priority === 'Hot' ? 'rgba(251, 191, 36, 0.15)' : lead.priority === 'Warm' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.15)', color: lead.priority === 'Hot' ? '#fbbf24' : lead.priority === 'Warm' ? '#38bdf8' : '#94a3b8', border: lead.priority === 'Hot' ? '1px solid rgba(251, 191, 36, 0.3)' : lead.priority === 'Warm' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(148, 163, 184, 0.3)' }}>
-                                                        {lead.priority === 'Hot' ? '🔥 High' : lead.priority === 'Warm' ? '☀️ Avg' : '❄️ Low'}
+                                                    <div style={{ fontSize: '9px', fontWeight: '800', display: 'inline-block', padding: '2px 6px', borderRadius: '10px', background: leadLost ? 'rgba(239, 68, 68, 0.15)' : lead.priority === 'Hot' ? 'rgba(251, 191, 36, 0.15)' : lead.priority === 'Warm' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.15)', color: leadLost ? '#f87171' : lead.priority === 'Hot' ? '#fbbf24' : lead.priority === 'Warm' ? '#38bdf8' : '#94a3b8', border: leadLost ? '1px solid rgba(239, 68, 68, 0.35)' : lead.priority === 'Hot' ? '1px solid rgba(251, 191, 36, 0.3)' : lead.priority === 'Warm' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(148, 163, 184, 0.3)' }}>
+                                                        {leadLost ? '❌ Lost' : lead.priority === 'Hot' ? '🔥 High' : lead.priority === 'Warm' ? '☀️ Avg' : '❄️ Low'}
                                                     </div>
                                                 </div>
                                             )}
@@ -2406,7 +2634,23 @@ export default function Leads() {
 
                                     {/* 3. Status Badge */}
                                     <td style={{ padding: '16px 20px', verticalAlign: 'middle' }}>
-                                        {lead.status === 'Confirmed' || lead.bookingId ? (
+                                        {leadRideCompleted ? (
+                                            <span style={{
+                                                background: 'rgba(56, 189, 248, 0.15)',
+                                                color: '#38bdf8',
+                                                border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                padding: '4px 10px',
+                                                borderRadius: '8px',
+                                                fontSize: '11.5px',
+                                                fontWeight: '800',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '5px',
+                                                whiteSpace: 'nowrap'
+                                            }}>
+                                                <CheckCircle size={13} color="#38bdf8" /> Completed
+                                            </span>
+                                        ) : leadConfirmed ? (
                                             <span style={{
                                                 background: 'rgba(16, 185, 129, 0.15)',
                                                 color: '#10b981',
@@ -2438,11 +2682,11 @@ export default function Leads() {
                                             }}>
                                                 <XCircle size={13} color="#ef4444" /> Cancelled
                                             </span>
-                                        ) : lead.status === 'Lost' ? (
+                                        ) : leadLost ? (
                                             <span style={{
-                                                background: 'rgba(148, 163, 184, 0.15)',
-                                                color: '#94a3b8',
-                                                border: '1px solid rgba(148, 163, 184, 0.35)',
+                                                background: 'rgba(239, 68, 68, 0.15)',
+                                                color: '#f87171',
+                                                border: '1px solid rgba(239, 68, 68, 0.35)',
                                                 padding: '4px 10px',
                                                 borderRadius: '8px',
                                                 fontSize: '11.5px',
@@ -2452,7 +2696,7 @@ export default function Leads() {
                                                 gap: '5px',
                                                 whiteSpace: 'nowrap'
                                             }}>
-                                                <AlertTriangle size={13} color="#94a3b8" /> Lost
+                                                <XCircle size={13} color="#f87171" /> Lost
                                             </span>
                                         ) : (
                                             <span style={{
@@ -2516,7 +2760,27 @@ export default function Leads() {
                                     <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
                                             {/* Record Advance / Confirm action */}
-                                            {lead.status === 'Confirmed' || lead.bookingId ? (
+                                            {leadRideCompleted ? (
+                                                <a
+                                                    href="/admin/completed-bookings"
+                                                    style={{
+                                                        padding: '5px 10px',
+                                                        borderRadius: '8px',
+                                                        fontSize: '11px',
+                                                        fontWeight: '800',
+                                                        background: 'rgba(56, 189, 248, 0.15)',
+                                                        color: '#38bdf8',
+                                                        border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        textDecoration: 'none'
+                                                    }}
+                                                    title="Trip Completed - View in Completed Bookings"
+                                                >
+                                                    <CheckCircle size={12} /> Completed (View ➔)
+                                                </a>
+                                            ) : leadConfirmed ? (
                                                 <a
                                                     href="/admin/bookings"
                                                     style={{
@@ -2536,7 +2800,7 @@ export default function Leads() {
                                                 >
                                                     <CheckCircle size={12} /> Confirmed (View ➔)
                                                 </a>
-                                             ) : lead.status === 'Cancelled' ? (
+                                             ) : (lead.status === 'Cancelled' || lead.status === 'Lost' || lead.priority === 'Lost') ? (
                                                 <div style={{ display: 'inline-flex', gap: '5px' }}>
                                                     <button
                                                         onClick={() => handleReopenLead(lead)}
@@ -3869,7 +4133,8 @@ export default function Leads() {
                                                                     type="button"
                                                                     onClick={() => {
                                                                         setShowBookingsModal(false);
-                                                                        navigate(`/admin/bookings?search=${encodeURIComponent(b.bookingId || b.clientCode || '')}`);
+                                                                        const targetPath = b.bookingStatus === 'Completed' ? '/admin/completed-bookings' : '/admin/bookings';
+                                                                        navigate(`${targetPath}?search=${encodeURIComponent(b.bookingId || b.clientCode || '')}`);
                                                                     }}
                                                                     style={{
                                                                         padding: '4px 10px',
@@ -4353,13 +4618,21 @@ export default function Leads() {
                                             <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Client Interest Level</label>
                                             <select
                                                 value={formData.priority || 'Unassigned'}
-                                                onChange={e => setFormData({ ...formData, priority: e.target.value })}
+                                                onChange={e => {
+                                                    const val = e.target.value;
+                                                    setFormData(prev => ({
+                                                        ...prev,
+                                                        priority: val,
+                                                        status: val === 'Lost' ? 'Lost' : ((prev.status === 'Lost' || prev.status === 'Cancelled') ? 'New' : prev.status)
+                                                    }));
+                                                }}
                                                 style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '13px', outline: 'none', cursor: 'pointer' }}
                                             >
                                                 <option value="Unassigned" style={{ background: '#090f1d' }}>Not Set</option>
                                                 <option value="Hot" style={{ background: '#090f1d', color: '#fbbf24' }}>🔥 High (Hot)</option>
                                                 <option value="Warm" style={{ background: '#090f1d', color: '#38bdf8' }}>☀️ Average (Warm)</option>
                                                 <option value="Cold" style={{ background: '#090f1d', color: '#94a3b8' }}>❄️ Low (Cold)</option>
+                                                <option value="Lost" style={{ background: '#090f1d', color: '#f87171' }}>❌ Lost</option>
                                             </select>
                                         </div>
                                         

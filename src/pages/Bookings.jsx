@@ -50,10 +50,11 @@ const isDatePassedBooking = (bkg) => {
     if (!bkg) return false;
     const status = (bkg.bookingStatus || '').toLowerCase();
     if (status === 'completed' || status === 'cancelled') return false;
-    const dateVal = bkg.travelStartDate;
+    const dateVal = bkg.travelEndDate || bkg.travelStartDate;
     if (!dateVal) return false;
     const d = new Date(dateVal);
     if (isNaN(d.getTime())) return false;
+    d.setHours(0, 0, 0, 0);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return d < today;
@@ -655,9 +656,17 @@ export default function Bookings() {
             setLoading(true);
             const { data } = await axios.get(`/api/bookings/${selectedCompany._id}`);
             if (Array.isArray(data) && data.length > 0) {
-                setBookings(data);
+                const normalized = data.map(b => {
+                    if (isDatePassedBooking(b)) {
+                        if (b._id && !String(b._id).startsWith('bkg-mock')) {
+                            axios.put(`/api/bookings/single/${b._id}`, { bookingStatus: 'Completed' }).catch(() => {});
+                        }
+                        return { ...b, bookingStatus: 'Completed' };
+                    }
+                    return b;
+                });
+                setBookings(normalized);
             } else {
-                // If company has no bookings yet, provide the baseline mockup matching the screenshot
                 setBookings([]);
             }
         } catch (error) {
@@ -670,12 +679,13 @@ export default function Bookings() {
 
     // Filter & Sort Bookings
     const processedBookings = useMemo(() => {
-          console.log('Bookings state:', bookings.length, bookings.map(b => b.bookingStatus));
         let list = bookings;
-        
 
-        // ONLY show Confirmed and Ongoing bookings in the Bookings page
-        list = list.filter(b => b.bookingStatus === 'Confirmed' || b.bookingStatus === 'Ongoing' || b.status === 'Confirmed' || b.status === 'Ongoing');
+        // ONLY show active Confirmed and Ongoing bookings whose ride date has not completed yet
+        list = list.filter(b =>
+            (b.bookingStatus === 'Confirmed' || b.bookingStatus === 'Ongoing' || b.status === 'Confirmed' || b.status === 'Ongoing') &&
+            !isDatePassedBooking(b)
+        );
 
         // 0. Financial Year Filter
         if (selectedFy && selectedFy !== 'All FY') {

@@ -39,6 +39,7 @@ export default function CompletedBookings() {
     const [ledgerModalBooking, setLedgerModalBooking] = useState(null);
     const [invoiceModalBooking, setInvoiceModalBooking] = useState(null);
     const [editingBooking, setEditingBooking] = useState(null);
+    const [activeActionMenu, setActiveActionMenu] = useState(null);
     const [viewItineraryBooking, setViewItineraryBooking] = useState(null);
     const [downloadPdfModalBooking, setDownloadPdfModalBooking] = useState(null);
 
@@ -288,12 +289,7 @@ export default function CompletedBookings() {
             const bal = Math.max(0, pkg - adv);
             return sum + bal;
         }, 0);
-        const taxInvoices = processedBookings.filter(b => {
-            const pkg = Number(b.packagePrice || b.totalAmount) || 0;
-            const adv = Number(b.advancePaid) || 0;
-            const bal = Math.max(0, pkg - adv);
-            return bal <= 0;
-        }).length;
+        const taxInvoices = processedBookings.length;
 
         return {
             totalRides,
@@ -346,7 +342,7 @@ export default function CompletedBookings() {
             gstMode: bkg.gstMode || 'GST Inclusive',
             gstRate: bkg.gstRate || 5,
             isInterState: false,
-            advanceAdjusted: bkg.advancePaid || bkg.packagePrice || bkg.totalAmount || 0,
+            advanceAdjusted: Number(bkg.advancePaid) || 0,
             notes: 'Completed ride tax invoice generated automatically.'
         };
 
@@ -587,38 +583,39 @@ export default function CompletedBookings() {
             {/* 3. KPI Metric Cards */}
             <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-                gap: '14px',
-                marginBottom: '26px'
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '12px',
+                marginBottom: '18px'
             }}>
                 {/* Total Completed Rides */}
                 <div style={{
                     background: 'rgba(13, 21, 38, 0.7)',
                     border: '1px solid rgba(255, 255, 255, 0.07)',
-                    borderRadius: '16px',
-                    padding: '16px 20px',
+                    borderRadius: '12px',
+                    padding: '11px 14px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '14px'
+                    gap: '12px'
                 }}>
                     <div style={{
-                        width: '42px',
-                        height: '42px',
-                        borderRadius: '12px',
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '9px',
                         background: 'rgba(52, 211, 153, 0.15)',
                         border: '1px solid rgba(52, 211, 153, 0.25)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#34d399'
+                        color: '#34d399',
+                        flexShrink: 0
                     }}>
-                        <CheckCircle size={20} />
+                        <CheckCircle size={16} />
                     </div>
                     <div>
-                        <div style={{ fontSize: '11.5px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
+                        <div style={{ fontSize: '11px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
                             Completed Rides
                         </div>
-                        <div style={{ fontSize: '21px', fontWeight: '900', color: '#ffffff', marginTop: '2px' }}>
+                        <div style={{ fontSize: '17px', fontWeight: '900', color: '#ffffff', marginTop: '1px' }}>
                             {kpiStats.totalRides}
                         </div>
                     </div>
@@ -628,30 +625,31 @@ export default function CompletedBookings() {
                 <div style={{
                     background: 'rgba(13, 21, 38, 0.7)',
                     border: '1px solid rgba(255, 255, 255, 0.07)',
-                    borderRadius: '16px',
-                    padding: '16px 20px',
+                    borderRadius: '12px',
+                    padding: '11px 14px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '14px'
+                    gap: '12px'
                 }}>
                     <div style={{
-                        width: '42px',
-                        height: '42px',
-                        borderRadius: '12px',
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '9px',
                         background: 'rgba(251, 191, 36, 0.15)',
                         border: '1px solid rgba(251, 191, 36, 0.25)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#fbbf24'
+                        color: '#fbbf24',
+                        flexShrink: 0
                     }}>
-                        <IndianRupee size={20} />
+                        <IndianRupee size={16} />
                     </div>
                     <div>
-                        <div style={{ fontSize: '11.5px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
+                        <div style={{ fontSize: '11px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
                             Total Tour Value
                         </div>
-                        <div style={{ fontSize: '21px', fontWeight: '900', color: '#ffffff', marginTop: '2px' }}>
+                        <div style={{ fontSize: '17px', fontWeight: '900', color: '#ffffff', marginTop: '1px' }}>
                             ₹{kpiStats.packageValue.toLocaleString('en-IN')}
                         </div>
                     </div>
@@ -661,30 +659,31 @@ export default function CompletedBookings() {
                 <div style={{
                     background: 'rgba(13, 21, 38, 0.7)',
                     border: '1px solid rgba(255, 255, 255, 0.07)',
-                    borderRadius: '16px',
-                    padding: '16px 20px',
+                    borderRadius: '12px',
+                    padding: '11px 14px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '14px'
+                    gap: '12px'
                 }}>
                     <div style={{
-                        width: '42px',
-                        height: '42px',
-                        borderRadius: '12px',
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '9px',
                         background: 'rgba(16, 185, 129, 0.15)',
                         border: '1px solid rgba(16, 185, 129, 0.3)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#34d399'
+                        color: '#34d399',
+                        flexShrink: 0
                     }}>
-                        <CreditCard size={20} />
+                        <CreditCard size={16} />
                     </div>
                     <div>
-                        <div style={{ fontSize: '11.5px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
+                        <div style={{ fontSize: '11px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
                             Received Amount
                         </div>
-                        <div style={{ fontSize: '21px', fontWeight: '900', color: '#34d399', marginTop: '2px' }}>
+                        <div style={{ fontSize: '17px', fontWeight: '900', color: '#34d399', marginTop: '1px' }}>
                             ₹{kpiStats.receivedAmount.toLocaleString('en-IN')}
                         </div>
                     </div>
@@ -694,30 +693,31 @@ export default function CompletedBookings() {
                 <div style={{
                     background: 'rgba(13, 21, 38, 0.7)',
                     border: '1px solid rgba(255, 255, 255, 0.07)',
-                    borderRadius: '16px',
-                    padding: '16px 20px',
+                    borderRadius: '12px',
+                    padding: '11px 14px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '14px'
+                    gap: '12px'
                 }}>
                     <div style={{
-                        width: '42px',
-                        height: '42px',
-                        borderRadius: '12px',
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '9px',
                         background: 'rgba(239, 68, 68, 0.15)',
                         border: '1px solid rgba(239, 68, 68, 0.3)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#f87171'
+                        color: '#f87171',
+                        flexShrink: 0
                     }}>
-                        <Hourglass size={20} />
+                        <Hourglass size={16} />
                     </div>
                     <div>
-                        <div style={{ fontSize: '11.5px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
+                        <div style={{ fontSize: '11px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
                             Balance Pending
                         </div>
-                        <div style={{ fontSize: '21px', fontWeight: '900', color: kpiStats.balanceDue > 0 ? '#f87171' : '#34d399', marginTop: '2px' }}>
+                        <div style={{ fontSize: '17px', fontWeight: '900', color: kpiStats.balanceDue > 0 ? '#f87171' : '#34d399', marginTop: '1px' }}>
                             ₹{kpiStats.balanceDue.toLocaleString('en-IN')}
                         </div>
                     </div>
@@ -727,30 +727,31 @@ export default function CompletedBookings() {
                 <div style={{
                     background: 'rgba(13, 21, 38, 0.7)',
                     border: '1px solid rgba(255, 255, 255, 0.07)',
-                    borderRadius: '16px',
-                    padding: '16px 20px',
+                    borderRadius: '12px',
+                    padding: '11px 14px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '14px'
+                    gap: '12px'
                 }}>
                     <div style={{
-                        width: '42px',
-                        height: '42px',
-                        borderRadius: '12px',
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '9px',
                         background: 'rgba(59, 130, 246, 0.15)',
                         border: '1px solid rgba(59, 130, 246, 0.25)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#60a5fa'
+                        color: '#60a5fa',
+                        flexShrink: 0
                     }}>
-                        <Receipt size={20} />
+                        <Receipt size={16} />
                     </div>
                     <div>
-                        <div style={{ fontSize: '11.5px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
-                            Invoices Ready (Paid)
+                        <div style={{ fontSize: '11px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}>
+                            Tax Invoices Ready
                         </div>
-                        <div style={{ fontSize: '21px', fontWeight: '900', color: '#ffffff', marginTop: '2px' }}>
+                        <div style={{ fontSize: '17px', fontWeight: '900', color: '#ffffff', marginTop: '1px' }}>
                             {kpiStats.taxInvoices}
                         </div>
                     </div>
@@ -761,8 +762,8 @@ export default function CompletedBookings() {
             <div style={{
                 background: 'rgba(13, 21, 38, 0.6)',
                 border: '1px solid rgba(255, 255, 255, 0.07)',
-                borderRadius: '16px',
-                overflow: 'hidden',
+                borderRadius: '14px',
+                overflow: 'visible',
                 marginBottom: '20px'
             }}>
                 <div style={{ overflowX: 'auto' }}>
@@ -776,69 +777,72 @@ export default function CompletedBookings() {
                                 background: '#0a101d',
                                 borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
                             }}>
-                                <th style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', width: '50px' }}>
+                                <th style={{ padding: '11px 14px', fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', width: '44px' }}>
                                     #
                                 </th>
                                 <th
                                     onClick={() => handleSort('bookingId')}
-                                    style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none' }}
+                                    style={{ padding: '11px 14px', fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                                 >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        Booking ID <ArrowUpDown size={12} />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        Booking ID <ArrowUpDown size={11} />
                                     </div>
                                 </th>
                                 <th
                                     onClick={() => handleSort('guestName')}
-                                    style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none' }}
+                                    style={{ padding: '11px 14px', fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                                 >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        Guest & Contact <ArrowUpDown size={12} />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        Guest & Contact <ArrowUpDown size={11} />
                                     </div>
                                 </th>
                                 <th
                                     onClick={() => handleSort('travelStartDate')}
-                                    style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none' }}
+                                    style={{ padding: '11px 14px', fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                                 >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        Trip Dates <ArrowUpDown size={12} />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        Trip Dates <ArrowUpDown size={11} />
                                     </div>
                                 </th>
                                 <th
                                     onClick={() => handleSort('packagePrice')}
-                                    style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none' }}
+                                    style={{ padding: '11px 14px', fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                                 >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        Package Price (₹) <ArrowUpDown size={12} />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        Package (₹) <ArrowUpDown size={11} />
                                     </div>
                                 </th>
                                 <th
                                     onClick={() => handleSort('advancePaid')}
-                                    style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none' }}
+                                    style={{ padding: '11px 14px', fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                                 >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        Received (₹) <ArrowUpDown size={12} />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        Received (₹) <ArrowUpDown size={11} />
                                     </div>
                                 </th>
                                 <th
                                     onClick={() => handleSort('balanceDue')}
-                                    style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none' }}
+                                    style={{ padding: '11px 14px', fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                                 >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        Balance Due (₹) <ArrowUpDown size={12} />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        Balance (₹) <ArrowUpDown size={11} />
                                     </div>
                                 </th>
-                                <th style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textAlign: 'center' }}>
-                                    Client Ledger
+                                <th style={{ padding: '11px 12px', fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                    Ledger
                                 </th>
-                                <th style={{ padding: '14px 16px', fontSize: '12px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textAlign: 'right' }}>
-                                    Tax Invoice
+                                <th style={{ padding: '11px 12px', fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                    Invoice
+                                </th>
+                                <th style={{ padding: '11px 14px', fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textAlign: 'center', width: '60px' }}>
+                                    Action
                                 </th>
                             </tr>
                         </thead>
                         <tbody>
                             {paginatedBookings.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} style={{ padding: '48px 16px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
+                                    <td colSpan={10} style={{ padding: '40px 16px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>
                                         No completed bookings found for {selectedMonth} {selectedFy}.
                                     </td>
                                 </tr>
@@ -848,14 +852,14 @@ export default function CompletedBookings() {
                                     const pkgPrice = Number(bkg.packagePrice || bkg.totalAmount) || 0;
                                     const recAmt = Number(bkg.advancePaid) || 0;
                                     const bal = Math.max(0, pkgPrice - recAmt);
-                                    const isPaymentDone = bal <= 0;
                                     const daysCount = Array.isArray(bkg.itinerary) && bkg.itinerary.length > 0 
                                         ? bkg.itinerary.length 
                                         : 1;
+                                    const rowMenuId = bkg._id || idx;
 
                                     return (
                                         <tr
-                                            key={bkg._id || idx}
+                                            key={rowMenuId}
                                             style={{
                                                 borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
                                                 transition: 'background 0.15s'
@@ -864,82 +868,81 @@ export default function CompletedBookings() {
                                             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                                         >
                                             {/* Serial No */}
-                                            <td style={{ padding: '14px 16px', fontSize: '13px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>
+                                            <td style={{ padding: '10px 14px', fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>
                                                 {serialNo}
                                             </td>
 
                                             {/* Booking ID */}
-                                            <td style={{ padding: '14px 16px' }}>
-                                                <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#fbbf24', fontFamily: 'monospace' }}>
+                                            <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                                                <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#fbbf24', fontFamily: 'monospace' }}>
                                                     {bkg.bookingId}
                                                 </span>
                                             </td>
 
                                             {/* Guest Name & Mobile */}
-                                            <td style={{ padding: '14px 16px' }}>
-                                                <div style={{ fontSize: '13.5px', fontWeight: '700', color: '#ffffff' }}>
+                                            <td style={{ padding: '10px 14px' }}>
+                                                <div style={{ fontSize: '12.5px', fontWeight: '700', color: '#ffffff' }}>
                                                     {bkg.guestName}
                                                 </div>
                                                 {bkg.mobileNumber && (
-                                                    <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.5)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <Phone size={10} /> {bkg.mobileNumber}
+                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '1px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <Phone size={9} /> {bkg.mobileNumber}
                                                     </div>
                                                 )}
                                             </td>
 
                                             {/* Trip Dates */}
-                                            <td style={{ padding: '14px 16px' }}>
-                                                <div style={{ fontSize: '12.5px', fontWeight: '600', color: 'rgba(255,255,255,0.9)' }}>
+                                            <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                                                <div style={{ fontSize: '12px', fontWeight: '600', color: 'rgba(255,255,255,0.9)' }}>
                                                     {formatTripDate(bkg.travelStartDate)} {bkg.travelEndDate && bkg.travelEndDate !== bkg.travelStartDate ? `- ${formatTripDate(bkg.travelEndDate)}` : ''}
                                                 </div>
-                                                <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.45)', marginTop: '2px' }}>
+                                                <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', marginTop: '1px' }}>
                                                     {daysCount} {daysCount > 1 ? 'Days Tour' : 'Day Tour'}
                                                 </div>
                                             </td>
 
                                             {/* Package Price */}
-                                            <td style={{ padding: '14px 16px' }}>
-                                                <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#ffffff' }}>
+                                            <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                                                <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#ffffff' }}>
                                                     ₹{pkgPrice.toLocaleString('en-IN')}
                                                 </span>
                                             </td>
 
                                             {/* Received Amount */}
-                                            <td style={{ padding: '14px 16px' }}>
-                                                <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#34d399' }}>
+                                            <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                                                <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#34d399' }}>
                                                     ₹{recAmt.toLocaleString('en-IN')}
                                                 </span>
                                             </td>
 
                                             {/* Balance Due */}
-                                            <td style={{ padding: '14px 16px' }}>
+                                            <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                                                 {bal > 0 ? (
-                                                    <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#f87171' }}>
+                                                    <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#f87171' }}>
                                                         ₹{bal.toLocaleString('en-IN')}
                                                     </span>
                                                 ) : (
-                                                    <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#34d399' }}>
+                                                    <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#34d399' }}>
                                                         ₹0
                                                     </span>
                                                 )}
                                             </td>
 
                                             {/* Client Ledger */}
-                                            <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                                                 <button
                                                     type="button"
                                                     onClick={() => setLedgerModalBooking(bkg)}
                                                     title="Open Client Account Ledger & Payment Statement"
                                                     style={{
-                                                        padding: '6px 14px',
+                                                        padding: '4px 11px',
                                                         background: '#2563eb',
                                                         border: 'none',
-                                                        borderRadius: '20px',
+                                                        borderRadius: '16px',
                                                         color: '#ffffff',
-                                                        fontSize: '11.5px',
+                                                        fontSize: '11px',
                                                         fontWeight: '700',
                                                         cursor: 'pointer',
-                                                        boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
                                                         whiteSpace: 'nowrap'
                                                     }}
                                                 >
@@ -947,62 +950,101 @@ export default function CompletedBookings() {
                                                 </button>
                                             </td>
 
-                                            {/* Tax Invoice (Appears ONLY when payment is done) */}
-                                            <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                                                {isPaymentDone ? (
-                                                    <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleDownloadInvoice(bkg)}
-                                                            style={{
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                gap: '5px',
-                                                                background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-                                                                border: '1px solid rgba(56, 189, 248, 0.4)',
-                                                                borderRadius: '8px',
-                                                                padding: '6px 12px',
-                                                                color: '#ffffff',
-                                                                fontSize: '11.5px',
-                                                                fontWeight: '800',
-                                                                cursor: 'pointer',
-                                                                boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)',
-                                                                whiteSpace: 'nowrap'
-                                                            }}
-                                                            title="Download Official GST Tax Invoice"
-                                                        >
-                                                            <Receipt size={13} />
-                                                            <span>Tax Invoice</span>
-                                                        </button>
+                                            {/* Tax Invoice (Compact button for all completed bookings) */}
+                                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDownloadInvoice(bkg)}
+                                                    style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        background: 'rgba(2, 132, 199, 0.2)',
+                                                        border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                        borderRadius: '16px',
+                                                        padding: '4px 10px',
+                                                        color: '#38bdf8',
+                                                        fontSize: '11px',
+                                                        fontWeight: '700',
+                                                        cursor: 'pointer',
+                                                        whiteSpace: 'nowrap'
+                                                    }}
+                                                    title="Download Official GST Tax Invoice"
+                                                >
+                                                    <Receipt size={11} />
+                                                    <span>Invoice</span>
+                                                </button>
+                                            </td>
 
-                                                        {bkg.invoiceGenerated && (
+                                            {/* Action Menu (3-dot dropdown matching Confirmed Bookings) */}
+                                            <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                                                <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setActiveActionMenu(activeActionMenu === rowMenuId ? null : rowMenuId)}
+                                                        style={{
+                                                            width: '28px',
+                                                            height: '28px',
+                                                            borderRadius: '6px',
+                                                            background: 'transparent',
+                                                            border: '1px solid rgba(255,255,255,0.12)',
+                                                            color: 'rgba(255,255,255,0.8)',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center'
+                                                        }}
+                                                        title="Booking Actions"
+                                                    >
+                                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
+                                                    </button>
+
+                                                    {activeActionMenu === rowMenuId && (
+                                                        <div style={{
+                                                            position: 'absolute',
+                                                            right: 0,
+                                                            top: '100%',
+                                                            marginTop: '4px',
+                                                            background: '#0B1121',
+                                                            border: '1px solid rgba(255,255,255,0.12)',
+                                                            borderRadius: '10px',
+                                                            padding: '5px',
+                                                            width: '185px',
+                                                            zIndex: 200,
+                                                            boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
+                                                            textAlign: 'left'
+                                                        }}>
                                                             <button
                                                                 type="button"
-                                                                onClick={() => setInvoiceModalBooking(bkg)}
-                                                                style={{
-                                                                    display: 'inline-flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '4px',
-                                                                    background: 'rgba(255,255,255,0.06)',
-                                                                    border: '1px solid rgba(255,255,255,0.15)',
-                                                                    borderRadius: '8px',
-                                                                    padding: '6px 10px',
-                                                                    color: '#38bdf8',
-                                                                    fontSize: '11px',
-                                                                    fontWeight: '700',
-                                                                    cursor: 'pointer'
-                                                                }}
-                                                                title="Edit Tax Invoice"
+                                                                onClick={() => { setActiveActionMenu(null); setEditingBooking(bkg); }}
+                                                                style={{ width: '100%', padding: '7px 10px', background: 'transparent', border: 'none', color: '#ffffff', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}
                                                             >
-                                                                <Edit size={12} />
+                                                                <Edit size={13} color="#a78bfa" /> Edit Booking
                                                             </button>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', fontWeight: '600' }}>
-                                                        —
-                                                    </span>
-                                                )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => { setActiveActionMenu(null); handleOpenPaymentModal(bkg); }}
+                                                                style={{ width: '100%', padding: '7px 10px', background: 'transparent', border: 'none', color: '#ffffff', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}
+                                                            >
+                                                                <IndianRupee size={13} color="#4ade80" /> Record Payment
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => { setActiveActionMenu(null); handleDownloadInvoice(bkg); }}
+                                                                style={{ width: '100%', padding: '7px 10px', background: 'transparent', border: 'none', color: '#ffffff', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}
+                                                            >
+                                                                <Receipt size={13} color="#38bdf8" /> Download Invoice
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => { setActiveActionMenu(null); setInvoiceModalBooking(bkg); }}
+                                                                style={{ width: '100%', padding: '7px 10px', background: 'transparent', border: 'none', color: '#ffffff', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}
+                                                            >
+                                                                <FileText size={13} color="#fbbf24" /> Customize Invoice
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     );
