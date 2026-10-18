@@ -273,7 +273,7 @@ const CarUtility = () => {
         try {
             const token = JSON.parse(localStorage.getItem('userInfo')).token;
             if (formData instanceof FormData && !formData.get('vehicleId')) {
-                formData.append('vehicleId', targetId);
+                formData.set('vehicleId', targetId);
             }
             await axios.post('/api/admin/border-tax', formData, {
                 headers: {
@@ -303,8 +303,8 @@ const CarUtility = () => {
         try {
             const token = JSON.parse(localStorage.getItem('userInfo')).token;
             if (formData instanceof FormData) {
-                if (!formData.get('vehicleId')) formData.append('vehicleId', targetId);
-                formData.append('maintenanceType', 'Driver Services');
+                if (!formData.get('vehicleId')) formData.set('vehicleId', targetId);
+                formData.set('maintenanceType', 'Driver Services');
             }
             await axios.post('/api/admin/maintenance', formData, {
                 headers: {
@@ -1213,17 +1213,17 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 const fd = new FormData();
                 Object.keys(form).forEach(k => {
                     if (form[k] !== undefined && form[k] !== null && !['date', 'billDate', 'vehicleId'].includes(k)) {
-                        fd.append(k, form[k]);
+                        fd.set(k, form[k]);
                     }
                 });
-                fd.append('date', finalDate);
-                fd.append('billDate', finalDate);
-                if (companyId) fd.append('companyId', companyId);
-                fd.append('vehicleId', targetVehicleId);
-                fd.append('paidBy', form.paidBy || 'Company');
-                fd.append('paymentSource', form.paidBy === 'Guest' ? 'Guest' : 'Office');
+                fd.set('date', finalDate);
+                fd.set('billDate', finalDate);
+                if (companyId) fd.set('companyId', companyId);
+                fd.set('vehicleId', targetVehicleId);
+                fd.set('paidBy', form.paidBy || 'Company');
+                fd.set('paymentSource', form.paidBy === 'Guest' ? 'Guest' : 'Office');
 
-                if (file) fd.append('receiptPhoto', file);
+                if (file) fd.set('receiptPhoto', file);
 
                 if (editingItem) {
                     success = await onUpdate(editingItem._id, fd);
@@ -1235,24 +1235,23 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 const fd = new FormData();
                 Object.keys(form).forEach(k => {
                     if (form[k] !== undefined && form[k] !== null && !['date', 'billDate', 'vehicleId'].includes(k)) {
-                        fd.append(k, form[k]);
+                        fd.set(k, form[k]);
                     }
                 });
-                fd.append('date', finalDate);
-                fd.append('billDate', finalDate);
-                fd.append('maintenanceType', 'Driver Services'); // Strict isolation tag
-                fd.append('category', form.category || 'Car Wash');
-                fd.append('description', form.remarks || '');
-                fd.append('remarks', form.remarks || '');
-                if (companyId) fd.append('companyId', companyId);
-                fd.append('vehicleId', targetVehicleId);
-                fd.append('paidBy', form.paidBy || 'Company');
-                fd.append('paymentSource', form.paidBy === 'Guest' ? 'Guest' : 'Office');
-                if (form.driverId) fd.append('driverId', form.driverId);
+                fd.set('date', finalDate);
+                fd.set('billDate', finalDate);
+                fd.set('maintenanceType', 'Driver Services'); // Strict isolation tag
+                fd.set('category', form.category || 'Car Wash');
+                fd.set('description', form.remarks || '');
+                fd.set('remarks', form.remarks || '');
+                if (companyId) fd.set('companyId', companyId);
+                fd.set('vehicleId', targetVehicleId);
+                fd.set('paidBy', form.paidBy || 'Company');
+                fd.set('paymentSource', form.paidBy === 'Guest' ? 'Guest' : 'Office');
+                if (form.driverId) fd.set('driverId', form.driverId);
 
                 if (file) {
-                    fd.append('billPhoto', file);
-                    fd.append('receiptPhoto', file);
+                    fd.set('billPhoto', file);
                 }
 
                 if (editingItem) {
