@@ -368,12 +368,14 @@ export default function Leads() {
         leadDate: '',
         travelStartDate: '',
         travelEndDate: '',
+        isBreakTour: false,
+        excludedDates: [],
         carType: 'Innova Crysta',
         numberOfCars: 1,
         gstMode: 'GST Inclusive',
         gstRate: 5,
         status: 'New',
-          priority: 'Unassigned',
+        priority: 'Unassigned',
         notes: '',
         specialRemarks: '',
         inclusions: {
@@ -388,6 +390,28 @@ export default function Leads() {
         totalAmount: 0
     });
 
+    // Generate all dates in range [travelStartDate, travelEndDate]
+    const allTourDates = useMemo(() => {
+        if (!formData.travelStartDate || !formData.travelEndDate) return [];
+        const s = toLocalDateString(formData.travelStartDate);
+        const e = toLocalDateString(formData.travelEndDate);
+        if (!s || !e || e < s) return s ? [s] : [];
+        const count = Math.min(90, getDaysDifference(s, e));
+        const arr = [];
+        for (let i = 0; i < count; i++) {
+            arr.push(addDaysToDateString(s, i));
+        }
+        return arr;
+    }, [formData.travelStartDate, formData.travelEndDate]);
+
+    const validExcludedDates = useMemo(() => {
+        const set = new Set(allTourDates);
+        return (formData.excludedDates || []).filter(d => set.has(d));
+    }, [formData.excludedDates, allTourDates]);
+
+    const totalStayDays = Math.max(1, allTourDates.length || formData.itinerary?.length || 1);
+    const activeCarDays = Math.max(1, totalStayDays - validExcludedDates.length);
+
     // Vehicle Matrix Math Calculations
     const currentFuelConfig = FUEL_TYPES.find(f => f.type === matrixFuelType) || FUEL_TYPES[0];
     const matrixKmVal = parseFloat(matrixTotalKmRun) || 0;
@@ -401,7 +425,7 @@ export default function Leads() {
     const matrixGstVal = parseFloat(matrixGstAmount) || 0;
     const matrixPackageVal = parseFloat(formData.totalAmount) || 0;
 
-    const matrixDaysVal = Math.max(1, (formData.travelStartDate && formData.travelEndDate ? getDaysDifference(formData.travelStartDate, formData.travelEndDate) : 0) || formData.itinerary?.length || 1);
+    const matrixDaysVal = activeCarDays;
     const matrixTargetPerDayVal = parseFloat(matrixTargetPerDay) || 0;
 
     const matrixTotalCost = matrixFuelCost + matrixDriverSalaryVal + matrixNightHoldVal + matrixTollVal + matrixGstVal;
@@ -594,6 +618,103 @@ export default function Leads() {
         });
     };
 
+    // Toggle a specific date as Break Day (No Car Used) vs Active Car Day
+    const toggleBreakTourDate = (dateStr) => {
+        setFormData(prev => {
+            const currentExcluded = Array.isArray(prev.excludedDates) ? [...prev.excludedDates] : [];
+            const isExcluded = currentExcluded.includes(dateStr);
+            let nextExcluded;
+            if (isExcluded) {
+                nextExcluded = currentExcluded.filter(d => d !== dateStr);
+            } else {
+                // Prevent excluding all dates (must have at least 1 active car day)
+                const activeCountAfter = allTourDates.filter(d => !currentExcluded.includes(d) && d !== dateStr).length;
+                if (activeCountAfter < 1) {
+                    alert('At least 1 active car usage day is required in the tour!');
+                    return prev;
+                }
+                nextExcluded = [...currentExcluded, dateStr].sort();
+            }
+
+            // If itinerary already has items, keep itinerary synced with active dates
+            let nextItinerary = prev.itinerary || [];
+            if (nextItinerary.length > 0) {
+                if (!isExcluded) {
+                    // Date was just marked as Break (No Car) -> remove that date from itinerary
+                    nextItinerary = nextItinerary
+                        .filter(item => toLocalDateString(item.date) !== dateStr)
+                        .map((item, idx) => ({ ...item, dayNo: idx + 1 }));
+                } else {
+                    // Date was re-activated -> insert into itinerary in chronological order if not present
+                    const exists = nextItinerary.some(item => toLocalDateString(item.date) === dateStr);
+                    if (!exists) {
+                        const newRow = {
+                            dayNo: 1,
+                            date: dateStr,
+                            time: '09:00 AM',
+                            isApg: false,
+                            pickupPoint: '',
+                            duty: 'City Tour / Transfer',
+                            description: 'City Tour / Transfer',
+                            vehicleType: prev.carType || 'Innova Crysta',
+                            vehicleCount: prev.numberOfCars || 1,
+                            quantity: prev.numberOfCars || 1,
+                            rate: 0,
+                            amount: 0
+                        };
+                        nextItinerary = [...nextItinerary, newRow]
+                            .sort((a, b) => toLocalDateString(a.date).localeCompare(toLocalDateString(b.date)))
+                            .map((item, idx) => ({ ...item, dayNo: idx + 1 }));
+                    }
+                }
+            }
+
+            return {
+                ...prev,
+                isBreakTour: nextExcluded.length > 0 ? true : prev.isBreakTour,
+                excludedDates: nextExcluded,
+                itinerary: nextItinerary
+            };
+        });
+    };
+
+    const syncActiveDatesToItinerary = () => {
+        const activeDatesList = allTourDates.filter(d => !validExcludedDates.includes(d));
+        if (activeDatesList.length === 0) return;
+        setFormData(prev => {
+            const existingByDate = {};
+            (prev.itinerary || []).forEach(item => {
+                const dStr = toLocalDateString(item.date);
+                if (dStr) existingByDate[dStr] = item;
+            });
+            const nextItin = activeDatesList.map((dStr, idx) => {
+                const ex = existingByDate[dStr];
+                if (ex) {
+                    return { ...ex, dayNo: idx + 1, date: dStr };
+                }
+                return {
+                    dayNo: idx + 1,
+                    date: dStr,
+                    time: idx === 0 ? '09:00 AM' : '10:00 AM',
+                    isApg: false,
+                    pickupPoint: '',
+                    duty: idx === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer',
+                    description: idx === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer',
+                    vehicleType: prev.carType || 'Innova Crysta',
+                    vehicleCount: prev.numberOfCars || 1,
+                    quantity: prev.numberOfCars || 1,
+                    rate: 0,
+                    amount: 0
+                };
+            });
+            return {
+                ...prev,
+                itinerary: nextItin
+            };
+        });
+        setShowDetailedItinerary(true);
+    };
+
     // Itinerary Row Field Handlers
     const handleItineraryRowChange = (index, field, value) => {
         const updated = [...formData.itinerary];
@@ -707,6 +828,7 @@ export default function Leads() {
             const isConfirmedLead = (lead.status === 'Confirmed' || lead.status === 'Converted' || !!lead.bookingId || Number(lead.advancePayment) > 0) && lead.status !== 'Cancelled' && lead.status !== 'Lost' && lead.priority !== 'Lost';
             const endOrStart = eDate || sDate;
             const isAutoLost = lead.status === 'Lost' || lead.priority === 'Lost' || lead.status === 'Cancelled' || (!isConfirmedLead && endOrStart && endOrStart < todayStr);
+            const savedExcluded = Array.isArray(lead.excludedDates) ? lead.excludedDates : [];
             setFormData({
                 bookingReference: lead.bookingReference || 'Direct',
                 travelAgent: lead.travelAgent || '',
@@ -723,6 +845,8 @@ export default function Leads() {
                 leadDate: toLocalDateString(lead.leadDate) || toLocalDateString(new Date()),
                 travelStartDate: sDate,
                 travelEndDate: eDate,
+                isBreakTour: Boolean(lead.isBreakTour) || savedExcluded.length > 0,
+                excludedDates: savedExcluded,
                 carType: lead.carType || 'Innova Crysta',
                 numberOfCars: lead.numberOfCars || 1,
                 gstMode: lead.gstMode || 'GST Inclusive',
@@ -803,6 +927,8 @@ export default function Leads() {
                 leadDate: today,
                 travelStartDate: today,
                 travelEndDate: today,
+                isBreakTour: false,
+                excludedDates: [],
                 carType: 'Innova Crysta',
                 numberOfCars: 1,
                 gstMode: 'GST Inclusive',
@@ -858,6 +984,9 @@ export default function Leads() {
 
             const payload = {
                 ...formData,
+                isBreakTour: validExcludedDates.length > 0,
+                excludedDates: validExcludedDates,
+                activeDaysCount: activeCarDays,
                 status: finalStatus,
                 vehicleMatrix: finalVehicleMatrix,
                 clientName: finalClientName,
@@ -1035,7 +1164,10 @@ export default function Leads() {
         const sDate = lead.travelStartDate ? new Date(lead.travelStartDate).toLocaleDateString('en-IN') : '';
         const eDate = lead.travelEndDate ? new Date(lead.travelEndDate).toLocaleDateString('en-IN') : '';
         const diffDays = getDaysDifference(toLocalDateString(lead.travelStartDate), toLocalDateString(lead.travelEndDate));
-        doc.text(`Travel Dates: ${sDate} to ${eDate} (${diffDays} Days)`, 120, 50);
+        const exclCount = Array.isArray(lead.excludedDates) ? lead.excludedDates.length : 0;
+        const activeDaysPdf = exclCount > 0 ? Math.max(1, diffDays - exclCount) : diffDays;
+        const durationLabelPdf = exclCount > 0 ? `${activeDaysPdf} Car Days / ${diffDays}d Stay` : `${diffDays} Days`;
+        doc.text(`Travel Dates: ${sDate} to ${eDate} (${durationLabelPdf})`, 120, 50);
 
         // Day-wise Itinerary Table
         const tableColumn = withAmount
@@ -2724,22 +2856,49 @@ export default function Leads() {
 
                                     {/* 5. Travel Dates */}
                                     <td style={{ padding: '16px 20px' }}>
-                                        {lead.travelStartDate ? (
-                                            <div>
-                                                <div style={{ fontSize: '13px', color: 'white', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
-                                                    <Calendar size={13} color="#fbbf24" />
-                                                    <span>
-                                                        {formatTourDate(lead.travelStartDate)}
-                                                        {lead.travelEndDate && toLocalDateString(lead.travelEndDate) !== toLocalDateString(lead.travelStartDate) && (
-                                                            ` ➔ ${formatTourDate(lead.travelEndDate)}`
+                                        {lead.travelStartDate ? (() => {
+                                            const totalStay = getDaysDifference(toLocalDateString(lead.travelStartDate), toLocalDateString(lead.travelEndDate || lead.travelStartDate));
+                                            const exclDates = Array.isArray(lead.excludedDates) ? lead.excludedDates : [];
+                                            const activeDays = exclDates.length > 0 ? Math.max(1, totalStay - exclDates.length) : totalStay;
+                                            return (
+                                                <div>
+                                                    <div style={{ fontSize: '13px', color: 'white', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                                                        <Calendar size={13} color="#fbbf24" />
+                                                        <span>
+                                                            {formatTourDate(lead.travelStartDate)}
+                                                            {lead.travelEndDate && toLocalDateString(lead.travelEndDate) !== toLocalDateString(lead.travelStartDate) && (
+                                                                ` ➔ ${formatTourDate(lead.travelEndDate)}`
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                                                        {exclDates.length > 0 ? (
+                                                            <>
+                                                                <span style={{ color: '#34d399', fontWeight: '800' }}>🚗 {activeDays} Car Days</span>
+                                                                <span>•</span>
+                                                                <span>{totalStay}d Stay</span>
+                                                                <span
+                                                                    style={{
+                                                                        background: 'rgba(239, 68, 68, 0.15)',
+                                                                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                                                                        color: '#f87171',
+                                                                        padding: '1px 6px',
+                                                                        borderRadius: '5px',
+                                                                        fontSize: '10px',
+                                                                        fontWeight: '800'
+                                                                    }}
+                                                                    title={`Break / No Car Dates: ${exclDates.map(d => formatTourDate(d)).join(', ')}`}
+                                                                >
+                                                                    ⏸️ {exclDates.length} Break Day{exclDates.length > 1 ? 's' : ''}
+                                                                </span>
+                                                            </>
+                                                        ) : (
+                                                            <span>{totalStay} Days Tour • {travelInfo.month}</span>
                                                         )}
-                                                    </span>
+                                                    </div>
                                                 </div>
-                                                <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px', fontWeight: '600' }}>
-                                                    {getDaysDifference(toLocalDateString(lead.travelStartDate), toLocalDateString(lead.travelEndDate || lead.travelStartDate))} Days Tour • {travelInfo.month}
-                                                </div>
-                                            </div>
-                                        ) : (
+                                            );
+                                        })() : (
                                             <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>TBA</span>
                                         )}
                                     </td>
@@ -4868,6 +5027,202 @@ export default function Leads() {
                                     </div>
 
                                     {/* ========================================================= */}
+                                    {/* BREAK TOUR / CAR USAGE SCHEDULE (SKIP CAR DAYS)           */}
+                                    {/* ========================================================= */}
+                                    {allTourDates.length > 0 && (
+                                        <div style={{
+                                            marginTop: '12px',
+                                            background: (formData.isBreakTour || validExcludedDates.length > 0)
+                                                ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(15, 23, 42, 0.9))'
+                                                : 'rgba(255, 255, 255, 0.02)',
+                                            border: (formData.isBreakTour || validExcludedDates.length > 0)
+                                                ? '1px solid rgba(245, 158, 11, 0.4)'
+                                                : '1px solid rgba(255, 255, 255, 0.08)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            transition: 'all 0.2s ease'
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setFormData(prev => {
+                                                                const turningOff = prev.isBreakTour && (prev.excludedDates || []).length === 0;
+                                                                if (prev.isBreakTour && (prev.excludedDates || []).length > 0) {
+                                                                    // Turn off break tour and restore all dates
+                                                                    return { ...prev, isBreakTour: false, excludedDates: [] };
+                                                                }
+                                                                return { ...prev, isBreakTour: !prev.isBreakTour };
+                                                            });
+                                                        }}
+                                                        style={{
+                                                            background: (formData.isBreakTour || validExcludedDates.length > 0)
+                                                                ? 'rgba(245, 158, 11, 0.2)'
+                                                                : 'rgba(255, 255, 255, 0.06)',
+                                                            border: (formData.isBreakTour || validExcludedDates.length > 0)
+                                                                ? '1.5px solid #fbbf24'
+                                                                : '1px solid rgba(255, 255, 255, 0.15)',
+                                                            color: (formData.isBreakTour || validExcludedDates.length > 0)
+                                                                ? '#fbbf24'
+                                                                : '#cbd5e1',
+                                                            padding: '6px 12px',
+                                                            borderRadius: '8px',
+                                                            fontSize: '12px',
+                                                            fontWeight: '800',
+                                                            cursor: 'pointer',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '6px',
+                                                            transition: 'all 0.15s ease'
+                                                        }}
+                                                    >
+                                                        <span>{(formData.isBreakTour || validExcludedDates.length > 0) ? '✅' : '⏸️'}</span>
+                                                        <span>Break Tour (Guest Skip Car Days)</span>
+                                                    </button>
+
+                                                    {/* Live Stay vs Car Usage Badges */}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                        <span style={{
+                                                            background: 'rgba(148, 163, 184, 0.12)',
+                                                            border: '1px solid rgba(148, 163, 184, 0.25)',
+                                                            color: '#cbd5e1',
+                                                            padding: '3px 9px',
+                                                            borderRadius: '6px',
+                                                            fontSize: '11.5px',
+                                                            fontWeight: '700'
+                                                        }}>
+                                                            📅 Total Stay: <strong style={{ color: 'white' }}>{totalStayDays} Day{totalStayDays > 1 ? 's' : ''}</strong>
+                                                        </span>
+                                                        <span style={{
+                                                            background: 'rgba(16, 185, 129, 0.14)',
+                                                            border: '1px solid rgba(16, 185, 129, 0.35)',
+                                                            color: '#34d399',
+                                                            padding: '3px 9px',
+                                                            borderRadius: '6px',
+                                                            fontSize: '11.5px',
+                                                            fontWeight: '800'
+                                                        }}>
+                                                            🚗 Car Used: <strong>{activeCarDays} Day{activeCarDays > 1 ? 's' : ''}</strong>
+                                                        </span>
+                                                        {validExcludedDates.length > 0 && (
+                                                            <span style={{
+                                                                background: 'rgba(239, 68, 68, 0.15)',
+                                                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                                                color: '#f87171',
+                                                                padding: '3px 9px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11.5px',
+                                                                fontWeight: '800'
+                                                            }}>
+                                                                🚫 Break / No Car: <strong>{validExcludedDates.length} Day{validExcludedDates.length > 1 ? 's' : ''}</strong>
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                    {validExcludedDates.length > 0 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setFormData(prev => ({ ...prev, excludedDates: [] }))}
+                                                            style={{
+                                                                background: 'rgba(239, 68, 68, 0.12)',
+                                                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                                color: '#fca5a5',
+                                                                padding: '5px 10px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: '700',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            Reset All Days Active
+                                                        </button>
+                                                    )}
+                                                    {(formData.isBreakTour || validExcludedDates.length > 0) && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={syncActiveDatesToItinerary}
+                                                            style={{
+                                                                background: 'rgba(59, 130, 246, 0.18)',
+                                                                border: '1px solid rgba(59, 130, 246, 0.45)',
+                                                                color: '#93c5fd',
+                                                                padding: '5px 10px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: '800',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                            title="Generate or sync Day-wise Itinerary with only active car usage dates"
+                                                        >
+                                                            ⚡ Sync {activeCarDays} Active Days to Itinerary
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Interactive Date Pills when Break Tour is active */}
+                                            {(formData.isBreakTour || validExcludedDates.length > 0) && (
+                                                <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed rgba(255, 255, 255, 0.1)' }}>
+                                                    <div style={{ fontSize: '11.5px', color: '#cbd5e1', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                                                        <span>
+                                                            💡 <strong>Click on any date</strong> below when guest is <strong style={{ color: '#f87171' }}>NOT using the car</strong> (Break Day):
+                                                        </span>
+                                                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                                                            <span style={{ color: '#34d399', fontWeight: '700' }}>● Green = Car Used</span> &nbsp;|&nbsp; <span style={{ color: '#f87171', fontWeight: '700' }}>● Red = Break (No Car)</span>
+                                                        </span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px', maxHeight: '150px', overflowY: 'auto', padding: '2px' }}>
+                                                        {allTourDates.map((dStr, idx) => {
+                                                            const isOff = validExcludedDates.includes(dStr);
+                                                            const dObj = new Date(dStr + 'T00:00:00');
+                                                            const dayLabel = dObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+                                                            const weekDay = dObj.toLocaleDateString('en-IN', { weekday: 'short' });
+                                                            return (
+                                                                <button
+                                                                    key={dStr}
+                                                                    type="button"
+                                                                    onClick={() => toggleBreakTourDate(dStr)}
+                                                                    style={{
+                                                                        background: isOff
+                                                                            ? 'rgba(239, 68, 68, 0.16)'
+                                                                            : 'rgba(16, 185, 129, 0.14)',
+                                                                        border: isOff
+                                                                            ? '1.5px solid rgba(239, 68, 68, 0.55)'
+                                                                            : '1.5px solid rgba(16, 185, 129, 0.45)',
+                                                                        color: isOff ? '#fca5a5' : '#6ee7b7',
+                                                                        padding: '6px 10px',
+                                                                        borderRadius: '8px',
+                                                                        cursor: 'pointer',
+                                                                        display: 'flex',
+                                                                        flexDirection: 'column',
+                                                                        alignItems: 'center',
+                                                                        minWidth: '74px',
+                                                                        transition: 'all 0.15s ease',
+                                                                        opacity: isOff ? 0.85 : 1
+                                                                    }}
+                                                                    title={isOff ? `${dayLabel}: Break Day (No Car) — Click to mark Car Used` : `${dayLabel}: Car Used — Click to mark Break / No Car`}
+                                                                >
+                                                                    <span style={{ fontSize: '10px', fontWeight: '700', opacity: 0.75, textTransform: 'uppercase' }}>
+                                                                        {weekDay} • D{idx + 1}
+                                                                    </span>
+                                                                    <span style={{ fontSize: '12px', fontWeight: '900', margin: '1px 0', textDecoration: isOff ? 'line-through' : 'none' }}>
+                                                                        {dayLabel}
+                                                                    </span>
+                                                                    <span style={{ fontSize: '9.5px', fontWeight: '800', color: isOff ? '#f87171' : '#34d399' }}>
+                                                                        {isOff ? '🚫 No Car' : '🚗 Car Use'}
+                                                                    </span>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* ========================================================= */}
                                     {/* VEHICLE MATRIX (LIVE PROFIT & OPERATING EXPENSES)         */}
                                     {/* ========================================================= */}
                                     <div style={{
@@ -4889,8 +5244,15 @@ export default function Leads() {
                                                     Live P&L
                                                 </span>
                                             </div>
-                                            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
-                                                Tour Duration: <strong style={{ color: '#fbbf24' }}>{matrixDaysVal} Day{matrixDaysVal > 1 ? 's' : ''}</strong>
+                                            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                <span>
+                                                    Active Car Usage: <strong style={{ color: '#fbbf24' }}>{matrixDaysVal} Day{matrixDaysVal > 1 ? 's' : ''}</strong>
+                                                </span>
+                                                {validExcludedDates.length > 0 && (
+                                                    <span style={{ fontSize: '11px', color: '#f87171', background: 'rgba(239, 68, 68, 0.12)', padding: '2px 7px', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.3)', fontWeight: '700' }}>
+                                                        ⏸️ Break Tour ({totalStayDays} Stay - {validExcludedDates.length} Off)
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
 
@@ -5096,7 +5458,9 @@ export default function Leads() {
                                                         <span style={{ fontSize: '13px', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                             <Calculator size={15} color="#fbbf24" /> P&L Live Statement
                                                         </span>
-                                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>{matrixDaysVal} Days Tour</span>
+                                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+                                                            {matrixDaysVal} Active Car Day{matrixDaysVal > 1 ? 's' : ''}{validExcludedDates.length > 0 ? ` (${totalStayDays}d Stay)` : ''}
+                                                        </span>
                                                     </div>
 
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>

@@ -331,31 +331,57 @@ export default function Bookings() {
         const eMidnight = new Date(e.getFullYear(), e.getMonth(), e.getDate());
         const dateRangeDays = Math.max(1, Math.round((eMidnight - sMidnight) / 86400000) + 1);
 
-        const existingItin = Array.isArray(bkg.itinerary) ? bkg.itinerary : [];
-        const existingDrs = Array.isArray(bkg.drsDuties) ? bkg.drsDuties : [];
-        const totalDays = Math.max(dateRangeDays, existingItin.length, existingDrs.length);
+        const excludedSet = new Set(
+            Array.isArray(bkg.excludedDates)
+                ? bkg.excludedDates.map(d => String(d).slice(0, 10))
+                : []
+        );
+
+        const allCalendarDates = [];
+        for (let dIdx = 0; dIdx < dateRangeDays; dIdx++) {
+            const curDate = new Date(sMidnight);
+            curDate.setDate(curDate.getDate() + dIdx);
+            const y = curDate.getFullYear();
+            const m = String(curDate.getMonth() + 1).padStart(2, '0');
+            const dNum = String(curDate.getDate()).padStart(2, '0');
+            allCalendarDates.push(`${y}-${m}-${dNum}`);
+        }
+
+        const activeCalendarDates = allCalendarDates.filter(dStr => !excludedSet.has(dStr));
+        const effectiveActiveDates = activeCalendarDates.length > 0 ? activeCalendarDates : allCalendarDates;
+
+        const existingItin = (Array.isArray(bkg.itinerary) ? bkg.itinerary : []).filter(
+            it => !it.date || !excludedSet.has(String(it.date).slice(0, 10))
+        );
+        const existingDrs = (Array.isArray(bkg.drsDuties) ? bkg.drsDuties : []).filter(
+            dr => !dr.date || !excludedSet.has(new Date(dr.date).toISOString().slice(0, 10))
+        );
+        const totalDays = Math.max(effectiveActiveDates.length, existingItin.length, existingDrs.length);
 
         const days = [];
         for (let i = 0; i < totalDays; i++) {
             const dayNo = i + 1;
-            const curDate = new Date(sMidnight);
-            curDate.setDate(curDate.getDate() + i);
-            const y = curDate.getFullYear();
-            const m = String(curDate.getMonth() + 1).padStart(2, '0');
-            const dNum = String(curDate.getDate()).padStart(2, '0');
-            const defaultDateStr = `${y}-${m}-${dNum}`;
+            let defaultDateStr = effectiveActiveDates[i];
+            if (!defaultDateStr) {
+                const curDate = new Date(sMidnight);
+                curDate.setDate(curDate.getDate() + i);
+                const y = curDate.getFullYear();
+                const m = String(curDate.getMonth() + 1).padStart(2, '0');
+                const dNum = String(curDate.getDate()).padStart(2, '0');
+                defaultDateStr = `${y}-${m}-${dNum}`;
+            }
 
             const itinItem =
-                existingItin.find(it => Number(it.dayNo) === dayNo) ||
                 existingItin.find(it => it.date && String(it.date).slice(0, 10) === defaultDateStr) ||
+                existingItin.find(it => Number(it.dayNo) === dayNo) ||
                 existingItin[i] ||
                 {};
 
             const itemDateStr = itinItem.date ? String(itinItem.date).slice(0, 10) : defaultDateStr;
 
             const drsItem =
-                existingDrs.find(dr => Number(dr.dayNo) === dayNo) ||
                 existingDrs.find(dr => dr.date && new Date(dr.date).toISOString().slice(0, 10) === itemDateStr) ||
+                existingDrs.find(dr => Number(dr.dayNo) === dayNo) ||
                 (existingDrs.length === totalDays ? existingDrs[i] : null);
 
             const rawDrvId =
@@ -1482,7 +1508,28 @@ export default function Bookings() {
 
                                         {/* 7. Trip End */}
                                         <td style={{ padding: '14px 16px', color: 'rgba(255,255,255,0.85)', fontSize: '13px' }}>
-                                            {eDate}
+                                            <div>{eDate}</div>
+                                            {Array.isArray(bkg.excludedDates) && bkg.excludedDates.length > 0 && (
+                                                <div
+                                                    style={{
+                                                        marginTop: '3px',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        background: 'rgba(239, 68, 68, 0.14)',
+                                                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                                                        color: '#f87171',
+                                                        padding: '1px 6px',
+                                                        borderRadius: '5px',
+                                                        fontSize: '10px',
+                                                        fontWeight: '800',
+                                                        whiteSpace: 'nowrap'
+                                                    }}
+                                                    title={`Break / No Car Dates: ${bkg.excludedDates.join(', ')}`}
+                                                >
+                                                    ⏸️ Break ({bkg.excludedDates.length} Off)
+                                                </div>
+                                            )}
                                         </td>
 
                                         {/* 8. Car Type */}
