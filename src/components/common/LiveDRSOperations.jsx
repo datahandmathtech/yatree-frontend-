@@ -3,7 +3,7 @@ import axios from '../../api/axios';
 import {
     Calendar, Plus, Trash2, X, Users, Car, Clock,
     MapPin, IndianRupee, Search, Briefcase, Filter,
-    CheckCircle2, AlertCircle, Edit3, ChevronLeft, ChevronRight, Phone,
+    CheckCircle2, AlertCircle, Edit3, ChevronLeft, ChevronRight, ChevronDown, Phone,
     Share2, UserCheck, ShieldCheck, Sparkles, RefreshCw, Send, Check,
     AlertOctagon, Eye, ArrowRight, CheckCheck, Navigation, Info
 } from 'lucide-react';
@@ -156,6 +156,36 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
     const todayDateStr = todayIST();
     const tomorrowDateStr = getTomorrowDate();
 
+    // Daily Breakdown & Guest Settlement Drawer States (Tally-style like Leads.jsx)
+    const [showDailyBreakdownDrawer, setShowDailyBreakdownDrawer] = useState(false);
+    const [breakdownMonth, setBreakdownMonth] = useState(() => todayDateStr.slice(0, 7));
+    const [selectedBreakdownDate, setSelectedBreakdownDate] = useState(() => todayDateStr);
+    const [expandedBreakdownDate, setExpandedBreakdownDate] = useState(() => todayDateStr);
+    const [hoveredBreakdownDay, setHoveredBreakdownDay] = useState(null);
+    const [showBreakdownMonthDropdown, setShowBreakdownMonthDropdown] = useState(false);
+    const [rideSettlementEdits, setRideSettlementEdits] = useState({});
+    const [savingRideKey, setSavingRideKey] = useState(null);
+
+    const openDailyBreakdownDrawer = (dateStr) => {
+        const target = (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) ? dateStr : todayDateStr;
+        setSelectedBreakdownDate(target);
+        setExpandedBreakdownDate(target);
+        setBreakdownMonth(target.slice(0, 7));
+        setShowBreakdownMonthDropdown(false);
+        setShowDailyBreakdownDrawer(true);
+    };
+
+    useEffect(() => {
+        if (!showDailyBreakdownDrawer || !selectedBreakdownDate) return;
+        const timer = setTimeout(() => {
+            const el = document.getElementById(`drs-breakdown-day-${selectedBreakdownDate}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 180);
+        return () => clearTimeout(timer);
+    }, [showDailyBreakdownDrawer, selectedBreakdownDate]);
+
     useEffect(() => {
         if (selectedCompany?._id) {
             fetchDuties();
@@ -267,7 +297,8 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                     } else if (statusFilter === 'Pending Payment') {
                         const bkgTotal = Number(duty.bookingRef?.totalAmount || duty.revenue || 0);
                         const bkgAdv = Number(duty.bookingRef?.advancePaid || duty.advancePaid || 0);
-                        const bkgBal = duty.bookingRef?.balanceDue !== undefined ? Number(duty.bookingRef.balanceDue) : Math.max(0, bkgTotal - bkgAdv);
+                        const bkgFuel = (duty.bookingRef?.guestFuelFilled ?? duty.guestFuelFilled) ? Number(duty.bookingRef?.guestFuelAmount || duty.guestFuelAmount || 0) : 0;
+                        const bkgBal = duty.bookingRef?.balanceDue !== undefined ? Number(duty.bookingRef.balanceDue) : Math.max(0, bkgTotal - bkgAdv - bkgFuel);
                         const isPaid = duty.paymentStatus === 'Full Received' || duty.paymentStatus === 'Fully Paid' || (bkgBal === 0 && bkgTotal > 0);
                         if (isPaid) return false;
                     } else if (duty.status !== statusFilter) {
@@ -317,7 +348,8 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
         endingTodayBookings.forEach(b => {
             const tot = Number(b.totalAmount) || 0;
             const paid = Number(b.advancePaid) || 0;
-            const due = Number(b.balanceDue !== undefined ? b.balanceDue : (tot - paid)) || 0;
+            const fuel = b.guestFuelFilled ? (Number(b.guestFuelAmount) || 0) : 0;
+            const due = Number(b.balanceDue !== undefined ? b.balanceDue : Math.max(0, tot - paid - fuel)) || 0;
             totalRev += tot;
             adv += paid;
             bal += due;
@@ -329,6 +361,355 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
             totalCount: endingTodayBookings.length
         };
     }, [endingTodayBookings]);
+
+    // Unified Completing Rides & Daily Breakdown Engine across Bookings + Live DRS Duties
+    const completingRidesByDate = useMemo(() => {
+        const normDate = (val) => {
+            if (!val) return '';
+            const ist = toISTDateString(val);
+            if (ist && /^\d{4}-\d{2}-\d{2}$/.test(ist)) return ist;
+            if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) return val.slice(0, 10);
+            const d = new Date(val);
+            if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+            return '';
+        };
+
+        const byDate = {};
+        const addRideToDate = (dateStr, rideObj) => {
+            if (!dateStr) return;
+            if (!byDate[dateStr]) byDate[dateStr] = [];
+            byDate[dateStr].push(rideObj);
+        };
+
+        const coveredBookingIds = new Set();
+        const coveredBookingCodes = new Set();
+
+        // Index DRS duties by bookingRef._id and bookingId so we can attach duty metadata to bookings
+        const dutiesByBkgId = {};
+        const dutiesByCode = {};
+        (duties || []).forEach(d => {
+            if (!d || d.status === 'Cancelled') return;
+            const refId = d.bookingRef?._id ? String(d.bookingRef._id) : (typeof d.bookingRef === 'string' ? d.bookingRef : '');
+            if (refId) {
+                if (!dutiesByBkgId[refId]) dutiesByBkgId[refId] = [];
+                dutiesByBkgId[refId].push(d);
+            }
+            const code = (d.bookingId || '').trim();
+            if (code && code !== 'DIRECT' && code !== 'N/A') {
+                if (!dutiesByCode[code]) dutiesByCode[code] = [];
+                dutiesByCode[code].push(d);
+            }
+        });
+
+        // 1. Add all non-cancelled Confirmed Bookings on their completion date (travelEndDate or last active date)
+        (allCompanyBookings || []).forEach(b => {
+            if (!b || b.status === 'Cancelled') return;
+            const bId = String(b._id);
+            const bCode = (b.bookingCode || b.clientCode || '').trim();
+            coveredBookingIds.add(bId);
+            if (bCode) coveredBookingCodes.add(bCode);
+
+            const linkedDuties = dutiesByBkgId[bId] || (bCode ? dutiesByCode[bCode] : []) || [];
+            // Sort linked duties by date to get the final day's duty
+            const sortedLinked = [...linkedDuties].sort((a, c) => new Date(a.date || 0) - new Date(c.date || 0));
+            const lastDuty = sortedLinked.length > 0 ? sortedLinked[sortedLinked.length - 1] : null;
+
+            const endDateStr = normDate(b.travelEndDate) || (lastDuty ? normDate(lastDuty.date) : '') || normDate(b.travelStartDate);
+            if (!endDateStr) return;
+
+            const key = `bkg_${bId}`;
+            const editOverride = rideSettlementEdits[key] || {};
+
+            const rawTotal = Number(b.totalAmount) || sortedLinked.reduce((s, d) => s + (Number(d.revenue) || 0), 0);
+            const rawAdvance = Number(b.advancePaid ?? (lastDuty?.advancePaid || 0)) || 0;
+            const rawFuelFilled = Boolean(b.guestFuelFilled ?? lastDuty?.guestFuelFilled ?? (Number(b.guestFuelAmount || lastDuty?.guestFuelAmount || 0) > 0));
+            const rawFuelAmount = Number(b.guestFuelAmount ?? lastDuty?.guestFuelAmount ?? 0) || 0;
+
+            const totalAmount = editOverride.totalAmount !== undefined ? Number(editOverride.totalAmount) || 0 : rawTotal;
+            const advancePaid = editOverride.advancePaid !== undefined ? Number(editOverride.advancePaid) || 0 : rawAdvance;
+            const guestFuelFilled = editOverride.guestFuelFilled !== undefined ? Boolean(editOverride.guestFuelFilled) : rawFuelFilled;
+            const guestFuelAmount = guestFuelFilled
+                ? (editOverride.guestFuelAmount !== undefined ? Number(editOverride.guestFuelAmount) || 0 : rawFuelAmount)
+                : 0;
+            const netBalanceDue = Math.max(0, totalAmount - advancePaid - guestFuelAmount);
+
+            addRideToDate(endDateStr, {
+                key,
+                bookingId: b._id,
+                dutyId: lastDuty?._id || null,
+                dutyObj: lastDuty || {
+                    _id: null,
+                    bookingId: bCode,
+                    clientName: b.clientName,
+                    mobileNumber: b.mobileNumber,
+                    revenue: totalAmount,
+                    advancePaid,
+                    bookingRef: b
+                },
+                bookingCode: bCode || 'BOOKING',
+                clientName: b.clientName || 'Guest',
+                mobileNumber: b.mobileNumber || '',
+                vehicleType: b.vehicleType || lastDuty?.carType || 'Car',
+                carNumber: b.vehicleNumber || lastDuty?.vehicle?.carNumber || lastDuty?.customCarNumber || '',
+                driverName: b.driverName || lastDuty?.driver?.name || lastDuty?.customDriverName || '',
+                route: lastDuty?.duty || lastDuty?.itinerary || b.pickupLocation || 'Tour Package',
+                hotel: lastDuty?.hotel || b.pickupLocation || '',
+                startDateStr: normDate(b.travelStartDate) || endDateStr,
+                endDateStr,
+                totalDays: Number(b.totalDays) || Math.max(1, sortedLinked.length),
+                totalAmount,
+                advancePaid,
+                guestFuelFilled,
+                guestFuelAmount,
+                netBalanceDue,
+                hasUnsavedEdits: Boolean(rideSettlementEdits[key]),
+                status: lastDuty?.status || b.status || 'Confirmed'
+            });
+        });
+
+        // 2. Group remaining Live DRS Duties not already covered by allCompanyBookings
+        const standaloneGroups = {};
+        (duties || []).forEach(d => {
+            if (!d || d.status === 'Cancelled') return;
+            const refId = d.bookingRef?._id ? String(d.bookingRef._id) : (typeof d.bookingRef === 'string' ? d.bookingRef : '');
+            const code = (d.bookingId || '').trim();
+            if (refId && coveredBookingIds.has(refId)) return;
+            if (code && coveredBookingCodes.has(code)) return;
+
+            const gKey = refId ? `ref_${refId}` : (code && code !== 'DIRECT' && code !== 'N/A' ? `code_${code}` : `duty_${d._id}`);
+            if (!standaloneGroups[gKey]) standaloneGroups[gKey] = [];
+            standaloneGroups[gKey].push(d);
+        });
+
+        Object.entries(standaloneGroups).forEach(([gKey, groupDuties]) => {
+            const sorted = [...groupDuties].sort((a, c) => new Date(a.date || 0) - new Date(c.date || 0));
+            const lastDuty = sorted[sorted.length - 1];
+            const firstDuty = sorted[0];
+            const endDateStr = normDate(lastDuty?.bookingRef?.travelEndDate) || normDate(lastDuty?.date);
+            if (!endDateStr) return;
+
+            const key = gKey;
+            const editOverride = rideSettlementEdits[key] || {};
+
+            const bRef = lastDuty.bookingRef && typeof lastDuty.bookingRef === 'object' ? lastDuty.bookingRef : null;
+            const sumFare = sorted.reduce((s, item) => s + (Number(item.revenue) || 0), 0);
+            const rawTotal = Number(bRef?.totalAmount) || sumFare;
+            const rawAdvance = Number(bRef?.advancePaid ?? lastDuty.advancePaid ?? (lastDuty.paymentStatus === 'Full Received' ? rawTotal : 0)) || 0;
+            const rawFuelFilled = Boolean(bRef?.guestFuelFilled ?? lastDuty.guestFuelFilled ?? (Number(bRef?.guestFuelAmount || lastDuty.guestFuelAmount || 0) > 0));
+            const rawFuelAmount = Number(bRef?.guestFuelAmount ?? lastDuty.guestFuelAmount ?? 0) || 0;
+
+            const totalAmount = editOverride.totalAmount !== undefined ? Number(editOverride.totalAmount) || 0 : rawTotal;
+            const advancePaid = editOverride.advancePaid !== undefined ? Number(editOverride.advancePaid) || 0 : rawAdvance;
+            const guestFuelFilled = editOverride.guestFuelFilled !== undefined ? Boolean(editOverride.guestFuelFilled) : rawFuelFilled;
+            const guestFuelAmount = guestFuelFilled
+                ? (editOverride.guestFuelAmount !== undefined ? Number(editOverride.guestFuelAmount) || 0 : rawFuelAmount)
+                : 0;
+            const netBalanceDue = Math.max(0, totalAmount - advancePaid - guestFuelAmount);
+
+            addRideToDate(endDateStr, {
+                key,
+                bookingId: bRef?._id || null,
+                dutyId: lastDuty._id,
+                dutyObj: lastDuty,
+                bookingCode: lastDuty.bookingId || bRef?.bookingCode || 'DRS',
+                clientName: lastDuty.clientName || bRef?.clientName || 'Guest',
+                mobileNumber: lastDuty.mobileNumber || bRef?.mobileNumber || '',
+                vehicleType: lastDuty.carType || bRef?.vehicleType || 'Car',
+                carNumber: lastDuty.vehicle?.carNumber || lastDuty.customCarNumber || '',
+                driverName: lastDuty.driver?.name || lastDuty.customDriverName || '',
+                route: lastDuty.duty || lastDuty.itinerary || 'Duty',
+                hotel: lastDuty.hotel || '',
+                startDateStr: normDate(firstDuty?.date) || endDateStr,
+                endDateStr,
+                totalDays: sorted.length,
+                totalAmount,
+                advancePaid,
+                guestFuelFilled,
+                guestFuelAmount,
+                netBalanceDue,
+                hasUnsavedEdits: Boolean(rideSettlementEdits[key]),
+                status: lastDuty.status || 'Scheduled'
+            });
+        });
+
+        return byDate;
+    }, [allCompanyBookings, duties, rideSettlementEdits]);
+
+    // Active Selected Date Settlement Summary (Left Side vs Right Side)
+    const activeDateSettlement = useMemo(() => {
+        const rides = completingRidesByDate[selectedBreakdownDate] || [];
+        let totalPackageAmount = 0;
+        let totalAdvancePaid = 0;
+        let totalGuestFuel = 0;
+        let fuelGuestCount = 0;
+        let totalNetReceivable = 0;
+        let settledCount = 0;
+        let pendingCount = 0;
+
+        rides.forEach(r => {
+            totalPackageAmount += r.totalAmount;
+            totalAdvancePaid += r.advancePaid;
+            totalGuestFuel += r.guestFuelAmount;
+            if (r.guestFuelFilled && r.guestFuelAmount > 0) fuelGuestCount += 1;
+            totalNetReceivable += r.netBalanceDue;
+            if (r.netBalanceDue <= 0 && r.totalAmount > 0) settledCount += 1;
+            else pendingCount += 1;
+        });
+
+        return {
+            dateStr: selectedBreakdownDate,
+            rides,
+            completingCount: rides.length,
+            totalPackageAmount,
+            totalAdvancePaid,
+            totalGuestFuel,
+            fuelGuestCount,
+            totalDeductions: totalAdvancePaid + totalGuestFuel,
+            totalNetReceivable,
+            settledCount,
+            pendingCount
+        };
+    }, [completingRidesByDate, selectedBreakdownDate]);
+
+    // Today's Quick Badge Summary for Top Bar Button
+    const todaySettlementBadge = useMemo(() => {
+        const rides = completingRidesByDate[todayDateStr] || [];
+        const netDue = rides.reduce((s, r) => s + r.netBalanceDue, 0);
+        return {
+            count: rides.length,
+            netDue
+        };
+    }, [completingRidesByDate, todayDateStr]);
+
+    // Month options for Tally-style Daily Breakdown Sidebar
+    const breakdownMonthOptions = useMemo(() => {
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const [curY, curM] = todayDateStr.slice(0, 7).split('-').map(Number);
+        const opts = [];
+        for (let offset = -5; offset <= 4; offset++) {
+            const d = new Date(curY, (curM - 1) + offset, 1);
+            const y = d.getFullYear();
+            const m = d.getMonth() + 1;
+            const val = `${y}-${String(m).padStart(2, '0')}`;
+            opts.push({
+                value: val,
+                label: `${monthNames[m - 1]} ${y}`
+            });
+        }
+        return opts;
+    }, [todayDateStr]);
+
+    const breakdownMonthLabel = useMemo(() => {
+        const found = breakdownMonthOptions.find(o => o.value === breakdownMonth);
+        if (found) return found.label;
+        if (!breakdownMonth || !/^\d{4}-\d{2}$/.test(breakdownMonth)) return breakdownMonth;
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const [yr, mo] = breakdownMonth.split('-').map(Number);
+        return `${monthNames[(mo || 1) - 1]} ${yr}`;
+    }, [breakdownMonth, breakdownMonthOptions]);
+
+    // Day-by-Day Month Breakdown Rows (1st to 31st of breakdownMonth)
+    const monthlyDailySettlementRows = useMemo(() => {
+        if (!breakdownMonth || !/^\d{4}-\d{2}$/.test(breakdownMonth)) return [];
+        const [yr, mo] = breakdownMonth.split('-').map(Number);
+        const daysInMonth = new Date(yr, mo, 0).getDate();
+        const rows = [];
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${yr}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const rides = completingRidesByDate[dateStr] || [];
+            let totalPackage = 0;
+            let totalAdv = 0;
+            let totalFuel = 0;
+            let netPayable = 0;
+
+            rides.forEach(r => {
+                totalPackage += r.totalAmount;
+                totalAdv += r.advancePaid;
+                totalFuel += r.guestFuelAmount;
+                netPayable += r.netBalanceDue;
+            });
+
+            rows.push({
+                dateStr,
+                dayNum: d,
+                rides,
+                completingCount: rides.length,
+                totalPackage,
+                totalAdv,
+                totalFuel,
+                netPayable
+            });
+        }
+        return rows;
+    }, [breakdownMonth, completingRidesByDate]);
+
+    const handleUpdateRideField = (ride, field, value) => {
+        setRideSettlementEdits(prev => {
+            const existing = prev[ride.key] || {
+                totalAmount: ride.totalAmount,
+                advancePaid: ride.advancePaid,
+                guestFuelFilled: ride.guestFuelFilled,
+                guestFuelAmount: ride.guestFuelAmount
+            };
+            const updated = { ...existing, [field]: value };
+            if (field === 'guestFuelFilled' && !value) {
+                updated.guestFuelAmount = 0;
+            }
+            return { ...prev, [ride.key]: updated };
+        });
+    };
+
+    const handleSaveRideSettlement = async (ride) => {
+        if (!ride) return;
+        setSavingRideKey(ride.key);
+        try {
+            const tot = Number(ride.totalAmount) || 0;
+            const adv = Number(ride.advancePaid) || 0;
+            const fuelFilled = Boolean(ride.guestFuelFilled);
+            const fuelAmt = fuelFilled ? (Number(ride.guestFuelAmount) || 0) : 0;
+            const netBal = Math.max(0, tot - adv - fuelAmt);
+            const payStatus = (netBal <= 0 && tot > 0) ? 'Full Received' : (adv > 0 ? 'Advance Received' : 'Pending');
+
+            if (ride.bookingId) {
+                await axios.put(`/api/bookings/single/${ride.bookingId}`, {
+                    totalAmount: tot,
+                    advancePaid: adv,
+                    guestFuelFilled: fuelFilled,
+                    guestFuelAmount: fuelAmt,
+                    balanceDue: netBal
+                });
+            }
+            if (ride.dutyId) {
+                await axios.put(`/api/drs/${ride.dutyId}`, {
+                    revenue: tot,
+                    advancePaid: adv,
+                    guestFuelFilled: fuelFilled,
+                    guestFuelAmount: fuelAmt,
+                    paymentStatus: payStatus
+                });
+            }
+
+            setRideSettlementEdits(prev => {
+                const next = { ...prev };
+                delete next[ride.key];
+                return next;
+            });
+
+            await Promise.all([fetchAllCompanyBookings(), fetchDuties()]);
+            setSuccessBanner({
+                code: ride.bookingCode || 'SETTLEMENT',
+                guest: ride.clientName,
+                time: `Saved Settlement • Balance Due: ₹${netBal.toLocaleString('en-IN')}`
+            });
+            setTimeout(() => setSuccessBanner(null), 5000);
+        } catch (err) {
+            console.error('Error saving ride settlement:', err);
+            alert(err.response?.data?.message || 'Failed to save guest settlement calculation');
+        } finally {
+            setSavingRideKey(null);
+        }
+    };
 
     const handleOpenAssignBooking = (bkg) => {
         setAssigningBooking(bkg);
@@ -550,7 +931,12 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
     const openPaymentModal = (duty) => {
         const totAmount = Number(duty.bookingRef?.totalAmount || duty.revenue || 0);
         const advPaid = Number(duty.bookingRef?.advancePaid || duty.advancePaid || 0);
-        const balDue = duty.bookingRef?.balanceDue !== undefined ? Number(duty.bookingRef.balanceDue) : Math.max(0, totAmount - advPaid);
+        const fuelAmt = (duty.bookingRef?.guestFuelFilled ?? duty.guestFuelFilled)
+            ? Number(duty.bookingRef?.guestFuelAmount ?? duty.guestFuelAmount ?? 0)
+            : 0;
+        const balDue = duty.netBalanceDue !== undefined
+            ? Number(duty.netBalanceDue)
+            : Math.max(0, totAmount - advPaid - fuelAmt);
 
         setSelectedDutyForPayment(duty);
         setCollectAmount(balDue > 0 ? balDue : '');
@@ -881,67 +1267,97 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                 <div>
                     {/* Top Clean Bar for Excel View */}
                     <div style={{
-                        background: 'rgba(15, 23, 42, 0.65)',
-                        border: '1px solid rgba(255, 255, 255, 0.08)',
-                        borderRadius: '20px',
-                        padding: '12px 20px',
-                        marginBottom: '16px',
+                        background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(11, 17, 32, 0.92))',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '18px',
+                        padding: '12px 18px',
+                        marginBottom: '14px',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
                         flexWrap: 'wrap',
                         gap: '12px',
-                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.35)',
                         backdropFilter: 'blur(20px)'
                     }}>
-                        {/* View Switcher */}
-                        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '3px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                            <button
-                                onClick={() => setDrsDisplayMode('excel')}
-                                style={{
-                                    padding: '7px 14px',
-                                    borderRadius: '9px',
-                                    border: 'none',
-                                    background: '#10b981',
-                                    color: '#000',
-                                    fontWeight: '900',
-                                    fontSize: '12.5px',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px'
-                                }}
-                            >
-                                <span>📊</span>
-                                <span>Excel Sheet View</span>
-                            </button>
-                            <button
-                                onClick={() => setDrsDisplayMode('standard')}
-                                style={{
-                                    padding: '7px 14px',
-                                    borderRadius: '9px',
-                                    border: 'none',
-                                    background: 'transparent',
-                                    color: 'rgba(255,255,255,0.7)',
-                                    fontWeight: '700',
-                                    fontSize: '12.5px',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px'
-                                }}
-                            >
-                                <span>🗂️</span>
-                                <span>Cards View</span>
-                            </button>
+                        {/* Left: View Switcher */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '3px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                <button
+                                    onClick={() => setDrsDisplayMode('excel')}
+                                    style={{
+                                        padding: '7px 14px',
+                                        borderRadius: '9px',
+                                        border: 'none',
+                                        background: '#10b981',
+                                        color: '#000',
+                                        fontWeight: '900',
+                                        fontSize: '12.5px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                    }}
+                                >
+                                    <span>📊</span>
+                                    <span>Excel Sheet View</span>
+                                </button>
+                                <button
+                                    onClick={() => setDrsDisplayMode('standard')}
+                                    style={{
+                                        padding: '7px 14px',
+                                        borderRadius: '9px',
+                                        border: 'none',
+                                        background: 'transparent',
+                                        color: 'rgba(255,255,255,0.7)',
+                                        fontWeight: '700',
+                                        fontSize: '12.5px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                    }}
+                                >
+                                    <span>🗂️</span>
+                                    <span>Cards View</span>
+                                </button>
+                            </div>
                         </div>
 
                         {/* Right: Actions */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            {/* Daily Breakdown Button (Matches Leads.jsx exact Tally button style) */}
                             <button
-                                onClick={() => fetchDuties()}
+                                onClick={() => setShowDailyBreakdownDrawer(!showDailyBreakdownDrawer)}
                                 style={{
-                                    padding: '9px 16px',
+                                    height: '40px',
+                                    padding: '0 16px',
+                                    borderRadius: '12px',
+                                    background: showDailyBreakdownDrawer ? 'rgba(251, 191, 36, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                                    border: showDailyBreakdownDrawer ? '1px solid #fbbf24' : '1px solid rgba(251, 191, 36, 0.35)',
+                                    color: '#fbbf24',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    fontSize: '13px',
+                                    fontWeight: '800',
+                                    boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+                                    transition: 'all 0.2s'
+                                }}
+                                title="Open Daily Breakdown (Tally Sidebar)"
+                            >
+                                <span>📊</span>
+                                <span>Daily Breakdown</span>
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    fetchDuties();
+                                    fetchAllCompanyBookings();
+                                }}
+                                style={{
+                                    padding: '9px 15px',
                                     borderRadius: '12px',
                                     background: 'rgba(255,255,255,0.05)',
                                     border: '1px solid rgba(255,255,255,0.1)',
@@ -967,7 +1383,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                     setShowDirectBookingModal(true);
                                 }}
                                 style={{
-                                    padding: '9px 20px',
+                                    padding: '9px 18px',
                                     borderRadius: '12px',
                                     background: 'linear-gradient(135deg, #f59e0b, #d97706)',
                                     border: 'none',
@@ -992,7 +1408,10 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                         selectedCompany={selectedCompany}
                         drivers={drivers}
                         vehicles={vehicles}
-                        onRefresh={fetchDuties}
+                        onRefresh={() => {
+                            fetchDuties();
+                            fetchAllCompanyBookings();
+                        }}
                         onOpenDirectBooking={(date) => {
                             setDirectForm({
                                 ...initialDirectBookingForm,
@@ -1003,6 +1422,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                         onOpenEditDuty={(duty) => openEditModal(duty)}
                         onOpenAssign={(duty) => openAssignModal(duty)}
                         onShareWhatsApp={(duty) => handleShareWhatsApp(duty)}
+                        onOpenDailyBreakdown={(dateStr) => openDailyBreakdownDrawer(dateStr)}
                     />
                 </div>
             ) : (
@@ -1188,6 +1608,29 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
 
                 {/* Right: Action Buttons */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    {/* Daily Breakdown Button in Cards View */}
+                    <button
+                        onClick={() => setShowDailyBreakdownDrawer(!showDailyBreakdownDrawer)}
+                        style={{
+                            height: '40px',
+                            padding: '0 16px',
+                            borderRadius: '12px',
+                            background: showDailyBreakdownDrawer ? 'rgba(251, 191, 36, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                            border: showDailyBreakdownDrawer ? '1px solid #fbbf24' : '1px solid rgba(251, 191, 36, 0.35)',
+                            color: '#fbbf24',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            fontSize: '13px',
+                            fontWeight: '800',
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.2)'
+                        }}
+                    >
+                        <span>📊</span>
+                        <span>Daily Breakdown</span>
+                    </button>
+
                     {/* View Switcher: Excel Spreadsheet View vs Cards View */}
                     <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '3px', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <button
@@ -1234,7 +1677,10 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                         </button>
                     </div>
                     <button
-                        onClick={() => fetchDuties()}
+                        onClick={() => {
+                            fetchDuties();
+                            fetchAllCompanyBookings();
+                        }}
                         style={{
                             padding: '10px 16px',
                             borderRadius: '14px',
@@ -3329,6 +3775,448 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                         </div>
                     );
                 })()}
+            </AnimatePresence>
+
+            {/* DAILY BREAKDOWN RIGHT-SIDE TALLY SIDEBAR (MATCHING LEADS.JSX) */}
+            <AnimatePresence>
+                {showDailyBreakdownDrawer && (
+                    <>
+                        {/* Backdrop */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            onClick={() => setShowDailyBreakdownDrawer(false)}
+                            style={{
+                                position: 'fixed',
+                                inset: 0,
+                                background: 'rgba(0, 0, 0, 0.55)',
+                                backdropFilter: 'blur(4px)',
+                                zIndex: 200000
+                            }}
+                        />
+
+                        {/* Right Sidebar Container (Exact Tally Style like Leads.jsx) */}
+                        <motion.aside
+                            initial={{ x: '100%' }}
+                            animate={{ x: 0 }}
+                            exit={{ x: '100%' }}
+                            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                                position: 'fixed',
+                                top: 0,
+                                right: 0,
+                                bottom: 0,
+                                width: '480px',
+                                maxWidth: '94vw',
+                                height: '100vh',
+                                background: '#070d19',
+                                borderLeft: '1px solid rgba(255, 255, 255, 0.12)',
+                                boxShadow: '-12px 0 45px rgba(0, 0, 0, 0.9)',
+                                zIndex: 200001,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                overflow: 'hidden'
+                            }}
+                        >
+                            {/* Drawer Top Header (Month Dropdown + Today Quick Button + Close) */}
+                            <div style={{
+                                padding: '18px 20px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                position: 'relative'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div
+                                        onClick={() => setShowBreakdownMonthDropdown(prev => !prev)}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            cursor: 'pointer',
+                                            padding: '6px 12px',
+                                            borderRadius: '10px',
+                                            background: showBreakdownMonthDropdown ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            transition: 'all 0.2s',
+                                            userSelect: 'none'
+                                        }}
+                                        title="Click to select month"
+                                    >
+                                        <div style={{ padding: '6px', background: 'rgba(251, 191, 36, 0.15)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <Calendar size={18} color="#fbbf24" />
+                                        </div>
+                                        <h3 style={{ margin: 0, fontSize: '16.5px', fontWeight: '800', color: 'white', letterSpacing: '0.3px' }}>
+                                            {breakdownMonthLabel}
+                                        </h3>
+                                        <ChevronDown
+                                            size={16}
+                                            color="#94a3b8"
+                                            style={{
+                                                transform: showBreakdownMonthDropdown ? 'rotate(180deg)' : 'none',
+                                                transition: 'transform 0.2s'
+                                            }}
+                                        />
+                                    </div>
+
+                                    {selectedBreakdownDate !== todayDateStr && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSelectedBreakdownDate(todayDateStr);
+                                                setExpandedBreakdownDate(todayDateStr);
+                                                setBreakdownMonth(todayDateStr.slice(0, 7));
+                                            }}
+                                            style={{
+                                                padding: '6px 10px',
+                                                borderRadius: '8px',
+                                                border: '1px solid rgba(251, 191, 36, 0.4)',
+                                                background: 'rgba(251, 191, 36, 0.12)',
+                                                color: '#fbbf24',
+                                                fontSize: '11.5px',
+                                                fontWeight: '800',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Today
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Month Dropdown Menu */}
+                                {showBreakdownMonthDropdown && (
+                                    <>
+                                        <div
+                                            style={{
+                                                position: 'fixed',
+                                                inset: 0,
+                                                zIndex: 200002
+                                            }}
+                                            onClick={() => setShowBreakdownMonthDropdown(false)}
+                                        />
+                                        <div
+                                            style={{
+                                                position: 'absolute',
+                                                top: '68px',
+                                                left: '20px',
+                                                background: '#0d1527',
+                                                border: '1px solid rgba(255, 255, 255, 0.15)',
+                                                borderRadius: '12px',
+                                                boxShadow: '0 16px 40px rgba(0, 0, 0, 0.9)',
+                                                zIndex: 200003,
+                                                width: '210px',
+                                                maxHeight: '320px',
+                                                overflowY: 'auto',
+                                                padding: '6px'
+                                            }}
+                                        >
+                                            {breakdownMonthOptions.map((opt) => {
+                                                const isSelected = breakdownMonth === opt.value;
+                                                return (
+                                                    <button
+                                                        key={opt.value}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setBreakdownMonth(opt.value);
+                                                            const nextDate = opt.value === todayDateStr.slice(0, 7) ? todayDateStr : `${opt.value}-01`;
+                                                            setSelectedBreakdownDate(nextDate);
+                                                            setExpandedBreakdownDate(nextDate);
+                                                            setShowBreakdownMonthDropdown(false);
+                                                        }}
+                                                        style={{
+                                                            width: '100%',
+                                                            textAlign: 'left',
+                                                            padding: '9px 12px',
+                                                            borderRadius: '8px',
+                                                            background: isSelected ? 'rgba(251, 191, 36, 0.15)' : 'transparent',
+                                                            color: isSelected ? '#fbbf24' : '#e2e8f0',
+                                                            border: 'none',
+                                                            fontSize: '13px',
+                                                            fontWeight: isSelected ? '800' : '500',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'space-between',
+                                                            transition: 'all 0.15s'
+                                                        }}
+                                                    >
+                                                        <span>{opt.label}</span>
+                                                        {isSelected && (
+                                                            <span
+                                                                style={{
+                                                                    width: '6px',
+                                                                    height: '6px',
+                                                                    borderRadius: '50%',
+                                                                    background: '#fbbf24'
+                                                                }}
+                                                            />
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                )}
+
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDailyBreakdownDrawer(false)}
+                                    style={{
+                                        width: '32px',
+                                        height: '32px',
+                                        borderRadius: '10px',
+                                        background: 'rgba(255, 255, 255, 0.06)',
+                                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                                        color: 'white',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s'
+                                    }}
+                                    title="Close Drawer"
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+
+                            {/* Top Gold-Bordered 2-Column Summary Box (Clean Read-Only like Leads.jsx) */}
+                            <div style={{ padding: '0 20px', marginBottom: '18px' }}>
+                                <div style={{
+                                    border: '1px solid rgba(251, 191, 36, 0.4)',
+                                    borderRadius: '12px',
+                                    padding: '16px 20px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    background: 'rgba(251, 191, 36, 0.02)'
+                                }}>
+                                    {/* LEFT SIDE: Total & Advance/Fuel Deduction (-) */}
+                                    <div style={{ flex: 1, paddingRight: '15px', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+                                        <div style={{ fontSize: '12.5px', color: '#94a3b8', marginBottom: '6px' }}>Total & Advance (-)</div>
+                                        <div style={{ fontSize: '22px', fontWeight: '900', color: 'white', lineHeight: '1' }}>
+                                            ₹{activeDateSettlement.totalPackageAmount.toLocaleString('en-IN')}
+                                        </div>
+                                        <div style={{ fontSize: '14px', color: '#f87171', marginTop: '6px', fontWeight: '700' }}>
+                                            -₹{activeDateSettlement.totalDeductions.toLocaleString('en-IN')}
+                                        </div>
+                                    </div>
+
+                                    {/* RIGHT SIDE: Balance Due */}
+                                    <div style={{ flex: 1, paddingLeft: '20px' }}>
+                                        <div style={{ fontSize: '12.5px', color: '#94a3b8', marginBottom: '6px' }}>Balance Due</div>
+                                        <div style={{ fontSize: '22px', fontWeight: '900', color: 'white', lineHeight: '1' }}>
+                                            {activeDateSettlement.completingCount}
+                                        </div>
+                                        <div style={{ fontSize: '15px', color: '#34d399', marginTop: '6px', fontWeight: '800' }}>
+                                            ₹{activeDateSettlement.totalNetReceivable.toLocaleString('en-IN')}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Table Header (Exact 3-Column + Chevron Layout like Leads.jsx) */}
+                            <div style={{
+                                padding: '0 20px 12px 20px',
+                                display: 'grid',
+                                gridTemplateColumns: '64px 1fr 1fr 24px',
+                                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                                gap: '10px'
+                            }}>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Date</div>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Total & (-)</div>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Balance Due</div>
+                                <div></div>
+                            </div>
+
+                            {/* Drawer Body (Scrollable Day 1..31 Table with Clean Read-Only Guest Amount List) */}
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px', display: 'flex', flexDirection: 'column' }}>
+                                <div style={{ flex: 1, overflowY: 'auto', paddingRight: '5px' }}>
+                                    {monthlyDailySettlementRows.map(row => {
+                                        const isExpanded = expandedBreakdownDate === row.dateStr;
+                                        const isHovered = hoveredBreakdownDay === row.dayNum;
+                                        const hasRides = row.completingCount > 0;
+                                        const isToday = row.dateStr === todayDateStr;
+                                        const totalMinus = row.totalAdv + row.totalFuel;
+
+                                        return (
+                                            <div
+                                                id={`drs-breakdown-day-${row.dateStr}`}
+                                                key={row.dateStr}
+                                                onMouseEnter={() => setHoveredBreakdownDay(row.dayNum)}
+                                                onMouseLeave={() => setHoveredBreakdownDay(null)}
+                                                style={{
+                                                    borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                                                    position: 'relative',
+                                                    transition: 'background 0.2s',
+                                                    background: isExpanded
+                                                        ? 'rgba(251, 191, 36, 0.08)'
+                                                        : isHovered && hasRides
+                                                        ? 'rgba(255, 255, 255, 0.04)'
+                                                        : 'transparent',
+                                                    borderRadius: isExpanded ? '10px' : '0'
+                                                }}
+                                            >
+                                                {/* Row Summary Bar (Clickable) */}
+                                                <div
+                                                    onClick={() => {
+                                                        setSelectedBreakdownDate(row.dateStr);
+                                                        if (hasRides) {
+                                                            setExpandedBreakdownDate(prev => prev === row.dateStr ? null : row.dateStr);
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        display: 'grid',
+                                                        gridTemplateColumns: '64px 1fr 1fr 24px',
+                                                        padding: '12px 6px',
+                                                        alignItems: 'center',
+                                                        gap: '10px',
+                                                        cursor: hasRides ? 'pointer' : 'default',
+                                                        userSelect: 'none'
+                                                    }}
+                                                >
+                                                    {/* Column 1: Date */}
+                                                    <div>
+                                                        <div style={{ fontWeight: '700', fontSize: '15px', color: isToday ? '#fbbf24' : 'white', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <span>{row.dayNum}</span>
+                                                            {isToday && (
+                                                                <span style={{
+                                                                    fontSize: '8.5px',
+                                                                    background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
+                                                                    color: '#000',
+                                                                    padding: '1px 5px',
+                                                                    borderRadius: '4px',
+                                                                    fontWeight: '900',
+                                                                    letterSpacing: '0.4px',
+                                                                    textTransform: 'uppercase'
+                                                                }}>
+                                                                    Today
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Column 2: Total & (-) */}
+                                                    <div>
+                                                        <div style={{ fontSize: '14.5px', color: hasRides ? (isToday ? '#fbbf24' : 'white') : 'rgba(255,255,255,0.4)', fontWeight: '700', marginBottom: '2px' }}>
+                                                            {hasRides ? `₹${row.totalPackage.toLocaleString('en-IN')}` : '0'}
+                                                        </div>
+                                                        <div style={{ fontSize: '12px', color: hasRides ? (totalMinus > 0 ? '#f87171' : '#38bdf8') : 'rgba(255,255,255,0.3)', fontWeight: '600' }}>
+                                                            {hasRides ? `-₹${totalMinus.toLocaleString('en-IN')}` : '₹0'}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Column 3: Balance Due */}
+                                                    <div>
+                                                        <div style={{ fontSize: '15px', color: hasRides ? '#34d399' : 'rgba(255,255,255,0.4)', fontWeight: '700', marginBottom: '2px' }}>
+                                                            {row.completingCount}
+                                                        </div>
+                                                        <div style={{ fontSize: '12.5px', color: hasRides ? '#34d399' : 'rgba(255,255,255,0.3)', fontWeight: '700' }}>
+                                                            ₹{row.netPayable.toLocaleString('en-IN')}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Column 4: Chevron */}
+                                                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                                        {hasRides && (
+                                                            <ChevronDown
+                                                                size={16}
+                                                                style={{
+                                                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                                                    transition: 'transform 0.2s',
+                                                                    color: isExpanded ? '#fbbf24' : 'rgba(255,255,255,0.4)'
+                                                                }}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Click-to-Expand Simple Guest Amount List (Just like Leads.jsx) */}
+                                                {isExpanded && hasRides && (
+                                                    <div
+                                                        style={{
+                                                            padding: '10px 12px',
+                                                            marginBottom: '10px',
+                                                            background: 'rgba(11, 19, 36, 0.95)',
+                                                            border: '1px solid rgba(251, 191, 36, 0.35)',
+                                                            borderRadius: '10px',
+                                                            display: 'flex',
+                                                            flexDirection: 'column',
+                                                            gap: '6px'
+                                                        }}
+                                                    >
+                                                        {row.rides.map((ride) => {
+                                                            const deductAmt = ride.advancePaid + ride.guestFuelAmount;
+                                                            return (
+                                                                <div
+                                                                    key={ride.key}
+                                                                    style={{
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'space-between',
+                                                                        gap: '8px',
+                                                                        padding: '7px 10px',
+                                                                        borderRadius: '7px',
+                                                                        background: 'rgba(255, 255, 255, 0.04)',
+                                                                        border: '1px solid rgba(255, 255, 255, 0.07)'
+                                                                    }}
+                                                                >
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                                                                        <span style={{
+                                                                            fontSize: '11px',
+                                                                            fontWeight: '800',
+                                                                            color: '#fbbf24',
+                                                                            background: 'rgba(251, 191, 36, 0.15)',
+                                                                            padding: '2px 6px',
+                                                                            borderRadius: '4px',
+                                                                            whiteSpace: 'nowrap'
+                                                                        }}>
+                                                                            #{ride.bookingCode}
+                                                                        </span>
+                                                                        <span style={{
+                                                                            fontSize: '13px',
+                                                                            fontWeight: '700',
+                                                                            color: 'white',
+                                                                            whiteSpace: 'nowrap',
+                                                                            overflow: 'hidden',
+                                                                            textOverflow: 'ellipsis'
+                                                                        }}>
+                                                                            {ride.clientName}
+                                                                        </span>
+                                                                    </div>
+
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', whiteSpace: 'nowrap', fontSize: '12.5px' }}>
+                                                                        <span style={{ color: '#94a3b8', fontWeight: '600' }}>
+                                                                            ₹{ride.totalAmount.toLocaleString('en-IN')}
+                                                                        </span>
+                                                                        {deductAmt > 0 && (
+                                                                            <span style={{ color: '#f87171', fontWeight: '700' }}>
+                                                                                -₹{deductAmt.toLocaleString('en-IN')}
+                                                                            </span>
+                                                                        )}
+                                                                        <span style={{ color: '#34d399', fontWeight: '900' }}>
+                                                                            ₹{ride.netBalanceDue.toLocaleString('en-IN')}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+
+                                    {/* Extra bottom padding for scroll visibility */}
+                                    <div style={{ height: '40px' }}></div>
+                                </div>
+                            </div>
+                        </motion.aside>
+                    </>
+                )}
             </AnimatePresence>
         </div>
     );

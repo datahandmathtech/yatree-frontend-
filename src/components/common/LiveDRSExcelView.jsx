@@ -35,7 +35,8 @@ export default function LiveDRSExcelView({
     onOpenDirectBooking,
     onOpenEditDuty,
     onOpenAssign,
-    onShareWhatsApp
+    onShareWhatsApp,
+    onOpenDailyBreakdown
 }) {
     // Mode: 'month' (Full Month Sheet), 'single' (Single Date Sheet), 'range' (Date Range Sheet)
     const [filterMode, setFilterMode] = useState('month');
@@ -313,99 +314,100 @@ export default function LiveDRSExcelView({
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Top Toolbar: View Filter Mode + Navigation + Search + Stats */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Top Toolbar: Sleek 2-Row Filter + Navigation + Search + KPI Bar */}
             <div style={{
-                background: 'rgba(15, 23, 42, 0.95)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '16px',
+                background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(11, 17, 32, 0.98))',
+                border: '1px solid rgba(255, 255, 255, 0.09)',
+                borderRadius: '18px',
                 padding: '14px 18px',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '12px',
-                boxShadow: '0 8px 30px rgba(0,0,0,0.4)'
+                boxShadow: '0 10px 30px rgba(0,0,0,0.45)'
             }}>
-                {/* Row 1: Filter Mode Selector (Month / Single Date / Range) + Dynamic Nav Controls */}
+                {/* Row 1: Filter Mode Selector + Month Navigation + Month Tabs */}
                 <div style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     flexWrap: 'wrap',
-                    gap: '12px'
+                    gap: '10px'
                 }}>
-                    {/* Left: Mode Buttons */}
-                    <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '3px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                        <button
-                            onClick={() => setFilterMode('month')}
-                            style={{
-                                padding: '6px 13px',
-                                borderRadius: '9px',
-                                border: 'none',
-                                background: filterMode === 'month' ? '#10b981' : 'transparent',
-                                color: filterMode === 'month' ? '#000' : 'rgba(255,255,255,0.7)',
-                                fontWeight: filterMode === 'month' ? '900' : '600',
-                                fontSize: '12px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                            }}
-                        >
-                            <Calendar size={13} />
-                            <span>Full Month</span>
-                        </button>
+                    {/* Left Group: Mode Switcher + Month/Single/Range Controls */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', borderRadius: '11px', padding: '3px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                            <button
+                                onClick={() => setFilterMode('month')}
+                                style={{
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    border: 'none',
+                                    background: filterMode === 'month' ? '#10b981' : 'transparent',
+                                    color: filterMode === 'month' ? '#000' : 'rgba(255,255,255,0.75)',
+                                    fontWeight: filterMode === 'month' ? '900' : '700',
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    transition: 'all 0.15s'
+                                }}
+                            >
+                                <Calendar size={13} />
+                                <span>Full Month</span>
+                            </button>
 
-                        <button
-                            onClick={() => setFilterMode('single')}
-                            style={{
-                                padding: '6px 13px',
-                                borderRadius: '9px',
-                                border: 'none',
-                                background: filterMode === 'single' ? '#38bdf8' : 'transparent',
-                                color: filterMode === 'single' ? '#000' : 'rgba(255,255,255,0.7)',
-                                fontWeight: filterMode === 'single' ? '900' : '600',
-                                fontSize: '12px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                            }}
-                        >
-                            <span>📌</span>
-                            <span>Single Date</span>
-                        </button>
+                            <button
+                                onClick={() => setFilterMode('single')}
+                                style={{
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    border: 'none',
+                                    background: filterMode === 'single' ? '#38bdf8' : 'transparent',
+                                    color: filterMode === 'single' ? '#000' : 'rgba(255,255,255,0.75)',
+                                    fontWeight: filterMode === 'single' ? '900' : '700',
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    transition: 'all 0.15s'
+                                }}
+                            >
+                                <span>📌</span>
+                                <span>Single Date</span>
+                            </button>
 
-                        <button
-                            onClick={() => setFilterMode('range')}
-                            style={{
-                                padding: '6px 13px',
-                                borderRadius: '9px',
-                                border: 'none',
-                                background: filterMode === 'range' ? '#c084fc' : 'transparent',
-                                color: filterMode === 'range' ? '#000' : 'rgba(255,255,255,0.7)',
-                                fontWeight: filterMode === 'range' ? '900' : '600',
-                                fontSize: '12px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                            }}
-                        >
-                            <CalendarRange size={13} />
-                            <span>Date Range</span>
-                        </button>
-                    </div>
+                            <button
+                                onClick={() => setFilterMode('range')}
+                                style={{
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    border: 'none',
+                                    background: filterMode === 'range' ? '#c084fc' : 'transparent',
+                                    color: filterMode === 'range' ? '#000' : 'rgba(255,255,255,0.75)',
+                                    fontWeight: filterMode === 'range' ? '900' : '700',
+                                    fontSize: '12px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    transition: 'all 0.15s'
+                                }}
+                            >
+                                <CalendarRange size={13} />
+                                <span>Date Range</span>
+                            </button>
+                        </div>
 
-                    {/* Middle: Controls depending on Mode */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         {filterMode === 'month' && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                {/* Prev Month Button */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <button
                                     onClick={handlePrevMonth}
                                     title="Previous Month"
                                     style={{
-                                        padding: '6px 10px',
+                                        padding: '6px 9px',
                                         background: 'rgba(255,255,255,0.06)',
                                         border: '1px solid rgba(255,255,255,0.1)',
                                         borderRadius: '8px',
@@ -415,31 +417,31 @@ export default function LiveDRSExcelView({
                                         alignItems: 'center'
                                     }}
                                 >
-                                    <ChevronLeft size={16} />
+                                    <ChevronLeft size={15} />
                                 </button>
 
-                                {/* Month / Year Badge */}
                                 <div style={{
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: '6px',
-                                    background: 'rgba(16, 185, 129, 0.15)',
-                                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                                    background: 'rgba(16, 185, 129, 0.14)',
+                                    border: '1px solid rgba(16, 185, 129, 0.35)',
                                     padding: '5px 14px',
-                                    borderRadius: '10px',
+                                    borderRadius: '9px',
                                     color: '#34d399',
                                     fontWeight: '900',
-                                    fontSize: '13px'
+                                    fontSize: '12.5px',
+                                    minWidth: '125px',
+                                    justifyContent: 'center'
                                 }}>
                                     <span>{selectedMonth === 'all' ? 'All Duties' : `${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}`}</span>
                                 </div>
 
-                                {/* Next Month Button */}
                                 <button
                                     onClick={handleNextMonth}
                                     title="Next Month"
                                     style={{
-                                        padding: '6px 10px',
+                                        padding: '6px 9px',
                                         background: 'rgba(255,255,255,0.06)',
                                         border: '1px solid rgba(255,255,255,0.1)',
                                         borderRadius: '8px',
@@ -449,32 +451,8 @@ export default function LiveDRSExcelView({
                                         alignItems: 'center'
                                     }}
                                 >
-                                    <ChevronRight size={16} />
+                                    <ChevronRight size={15} />
                                 </button>
-
-                                {/* Month Tabs Pills */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.03)', padding: '3px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)', overflowX: 'auto' }}>
-                                    {MONTH_TABS.map(tab => (
-                                        <button
-                                            key={tab}
-                                            onClick={() => handleSelectMonthTab(tab)}
-                                            style={{
-                                                padding: '5px 11px',
-                                                borderRadius: '7px',
-                                                border: 'none',
-                                                background: selectedMonthTab === tab ? '#10b981' : 'transparent',
-                                                color: selectedMonthTab === tab ? '#000' : 'rgba(255,255,255,0.7)',
-                                                fontWeight: selectedMonthTab === tab ? '900' : '600',
-                                                fontSize: '11.5px',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.15s',
-                                                whiteSpace: 'nowrap'
-                                            }}
-                                        >
-                                            {tab}
-                                        </button>
-                                    ))}
-                                </div>
                             </div>
                         )}
 
@@ -488,7 +466,7 @@ export default function LiveDRSExcelView({
                                     <ChevronLeft size={16} />
                                 </button>
 
-                                <div style={{ width: '150px' }}>
+                                <div style={{ width: '145px' }}>
                                     <PremiumDateInput
                                         value={singleDate}
                                         onChange={(val) => setSingleDate(val)}
@@ -514,7 +492,7 @@ export default function LiveDRSExcelView({
                         )}
 
                         {filterMode === 'range' && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(192, 132, 252, 0.08)', padding: '4px 10px', borderRadius: '12px', border: '1px solid rgba(192, 132, 252, 0.25)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(192, 132, 252, 0.08)', padding: '4px 10px', borderRadius: '11px', border: '1px solid rgba(192, 132, 252, 0.25)' }}>
                                 <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>From:</span>
                                 <div style={{ width: '135px' }}>
                                     <PremiumDateInput
@@ -536,22 +514,34 @@ export default function LiveDRSExcelView({
                         )}
                     </div>
 
-                    {/* Right: Quick Jump to Date in Month Mode */}
+                    {/* Right Group: Month Quick Pills */}
                     {filterMode === 'month' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.5)', fontWeight: '700' }}>🎯 Jump to Date:</span>
-                            <div style={{ width: '140px' }}>
-                                <PremiumDateInput
-                                    value={jumpDate}
-                                    onChange={handleJumpToDate}
-                                    placeholder="Select Date"
-                                />
-                            </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.03)', padding: '3px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.07)', overflowX: 'auto' }}>
+                            {MONTH_TABS.map(tab => (
+                                <button
+                                    key={tab}
+                                    onClick={() => handleSelectMonthTab(tab)}
+                                    style={{
+                                        padding: '5px 10px',
+                                        borderRadius: '7px',
+                                        border: 'none',
+                                        background: selectedMonthTab === tab ? '#10b981' : 'transparent',
+                                        color: selectedMonthTab === tab ? '#000' : 'rgba(255,255,255,0.7)',
+                                        fontWeight: selectedMonthTab === tab ? '900' : '600',
+                                        fontSize: '11px',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                >
+                                    {tab}
+                                </button>
+                            ))}
                         </div>
                     )}
                 </div>
 
-                {/* Row 2: Search + Stats + Add Duty */}
+                {/* Row 2: Search + Jump to Date + Stats Pill + Add Duty */}
                 <div style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -561,59 +551,68 @@ export default function LiveDRSExcelView({
                     borderTop: '1px solid rgba(255, 255, 255, 0.06)',
                     paddingTop: '10px'
                 }}>
-                    {/* Search Input */}
-                    <div style={{ position: 'relative', width: 'clamp(260px, 35vw, 380px)' }}>
-                        <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
-                        <input 
-                            type="text"
-                            value={searchFilter}
-                            onChange={(e) => setSearchFilter(e.target.value)}
-                            placeholder="Search guest, hotel, route, car, driver..."
-                            style={{
-                                width: '100%',
-                                padding: '8px 12px 8px 34px',
-                                background: 'rgba(255,255,255,0.05)',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                borderRadius: '10px',
-                                color: 'white',
-                                fontSize: '12.5px',
-                                outline: 'none'
-                            }}
-                        />
-                    </div>
-
-                    {/* Right: Stats & + Add Duty Button */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700' }}>
-                                {monthStats.totalRides} Duties • Total Fare
-                            </div>
-                            <div style={{ fontSize: '16px', color: '#10b981', fontWeight: '900' }}>
-                                ₹{monthStats.totalRevenue.toLocaleString('en-IN')}
-                            </div>
+                    {/* Left: Search Input + Jump to Date */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flex: 1 }}>
+                        <div style={{ position: 'relative', width: 'clamp(240px, 30vw, 350px)' }}>
+                            <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
+                            <input 
+                                type="text"
+                                value={searchFilter}
+                                onChange={(e) => setSearchFilter(e.target.value)}
+                                placeholder="Search guest, hotel, route, car, driver..."
+                                style={{
+                                    width: '100%',
+                                    padding: '8px 12px 8px 34px',
+                                    background: 'rgba(255,255,255,0.04)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    borderRadius: '10px',
+                                    color: 'white',
+                                    fontSize: '12.5px',
+                                    outline: 'none'
+                                }}
+                            />
                         </div>
 
-                        <button
-                            onClick={() => onOpenDirectBooking && onOpenDirectBooking()}
-                            style={{
-                                padding: '9px 18px',
-                                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                                border: 'none',
-                                borderRadius: '10px',
-                                color: '#000',
-                                fontWeight: '900',
-                                fontSize: '12.5px',
-                                cursor: 'pointer',
+                        {filterMode === 'month' && (
+                            <div style={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '6px',
-                                boxShadow: '0 4px 15px rgba(245, 158, 11, 0.35)'
-                            }}
-                            title="Add New Duty"
-                        >
-                            <Plus size={15} strokeWidth={3} />
-                            <span>Add Duty</span>
-                        </button>
+                                background: 'rgba(255,255,255,0.03)',
+                                border: '1px solid rgba(255,255,255,0.08)',
+                                padding: '3px 8px 3px 10px',
+                                borderRadius: '10px'
+                            }}>
+                                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', fontWeight: '800', whiteSpace: 'nowrap' }}>🎯 Jump to Date:</span>
+                                <div style={{ width: '132px' }}>
+                                    <PremiumDateInput
+                                        value={jumpDate}
+                                        onChange={handleJumpToDate}
+                                        placeholder="Select Date"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Right: Clean Month Stats Pill */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            background: 'rgba(16, 185, 129, 0.08)',
+                            border: '1px solid rgba(16, 185, 129, 0.25)',
+                            padding: '7px 16px',
+                            borderRadius: '10px'
+                        }}>
+                            <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>
+                                {monthStats.totalRides} Duties • Total Fare:
+                            </span>
+                            <span style={{ fontSize: '15px', color: '#34d399', fontWeight: '900' }}>
+                                ₹{monthStats.totalRevenue.toLocaleString('en-IN')}
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -667,16 +666,18 @@ export default function LiveDRSExcelView({
                                             borderBottom: '1.5px solid rgba(255, 255, 255, 0.15)',
                                             transition: 'all 0.4s'
                                         }}>
-                                            <th style={{
-                                                padding: '10px 12px',
-                                                width: '80px',
-                                                background: '#fef08a',
-                                                color: '#000000',
-                                                fontWeight: '900',
-                                                fontSize: '13px',
-                                                textAlign: 'center',
-                                                borderRight: '1px solid rgba(0,0,0,0.15)'
-                                            }}>
+                                            <th
+                                                style={{
+                                                    padding: '10px 12px',
+                                                    width: '80px',
+                                                    background: '#fef08a',
+                                                    color: '#000000',
+                                                    fontWeight: '900',
+                                                    fontSize: '13px',
+                                                    textAlign: 'center',
+                                                    borderRight: '1px solid rgba(0,0,0,0.15)'
+                                                }}
+                                            >
                                                 {group.dateKey}
                                             </th>
                                             <th style={{ padding: '10px 8px', width: '55px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
