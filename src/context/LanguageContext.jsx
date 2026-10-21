@@ -151,6 +151,10 @@ export const translations = {
         rate_per_l: 'Rate / L',
         charging_units: 'Units (kWh)',
         rate_per_kwh: 'Rate / kWh',
+        payment_source: 'Payment By (Company or Guest)',
+        office: '🏢 Company (Office)',
+        guest: '👤 Guest / Client',
+        optional: 'Optional',
 
         // Admin Sidebar
         dashboard: 'Dashboard',
@@ -456,9 +460,9 @@ export const translations = {
         rate_per_l: 'रेट',
         charging_units: 'यूनिट्स (kWh)',
         rate_per_kwh: 'रेट / kWh',
-        payment_source: 'भुगतान का स्रोत',
-        office: 'ऑफिस',
-        guest: 'गेस्ट',
+        payment_source: 'भुगतान किसने किया? (कंपनी या गेस्ट)',
+        office: '🏢 कंपनी (ऑफिस)',
+        guest: '👤 गेस्ट / क्लाइंट',
         optional: 'वैकल्पिक'
     }
 };

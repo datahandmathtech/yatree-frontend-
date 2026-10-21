@@ -367,12 +367,17 @@ const FuelPage = () => {
             if (duties.length === 1) {
                 const singleDuty = duties[0];
                 const resolvedClientId = (typeof singleDuty.bookingRef?.client === 'object' ? singleDuty.bookingRef?.client?._id : singleDuty.bookingRef?.client) || singleDuty.client || '';
-                setFormData(prev => ({
-                    ...prev,
-                    paymentBy: prev.paymentBy || singleDuty.clientName || '',
-                    drsDuty: prev.drsDuty || singleDuty._id,
-                    client: prev.client || resolvedClientId
-                }));
+                setFormData(prev => {
+                    if (!prev.paymentSource?.toLowerCase().includes('guest')) {
+                        return prev;
+                    }
+                    return {
+                        ...prev,
+                        paymentBy: prev.paymentBy || singleDuty.clientName || '',
+                        drsDuty: prev.drsDuty || singleDuty._id,
+                        client: prev.client || resolvedClientId
+                    };
+                });
             }
         } catch (err) {
             console.error('Error fetching guest duties:', err);
@@ -566,6 +571,8 @@ const FuelPage = () => {
         setSelectedPending(entry);
         const entryDate = toISTDateString(entry.date);
         const ps = entry.paymentSource || 'Office';
+        const isGuestSource = ps.toLowerCase().includes('guest');
+        setGuestDuties([]);
         setFormData({
             ...formData,
             amount: entry.amount,
@@ -574,14 +581,16 @@ const FuelPage = () => {
             driver: entry.driver || '',
             fuelType: entry.fuelType || 'Diesel',
             paymentSource: ps,
-            paymentBy: entry.paymentBy || '',
+            paymentBy: isGuestSource ? (entry.paymentBy || '') : '',
+            client: '',
+            drsDuty: '',
             quantity: entry.quantity ? entry.quantity : '', // Pre-fill if driver submitted
             rate: (entry.quantity && entry.amount) ? (entry.amount / entry.quantity).toFixed(2) : '',
             slipPhoto: entry.slipPhoto || ''
         });
         setShowApprovalModal(true);
-        // Auto-fetch guest duties for this vehicle+date
-        if (entry.carNumber && entryDate) {
+        // Only auto-fetch guest duties if Payment Source is Guest
+        if (isGuestSource && entry.carNumber && entryDate) {
             fetchGuestForVehicle(entry.carNumber, entryDate);
         }
     };
@@ -656,7 +665,23 @@ const FuelPage = () => {
         }
     }, [formData.amount, formData.quantity]);
 
-    const uniquePayers = [...new Set(entries.map(e => e.paymentBy).filter(name => name && name.trim() !== ''))].sort();
+    const guestNameSet = new Set([
+        ...clients.map(c => (c.name || '').trim().toLowerCase()).filter(Boolean),
+        ...entries.filter(e => e.paymentSource?.toLowerCase().includes('guest')).map(e => (e.paymentBy || '').trim().toLowerCase()).filter(Boolean)
+    ]);
+
+    const uniquePayers = [...new Set(
+        entries
+            .filter(e => !e.paymentSource?.toLowerCase().includes('guest'))
+            .map(e => e.paymentBy)
+            .filter(name => {
+                if (!name || name.trim() === '') return false;
+                const lower = name.trim().toLowerCase();
+                if (guestNameSet.has(lower)) return false;
+                if (lower.startsWith('mr.') || lower.startsWith('mr ') || lower.startsWith('mrs.') || lower.startsWith('ms.') || lower.startsWith('dr.')) return false;
+                return true;
+            })
+    )].sort();
 
     const formatPayerName = (name) => {
         if (!name) return '';
@@ -1813,36 +1838,26 @@ const FuelPage = () => {
                                                 </button>
                                             </div>
 
-                                            {/* If Cash is chosen: Live Cash in Hand Balance Impact */}
+                                            {/* If Cash is chosen: 1-Day Cash Book Indicator */}
                                             {(!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? (
                                                 <div style={{
                                                     background: 'rgba(16, 185, 129, 0.08)',
                                                     border: '1px solid rgba(16, 185, 129, 0.25)',
                                                     borderRadius: '12px',
-                                                    padding: '12px 14px',
+                                                    padding: '10px 14px',
                                                     display: 'flex',
-                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
                                                     gap: '8px'
                                                 }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Current Cash in Hand:</span>
-                                                        <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '900' }}>₹{(selectedCompany?.cashBalance || 0).toLocaleString('en-IN')}</span>
+                                                    <div style={{ fontSize: '12px', color: '#10b981', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        <span>💵</span> Recorded in 1-Day Cash Book (Paid Out)
                                                     </div>
                                                     {Number(formData.amount) > 0 && (
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(16, 185, 129, 0.2)', paddingTop: '6px' }}>
-                                                            <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Cash Balance After:</span>
-                                                            <span style={{
-                                                                fontSize: '14px',
-                                                                fontWeight: '950',
-                                                                color: ((selectedCompany?.cashBalance || 0) - Number(formData.amount)) < 0 ? '#f43f5e' : '#10b981'
-                                                            }}>
-                                                                ₹{((selectedCompany?.cashBalance || 0) - Number(formData.amount)).toLocaleString('en-IN')}
-                                                            </span>
-                                                        </div>
+                                                        <span style={{ fontSize: '13px', fontWeight: '900', color: '#f87171' }}>
+                                                            -₹{Number(formData.amount).toLocaleString('en-IN')}
+                                                        </span>
                                                     )}
-                                                    <div style={{ fontSize: '11px', color: '#10b981', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                                        <span>💵</span> Deducts from Cash in Hand & logs in Cash Book
-                                                    </div>
                                                 </div>
                                             ) : (
                                                 <BankSelector
@@ -2162,7 +2177,7 @@ const FuelPage = () => {
                                                     client: '',
                                                     paymentBy: prev.paymentSource?.toLowerCase().includes('guest') ? '' : prev.paymentBy
                                                 }));
-                                                if (selectedPending?.carNumber && newDate) {
+                                                if (formData.paymentSource?.toLowerCase().includes('guest') && selectedPending?.carNumber && newDate) {
                                                     fetchGuestForVehicle(selectedPending.carNumber, newDate);
                                                 }
                                             }}
@@ -2178,6 +2193,23 @@ const FuelPage = () => {
                                                 cursor: 'pointer'
                                             }}
                                         />
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800', marginBottom: '4px' }}>Driver Selected</div>
+                                        <span style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '5px',
+                                            padding: '4px 10px',
+                                            borderRadius: '6px',
+                                            fontSize: '12px',
+                                            fontWeight: '800',
+                                            background: selectedPending?.paymentSource?.toLowerCase().includes('guest') ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                                            color: selectedPending?.paymentSource?.toLowerCase().includes('guest') ? '#60a5fa' : '#34d399',
+                                            border: selectedPending?.paymentSource?.toLowerCase().includes('guest') ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid rgba(16, 185, 129, 0.35)'
+                                        }}>
+                                            {selectedPending?.paymentSource?.toLowerCase().includes('guest') ? '👤 Guest / Client' : '🏢 Company (Office)'}
+                                        </span>
                                     </div>
                                 </div>
 
@@ -2208,7 +2240,11 @@ const FuelPage = () => {
                                         <select
                                             className="input-field"
                                             value={formData.paymentSource}
-                                            onChange={(e) => setFormData({ ...formData, paymentSource: e.target.value, paymentBy: '', client: '', drsDuty: '' })}
+                                            onChange={(e) => {
+                                                const nextSource = e.target.value;
+                                                setGuestDuties([]);
+                                                setFormData({ ...formData, paymentSource: nextSource, paymentBy: '', client: '', drsDuty: '' });
+                                            }}
                                             style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
                                         >
                                             <option value="Office">Office (Company)</option>
@@ -2236,7 +2272,7 @@ const FuelPage = () => {
                                                 className="input-field"
                                                 value={formData.paymentBy}
                                                 onChange={(e) => setFormData({ ...formData, paymentBy: e.target.value })}
-                                                placeholder="e.g. Admin Manager"
+                                                placeholder="e.g. Office / Manager Name"
                                                 list="payer-names"
                                                 style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }}
                                             />
@@ -2307,36 +2343,26 @@ const FuelPage = () => {
                                             </button>
                                         </div>
 
-                                        {/* If Cash is chosen: Live Cash in Hand Balance Impact */}
+                                        {/* If Cash is chosen: 1-Day Cash Book Indicator */}
                                         {(!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? (
                                             <div style={{
                                                 background: 'rgba(16, 185, 129, 0.08)',
                                                 border: '1px solid rgba(16, 185, 129, 0.25)',
                                                 borderRadius: '12px',
-                                                padding: '12px 14px',
+                                                padding: '10px 14px',
                                                 display: 'flex',
-                                                flexDirection: 'column',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
                                                 gap: '8px'
                                             }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Current Cash in Hand:</span>
-                                                    <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '900' }}>₹{(selectedCompany?.cashBalance || 0).toLocaleString('en-IN')}</span>
+                                                <div style={{ fontSize: '12px', color: '#10b981', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <span>💵</span> Recorded in 1-Day Cash Book (Paid Out)
                                                 </div>
                                                 {Number(formData.amount) > 0 && (
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(16, 185, 129, 0.2)', paddingTop: '6px' }}>
-                                                        <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Cash Balance After:</span>
-                                                        <span style={{
-                                                            fontSize: '14px',
-                                                            fontWeight: '950',
-                                                            color: ((selectedCompany?.cashBalance || 0) - Number(formData.amount)) < 0 ? '#f43f5e' : '#10b981'
-                                                        }}>
-                                                            ₹{((selectedCompany?.cashBalance || 0) - Number(formData.amount)).toLocaleString('en-IN')}
-                                                        </span>
-                                                    </div>
+                                                    <span style={{ fontSize: '13px', fontWeight: '900', color: '#f87171' }}>
+                                                        -₹{Number(formData.amount).toLocaleString('en-IN')}
+                                                    </span>
                                                 )}
-                                                <div style={{ fontSize: '11px', color: '#10b981', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                                    <span>💵</span> Deducts from Cash in Hand & logs in Cash Book
-                                                </div>
                                             </div>
                                         ) : (
                                             <BankSelector

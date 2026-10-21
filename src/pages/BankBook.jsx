@@ -57,15 +57,27 @@ const BankBook = ({ initialTab = 'bank' }) => {
     const [bankStats, setBankStats] = useState({ totalIn: 0, totalOut: 0, periodBalance: 0, currentBalance: 0 });
     const [bankLoading, setBankLoading] = useState(true);
 
-    // Filters for Bank Book
-    const [periodType, setPeriodType] = useState('monthly'); // 'daily' or 'monthly'
+    // Filters for Bank Book (Strictly 1-Day Book — No Carry-Forward)
+    const [periodType, setPeriodType] = useState('daily');
     const [filterDate, setFilterDate] = useState(todayIST());
     const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
     const [filterYear, setFilterYear] = useState(new Date().getFullYear());
     const [searchTerm, setSearchTerm] = useState('');
 
+    const shiftFilterDate = (deltaDays) => {
+        if (!filterDate) return;
+        const d = new Date(`${filterDate}T12:00:00`);
+        if (isNaN(d.getTime())) return;
+        d.setDate(d.getDate() + deltaDays);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        setFilterDate(`${yyyy}-${mm}-${dd}`);
+    };
+
     // Bank Modals
     const [showAddBankModal, setShowAddBankModal] = useState(false);
+    const [editingBankId, setEditingBankId] = useState(null);
     const [bankFormData, setBankFormData] = useState({
         bankName: '',
         accountNumber: '',
@@ -77,6 +89,11 @@ const BankBook = ({ initialTab = 'bank' }) => {
     });
     const [submittingBank, setSubmittingBank] = useState(false);
 
+    // Guest / Client Ledger list for direct Bank & Cash entries
+    const [guestOptions, setGuestOptions] = useState([]);
+    const [guestSearchQuery, setGuestSearchQuery] = useState('');
+    const [showGuestDropdown, setShowGuestDropdown] = useState(false);
+
     const [showAddTxModal, setShowAddTxModal] = useState(false);
     const [txFormData, setTxFormData] = useState({
         bankAccountId: '',
@@ -86,7 +103,10 @@ const BankBook = ({ initialTab = 'bank' }) => {
         paymentMode: 'UPI / QR Code',
         reference: '',
         description: '',
-        date: todayIST()
+        date: todayIST(),
+        bookingRef: '',
+        clientId: '',
+        guestName: ''
     });
     const [txScreenshotFile, setTxScreenshotFile] = useState(null);
     const [submittingTx, setSubmittingTx] = useState(false);
@@ -142,7 +162,9 @@ const BankBook = ({ initialTab = 'bank' }) => {
         reference: '',
         description: '',
         guestName: '',
-        driverName: ''
+        driverName: '',
+        bookingRef: '',
+        clientId: ''
     });
     const [cashReceiptFile, setCashReceiptFile] = useState(null);
     const [submittingCash, setSubmittingCash] = useState(false);
@@ -160,8 +182,68 @@ const BankBook = ({ initialTab = 'bank' }) => {
     }, [initialTab]);
 
     // ==========================================
-    // DATA FETCHING: BANK BOOK
+    // DATA FETCHING: BANK BOOK & GUEST LEDGER LIST
     // ==========================================
+    const fetchGuestLedgerOptions = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            const [bkgRes, clientRes] = await Promise.all([
+                axios.get(`/api/bookings/${selectedCompany._id}`).catch(() => ({ data: [] })),
+                axios.get(`/api/clients/${selectedCompany._id}`).catch(() => ({ data: [] }))
+            ]);
+            const bookingsData = Array.isArray(bkgRes.data) ? bkgRes.data : [];
+            const clientsData = Array.isArray(clientRes.data) ? clientRes.data : [];
+
+            const options = [];
+            const seenBookingIds = new Set();
+
+            bookingsData.forEach(b => {
+                if (b.bookingStatus === 'Cancelled' || b.status === 'Cancelled') return;
+                const guestName = (b.clientName || b.guestName || '').trim();
+                if (!guestName) return;
+                seenBookingIds.add(String(b._id));
+                const clientId = typeof b.client === 'object' ? b.client?._id : b.client;
+                const totalAmt = Number(b.totalAmount || b.packagePrice) || 0;
+                const advAmt = Number(b.advancePaid) || 0;
+                const balDue = b.balanceDue !== undefined ? Math.max(0, Number(b.balanceDue)) : Math.max(0, totalAmt - advAmt);
+                options.push({
+                    key: `bkg_${b._id}`,
+                    bookingRef: b._id,
+                    clientId: clientId || '',
+                    guestName,
+                    mobile: b.mobileNumber || '',
+                    vehicleType: b.vehicleType || '',
+                    tripDate: b.travelStartDate ? formatDateIST(b.travelStartDate) : '',
+                    totalAmount: totalAmt,
+                    balanceDue: balDue
+                });
+            });
+
+            clientsData.forEach(c => {
+                const name = (c.name || '').trim();
+                if (!name) return;
+                const alreadyInBookings = options.some(o => String(o.clientId) === String(c._id));
+                if (!alreadyInBookings) {
+                    options.push({
+                        key: `cli_${c._id}`,
+                        bookingRef: '',
+                        clientId: c._id,
+                        guestName: name,
+                        mobile: c.mobile || '',
+                        vehicleType: '',
+                        tripDate: '',
+                        totalAmount: Number(c.totalBilled) || 0,
+                        balanceDue: Math.max(0, Number(c.balance) || 0)
+                    });
+                }
+            });
+
+            setGuestOptions(options);
+        } catch (err) {
+            console.error('Error fetching guest options for bank book:', err);
+        }
+    };
+
     const fetchBankAccounts = async () => {
         if (!selectedCompany?._id) return;
         try {
@@ -238,6 +320,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
     useEffect(() => {
         if (selectedCompany?._id) {
             fetchBankAccounts();
+            fetchGuestLedgerOptions();
         }
     }, [selectedCompany]);
 
@@ -254,6 +337,51 @@ const BankBook = ({ initialTab = 'bank' }) => {
     // ==========================================
     // HANDLERS: BANK BOOK
     // ==========================================
+    const handleOpenAddBank = () => {
+        setEditingBankId(null);
+        setBankFormData({
+            bankName: '',
+            accountNumber: '',
+            accountHolder: '',
+            ifsc: '',
+            branch: '',
+            upiId: '',
+            openingBalance: ''
+        });
+        setShowAddBankModal(true);
+    };
+
+    const handleOpenEditBank = (bank, e) => {
+        if (e) e.stopPropagation();
+        setEditingBankId(bank._id);
+        setBankFormData({
+            bankName: bank.bankName || '',
+            accountNumber: bank.accountNumber || '',
+            accountHolder: bank.accountHolder || '',
+            ifsc: bank.ifsc || '',
+            branch: bank.branch || '',
+            upiId: bank.upiId || '',
+            openingBalance: bank.openingBalance || ''
+        });
+        setShowAddBankModal(true);
+    };
+
+    const handleDeleteBank = async (bank, e) => {
+        if (e) e.stopPropagation();
+        if (!window.confirm(`Are you sure you want to delete bank account "${bank.bankName}"?`)) return;
+        try {
+            await axios.delete(`/api/banks/${bank._id}`);
+            if (selectedBankId === bank._id) {
+                setSelectedBankId('all');
+            }
+            await fetchBankAccounts();
+            await fetchBankTransactions();
+        } catch (err) {
+            console.error('Error deleting bank account:', err);
+            alert(err.response?.data?.message || 'Failed to delete bank account');
+        }
+    };
+
     const handleCreateBank = async (e) => {
         e.preventDefault();
         if (!bankFormData.bankName) {
@@ -262,12 +390,23 @@ const BankBook = ({ initialTab = 'bank' }) => {
         }
         setSubmittingBank(true);
         try {
-            const { data } = await axios.post('/api/banks', {
-                ...bankFormData,
-                company: selectedCompany._id
-            });
-            alert(`Bank account for "${data.bankName}" created successfully!`);
-            setShowAddBankModal(false);
+            if (editingBankId) {
+                const { data } = await axios.put(`/api/banks/${editingBankId}`, bankFormData);
+                alert(`Bank account "${data.bankName}" updated successfully!`);
+                setShowAddBankModal(false);
+                setEditingBankId(null);
+                await fetchBankAccounts();
+                await fetchBankTransactions();
+            } else {
+                const { data } = await axios.post('/api/banks', {
+                    ...bankFormData,
+                    company: selectedCompany._id
+                });
+                alert(`Bank account for "${data.bankName}" created successfully!`);
+                setShowAddBankModal(false);
+                setSelectedBankId(data._id);
+                await fetchBankAccounts();
+            }
             setBankFormData({
                 bankName: '',
                 accountNumber: '',
@@ -277,11 +416,9 @@ const BankBook = ({ initialTab = 'bank' }) => {
                 upiId: '',
                 openingBalance: ''
             });
-            await fetchBankAccounts();
-            setSelectedBankId(data._id);
         } catch (err) {
-            console.error('Error creating bank account:', err);
-            alert(err.response?.data?.message || 'Failed to create bank account');
+            console.error('Error saving bank account:', err);
+            alert(err.response?.data?.message || 'Failed to save bank account');
         } finally {
             setSubmittingBank(false);
         }
@@ -319,9 +456,11 @@ const BankBook = ({ initialTab = 'bank' }) => {
                 category: txFormData.category,
                 paymentMode: txFormData.paymentMode,
                 reference: txFormData.reference,
-                description: txFormData.description,
+                description: txFormData.description || (txFormData.guestName ? `Mr. ${txFormData.guestName.replace(/^(Mr\.?|Mrs\.?|Ms\.?)\s*/i, '')}` : ''),
                 paymentScreenshot: screenshotUrl,
-                date: txFormData.date || todayIST()
+                date: txFormData.date || todayIST(),
+                bookingRef: txFormData.bookingRef || null,
+                clientId: txFormData.clientId || null
             });
 
             setShowAddTxModal(false);
@@ -333,11 +472,17 @@ const BankBook = ({ initialTab = 'bank' }) => {
                 paymentMode: 'UPI / QR Code',
                 reference: '',
                 description: '',
-                date: todayIST()
+                date: todayIST(),
+                bookingRef: '',
+                clientId: '',
+                guestName: ''
             });
+            setGuestSearchQuery('');
+            setShowGuestDropdown(false);
             setTxScreenshotFile(null);
             await fetchBankAccounts();
             await fetchBankTransactions();
+            await fetchGuestLedgerOptions();
         } catch (err) {
             console.error('Error recording transaction:', err);
             alert(err.response?.data?.message || 'Failed to record transaction');
@@ -535,9 +680,11 @@ const BankBook = ({ initialTab = 'bank' }) => {
                 category: cashFormData.category,
                 date: cashFormData.date || todayIST(),
                 reference: cashFormData.reference,
-                description: cashFormData.description,
+                description: cashFormData.description || (cashFormData.guestName ? `Mr. ${cashFormData.guestName.replace(/^(Mr\.?|Mrs\.?|Ms\.?)\s*/i, '')}` : ''),
                 guestName: cashFormData.guestName,
                 driverName: cashFormData.driverName,
+                bookingRef: cashFormData.bookingRef || null,
+                clientId: cashFormData.clientId || null,
                 receiptPhoto: receiptPhotoUrl
             });
 
@@ -550,16 +697,64 @@ const BankBook = ({ initialTab = 'bank' }) => {
                 reference: '',
                 description: '',
                 guestName: '',
-                driverName: ''
+                driverName: '',
+                bookingRef: '',
+                clientId: ''
             });
+            setGuestSearchQuery('');
+            setShowGuestDropdown(false);
             setCashReceiptFile(null);
             await fetchCashTransactions();
+            await fetchGuestLedgerOptions();
         } catch (err) {
             console.error('Error adding cash transaction:', err);
             alert(err.response?.data?.message || 'Failed to record cash transaction');
         } finally {
             setSubmittingCash(false);
         }
+    };
+
+    const formatParticulars = (tx) => {
+        const rawDesc = String(tx?.description || '').trim();
+        const cat = String(tx?.category || '').trim();
+
+        // 1. Driver Advance -> "Mr. Bharat"
+        const drvMatch = rawDesc.match(/Advance\s+(?:given\s+)?to\s+Driver\s+([^(—\-]+?)(?:\s*\(.*|\s*[-—].*)?$/i);
+        if (drvMatch && drvMatch[1]) {
+            const cleanDrv = drvMatch[1].trim().replace(/^(Mr\.?|Mrs\.?|Ms\.?)\s*/i, '');
+            return `Mr. ${cleanDrv}`;
+        }
+        if (cat === 'Driver Advance' && tx?.driverName) {
+            const cleanDrv = String(tx.driverName).trim().replace(/^(Mr\.?|Mrs\.?|Ms\.?)\s*/i, '');
+            return `Mr. ${cleanDrv}`;
+        }
+
+        // 2. Vehicle Fuel / Fastag / Maintenance / Border Tax / Parking -> Car Number only (e.g. "RJ-27-TA-9053")
+        const vehMatch = rawDesc.match(/for\s+Vehicle\s+([A-Z0-9\-]+)/i)
+            || rawDesc.match(/\b([A-Z]{2}[-\s]?\d{1,2}[-\s]?[A-Z]{1,3}[-\s]?\d{3,4})\b/i);
+        if (vehMatch && vehMatch[1] && (
+            /fuel|fastag|maintenance|service|repair|utility|border|parking|toll|vehicle/i.test(cat) ||
+            /fuel|fastag|vehicle|approved from attendance/i.test(rawDesc)
+        )) {
+            return vehMatch[1].toUpperCase();
+        }
+
+        // 3. Guest / Booking Advance or Payment -> "Mr. <GuestName>"
+        if (tx?.bookingRef?.clientName) {
+            const cleanGuest = String(tx.bookingRef.clientName).trim().replace(/^(Mr\.?|Mrs\.?|Ms\.?)\s*/i, '');
+            return `Mr. ${cleanGuest}`;
+        }
+        if (tx?.clientRef?.name) {
+            const cleanGuest = String(tx.clientRef.name).trim().replace(/^(Mr\.?|Mrs\.?|Ms\.?)\s*/i, '');
+            return `Mr. ${cleanGuest}`;
+        }
+        const guestMatch = rawDesc.match(/^(?:Advance|Payment)\s+Received\s*[-–:]\s*(.+?)(?:\s*\(Ref:.*)?$/i);
+        if (guestMatch && guestMatch[1]) {
+            const cleanGuest = guestMatch[1].trim().replace(/^(Mr\.?|Mrs\.?|Ms\.?)\s*/i, '');
+            return `Mr. ${cleanGuest}`;
+        }
+
+        return rawDesc || '-';
     };
 
     const openEditCashModal = (tx) => {
@@ -702,7 +897,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
                         </div>
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                             <button
-                                onClick={() => setShowAddBankModal(true)}
+                                onClick={handleOpenAddBank}
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',
@@ -723,13 +918,15 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                 onClick={() => {
                                     if (bankAccounts.length === 0) {
                                         alert('Please create at least one Bank Account first!');
-                                        setShowAddBankModal(true);
+                                        handleOpenAddBank();
                                         return;
                                     }
                                     setTxFormData(prev => ({
                                         ...prev,
                                         bankAccountId: selectedBankId !== 'all' ? selectedBankId : bankAccounts[0]._id
                                     }));
+                                    setGuestSearchQuery('');
+                                    setShowGuestDropdown(false);
                                     setShowAddTxModal(true);
                                 }}
                                 style={{
@@ -775,42 +972,82 @@ const BankBook = ({ initialTab = 'bank' }) => {
                         </button>
 
                         {bankAccounts.map(b => (
-                            <button
+                            <div
                                 key={b._id}
                                 onClick={() => setSelectedBankId(b._id)}
                                 style={{
-                                    padding: '12px 20px',
+                                    padding: '12px 16px',
                                     borderRadius: '14px',
                                     border: selectedBankId === b._id ? '2px solid #22c55e' : '1px solid rgba(255,255,255,0.06)',
                                     background: selectedBankId === b._id ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255,255,255,0.03)',
                                     color: 'white',
                                     cursor: 'pointer',
                                     textAlign: 'left',
-                                    minWidth: '200px',
+                                    minWidth: '220px',
                                     transition: 'all 0.2s'
                                 }}
                             >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                                     <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700' }}>
                                         {b.accountNumber ? `A/C: •••• ${b.accountNumber.slice(-4)}` : 'Bank A/C'}
                                     </span>
-                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e' }} />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleOpenEditBank(b, e)}
+                                            title="Edit Bank Account"
+                                            style={{
+                                                background: 'rgba(59, 130, 246, 0.18)',
+                                                border: '1px solid rgba(59, 130, 246, 0.35)',
+                                                color: '#60a5fa',
+                                                borderRadius: '6px',
+                                                padding: '3px 6px',
+                                                fontSize: '10px',
+                                                fontWeight: '700',
+                                                cursor: 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '3px'
+                                            }}
+                                        >
+                                            ✏️ Edit
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleDeleteBank(b, e)}
+                                            title="Delete Bank Account"
+                                            style={{
+                                                background: 'rgba(239, 68, 68, 0.15)',
+                                                border: '1px solid rgba(239, 68, 68, 0.35)',
+                                                color: '#f87171',
+                                                borderRadius: '6px',
+                                                padding: '3px 6px',
+                                                fontSize: '10px',
+                                                fontWeight: '700',
+                                                cursor: 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center'
+                                            }}
+                                        >
+                                            <Trash2 size={11} />
+                                        </button>
+                                    </div>
                                 </div>
                                 <div style={{ fontSize: '16px', fontWeight: '800', margin: '4px 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                     {b.bankName}
                                 </div>
-                                <div style={{ fontSize: '13px', color: '#4ade80', fontWeight: '800' }}>
-                                    ₹{(b.currentBalance || 0).toLocaleString('en-IN')}
+                                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>
+                                    {b.accountHolder || '1-Day Bank Book'}
                                 </div>
-                            </button>
+                            </div>
                         ))}
                     </div>
 
-                    {/* Stats KPI Grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '15px', marginBottom: '15px' }}>
-                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                    {/* Stats KPI Grid — Strictly 1-Day Book (No Carry-Forward / No Closing Balance) */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '15px', marginBottom: '15px' }}>
+                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(34, 197, 94, 0.25)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>TOTAL RECEIVED (CREDIT)</span>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>AAJ KITNA AAYA (RECEIVED IN)</span>
                                 <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <ArrowDownLeft size={18} />
                                 </div>
@@ -818,14 +1055,14 @@ const BankBook = ({ initialTab = 'bank' }) => {
                             <div style={{ fontSize: '26px', fontWeight: '900', color: '#4ade80' }}>
                                 +₹{(bankStats.totalIn || 0).toLocaleString('en-IN')}
                             </div>
-                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                                Inflows for selected period
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
+                                1-Day Bank Credit (Inflow) • {formatDateIST(filterDate)}
                             </div>
                         </div>
 
-                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>TOTAL PAID (DEBIT)</span>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>AAJ KITNA GAYA (PAID OUT)</span>
                                 <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <ArrowUpRight size={18} />
                                 </div>
@@ -833,119 +1070,116 @@ const BankBook = ({ initialTab = 'bank' }) => {
                             <div style={{ fontSize: '26px', fontWeight: '900', color: '#f87171' }}>
                                 -₹{(bankStats.totalOut || 0).toLocaleString('en-IN')}
                             </div>
-                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                                Outflows for selected period
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
+                                1-Day Bank Debit (Outflow) • {formatDateIST(filterDate)}
                             </div>
                         </div>
 
-                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>NET PERIOD FLOW</span>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>1-DAY NET FLOW (IN - OUT)</span>
                                 <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <Wallet size={18} />
                                 </div>
                             </div>
                             <div style={{ fontSize: '26px', fontWeight: '900', color: bankStats.periodBalance >= 0 ? '#60a5fa' : '#fb923c' }}>
-                                ₹{(bankStats.periodBalance || 0).toLocaleString('en-IN')}
+                                {bankStats.periodBalance > 0 ? '+' : ''}₹{(bankStats.periodBalance || 0).toLocaleString('en-IN')}
                             </div>
-                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                                Inflow minus Outflow
-                            </div>
-                        </div>
-
-                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>CLOSING BALANCE</span>
-                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(168, 85, 247, 0.1)', color: '#c084fc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <CreditCard size={18} />
-                                </div>
-                            </div>
-                            <div style={{ fontSize: '26px', fontWeight: '900', color: '#c084fc' }}>
-                                ₹{(bankStats.currentBalance || 0).toLocaleString('en-IN')}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                                {selectedBankId === 'all' ? 'All active accounts combined' : 'Selected bank balance'}
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
+                                Selected Day Only • No Carry-Forward
                             </div>
                         </div>
                     </div>
 
-                    {/* Controls Bar: Daily / Monthly & Search */}
+                    {/* Controls Bar: 1-Day Date Navigator & Search */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '3px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                                <button
-                                    onClick={() => setPeriodType('monthly')}
-                                    style={{
-                                        padding: '8px 16px',
-                                        borderRadius: '9px',
-                                        border: 'none',
-                                        background: periodType === 'monthly' ? '#3b82f6' : 'transparent',
-                                        color: periodType === 'monthly' ? '#fff' : 'rgba(255,255,255,0.7)',
-                                        fontWeight: '700',
-                                        fontSize: '12px',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Monthly View
-                                </button>
-                                <button
-                                    onClick={() => setPeriodType('daily')}
-                                    style={{
-                                        padding: '8px 16px',
-                                        borderRadius: '9px',
-                                        border: 'none',
-                                        background: periodType === 'daily' ? '#3b82f6' : 'transparent',
-                                        color: periodType === 'daily' ? '#fff' : 'rgba(255,255,255,0.7)',
-                                        fontWeight: '700',
-                                        fontSize: '12px',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Daily View
-                                </button>
+                            <div style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '8px 14px',
+                                borderRadius: '10px',
+                                background: 'rgba(59, 130, 246, 0.15)',
+                                border: '1px solid rgba(59, 130, 246, 0.35)',
+                                color: '#60a5fa',
+                                fontSize: '12px',
+                                fontWeight: '800'
+                            }}>
+                                <Calendar size={14} /> 1-Day Bank Book
                             </div>
 
-                            {periodType === 'monthly' ? (
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <select
-                                        value={filterMonth}
-                                        onChange={e => setFilterMonth(Number(e.target.value))}
-                                        className="premium-compact-input"
-                                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', color: 'white', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}
-                                    >
-                                        {MONTH_NAMES.map((m, idx) => (
-                                            <option key={m} value={idx + 1}>{m}</option>
-                                        ))}
-                                    </select>
-                                    <select
-                                        value={filterYear}
-                                        onChange={e => setFilterYear(Number(e.target.value))}
-                                        className="premium-compact-input"
-                                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', color: 'white', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}
-                                    >
-                                        <option value={2025}>2025</option>
-                                        <option value={2026}>2026</option>
-                                        <option value={2027}>2027</option>
-                                    </select>
-                                </div>
-                            ) : (
-                                <div>
-                                    <input
-                                        type="date"
-                                        value={filterDate}
-                                        onChange={e => setFilterDate(e.target.value)}
-                                        onClick={e => e.target.showPicker?.()}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => shiftFilterDate(-1)}
+                                    style={{
+                                        padding: '6px 10px',
+                                        borderRadius: '8px',
+                                        border: 'none',
+                                        background: 'rgba(255,255,255,0.06)',
+                                        color: 'white',
+                                        fontWeight: '800',
+                                        fontSize: '12px',
+                                        cursor: 'pointer'
+                                    }}
+                                    title="Previous Day"
+                                >
+                                    ◀ Prev
+                                </button>
+                                <input
+                                    type="date"
+                                    value={filterDate}
+                                    onChange={e => setFilterDate(e.target.value)}
+                                    onClick={e => e.target.showPicker?.()}
+                                    style={{
+                                        padding: '6px 12px',
+                                        background: 'rgba(0,0,0,0.4)',
+                                        color: 'white',
+                                        borderRadius: '8px',
+                                        border: '1px solid rgba(255,255,255,0.12)',
+                                        outline: 'none',
+                                        fontWeight: '800',
+                                        fontSize: '13px',
+                                        cursor: 'pointer'
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => shiftFilterDate(1)}
+                                    style={{
+                                        padding: '6px 10px',
+                                        borderRadius: '8px',
+                                        border: 'none',
+                                        background: 'rgba(255,255,255,0.06)',
+                                        color: 'white',
+                                        fontWeight: '800',
+                                        fontSize: '12px',
+                                        cursor: 'pointer'
+                                    }}
+                                    title="Next Day"
+                                >
+                                    Next ▶
+                                </button>
+                                {filterDate !== todayIST() && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilterDate(todayIST())}
                                         style={{
-                                            padding: '8px 12px',
-                                            background: 'rgba(0,0,0,0.3)',
+                                            padding: '6px 12px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            background: '#3b82f6',
                                             color: 'white',
-                                            borderRadius: '10px',
-                                            border: '1px solid rgba(255,255,255,0.1)',
-                                            outline: 'none'
+                                            fontWeight: '800',
+                                            fontSize: '12px',
+                                            cursor: 'pointer'
                                         }}
-                                    />
-                                </div>
-                            )}
+                                    >
+                                        Today
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
                         {/* Search */}
@@ -1021,20 +1255,8 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                                 </td>
                                                 <td style={{ padding: '16px 20px', fontSize: '13px' }}>
                                                     <div style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>
-                                                        {tx.description}
+                                                        {formatParticulars(tx)}
                                                     </div>
-                                                    {tx.bookingRef && (
-                                                        <div style={{ fontSize: '11px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                                            <span style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '2px 8px', borderRadius: '6px', fontWeight: '800', letterSpacing: '0.3px' }}>
-                                                                {tx.bookingRef.bookingId}
-                                                            </span>
-                                                            {tx.bookingRef.clientCode && (
-                                                                <span style={{ color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
-                                                                    Client Code: <span style={{ color: '#e2e8f0', fontWeight: '800' }}>{tx.bookingRef.clientCode}</span>
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    )}
                                                 </td>
                                                 <td style={{ padding: '16px 20px', fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>
                                                     <div>{tx.category || 'General'}</div>
@@ -1234,11 +1456,11 @@ const BankBook = ({ initialTab = 'bank' }) => {
                         </div>
                     </header>
 
-                    {/* Stats KPI Grid for Cash Book */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '18px', marginBottom: '28px' }}>
+                    {/* Stats KPI Grid for Cash Book — Strictly 1-Day Book (No Carry-Forward) */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px', marginBottom: '28px' }}>
                         <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>TOTAL CASH RECEIVED (IN)</span>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>AAJ CASH KITNA AAYA (IN)</span>
                                 <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <ArrowDownLeft size={18} />
                                 </div>
@@ -1246,14 +1468,14 @@ const BankBook = ({ initialTab = 'bank' }) => {
                             <div style={{ fontSize: '26px', fontWeight: '900', color: '#10b981' }}>
                                 +₹{(cashStats.totalIn || 0).toLocaleString('en-IN')}
                             </div>
-                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                                Cash inflows for selected period
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
+                                1-Day Cash Received • {formatDateIST(filterDate)}
                             </div>
                         </div>
 
                         <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>TOTAL CASH PAID (OUT)</span>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>AAJ CASH KITNA GAYA (OUT)</span>
                                 <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <ArrowUpRight size={18} />
                                 </div>
@@ -1261,119 +1483,116 @@ const BankBook = ({ initialTab = 'bank' }) => {
                             <div style={{ fontSize: '26px', fontWeight: '900', color: '#f87171' }}>
                                 -₹{(cashStats.totalOut || 0).toLocaleString('en-IN')}
                             </div>
-                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                                Cash outflows & bank deposits
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
+                                1-Day Cash Paid Out • {formatDateIST(filterDate)}
                             </div>
                         </div>
 
                         <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>NET PERIOD CASH FLOW</span>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>1-DAY NET CASH FLOW (IN - OUT)</span>
                                 <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <Wallet size={18} />
                                 </div>
                             </div>
                             <div style={{ fontSize: '26px', fontWeight: '900', color: cashStats.periodBalance >= 0 ? '#38bdf8' : '#fb923c' }}>
-                                ₹{(cashStats.periodBalance || 0).toLocaleString('en-IN')}
+                                {cashStats.periodBalance > 0 ? '+' : ''}₹{(cashStats.periodBalance || 0).toLocaleString('en-IN')}
                             </div>
-                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                                Net Cash Movement
-                            </div>
-                        </div>
-
-                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(251, 191, 36, 0.4)', background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(15, 23, 42, 0.7) 100%)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: '#fbbf24', fontWeight: '900', letterSpacing: '0.5px' }}>💵 CASH IN HAND BALANCE</span>
-                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(251, 191, 36, 0.2)', color: '#fbbf24', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Banknote size={18} />
-                                </div>
-                            </div>
-                            <div style={{ fontSize: '28px', fontWeight: '950', color: '#fbbf24' }}>
-                                ₹{(cashStats.currentBalance || 0).toLocaleString('en-IN')}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '4px' }}>
-                                Physical cash available in office / company
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
+                                Selected Day Only • No Carry-Forward
                             </div>
                         </div>
                     </div>
 
-                    {/* Controls Bar: Daily / Monthly & Search & Category */}
+                    {/* Controls Bar: 1-Day Date Navigator & Category & Search */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', padding: '3px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                                <button
-                                    onClick={() => setPeriodType('monthly')}
-                                    style={{
-                                        padding: '8px 16px',
-                                        borderRadius: '9px',
-                                        border: 'none',
-                                        background: periodType === 'monthly' ? '#10b981' : 'transparent',
-                                        color: periodType === 'monthly' ? '#000' : 'rgba(255,255,255,0.7)',
-                                        fontWeight: '800',
-                                        fontSize: '12px',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Monthly View
-                                </button>
-                                <button
-                                    onClick={() => setPeriodType('daily')}
-                                    style={{
-                                        padding: '8px 16px',
-                                        borderRadius: '9px',
-                                        border: 'none',
-                                        background: periodType === 'daily' ? '#10b981' : 'transparent',
-                                        color: periodType === 'daily' ? '#000' : 'rgba(255,255,255,0.7)',
-                                        fontWeight: '800',
-                                        fontSize: '12px',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Daily View
-                                </button>
+                            <div style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '8px 14px',
+                                borderRadius: '10px',
+                                background: 'rgba(16, 185, 129, 0.15)',
+                                border: '1px solid rgba(16, 185, 129, 0.35)',
+                                color: '#10b981',
+                                fontSize: '12px',
+                                fontWeight: '800'
+                            }}>
+                                <Calendar size={14} /> 1-Day Cash Book
                             </div>
 
-                            {periodType === 'monthly' ? (
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <select
-                                        value={filterMonth}
-                                        onChange={e => setFilterMonth(Number(e.target.value))}
-                                        className="premium-compact-input"
-                                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', color: 'white', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}
-                                    >
-                                        {MONTH_NAMES.map((m, idx) => (
-                                            <option key={m} value={idx + 1}>{m}</option>
-                                        ))}
-                                    </select>
-                                    <select
-                                        value={filterYear}
-                                        onChange={e => setFilterYear(Number(e.target.value))}
-                                        className="premium-compact-input"
-                                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', color: 'white', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}
-                                    >
-                                        <option value={2025}>2025</option>
-                                        <option value={2026}>2026</option>
-                                        <option value={2027}>2027</option>
-                                    </select>
-                                </div>
-                            ) : (
-                                <div>
-                                    <input
-                                        type="date"
-                                        value={filterDate}
-                                        onChange={e => setFilterDate(e.target.value)}
-                                        onClick={e => e.target.showPicker?.()}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => shiftFilterDate(-1)}
+                                    style={{
+                                        padding: '6px 10px',
+                                        borderRadius: '8px',
+                                        border: 'none',
+                                        background: 'rgba(255,255,255,0.06)',
+                                        color: 'white',
+                                        fontWeight: '800',
+                                        fontSize: '12px',
+                                        cursor: 'pointer'
+                                    }}
+                                    title="Previous Day"
+                                >
+                                    ◀ Prev
+                                </button>
+                                <input
+                                    type="date"
+                                    value={filterDate}
+                                    onChange={e => setFilterDate(e.target.value)}
+                                    onClick={e => e.target.showPicker?.()}
+                                    style={{
+                                        padding: '6px 12px',
+                                        background: 'rgba(0,0,0,0.4)',
+                                        color: 'white',
+                                        borderRadius: '8px',
+                                        border: '1px solid rgba(255,255,255,0.12)',
+                                        outline: 'none',
+                                        fontWeight: '800',
+                                        fontSize: '13px',
+                                        cursor: 'pointer'
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => shiftFilterDate(1)}
+                                    style={{
+                                        padding: '6px 10px',
+                                        borderRadius: '8px',
+                                        border: 'none',
+                                        background: 'rgba(255,255,255,0.06)',
+                                        color: 'white',
+                                        fontWeight: '800',
+                                        fontSize: '12px',
+                                        cursor: 'pointer'
+                                    }}
+                                    title="Next Day"
+                                >
+                                    Next ▶
+                                </button>
+                                {filterDate !== todayIST() && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilterDate(todayIST())}
                                         style={{
-                                            padding: '8px 12px',
-                                            background: 'rgba(0,0,0,0.3)',
-                                            color: 'white',
-                                            borderRadius: '10px',
-                                            border: '1px solid rgba(255,255,255,0.1)',
-                                            outline: 'none'
+                                            padding: '6px 12px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            background: '#10b981',
+                                            color: '#000',
+                                            fontWeight: '800',
+                                            fontSize: '12px',
+                                            cursor: 'pointer'
                                         }}
-                                    />
-                                </div>
-                            )}
+                                    >
+                                        Today
+                                    </button>
+                                )}
+                            </div>
 
                             {/* Category Filter */}
                             <select
@@ -1472,31 +1691,16 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                                     </span>
                                                 </td>
                                                 <td style={{ padding: '16px 20px', fontSize: '13px' }}>
-                                                    <div style={{ fontWeight: '700', color: '#fff', fontSize: '14px' }}>
-                                                        {tx.description || '-'}
+                                                    <div style={{ fontWeight: '800', color: '#fff', fontSize: '14px' }}>
+                                                        {formatParticulars(tx)}
                                                     </div>
-                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
-                                                        {tx.bankAccount && (
+                                                    {tx.bankAccount && (
+                                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
                                                             <span style={{ fontSize: '11px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', padding: '2px 6px', borderRadius: '4px' }}>
                                                                 🏦 {tx.bankAccount.bankName || tx.bankName}
                                                             </span>
-                                                        )}
-                                                        {tx.guestName && (
-                                                            <span style={{ fontSize: '11px', background: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24', padding: '2px 6px', borderRadius: '4px' }}>
-                                                                👤 Guest: {tx.guestName}
-                                                            </span>
-                                                        )}
-                                                        {tx.driverName && (
-                                                            <span style={{ fontSize: '11px', background: 'rgba(168, 85, 247, 0.1)', color: '#c084fc', padding: '2px 6px', borderRadius: '4px' }}>
-                                                                🚖 Driver: {tx.driverName}
-                                                            </span>
-                                                        )}
-                                                        {tx.bookingRef && (
-                                                            <span style={{ fontSize: '11px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', padding: '2px 6px', borderRadius: '4px' }}>
-                                                                Booking: {tx.bookingRef.clientCode || tx.bookingRef.bookingId}
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td style={{ padding: '16px 20px', fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontFamily: 'monospace' }}>
                                                     {tx.reference || '-'}
@@ -1578,7 +1782,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
             {/* MODALS: BANK & CASH BOOK                                                  */}
             {/* ========================================================================= */}
 
-            {/* Modal: Add Bank Account */}
+            {/* Modal: Add / Edit Bank Account */}
             <AnimatePresence>
                 {showAddBankModal && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000 }}>
@@ -1586,9 +1790,11 @@ const BankBook = ({ initialTab = 'bank' }) => {
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <Building2 size={22} color="#60a5fa" />
-                                    <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Create Bank Account</h3>
+                                    <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>
+                                        {editingBankId ? 'Edit Bank Account' : 'Create Bank Account'}
+                                    </h3>
                                 </div>
-                                <button type="button" onClick={() => setShowAddBankModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                                <button type="button" onClick={() => { setShowAddBankModal(false); setEditingBankId(null); }} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
                                     <X size={20} />
                                 </button>
                             </div>
@@ -1648,20 +1854,10 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                         />
                                     </div>
                                 </div>
-                                <div>
-                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Opening Balance (₹)</label>
-                                    <input
-                                        type="number"
-                                        placeholder="0"
-                                        value={bankFormData.openingBalance}
-                                        onChange={e => setBankFormData({ ...bankFormData, openingBalance: e.target.value })}
-                                        style={darkInputStyle}
-                                    />
-                                </div>
                                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                                    <button type="button" onClick={() => setShowAddBankModal(false)} style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                                    <button type="button" onClick={() => { setShowAddBankModal(false); setEditingBankId(null); }} style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
                                     <button type="submit" disabled={submittingBank} style={{ flex: 1, padding: '12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: submittingBank ? 'not-allowed' : 'pointer', fontWeight: '800' }}>
-                                        {submittingBank ? 'Saving...' : 'Save Bank Account'}
+                                        {submittingBank ? 'Saving...' : editingBankId ? 'Update Bank Account' : 'Save Bank Account'}
                                     </button>
                                 </div>
                             </form>
@@ -1674,7 +1870,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
             <AnimatePresence>
                 {showAddTxModal && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000 }}>
-                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '500px', background: '#0f172a', padding: '26px', border: '1px solid rgba(34, 197, 94, 0.4)' }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '520px', maxHeight: '92vh', overflowY: 'auto', background: '#0f172a', padding: '26px', border: '1px solid rgba(34, 197, 94, 0.4)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <Landmark size={22} color="#4ade80" />
@@ -1695,7 +1891,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                     >
                                         {bankAccounts.map(b => (
                                             <option key={b._id} value={b._id} style={{ background: '#090f1d' }}>
-                                                {b.bankName} {b.accountNumber ? `(•••• ${b.accountNumber.slice(-4)})` : ''} - Bal: ₹{(b.currentBalance || 0).toLocaleString()}
+                                                {b.bankName} {b.accountNumber ? `(•••• ${b.accountNumber.slice(-4)})` : ''}
                                             </option>
                                         ))}
                                     </select>
@@ -1724,6 +1920,135 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                         />
                                     </div>
                                 </div>
+
+                                {/* Guest / Client Ledger Selector (Search by Guest Name) */}
+                                <div style={{ position: 'relative' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                        <label style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '700' }}>
+                                            👤 Guest / Client Ledger (Search by Guest Name)
+                                        </label>
+                                        {(txFormData.bookingRef || txFormData.clientId) && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setTxFormData({ ...txFormData, guestName: '', bookingRef: '', clientId: '' });
+                                                    setGuestSearchQuery('');
+                                                }}
+                                                style={{ background: 'transparent', border: 'none', color: '#f87171', fontSize: '11px', cursor: 'pointer', fontWeight: '700' }}
+                                            >
+                                                ✕ Clear Ledger Link
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div style={{ position: 'relative' }}>
+                                        <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#38bdf8' }} />
+                                        <input
+                                            type="text"
+                                            placeholder="Search guest name or mobile to link Client Ledger..."
+                                            value={guestSearchQuery}
+                                            onFocus={() => setShowGuestDropdown(true)}
+                                            onChange={e => {
+                                                setGuestSearchQuery(e.target.value);
+                                                setTxFormData({ ...txFormData, guestName: e.target.value, bookingRef: '', clientId: '' });
+                                                setShowGuestDropdown(true);
+                                            }}
+                                            style={{ ...darkInputStyle, paddingLeft: '34px', borderColor: (txFormData.bookingRef || txFormData.clientId) ? 'rgba(16, 185, 129, 0.6)' : 'rgba(56, 189, 248, 0.35)' }}
+                                        />
+                                    </div>
+                                    {(txFormData.bookingRef || txFormData.clientId) && (
+                                        <div style={{ marginTop: '4px', fontSize: '11px', color: '#4ade80', fontWeight: '700' }}>
+                                            ✓ Linked to Client Ledger: Mr. {String(txFormData.guestName || '').replace(/^(Mr\.?\s*|Mrs\.?\s*|Ms\.?\s*)/i, '').trim()} (Auto-syncs balance & payment ledger)
+                                        </div>
+                                    )}
+                                    {showGuestDropdown && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '100%',
+                                            left: 0,
+                                            right: 0,
+                                            marginTop: '4px',
+                                            maxHeight: '210px',
+                                            overflowY: 'auto',
+                                            background: '#090f1d',
+                                            border: '1px solid rgba(56, 189, 248, 0.4)',
+                                            borderRadius: '10px',
+                                            zIndex: 50,
+                                            boxShadow: '0 12px 30px rgba(0,0,0,0.7)'
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)', fontSize: '10px', color: '#94a3b8' }}>
+                                                <span>SELECT GUEST LEDGER ({guestOptions.length} available)</span>
+                                                <button type="button" onClick={() => setShowGuestDropdown(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '11px' }}>Close ✕</button>
+                                            </div>
+                                            {guestOptions
+                                                .filter(g => {
+                                                    const q = (guestSearchQuery || '').toLowerCase().trim();
+                                                    if (!q) return true;
+                                                    return (g.guestName || '').toLowerCase().includes(q) ||
+                                                        (g.mobile || '').toLowerCase().includes(q) ||
+                                                        (g.tripInfo || '').toLowerCase().includes(q);
+                                                })
+                                                .slice(0, 30)
+                                                .map(g => {
+                                                    const cleanName = String(g.guestName || '').replace(/^(Mr\.?\s*|Mrs\.?\s*|Ms\.?\s*)/i, '').trim();
+                                                    return (
+                                                        <div
+                                                            key={g.id}
+                                                            onClick={() => {
+                                                                setGuestSearchQuery(`Mr. ${cleanName}`);
+                                                                setTxFormData({
+                                                                    ...txFormData,
+                                                                    guestName: cleanName,
+                                                                    bookingRef: g.bookingId || '',
+                                                                    clientId: g.clientId || '',
+                                                                    category: txFormData.category || (txFormData.type === 'IN' ? 'Advance Payment' : txFormData.category),
+                                                                    description: txFormData.description || `Mr. ${cleanName}`
+                                                                });
+                                                                setShowGuestDropdown(false);
+                                                            }}
+                                                            style={{
+                                                                padding: '10px 12px',
+                                                                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                                                cursor: 'pointer',
+                                                                display: 'flex',
+                                                                justifyContent: 'space-between',
+                                                                alignItems: 'center'
+                                                            }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.12)'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                        >
+                                                            <div>
+                                                                <div style={{ fontSize: '13px', fontWeight: '800', color: '#fff' }}>
+                                                                    Mr. {cleanName}
+                                                                </div>
+                                                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+                                                                    {g.mobile ? `📞 ${g.mobile}` : ''} {g.tripInfo ? `• ${g.tripInfo}` : ''}
+                                                                </div>
+                                                            </div>
+                                                            <div style={{ textAlign: 'right' }}>
+                                                                {g.balanceDue > 0 ? (
+                                                                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#fbbf24', background: 'rgba(251, 191, 36, 0.12)', padding: '2px 7px', borderRadius: '6px' }}>
+                                                                        Due: ₹{Number(g.balanceDue).toLocaleString('en-IN')}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span style={{ fontSize: '10px', color: '#4ade80', fontWeight: '700' }}>Ledger Active</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            {guestOptions.filter(g => {
+                                                const q = (guestSearchQuery || '').toLowerCase().trim();
+                                                if (!q) return true;
+                                                return (g.guestName || '').toLowerCase().includes(q) || (g.mobile || '').toLowerCase().includes(q);
+                                            }).length === 0 && (
+                                                <div style={{ padding: '12px', fontSize: '12px', color: 'rgba(255,255,255,0.4)', textAlign: 'center' }}>
+                                                    No matching guest ledger found. You can still record with custom guest name.
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                                     <div>
                                         <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Payment Mode</label>
@@ -1820,18 +2145,6 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                 </button>
                             </div>
 
-                            {/* Current Balances Header */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px', background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                <div>
-                                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontWeight: '800', textTransform: 'uppercase' }}>Available Cash in Hand</div>
-                                    <div style={{ fontSize: '17px', fontWeight: '950', color: '#fbbf24', marginTop: '2px' }}>₹{(cashStats.currentBalance || 0).toLocaleString()}</div>
-                                </div>
-                                <div>
-                                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontWeight: '800', textTransform: 'uppercase' }}>Target Bank Balance</div>
-                                    <div style={{ fontSize: '17px', fontWeight: '950', color: '#38bdf8', marginTop: '2px' }}>₹{(selectedDepositBank?.currentBalance || 0).toLocaleString()}</div>
-                                </div>
-                            </div>
-
                             <form onSubmit={handleDepositSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                                 <div>
                                     <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Target Bank Account *</label>
@@ -1843,7 +2156,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                     >
                                         {bankAccounts.map(b => (
                                             <option key={b._id} value={b._id} style={{ background: '#090f1d' }}>
-                                                {b.bankName} {b.accountNumber ? `(A/C •••• ${b.accountNumber.slice(-4)})` : ''} - Current: ₹{(b.currentBalance || 0).toLocaleString()}
+                                                {b.bankName} {b.accountNumber ? `(A/C •••• ${b.accountNumber.slice(-4)})` : ''}
                                             </option>
                                         ))}
                                     </select>
@@ -1874,19 +2187,19 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                     </div>
                                 </div>
 
-                                {/* Dynamic Live Balance Impact */}
+                                {/* 1-Day Flow Summary */}
                                 {Number(depositFormData.amount) > 0 && (
                                     <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '10px', padding: '10px 14px', fontSize: '12px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Cash in Hand:</span>
-                                            <span style={{ fontWeight: '800', color: '#fbbf24' }}>
-                                                ₹{(cashStats.currentBalance || 0).toLocaleString()} ➔ ₹{((cashStats.currentBalance || 0) - Number(depositFormData.amount)).toLocaleString()}
+                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>1-Day Cash Book (OUT):</span>
+                                            <span style={{ fontWeight: '800', color: '#f87171' }}>
+                                                -₹{Number(depositFormData.amount).toLocaleString('en-IN')}
                                             </span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>{selectedDepositBank?.bankName || 'Bank'} A/C:</span>
-                                            <span style={{ fontWeight: '800', color: '#38bdf8' }}>
-                                                ₹{(selectedDepositBank?.currentBalance || 0).toLocaleString()} ➔ ₹{((selectedDepositBank?.currentBalance || 0) + Number(depositFormData.amount)).toLocaleString()}
+                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>1-Day Bank Book ({selectedDepositBank?.bankName || 'Bank'} IN):</span>
+                                            <span style={{ fontWeight: '800', color: '#4ade80' }}>
+                                                +₹{Number(depositFormData.amount).toLocaleString('en-IN')}
                                             </span>
                                         </div>
                                     </div>
@@ -1966,7 +2279,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                     >
                                         {bankAccounts.map(b => (
                                             <option key={b._id} value={b._id} style={{ background: '#090f1d' }}>
-                                                {b.bankName} {b.accountNumber ? `(A/C •••• ${b.accountNumber.slice(-4)})` : ''} - Available: ₹{(b.currentBalance || 0).toLocaleString()}
+                                                {b.bankName} {b.accountNumber ? `(A/C •••• ${b.accountNumber.slice(-4)})` : ''}
                                             </option>
                                         ))}
                                     </select>
@@ -1997,19 +2310,19 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                     </div>
                                 </div>
 
-                                {/* Dynamic Live Balance Impact */}
+                                {/* 1-Day Flow Summary */}
                                 {Number(withdrawFormData.amount) > 0 && (
                                     <div style={{ background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.25)', borderRadius: '10px', padding: '10px 14px', fontSize: '12px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>{selectedWithdrawBank?.bankName || 'Bank'} A/C:</span>
+                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>1-Day Bank Book ({selectedWithdrawBank?.bankName || 'Bank'} OUT):</span>
                                             <span style={{ fontWeight: '800', color: '#f87171' }}>
-                                                ₹{(selectedWithdrawBank?.currentBalance || 0).toLocaleString()} ➔ ₹{((selectedWithdrawBank?.currentBalance || 0) - Number(withdrawFormData.amount)).toLocaleString()}
+                                                -₹{Number(withdrawFormData.amount).toLocaleString('en-IN')}
                                             </span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Cash in Hand:</span>
+                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>1-Day Cash Book (IN):</span>
                                             <span style={{ fontWeight: '800', color: '#10b981' }}>
-                                                ₹{(cashStats.currentBalance || 0).toLocaleString()} ➔ ₹{((cashStats.currentBalance || 0) + Number(withdrawFormData.amount)).toLocaleString()}
+                                                +₹{Number(withdrawFormData.amount).toLocaleString('en-IN')}
                                             </span>
                                         </div>
                                     </div>
@@ -2062,7 +2375,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
             <AnimatePresence>
                 {showAddCashModal && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000 }}>
-                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '520px', background: '#0f172a', padding: '26px', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '520px', maxHeight: '92vh', overflowY: 'auto', background: '#0f172a', padding: '26px', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <div style={{ padding: '8px', background: 'rgba(16, 185, 129, 0.15)', borderRadius: '10px', color: '#10b981' }}>
@@ -2132,27 +2445,143 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                     </div>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                    <div>
-                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Guest Name (Optional)</label>
+                                {/* Guest / Client Ledger Selector (Search by Guest Name) */}
+                                <div style={{ position: 'relative' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                        <label style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '700' }}>
+                                            👤 Guest / Client Ledger (Search by Guest Name)
+                                        </label>
+                                        {(cashFormData.bookingRef || cashFormData.clientId) && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setCashFormData({ ...cashFormData, guestName: '', bookingRef: '', clientId: '' });
+                                                    setGuestSearchQuery('');
+                                                }}
+                                                style={{ background: 'transparent', border: 'none', color: '#f87171', fontSize: '11px', cursor: 'pointer', fontWeight: '700' }}
+                                            >
+                                                ✕ Clear Ledger Link
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div style={{ position: 'relative' }}>
+                                        <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#38bdf8' }} />
                                         <input
                                             type="text"
-                                            placeholder="e.g. Ramesh Sharma"
-                                            value={cashFormData.guestName}
-                                            onChange={e => setCashFormData({ ...cashFormData, guestName: e.target.value })}
-                                            style={darkInputStyle}
+                                            placeholder="Search guest name or mobile to link Client Ledger..."
+                                            value={guestSearchQuery}
+                                            onFocus={() => setShowGuestDropdown(true)}
+                                            onChange={e => {
+                                                setGuestSearchQuery(e.target.value);
+                                                setCashFormData({ ...cashFormData, guestName: e.target.value, bookingRef: '', clientId: '' });
+                                                setShowGuestDropdown(true);
+                                            }}
+                                            style={{ ...darkInputStyle, paddingLeft: '34px', borderColor: (cashFormData.bookingRef || cashFormData.clientId) ? 'rgba(16, 185, 129, 0.6)' : 'rgba(56, 189, 248, 0.35)' }}
                                         />
                                     </div>
-                                    <div>
-                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Driver Name (Optional)</label>
-                                        <input
-                                            type="text"
-                                            placeholder="e.g. Sanjay Kumar"
-                                            value={cashFormData.driverName}
-                                            onChange={e => setCashFormData({ ...cashFormData, driverName: e.target.value })}
-                                            style={darkInputStyle}
-                                        />
-                                    </div>
+                                    {(cashFormData.bookingRef || cashFormData.clientId) && (
+                                        <div style={{ marginTop: '4px', fontSize: '11px', color: '#4ade80', fontWeight: '700' }}>
+                                            ✓ Linked to Client Ledger: Mr. {String(cashFormData.guestName || '').replace(/^(Mr\.?\s*|Mrs\.?\s*|Ms\.?\s*)/i, '').trim()} (Auto-syncs balance & payment ledger)
+                                        </div>
+                                    )}
+                                    {showGuestDropdown && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '100%',
+                                            left: 0,
+                                            right: 0,
+                                            marginTop: '4px',
+                                            maxHeight: '210px',
+                                            overflowY: 'auto',
+                                            background: '#090f1d',
+                                            border: '1px solid rgba(56, 189, 248, 0.4)',
+                                            borderRadius: '10px',
+                                            zIndex: 50,
+                                            boxShadow: '0 12px 30px rgba(0,0,0,0.7)'
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)', fontSize: '10px', color: '#94a3b8' }}>
+                                                <span>SELECT GUEST LEDGER ({guestOptions.length} available)</span>
+                                                <button type="button" onClick={() => setShowGuestDropdown(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '11px' }}>Close ✕</button>
+                                            </div>
+                                            {guestOptions
+                                                .filter(g => {
+                                                    const q = (guestSearchQuery || '').toLowerCase().trim();
+                                                    if (!q) return true;
+                                                    return (g.guestName || '').toLowerCase().includes(q) ||
+                                                        (g.mobile || '').toLowerCase().includes(q) ||
+                                                        (g.tripInfo || '').toLowerCase().includes(q);
+                                                })
+                                                .slice(0, 30)
+                                                .map(g => {
+                                                    const cleanName = String(g.guestName || '').replace(/^(Mr\.?\s*|Mrs\.?\s*|Ms\.?\s*)/i, '').trim();
+                                                    return (
+                                                        <div
+                                                            key={g.id}
+                                                            onClick={() => {
+                                                                setGuestSearchQuery(`Mr. ${cleanName}`);
+                                                                setCashFormData({
+                                                                    ...cashFormData,
+                                                                    guestName: cleanName,
+                                                                    bookingRef: g.bookingId || '',
+                                                                    clientId: g.clientId || '',
+                                                                    category: cashFormData.category === 'General Cash' && cashFormData.type === 'IN' ? 'Advance Payment' : cashFormData.category,
+                                                                    description: cashFormData.description || `Mr. ${cleanName}`
+                                                                });
+                                                                setShowGuestDropdown(false);
+                                                            }}
+                                                            style={{
+                                                                padding: '10px 12px',
+                                                                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                                                cursor: 'pointer',
+                                                                display: 'flex',
+                                                                justifyContent: 'space-between',
+                                                                alignItems: 'center'
+                                                            }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.12)'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                        >
+                                                            <div>
+                                                                <div style={{ fontSize: '13px', fontWeight: '800', color: '#fff' }}>
+                                                                    Mr. {cleanName}
+                                                                </div>
+                                                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+                                                                    {g.mobile ? `📞 ${g.mobile}` : ''} {g.tripInfo ? `• ${g.tripInfo}` : ''}
+                                                                </div>
+                                                            </div>
+                                                            <div style={{ textAlign: 'right' }}>
+                                                                {g.balanceDue > 0 ? (
+                                                                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#fbbf24', background: 'rgba(251, 191, 36, 0.12)', padding: '2px 7px', borderRadius: '6px' }}>
+                                                                        Due: ₹{Number(g.balanceDue).toLocaleString('en-IN')}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span style={{ fontSize: '10px', color: '#4ade80', fontWeight: '700' }}>Ledger Active</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            {guestOptions.filter(g => {
+                                                const q = (guestSearchQuery || '').toLowerCase().trim();
+                                                if (!q) return true;
+                                                return (g.guestName || '').toLowerCase().includes(q) || (g.mobile || '').toLowerCase().includes(q);
+                                            }).length === 0 && (
+                                                <div style={{ padding: '12px', fontSize: '12px', color: 'rgba(255,255,255,0.4)', textAlign: 'center' }}>
+                                                    No matching guest ledger found. You can still record with custom guest name.
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Driver Name (Optional)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Sanjay Kumar"
+                                        value={cashFormData.driverName}
+                                        onChange={e => setCashFormData({ ...cashFormData, driverName: e.target.value })}
+                                        style={darkInputStyle}
+                                    />
                                 </div>
 
                                 <div>

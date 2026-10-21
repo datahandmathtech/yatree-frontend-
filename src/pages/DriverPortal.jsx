@@ -1797,33 +1797,41 @@ const DriverPortal = () => {
                                                                         </div>
                                                                     </div>
 
-                                                                    <div className="input-wrapper-full" style={{ marginTop: '4px', marginBottom: '16px' }}>
-                                                                        <label className="input-label" style={{ fontSize: '10px', marginBottom: '6px' }}>{t('payment_source')}</label>
-                                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                                                                            {['Office', 'Guest'].map((source) => (
-                                                                                <button
-                                                                                    key={source}
-                                                                                    type="button"
-                                                                                    onClick={() => {
-                                                                                        const newEntries = [...expenseEntries];
-                                                                                        newEntries[index].paymentSource = source;
-                                                                                        setExpenseEntries(newEntries);
-                                                                                    }}
-                                                                                    style={{
-                                                                                        padding: '8px 4px',
-                                                                                        borderRadius: '8px',
-                                                                                        fontSize: '11px',
-                                                                                        fontWeight: '800',
-                                                                                        border: '1px solid',
-                                                                                        borderColor: (entry.paymentSource || 'Office') === source ? 'var(--primary)' : 'rgba(255,255,255,0.1)',
-                                                                                        background: (entry.paymentSource || 'Office') === source ? 'rgba(14, 165, 233, 0.15)' : 'rgba(255,255,255,0.02)',
-                                                                                        color: (entry.paymentSource || 'Office') === source ? 'var(--primary)' : 'var(--text-muted)',
-                                                                                        transition: 'all 0.2s ease'
-                                                                                    }}
-                                                                                >
-                                                                                    {t(source.toLowerCase())}
-                                                                                </button>
-                                                                            ))}
+                                                                    <div className="input-wrapper-full" style={{ marginTop: '6px', marginBottom: '16px', padding: '10px 12px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                                                        <label className="input-label" style={{ fontSize: '11px', marginBottom: '8px', color: '#f8fafc', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                            💳 {t('payment_source')}
+                                                                        </label>
+                                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                                                            {[
+                                                                                { key: 'Office', color: '#10b981', bg: 'rgba(16, 185, 129, 0.18)' },
+                                                                                { key: 'Guest', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.18)' }
+                                                                            ].map(({ key: source, color, bg }) => {
+                                                                                const isSelected = (entry.paymentSource || 'Office') === source;
+                                                                                return (
+                                                                                    <button
+                                                                                        key={source}
+                                                                                        type="button"
+                                                                                        onClick={() => {
+                                                                                            const newEntries = [...expenseEntries];
+                                                                                            newEntries[index].paymentSource = source;
+                                                                                            setExpenseEntries(newEntries);
+                                                                                        }}
+                                                                                        style={{
+                                                                                            padding: '10px 8px',
+                                                                                            borderRadius: '10px',
+                                                                                            fontSize: '12px',
+                                                                                            fontWeight: '800',
+                                                                                            border: isSelected ? `2px solid ${color}` : '1px solid rgba(255,255,255,0.12)',
+                                                                                            background: isSelected ? bg : 'rgba(255,255,255,0.02)',
+                                                                                            color: isSelected ? color : 'var(--text-muted)',
+                                                                                            transition: 'all 0.2s ease',
+                                                                                            cursor: 'pointer'
+                                                                                        }}
+                                                                                    >
+                                                                                        {t(source.toLowerCase())}
+                                                                                    </button>
+                                                                                );
+                                                                            })}
                                                                         </div>
                                                                     </div>
                                                                 </>

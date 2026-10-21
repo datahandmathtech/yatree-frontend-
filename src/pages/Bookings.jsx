@@ -823,6 +823,7 @@ export default function Bookings() {
         setSelectedBooking(bkg);
         const due = bkg.balanceDue !== undefined ? bkg.balanceDue : ((bkg.totalAmount || 0) - (bkg.advancePaid || 0));
         setPaymentAmount(due > 0 ? String(due) : '');
+        setPaymentDate(new Date().toISOString().split('T')[0]);
         setPaymentRef('');
         setShowPaymentModal(true);
     };
@@ -1594,19 +1595,6 @@ export default function Bookings() {
                                                                   </div>
                                                                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: '#a7f3d0', fontWeight: '700' }}>
                                                                       {vehNum && <span>🚗 {vehNum}</span>}
-                                                                      {isLiveInDrs && (
-                                                                          <span style={{
-                                                                              background: 'rgba(16, 185, 129, 0.25)',
-                                                                              color: '#6ee7b7',
-                                                                              padding: '1px 6px',
-                                                                              borderRadius: '4px',
-                                                                              fontSize: '9px',
-                                                                              fontWeight: '900',
-                                                                              letterSpacing: '0.4px'
-                                                                          }}>
-                                                                              ● LIVE DRS
-                                                                          </span>
-                                                                      )}
                                                                   </div>
                                                               </button>
                                                           );
@@ -1820,9 +1808,15 @@ export default function Bookings() {
                                 <button onClick={() => setShowPaymentModal(false)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}><X size={18} /></button>
                             </div>
                             <form onSubmit={handleRecordPayment} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                                <div>
-                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Amount to Pay (₹)</label>
-                                    <input required type="number" min="1" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} style={inputStyle} placeholder="Amount" />
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Amount to Pay (₹)</label>
+                                        <input required type="number" min="1" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} style={inputStyle} placeholder="Amount" />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Payment Date</label>
+                                        <input required type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} onClick={e => e.target.showPicker?.()} style={{ ...inputStyle, cursor: 'pointer' }} />
+                                    </div>
                                 </div>
                                 <div>
                                     <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Payment Mode</label>
@@ -1835,7 +1829,7 @@ export default function Bookings() {
                                 </div>
                                 {(paymentMode === 'Cash' || paymentMode === 'Driver Cash') ? (
                                     <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.25)', color: '#4ade80', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span>💵 <strong>Synced to Cash Book:</strong> Amount will be credited to physical Cash in Hand.</span>
+                                        <span>💵 <strong>Synced to 1-Day Cash Book:</strong> Amount will be recorded as Cash Received (IN).</span>
                                     </div>
                                 ) : (
                                     <BankSelector
@@ -2745,7 +2739,7 @@ export default function Bookings() {
                                     <div>
                                         <h2 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Client Ledger & Payment Statement</h2>
                                         <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.5)', fontSize: '12px' }}>
-                                            {ledgerModalBooking.bookingCode || ledgerModalBooking.bookingId} • Track package fare, payments received & pending balance.
+                                            Track package fare, payments received & pending balance.
                                         </p>
                                     </div>
                                 </div>
@@ -2776,11 +2770,7 @@ export default function Bookings() {
                                                 </div>
                                             </div>
 
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px' }}>
-                                                <div>
-                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Booking Code</div>
-                                                    <div style={{ fontSize: '13px', color: '#fbbf24', fontWeight: '800' }}>{ledgerModalBooking.bookingCode || ledgerModalBooking.bookingId}</div>
-                                                </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '16px', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px' }}>
                                                 <div>
                                                     <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Trip Start</div>
                                                     <div style={{ fontSize: '13px', color: 'white', fontWeight: '700' }}>{ledgerModalBooking.tripStartFormatted || new Date(ledgerModalBooking.travelStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</div>
@@ -2850,17 +2840,12 @@ export default function Bookings() {
                                             {(() => {
                                                 const totalFare = Number(ledgerModalBooking.totalAmount) || 0;
                                                 const createdDate = ledgerModalBooking.createdAt ? new Date(ledgerModalBooking.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
-                                                const sDate = ledgerModalBooking.tripStartFormatted || (ledgerModalBooking.travelStartDate ? new Date(ledgerModalBooking.travelStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
-                                                const eDate = ledgerModalBooking.tripEndFormatted || (ledgerModalBooking.travelEndDate ? new Date(ledgerModalBooking.travelEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
 
                                                 return (
                                                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.015)' }}>
                                                         <td style={{ padding: '12px 10px', color: 'white', whiteSpace: 'nowrap' }}>{createdDate}</td>
                                                         <td style={{ padding: '12px 10px' }}>
                                                             <div style={{ color: 'white', fontWeight: '700' }}>Tour Package Booking Fare</div>
-                                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                                                                Trip: {sDate} to {eDate} • {ledgerModalBooking.vehicleType || 'Vehicle'}
-                                                            </div>
                                                         </td>
                                                         <td style={{ padding: '12px 10px', color: 'white', fontWeight: '700', textAlign: 'right' }}>₹{totalFare.toLocaleString('en-IN')}</td>
                                                         <td style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.4)', textAlign: 'right' }}>—</td>
@@ -2930,9 +2915,6 @@ export default function Bookings() {
                                                                     <div>
                                                                         <div style={{ color: '#34d399', fontWeight: '700' }}>
                                                                             {isAdv ? 'Advance Payment Received' : 'Payment Received'}
-                                                                        </div>
-                                                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                                                                            Credited towards tour package
                                                                         </div>
                                                                     </div>
                                                                 )}

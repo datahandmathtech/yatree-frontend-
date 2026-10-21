@@ -170,6 +170,7 @@ export default function CompletedBookings() {
         const due = bkg.balanceDue !== undefined ? Math.max(0, Number(bkg.balanceDue)) : Math.max(0, pkg - adv);
         setPaymentModalBooking(bkg);
         setPaymentAmount(due > 0 ? String(due) : '');
+        setPaymentDate(new Date().toISOString().split('T')[0]);
         setPaymentRef('');
     };
 
@@ -1707,26 +1708,49 @@ export default function CompletedBookings() {
                                 <button onClick={() => setPaymentModalBooking(null)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}><X size={18} /></button>
                             </div>
                             <form onSubmit={handleRecordPayment} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                                <div>
-                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Amount to Receive (₹)</label>
-                                    <input
-                                        required
-                                        type="number"
-                                        min="1"
-                                        value={paymentAmount}
-                                        onChange={e => setPaymentAmount(e.target.value)}
-                                        style={{
-                                            width: '100%',
-                                            padding: '10px 14px',
-                                            borderRadius: '8px',
-                                            border: '1px solid rgba(255,255,255,0.12)',
-                                            background: 'rgba(0,0,0,0.3)',
-                                            color: 'white',
-                                            outline: 'none',
-                                            fontSize: '13px'
-                                        }}
-                                        placeholder="Amount"
-                                    />
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Amount to Receive (₹)</label>
+                                        <input
+                                            required
+                                            type="number"
+                                            min="1"
+                                            value={paymentAmount}
+                                            onChange={e => setPaymentAmount(e.target.value)}
+                                            style={{
+                                                width: '100%',
+                                                padding: '10px 14px',
+                                                borderRadius: '8px',
+                                                border: '1px solid rgba(255,255,255,0.12)',
+                                                background: 'rgba(0,0,0,0.3)',
+                                                color: 'white',
+                                                outline: 'none',
+                                                fontSize: '13px'
+                                            }}
+                                            placeholder="Amount"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Payment Date</label>
+                                        <input
+                                            required
+                                            type="date"
+                                            value={paymentDate}
+                                            onChange={e => setPaymentDate(e.target.value)}
+                                            onClick={e => e.target.showPicker?.()}
+                                            style={{
+                                                width: '100%',
+                                                padding: '10px 14px',
+                                                borderRadius: '8px',
+                                                border: '1px solid rgba(255,255,255,0.12)',
+                                                background: 'rgba(0,0,0,0.3)',
+                                                color: 'white',
+                                                outline: 'none',
+                                                fontSize: '13px',
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                    </div>
                                 </div>
                                 <div>
                                     <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Payment Mode</label>
@@ -1739,7 +1763,7 @@ export default function CompletedBookings() {
                                 </div>
                                 {(paymentMode === 'Cash' || paymentMode === 'Driver Cash') ? (
                                     <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.25)', color: '#4ade80', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span>💵 <strong>Synced to Cash Book:</strong> Amount will be credited to physical Cash in Hand.</span>
+                                        <span>💵 <strong>Synced to 1-Day Cash Book:</strong> Amount will be recorded as Cash Received (IN).</span>
                                     </div>
                                 ) : (
                                     <BankSelector

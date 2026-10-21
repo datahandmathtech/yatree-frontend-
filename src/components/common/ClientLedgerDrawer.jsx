@@ -107,7 +107,7 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                         <div>
                             <h2 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Client Ledger & Payment Statement</h2>
                             <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.5)', fontSize: '12px' }}>
-                                {booking.bookingCode || booking.bookingId} • Track package fare, payments received & pending balance.
+                                Track package fare, payments received & pending balance.
                             </p>
                         </div>
                     </div>
@@ -131,11 +131,7 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                             </div>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px' }}>
-                            <div>
-                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Booking Code</div>
-                                <div style={{ fontSize: '13px', color: '#fbbf24', fontWeight: '800' }}>{booking.bookingCode || booking.bookingId}</div>
-                            </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '16px', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px' }}>
                             <div>
                                 <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Trip Start</div>
                                 <div style={{ fontSize: '13px', color: 'white', fontWeight: '700' }}>{sDate || '—'}</div>
@@ -203,9 +199,6 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                                     <td style={{ padding: '12px 10px', color: 'white', whiteSpace: 'nowrap' }}>{createdDate}</td>
                                     <td style={{ padding: '12px 10px' }}>
                                         <div style={{ color: 'white', fontWeight: '700' }}>Tour Package Booking Fare</div>
-                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                                            Trip: {sDate} to {eDate} • {booking.vehicleType || 'Vehicle'}
-                                        </div>
                                     </td>
                                     <td style={{ padding: '12px 10px', color: 'white', fontWeight: '700', textAlign: 'right' }}>₹{totalFare.toLocaleString('en-IN')}</td>
                                     <td style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.4)', textAlign: 'right' }}>—</td>
@@ -261,9 +254,6 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                                                         <div>
                                                             <div style={{ color: '#34d399', fontWeight: '700' }}>
                                                                 {isAdv ? 'Advance Payment Received' : 'Payment Received'}
-                                                            </div>
-                                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                                                                Credited towards tour package
                                                             </div>
                                                         </div>
                                                     )}
