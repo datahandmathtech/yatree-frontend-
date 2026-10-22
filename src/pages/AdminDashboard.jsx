@@ -132,7 +132,10 @@ const AdminDashboard = () => {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [viewMode, setViewMode] = useState('monthly');
     const spokenAlertsRef = useRef(new Set());
-    const audioRef = useRef(new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'));
+    const audioRef = useRef(null);
+    if (!audioRef.current && typeof Audio !== 'undefined') {
+        audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+    }
 
     const shiftMonth = (amount) => {
         if (viewMode === 'monthly') {
@@ -151,7 +154,7 @@ const AdminDashboard = () => {
         const userInfoRaw = localStorage.getItem('userInfo');
         if (!userInfoRaw || !selectedCompany) { setLoading(false); return; }
 
-        setLoading(true);
+        if (!stats) setLoading(true);
         try {
             const userInfo = JSON.parse(userInfoRaw);
             let params = `companyId=${selectedCompany._id}`;
@@ -169,25 +172,23 @@ const AdminDashboard = () => {
                 params += `&from=${fromDate}&to=${toDate}`;
             }
 
-            const { data } = await axios.get(`/api/admin/dashboard/${selectedCompany._id}?${params}`, {
-                headers: { Authorization: `Bearer ${userInfo.token}` }
-            });
-            setStats(data);
+            const headers = { Authorization: `Bearer ${userInfo.token}` };
+            const shouldFetchPending = userRole === 'admin' || userRole === 'superadmin' || userRole === 'executive' || (user?.permissions?.driversService);
 
-            if (userRole === 'admin' || userRole === 'superadmin' || userRole === 'executive' || (user?.permissions?.driversService)) {
-                try {
-                    const leavesRes = await axios.get(`/api/admin/leaves/pending/${selectedCompany._id}`, {
-                        headers: { Authorization: `Bearer ${userInfo.token}` }
-                    });
-                    setPendingLeaves(leavesRes.data || []);
-                } catch(e) { console.error('Error fetching leaves', e); }
-                
-                try {
-                    const allowancesRes = await axios.get(`/api/admin/allowances/pending/${selectedCompany._id}`, {
-                        headers: { Authorization: `Bearer ${userInfo.token}` }
-                    });
-                    setPendingAllowances(allowancesRes.data || []);
-                } catch(e) { console.error('Error fetching allowances', e); }
+            const [dashRes, leavesRes, allowancesRes] = await Promise.all([
+                axios.get(`/api/admin/dashboard/${selectedCompany._id}?${params}`, { headers }),
+                shouldFetchPending
+                    ? axios.get(`/api/admin/leaves/pending/${selectedCompany._id}`, { headers }).catch(() => ({ data: [] }))
+                    : Promise.resolve({ data: [] }),
+                shouldFetchPending
+                    ? axios.get(`/api/admin/allowances/pending/${selectedCompany._id}`, { headers }).catch(() => ({ data: [] }))
+                    : Promise.resolve({ data: [] })
+            ]);
+
+            setStats(dashRes.data);
+            if (shouldFetchPending) {
+                setPendingLeaves(leavesRes.data || []);
+                setPendingAllowances(allowancesRes.data || []);
             }
         } catch (err) {
             console.error('Error fetching stats', err);

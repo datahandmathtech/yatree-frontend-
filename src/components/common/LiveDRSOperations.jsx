@@ -188,11 +188,16 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
 
     useEffect(() => {
         if (selectedCompany?._id) {
-            fetchDuties();
             fetchDropdowns();
             fetchAllCompanyBookings();
         }
-    }, [selectedCompany, drsDisplayMode, dateTab, customDate, startDate, endDate]);
+    }, [selectedCompany?._id]);
+
+    useEffect(() => {
+        if (selectedCompany?._id) {
+            fetchDuties();
+        }
+    }, [selectedCompany?._id, drsDisplayMode, dateTab, customDate, startDate, endDate]);
 
     const fetchAllCompanyBookings = async () => {
         if (!selectedCompany?._id) return;
@@ -206,7 +211,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
 
     const fetchDuties = async () => {
         if (!selectedCompany?._id) return;
-        setLoading(true);
+        if (duties.length === 0) setLoading(true);
         try {
             let url = `/api/drs/${selectedCompany._id}?`;
             if (drsDisplayMode === 'excel') {
@@ -256,7 +261,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
             const [dRes, vRes, bRes] = await Promise.all([
                 axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&status=active`).catch(() => ({ data: [] })),
                 axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false`).catch(() => ({ data: [] })),
-                axios.get(`/api/admin/bank-accounts/${selectedCompany._id}`).catch(() => ({ data: [] }))
+                axios.get(`/api/banks/company/${selectedCompany._id}`).catch(() => ({ data: [] }))
             ]);
             setDrivers(dRes.data?.drivers || dRes.data || []);
             setVehicles(vRes.data?.vehicles || vRes.data || []);

@@ -7,8 +7,24 @@ const CompanyContext = createContext();
 export const CompanyProvider = ({ children }) => {
     const { user } = useAuth();
     const [companies, setCompanies] = useState([]);
-    const [selectedCompany, setSelectedCompany] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [selectedCompany, setSelectedCompany] = useState(() => {
+        try {
+            const saved = localStorage.getItem('selectedCompany');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed && parsed._id) return parsed;
+            }
+            const userInfoRaw = localStorage.getItem('userInfo');
+            if (userInfoRaw) {
+                const userInfo = JSON.parse(userInfoRaw);
+                if (userInfo?.company && typeof userInfo.company === 'object' && userInfo.company._id) {
+                    return userInfo.company;
+                }
+            }
+        } catch (e) {}
+        return null;
+    });
+    const [loading, setLoading] = useState(() => !selectedCompany);
 
     // Global Date State
     const getTodayDate = () => {
@@ -23,6 +39,23 @@ export const CompanyProvider = ({ children }) => {
     useEffect(() => {
         fetchCompanies();
     }, [user]);
+
+    const updateSelectedCompanyIfChanged = (nextCompany) => {
+        if (!nextCompany) return;
+        localStorage.setItem('selectedCompany', JSON.stringify(nextCompany));
+        setSelectedCompany(prev => {
+            if (
+                prev &&
+                String(prev._id) === String(nextCompany._id) &&
+                prev.name === nextCompany.name &&
+                prev.gstRate === nextCompany.gstRate &&
+                prev.gstNumber === nextCompany.gstNumber
+            ) {
+                return prev;
+            }
+            return nextCompany;
+        });
+    };
 
     const fetchCompanies = async () => {
         try {
@@ -47,9 +80,7 @@ export const CompanyProvider = ({ children }) => {
                     if (fullCompany.logoUrl && fullCompany.logoUrl.includes('superadmin.yatreedestination.com')) {
                         fullCompany.logoUrl = '';
                     }
-                    console.log('Syncing context to user company:', fullCompany.name);
-                    setSelectedCompany(fullCompany);
-                    localStorage.setItem('selectedCompany', JSON.stringify(fullCompany));
+                    updateSelectedCompanyIfChanged(fullCompany);
                 } else {
                     // Critical Fix: If user's company not in fetched list, force the first available
                     if (data.length > 0) {
@@ -57,8 +88,7 @@ export const CompanyProvider = ({ children }) => {
                         if (first.logoUrl && first.logoUrl.includes('superadmin.yatreedestination.com')) {
                             first.logoUrl = '';
                         }
-                        setSelectedCompany(first);
-                        localStorage.setItem('selectedCompany', JSON.stringify(first));
+                        updateSelectedCompanyIfChanged(first);
                     }
                 }
             } else if (data.length > 0) {
@@ -66,8 +96,7 @@ export const CompanyProvider = ({ children }) => {
                 if (first.logoUrl && first.logoUrl.includes('superadmin.yatreedestination.com')) {
                     first.logoUrl = '';
                 }
-                setSelectedCompany(first);
-                localStorage.setItem('selectedCompany', JSON.stringify(first));
+                updateSelectedCompanyIfChanged(first);
             }
         } catch (err) {
             console.error('Error fetching companies', err);
@@ -79,8 +108,7 @@ export const CompanyProvider = ({ children }) => {
     };
 
     const changeCompany = (company) => {
-        // No-op or just set it
-        setSelectedCompany(company);
+        updateSelectedCompanyIfChanged(company);
     };
 
     return (

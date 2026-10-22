@@ -110,7 +110,11 @@ const LiveFeed = () => {
     const [stats, setStats] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState('feed'); // 'feed' | 'drs'
+    const [viewMode, setViewMode] = useState(() => {
+        const params = new URLSearchParams(window.location.search);
+        const modeParam = params.get('mode') || params.get('view');
+        return modeParam === 'drs' ? 'drs' : 'feed';
+    }); // 'feed' | 'drs'
     const [activeTab, setActiveTab] = useState('drivers'); // 'drivers', 'vehicles', 'history'
     const [searchQuery, setSearchQuery] = useState('');
     const [currentTimeIST, setCurrentTimeIST] = useState(formatTimeIST(new Date()));
@@ -198,7 +202,11 @@ const LiveFeed = () => {
     };
 
     useEffect(() => {
-        setLoading(true);
+        if (viewMode !== 'feed') {
+            setLoading(false);
+            return;
+        }
+        if (!stats) setLoading(true);
         fetchFeed();
         fetchEvents();
         const interval = setInterval(() => fetchFeed(false), 3 * 60 * 1000); // 3 min refresh
@@ -213,7 +221,7 @@ const LiveFeed = () => {
             clearInterval(interval);
             document.removeEventListener('visibilitychange', handleVisibility);
         };
-    }, [selectedCompany, selectedDate]);
+    }, [selectedCompany?._id, selectedDate, viewMode]);
 
     // ── AI AGENT SEARCH INTEGRATION ──
     useEffect(() => {

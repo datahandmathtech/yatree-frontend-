@@ -482,18 +482,19 @@ export default function Leads() {
             fetchLeads();
             fetchTravelAgents();
             fetchCompanyBanks();
+            fetchAllCompanyBookings();
         }
-    }, [selectedCompany]);
+    }, [selectedCompany?._id]);
 
     const fetchLeads = async () => {
+        if (!selectedCompany?._id) return;
         try {
-            setLoading(true);
-            let url = `/api/leads/${selectedCompany._id}?status=All`;
-            if (searchTerm) {
-                url += `&search=${encodeURIComponent(searchTerm)}`;
-            }
+            if (leads.length === 0) setLoading(true);
+            const url = `/api/leads/${selectedCompany._id}?status=All`;
             const { data } = await axios.get(url);
-            setLeads(data || []);
+            const list = data || [];
+            setLeads(list);
+            setSidebarLeads(list);
         } catch (error) {
             console.error('Error fetching leads:', error);
         } finally {
@@ -501,28 +502,14 @@ export default function Leads() {
         }
     };
 
-    const fetchSidebarLeads = async (monthTab) => {
-        if (!selectedCompany?._id) return;
-        try {
-            setLoadingSidebarLeads(true);
-            // Always fetch ALL leads for the sidebar so it can correctly count conversions
-            // for trips that might happen in future months, but were confirmed THIS month.
-            let url = `/api/leads/${selectedCompany._id}?status=All`;
-            const { data } = await axios.get(url);
-            setSidebarLeads(data || []);
-        } catch (err) {
-            console.error("Error fetching sidebar leads:", err);
-        } finally {
-            setLoadingSidebarLeads(false);
+    const fetchSidebarLeads = async () => {
+        // fetchLeads already loads all leads (?status=All) and updates sidebarLeads
+        if (leads.length > 0) {
+            setSidebarLeads(leads);
+            return;
         }
+        await fetchLeads();
     };
-
-    useEffect(() => {
-        if (selectedCompany?._id) {
-            const activeOption = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5];
-            fetchSidebarLeads(activeOption.tab);
-        }
-    }, [selectedCompany, selectedSidebarMonth]);
 
     const fetchAllCompanyBookings = async () => {
         if (!selectedCompany?._id) return;
@@ -537,26 +524,8 @@ export default function Leads() {
         }
     };
 
-    useEffect(() => {
-        if (selectedCompany?._id) {
-            fetchAllCompanyBookings();
-        }
-    }, [selectedCompany]);
-
-    useEffect(() => {
-        if (!selectedCompany?._id) return;
-        if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-        searchDebounceRef.current = setTimeout(() => {
-            fetchLeads();
-        }, 300);
-        return () => {
-            if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-        };
-    }, [searchTerm]);
-
     const handleSearchSubmit = (e) => {
         e.preventDefault();
-        fetchLeads();
     };
 
     // Duplicate Phone Checker
@@ -1741,7 +1710,18 @@ export default function Leads() {
         return Array.from(set);
     }, [leads]);
 
-    // Calculate Right Sidebar daily breakdown and totals
+    // Pre-index companyBookings by _id, bookingId, and clientCode for O(1) lookup
+    const bookingLookupMap = useMemo(() => {
+        const map = new Map();
+        (companyBookings || []).forEach(b => {
+            if (b._id) map.set(String(b._id), b);
+            if (b.bookingId) map.set(String(b.bookingId), b);
+            if (b.clientCode) map.set(String(b.clientCode), b);
+        });
+        return map;
+    }, [companyBookings]);
+
+    // Calculate Right Sidebar daily breakdown and totals in a single pass O(N)
     const sidebarStats = useMemo(() => {
         const activeOption = SIDEBAR_MONTH_OPTIONS.find(o => o.label === selectedSidebarMonth) || SIDEBAR_MONTH_OPTIONS[5];
         const { monthIdx, year, days } = activeOption;
@@ -1753,32 +1733,34 @@ export default function Leads() {
         let totalConversionsAmt = 0;
         const dailyList = [];
 
-        // Pre-process leads to avoid redundant filtering (keep all generated leads for accurate daily tally)
         const allLeadsInMonth = sourceList || [];
+        const dayLeadsByDay = Array.from({ length: days + 1 }, () => []);
+        const convLeadsByDay = Array.from({ length: days + 1 }, () => []);
+
+        for (let i = 0; i < allLeadsInMonth.length; i++) {
+            const l = allLeadsInMonth[i];
+            const dLead = parseLeadDateInfo(l.leadDate || l.createdAt);
+            if (dLead && dLead.year === year && dLead.monthIdx === monthIdx && dLead.day >= 1 && dLead.day <= days) {
+                dayLeadsByDay[dLead.day].push(l);
+            }
+
+            if (l.status !== 'Cancelled' && l.status !== 'Lost' && l.priority !== 'Lost' && (l.status === 'Confirmed' || l.status === 'Converted')) {
+                const matchedBkg = (l.bookingId && bookingLookupMap.get(String(l.bookingId))) || (l.clientCode && bookingLookupMap.get(String(l.clientCode)));
+                const convDateRaw = l.advanceDate || matchedBkg?.advanceDate || matchedBkg?.bookingDate || matchedBkg?.createdAt || l.leadDate || l.createdAt;
+                const dConv = parseLeadDateInfo(convDateRaw);
+                if (dConv && dConv.year === year && dConv.monthIdx === monthIdx && dConv.day >= 1 && dConv.day <= days) {
+                    convLeadsByDay[dConv.day].push(l);
+                }
+            }
+        }
 
         const now = new Date();
         const isCurrentMonth = now.getFullYear() === year && now.getMonth() === monthIdx;
         const today = now.getDate();
 
         for (let day = 1; day <= days; day++) {
-            const dayLeads = allLeadsInMonth.filter(l => {
-                const d = parseLeadDateInfo(l.leadDate || l.createdAt);
-                return d && d.year === year && d.monthIdx === monthIdx && d.day === day;
-            });
-            const convLeads = allLeadsInMonth.filter(l => {
-                // MUST BE CONFIRMED TO COUNT AS A CONVERSION (EXCLUDE CANCELLED OR LOST)
-                if (l.status === 'Cancelled' || l.status === 'Lost' || l.priority === 'Lost') return false;
-                if (l.status !== 'Confirmed' && l.status !== 'Converted') return false;
-                
-                // Use advanceDate if available, otherwise matched booking date or lead creation date (NEVER updatedAt)
-                const matchedBkg = (companyBookings || []).find(b =>
-                    (l.bookingId && (b._id === l.bookingId || b.bookingId === l.bookingId)) ||
-                    (l.clientCode && b.clientCode === l.clientCode)
-                );
-                const convDateRaw = l.advanceDate || matchedBkg?.advanceDate || matchedBkg?.bookingDate || matchedBkg?.createdAt || l.leadDate || l.createdAt;
-                const d = parseLeadDateInfo(convDateRaw);
-                return d && d.year === year && d.monthIdx === monthIdx && d.day === day;
-            });
+            const dayLeads = dayLeadsByDay[day];
+            const convLeads = convLeadsByDay[day];
 
             const leadsCount = dayLeads.length;
             const leadsAmt = dayLeads.reduce((s, l) => s + (Number(l.totalAmount) || 0), 0);
@@ -1810,7 +1792,7 @@ export default function Leads() {
             totalConversionsAmt,
             dailyList
         };
-    }, [sidebarLeads, leads, companyBookings, selectedSidebarMonth, SIDEBAR_MONTH_OPTIONS]);
+    }, [sidebarLeads, leads, bookingLookupMap, selectedSidebarMonth, SIDEBAR_MONTH_OPTIONS]);
 
     // KPI Summary Calculations
     const kpiData = useMemo(() => {
@@ -1862,10 +1844,7 @@ export default function Leads() {
         const confirmedMonthLeads = (basePeriodLeads || []).filter(l => isLeadConfirmed(l));
 
         const list = confirmedMonthLeads.map(l => {
-            const matchedBkg = (companyBookings || []).find(b => 
-                (l.bookingId && (b._id === l.bookingId || b.bookingId === l.bookingId)) ||
-                (l.clientCode && b.clientCode === l.clientCode)
-            );
+            const matchedBkg = (l.bookingId && bookingLookupMap.get(String(l.bookingId))) || (l.clientCode && bookingLookupMap.get(String(l.clientCode)));
             const effEndRaw = l.travelEndDate || matchedBkg?.travelEndDate || l.travelStartDate || matchedBkg?.travelStartDate;
             const effEnd = effEndRaw ? new Date(effEndRaw) : null;
             if (effEnd) effEnd.setHours(23, 59, 59, 999);
