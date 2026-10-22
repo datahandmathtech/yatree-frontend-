@@ -1703,7 +1703,7 @@ export default function Bookings() {
                                                                        {hasMultipleCars ? (
                                                                            <span>{hasMultipleDrivers ? `👥 Multiple Drivers (${distinctDrivers.length})` : (distinctDrivers[0] ? `👤 ${distinctDrivers[0]}` : 'Drivers Assigned')}</span>
                                                                        ) : (
-                                                                           distinctVehicles[0] && <span>🚗 ${distinctVehicles[0]}</span>
+                                                                           distinctVehicles[0] && <span>🚗 {distinctVehicles[0]}</span>
                                                                        )}
                                                                    </div>
                                                                </button>
