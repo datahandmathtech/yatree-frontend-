@@ -146,6 +146,8 @@ select.input-field option {
 }
 
 /* Hide number input spinners */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button,
 .input-field[type=number]::-webkit-outer-spin-button,
 .input-field[type=number]::-webkit-inner-spin-button,
 .no-spinner::-webkit-outer-spin-button,
@@ -154,10 +156,11 @@ select.input-field option {
   margin: 0;
 }
 
+input[type=number],
 .input-field[type=number],
 .no-spinner {
   -moz-appearance: textfield;
-  appearance: none;
+  appearance: textfield;
 }
 
 /* 📅 Premium Date Input Styles */

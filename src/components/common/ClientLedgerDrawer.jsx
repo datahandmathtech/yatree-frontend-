@@ -1,22 +1,67 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, FileText, Car, CheckCircle, Clock, Plus, Download, Fuel, Edit } from 'lucide-react';
+import { X, FileText, Car, CheckCircle, Clock, Plus, Download, Fuel, Edit, Trash2, IndianRupee } from 'lucide-react';
 import axios from '../../api/axios';
 import { useCompany } from '../../context/CompanyContext';
 import { generateClientLedgerPDF } from '../../utils/clientLedgerPdf';
 
-export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEditBooking }) {
+export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEditBooking, onEntryUpdated }) {
     const { selectedCompany } = useCompany();
     const [ledgerEntries, setLedgerEntries] = useState([]);
+    const [bankAccounts, setBankAccounts] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    // Edit entry modal state
+    const [editingEntry, setEditingEntry] = useState(null);
+    const [editAmount, setEditAmount] = useState('');
+    const [editDate, setEditDate] = useState('');
+    const [editMode, setEditMode] = useState('Cash to Company');
+    const [editBankAccountId, setEditBankAccountId] = useState('');
+    const [editReference, setEditReference] = useState('');
+    const [savingEdit, setSavingEdit] = useState(false);
+    const [deletingEdit, setDeletingEdit] = useState(false);
 
     useEffect(() => {
         if (booking && booking.client) {
             fetchLedger();
+            fetchBankAccounts();
         } else {
             setLoading(false);
         }
     }, [booking]);
+
+    const fetchBankAccounts = async () => {
+        try {
+            const compId = selectedCompany?._id || (typeof booking?.company === 'object' ? booking?.company?._id : booking?.company);
+            if (!compId) return;
+            const { data } = await axios.get(`/api/banks/company/${compId}`);
+            setBankAccounts(data || []);
+        } catch (err) {
+            console.error('Error fetching bank accounts:', err);
+        }
+    };
+
+    const resolveEntryModeName = (entry) => {
+        if (entry.type === 'Fuel') return 'Guest Fuel';
+        if (entry.bankName) return entry.bankName;
+        if (entry.paymentMode && !['UPI / QR Code', 'Bank Transfer / NEFT', 'Advance Payment', 'Payment Received'].includes(entry.paymentMode)) {
+            if (/cash/i.test(entry.paymentMode)) return 'Cash';
+            return entry.paymentMode;
+        }
+        const desc = entry.description || '';
+        const parenMatch = desc.match(/\(([^)]+)\)/);
+        if (parenMatch && parenMatch[1] && !/^Ref:/i.test(parenMatch[1].trim()) && !/^LK-/i.test(parenMatch[1].trim())) {
+            return parenMatch[1].trim();
+        }
+        const viaPart = desc.split('via ')[1]?.split(' (')[0]?.trim();
+        if (viaPart) {
+            if (/cash/i.test(viaPart)) return 'Cash';
+            if (!['UPI / QR Code', 'Bank Transfer / NEFT'].includes(viaPart)) return viaPart;
+        }
+        if (booking?.bankName) return booking.bankName;
+        if (booking?.paymentMode && /cash/i.test(booking.paymentMode)) return 'Cash';
+        return viaPart || (entry.type === 'Advance' ? 'Advance' : 'Bank');
+    };
 
     const fetchLedger = async () => {
         try {
@@ -26,13 +71,16 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                 return;
             }
             const { data } = await axios.get(`/api/clients/${clientId}/ledger`);
-            const bkgCode = booking.bookingCode || booking.bookingId;
+
+            const bkgIdStr = String(booking._id || '');
+            const leadIdStr = String(typeof booking.lead === 'object' ? (booking.lead?._id || '') : (booking.lead || ''));
+            const rawBkgId = String(booking.rawBookingId || booking.bookingId || '');
+            const bkgCode = String(booking.bookingCode || booking.bookingId || '');
+            const clientCode = String(booking.clientCode || '');
+
             const bkgLedger = (data || []).filter(entry => {
-                if (['Payment', 'Advance', 'Fuel'].includes(entry.type)) {
-                    if (entry.referenceId === booking._id) return true;
-                    if (bkgCode && entry.description && (entry.description.includes(bkgCode) || (booking.bookingId && entry.description.includes(booking.bookingId)))) return true;
-                }
-                return false;
+                if (entry.type === 'Bill') return false;
+                return true;
             }).sort((a,b) => new Date(a.date) - new Date(b.date));
             setLedgerEntries(bkgLedger);
         } catch (err) {
@@ -42,28 +90,156 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
         }
     };
 
+    const handleOpenEditPayment = (entry) => {
+        setEditingEntry(entry);
+        setEditAmount(String(entry.amount || ''));
+        const dateStr = entry.date ? new Date(entry.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+        setEditDate(dateStr);
+
+        // Determine mode
+        let mode = 'Cash to Company';
+        if (entry.type === 'Fuel') {
+            mode = 'Fuel (Guest)';
+        } else if (entry.bankName && entry.bankName !== 'Cash') {
+            mode = entry.bankName;
+        } else if (entry.paymentMode && /driver\s+cash/i.test(entry.paymentMode)) {
+            mode = 'Driver Cash';
+        } else if (entry.paymentMode && /cash/i.test(entry.paymentMode)) {
+            mode = 'Cash to Company';
+        } else if (entry.paymentMode) {
+            mode = entry.paymentMode;
+        }
+        setEditMode(mode);
+
+        const matchedBank = bankAccounts.find(b => b.bankName && b.bankName.toLowerCase() === (entry.bankName || mode || '').toLowerCase());
+        setEditBankAccountId(matchedBank ? matchedBank._id : (bankAccounts[0]?._id || ''));
+
+        // Extract reference
+        const desc = entry.description || '';
+        const refMatch = desc.match(/Ref:\s*([^)]+)/i);
+        setEditReference(refMatch ? refMatch[1].trim() : (entry.reference || ''));
+    };
+
+    const handleSaveEditEntry = async (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        if (!editingEntry) return;
+
+        try {
+            setSavingEdit(true);
+            const numAmt = Number(editAmount);
+            if (isNaN(numAmt) || numAmt <= 0) {
+                alert('Please enter a valid amount.');
+                setSavingEdit(false);
+                return;
+            }
+
+            const isBank = !['Cash to Company', 'Driver Cash', 'Fuel (Guest)'].includes(editMode);
+            const selectedBank = isBank ? bankAccounts.find(b => b._id === editBankAccountId || b.bankName === editMode) : null;
+            const bankName = selectedBank?.bankName || (isBank ? editMode : 'Cash');
+
+            if (editingEntry._id) {
+                await axios.put(`/api/clients/ledger/${editingEntry._id}`, {
+                    amount: numAmt,
+                    date: editDate,
+                    paymentMode: editingEntry.type === 'Fuel' ? 'Fuel (Guest)' : editMode,
+                    bankName: bankName,
+                    bankAccountId: selectedBank?._id || editBankAccountId,
+                    reference: editReference
+                });
+            } else if (booking?._id) {
+                // If it's the booking's un-persisted initial advance
+                const diff = numAmt - (Number(editingEntry.amount) || 0);
+                await axios.put(`/api/bookings/single/${booking._id}`, {
+                    advancePaid: Math.max(0, (Number(booking.advancePaid) || 0) + diff)
+                });
+            }
+
+            alert('Entry updated successfully!');
+            setEditingEntry(null);
+            await fetchLedger();
+            if (onEntryUpdated) onEntryUpdated();
+        } catch (err) {
+            console.error('Error updating ledger entry:', err);
+            alert(err.response?.data?.message || 'Failed to update ledger entry');
+        } finally {
+            setSavingEdit(false);
+        }
+    };
+
+    const handleDeleteEntry = async () => {
+        if (!editingEntry || !editingEntry._id) return;
+        if (!window.confirm(`Delete this ${editingEntry.type} entry of ₹${Number(editingEntry.amount).toLocaleString('en-IN')}? This will update the client balance and booking dues.`)) {
+            return;
+        }
+
+        try {
+            setDeletingEdit(true);
+            await axios.delete(`/api/clients/ledger/${editingEntry._id}`);
+            alert('Entry deleted successfully!');
+            setEditingEntry(null);
+            await fetchLedger();
+            if (onEntryUpdated) onEntryUpdated();
+        } catch (err) {
+            console.error('Error deleting entry:', err);
+            alert(err.response?.data?.message || 'Failed to delete entry');
+        } finally {
+            setDeletingEdit(false);
+        }
+    };
+
     if (!booking) return null;
 
     const totalFare = Number(booking.totalAmount) || 0;
-    const totalCredits = ledgerEntries.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
-    const effectivePaid = Math.max(Number(booking.advancePaid) || 0, totalCredits);
-    const balanceDue = booking.balanceDue !== undefined ? Number(booking.balanceDue) : Math.max(0, totalFare - effectivePaid);
+    const fuelAmt = booking.guestFuelFilled ? (Number(booking.guestFuelAmount) || 0) : 0;
+
+    // Prepare display rows
+    let displayEntries = [...ledgerEntries];
+    const recordedPaymentSum = displayEntries
+        .filter(e => e.type === 'Advance' || e.type === 'Payment')
+        .reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+    const totalAdvancePaid = Number(booking.advancePaid) || 0;
+
+    if (totalAdvancePaid > recordedPaymentSum) {
+        const missingAdv = totalAdvancePaid - recordedPaymentSum;
+        const initMode = booking.bankName || (/cash/i.test(booking.paymentMode || '') ? 'Cash' : (booking.paymentMode || 'Cash'));
+        displayEntries.unshift({
+            date: booking.advanceDate || booking.createdAt || new Date(),
+            type: 'Advance',
+            amount: missingAdv,
+            bankName: booking.bankName || (/cash/i.test(booking.paymentMode || '') ? 'Cash' : ''),
+            paymentMode: initMode,
+            description: `Advance Received via ${initMode}`
+        });
+    } else if (booking.advancePayment && Number(booking.advancePayment) > 0 && !displayEntries.some(e => e.type === 'Advance')) {
+        const advAmt = Number(booking.advancePayment);
+        const initMode = booking.bankName || (/cash/i.test(booking.paymentMode || '') ? 'Cash' : (booking.paymentMode || 'Cash'));
+        displayEntries.unshift({
+            date: booking.advanceDate || booking.createdAt || new Date(),
+            type: 'Advance',
+            amount: advAmt,
+            bankName: booking.bankName || (/cash/i.test(booking.paymentMode || '') ? 'Cash' : ''),
+            paymentMode: initMode,
+            description: `Advance Received via ${initMode}`
+        });
+    }
+    const hasFuelEntry = displayEntries.some(e => e.type === 'Fuel');
+    if (!hasFuelEntry && fuelAmt > 0) {
+        displayEntries.push({
+            date: booking.travelEndDate || booking.updatedAt || booking.createdAt || new Date(),
+            type: 'Fuel',
+            amount: fuelAmt,
+            description: 'Fuel Paid by Guest (Deducted)'
+        });
+    }
+
+    const totalCredits = displayEntries.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+    const effectivePaid = Math.max(totalAdvancePaid + fuelAmt, totalCredits);
+    const balanceDue = Math.max(0, totalFare - totalCredits);
     const isPaidFull = balanceDue <= 0;
 
     const createdDate = booking.createdAt ? new Date(booking.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
     const sDate = booking.tripStartFormatted || (booking.travelStartDate ? new Date(booking.travelStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
     const eDate = booking.tripEndFormatted || (booking.travelEndDate ? new Date(booking.travelEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
-
-    // Prepare display rows
-    let displayEntries = [...ledgerEntries];
-    if (displayEntries.length === 0 && (booking.advancePaid || 0) > 0) {
-        displayEntries.push({
-            date: booking.advanceDate || booking.createdAt || new Date(),
-            type: 'Advance',
-            amount: booking.advancePaid,
-            description: `Advance Received via ${booking.paymentMode || 'UPI / QR Code'}`
-        });
-    }
 
     const handleDownloadPdf = () => {
         let runBal = totalFare;
@@ -89,7 +265,7 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                 fare: null,
                 paid: amt,
                 balance: Math.max(0, runBal),
-                mode: isFuel ? 'Guest Fuel' : (entry.description?.split('via ')[1]?.split(' (')[0] || (isAdv ? 'Advance' : 'Payment'))
+                mode: resolveEntryModeName(entry)
             });
         });
 
@@ -99,7 +275,7 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
     return (
         <AnimatePresence>
             <motion.div key="client-ledger-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)', zIndex: 999998 }} />
-            <motion.aside key="client-ledger-panel" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} style={{ position: 'fixed', top: 0, right: 0, width: '100%', maxWidth: '560px', height: '100vh', background: '#0b1120', borderLeft: '1px solid rgba(255,255,255,0.1)', zIndex: 999999, display: 'flex', flexDirection: 'column', boxShadow: '-10px 0 30px rgba(0,0,0,0.5)' }}>
+            <motion.aside key="client-ledger-panel" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} style={{ position: 'fixed', top: 0, right: 0, width: '100%', maxWidth: '640px', height: '100vh', background: '#0b1120', borderLeft: '1px solid rgba(255,255,255,0.1)', zIndex: 999999, display: 'flex', flexDirection: 'column', boxShadow: '-10px 0 30px rgba(0,0,0,0.5)' }}>
                 {/* Header */}
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -158,12 +334,13 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                             <div style={{ textAlign: 'right' }}>
                                 <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '600' }}>Payment Status</div>
                                 <div style={{ 
-                                    padding: '5px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800',
+                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
+                                    padding: '5px 14px', borderRadius: '999px', fontSize: '12px', fontWeight: '800', whiteSpace: 'nowrap',
                                     background: isPaidFull ? 'rgba(16, 185, 129, 0.2)' : effectivePaid > 0 ? 'rgba(245, 158, 11, 0.2)' : 'rgba(239, 68, 68, 0.2)',
                                     color: isPaidFull ? '#34d399' : effectivePaid > 0 ? '#fbbf24' : '#f87171',
                                     border: isPaidFull ? '1px solid rgba(16, 185, 129, 0.4)' : effectivePaid > 0 ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)'
                                 }}>
-                                    {isPaidFull ? 'Paid in Full' : effectivePaid > 0 ? `Part Paid (₹${balanceDue.toLocaleString('en-IN')} Due)` : 'Payment Due'}
+                                    {isPaidFull ? <><CheckCircle size={13} /> Paid</> : effectivePaid > 0 ? `Part Paid (₹${balanceDue.toLocaleString('en-IN')} Due)` : 'Payment Due'}
                                 </div>
                             </div>
                         </div>
@@ -191,6 +368,7 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                                     <th style={{ padding: '12px 10px', color: '#34d399', fontWeight: '700', textAlign: 'right' }}>Paid / Received (₹)</th>
                                     <th style={{ padding: '12px 10px', color: '#fbbf24', fontWeight: '700', textAlign: 'right' }}>Balance Due (₹)</th>
                                     <th style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', textAlign: 'center' }}>Payment Mode</th>
+                                    <th style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', textAlign: 'center' }}>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -208,18 +386,43 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                                             Booking Confirmed
                                         </span>
                                     </td>
+                                    <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                                        {onEditBooking && (
+                                            <button
+                                                type="button"
+                                                onClick={onEditBooking}
+                                                title="Edit Tour Package Booking Details & Fare"
+                                                style={{
+                                                    padding: '4px 8px',
+                                                    background: 'rgba(167, 139, 250, 0.15)',
+                                                    border: '1px solid rgba(167, 139, 250, 0.35)',
+                                                    borderRadius: '6px',
+                                                    color: '#c4b5fd',
+                                                    fontSize: '11px',
+                                                    fontWeight: '700',
+                                                    cursor: 'pointer',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px'
+                                                }}
+                                            >
+                                                <Edit size={12} />
+                                                <span>Edit</span>
+                                            </button>
+                                        )}
+                                    </td>
                                 </tr>
 
                                 {/* Subsequent Rows */}
                                 {(() => {
                                     let runBal = totalFare;
                                     if (loading) {
-                                        return <tr><td colSpan="6" style={{ padding: '24px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.5)' }}>Loading transactions...</td></tr>;
+                                        return <tr><td colSpan="7" style={{ padding: '24px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.5)' }}>Loading transactions...</td></tr>;
                                     }
                                     if (displayEntries.length === 0) {
                                         return (
                                             <tr>
-                                                <td colSpan="6" style={{ padding: '24px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>
+                                                <td colSpan="7" style={{ padding: '24px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>
                                                     No payments recorded yet.
                                                 </td>
                                             </tr>
@@ -230,9 +433,7 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                                         runBal -= amt;
                                         const isFuel = entry.type === 'Fuel';
                                         const isAdv = entry.type === 'Advance';
-                                        const modeName = isFuel 
-                                            ? 'Guest Fuel' 
-                                            : (entry.description?.split('via ')[1]?.split(' (')[0] || (isAdv ? 'Advance Payment' : 'Payment Received'));
+                                        const modeName = resolveEntryModeName(entry);
 
                                         return (
                                             <tr key={entry._id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: isFuel ? 'rgba(245, 158, 11, 0.04)' : 'transparent' }}>
@@ -246,9 +447,19 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                                                                 <Fuel size={13} color="#fbbf24" />
                                                                 <span>Fuel Paid by Guest</span>
                                                             </div>
-                                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                                                                Deducted from booking balance {entry.description ? `(${entry.description.replace(/^Fuel paid by guest\s*/i, '')})` : ''}
-                                                            </div>
+                                                            {(() => {
+                                                                const rawDesc = entry.description || '';
+                                                                const cleanDesc = rawDesc
+                                                                    .replace(/^Fuel paid by guest\s*/i, '')
+                                                                    .replace(/deducted from booking balance/i, '')
+                                                                    .replace(/[()]/g, '')
+                                                                    .trim();
+                                                                return cleanDesc ? (
+                                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.55)', marginTop: '2px' }}>
+                                                                        {cleanDesc}
+                                                                    </div>
+                                                                ) : null;
+                                                            })()}
                                                         </div>
                                                     ) : (
                                                         <div>
@@ -275,6 +486,29 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                                                         {modeName}
                                                     </span>
                                                 </td>
+                                                <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleOpenEditPayment(entry)}
+                                                        title="Edit this entry"
+                                                        style={{
+                                                            padding: '4px 8px',
+                                                            background: 'rgba(56, 189, 248, 0.15)',
+                                                            border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                            borderRadius: '6px',
+                                                            color: '#38bdf8',
+                                                            fontSize: '11px',
+                                                            fontWeight: '700',
+                                                            cursor: 'pointer',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px'
+                                                        }}
+                                                    >
+                                                        <Edit size={12} />
+                                                        <span>Edit</span>
+                                                    </button>
+                                                </td>
                                             </tr>
                                         );
                                     });
@@ -282,25 +516,6 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                             </tbody>
                         </table>
                     </div>
-                    
-                    {/* Settlement Status Card */}
-                    {isPaidFull ? (
-                        <div style={{ background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '12px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                            <div style={{ background: '#10b981', color: 'white', borderRadius: '50%', padding: '4px', display: 'flex' }}><CheckCircle size={16} /></div>
-                            <div>
-                                <div style={{ color: '#34d399', fontWeight: '800', fontSize: '13px' }}>Booking Fully Paid & Settled</div>
-                                <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px', marginTop: '2px' }}>Total received ₹{effectivePaid.toLocaleString('en-IN')}. Zero outstanding balance.</div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', padding: '12px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                            <div style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', borderRadius: '50%', padding: '6px', display: 'flex' }}><Clock size={16} /></div>
-                            <div>
-                                <div style={{ color: '#fbbf24', fontWeight: '800', fontSize: '13px' }}>₹{balanceDue.toLocaleString('en-IN')} Outstanding Balance Due</div>
-                                <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: '11px', marginTop: '2px' }}>Client has paid ₹{effectivePaid.toLocaleString('en-IN')} of total ₹{totalFare.toLocaleString('en-IN')}.</div>
-                            </div>
-                        </div>
-                    )}
                     
                     {/* Action Buttons */}
                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -319,6 +534,132 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                         </button>
                     </div>
                 </div>
+
+                {/* EDIT PAYMENT ENTRY MODAL */}
+                <AnimatePresence>
+                    {editingEntry && (
+                        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000000, padding: '20px' }}>
+                            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} style={{ width: '100%', maxWidth: '460px', background: '#0b1120', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '16px', padding: '22px', boxShadow: '0 20px 40px rgba(0,0,0,0.8)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <div style={{ background: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8', padding: '8px', borderRadius: '8px' }}>
+                                            <Edit size={16} />
+                                        </div>
+                                        <div>
+                                            <h3 style={{ color: 'white', margin: 0, fontSize: '16px', fontWeight: '800' }}>
+                                                Edit {editingEntry.type === 'Fuel' ? 'Guest Fuel Entry' : (editingEntry.type === 'Advance' ? 'Advance Payment' : 'Payment Entry')}
+                                            </h3>
+                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
+                                                Client: {booking.clientName}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setEditingEntry(null)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}><X size={18} /></button>
+                                </div>
+
+                                <form onSubmit={handleSaveEditEntry} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginBottom: '5px' }}>Amount (₹)</label>
+                                        <input
+                                            type="number"
+                                            required
+                                            value={editAmount}
+                                            onChange={e => setEditAmount(e.target.value)}
+                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(0,0,0,0.3)', color: '#10b981', outline: 'none', fontSize: '16px', fontWeight: '800', boxSizing: 'border-box' }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginBottom: '5px' }}>Payment Date</label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={editDate}
+                                            onChange={e => setEditDate(e.target.value)}
+                                            onClick={e => e.target.showPicker?.()}
+                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none', fontSize: '13px', boxSizing: 'border-box', cursor: 'pointer', colorScheme: 'dark' }}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginBottom: '5px' }}>Payment Mode</label>
+                                        <select
+                                            value={editMode}
+                                            onChange={e => setEditMode(e.target.value)}
+                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: '#0b1120', color: 'white', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }}
+                                        >
+                                            {editingEntry.type === 'Fuel' && (
+                                                <option value="Fuel (Guest)">⛽ Fuel Paid by Guest (Deducted from Balance)</option>
+                                            )}
+                                            <option value="Cash to Company">💵 Cash to Company (Cash Book)</option>
+                                            <option value="Driver Cash">💵 Driver Cash in Hand (Cash Book)</option>
+                                            {bankAccounts.map(b => (
+                                                <option key={b._id} value={b.bankName}>
+                                                    🏦 {b.bankName} - {b.accountNumber} ({b.accountHolderName})
+                                                </option>
+                                            ))}
+                                            <option value="UPI / QR Code">📱 UPI / QR Code (General)</option>
+                                            <option value="Bank Transfer / NEFT">🏛 Bank Transfer / NEFT (General)</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginBottom: '5px' }}>Reference / UTR / Note (Optional)</label>
+                                        <input
+                                            type="text"
+                                            value={editReference}
+                                            onChange={e => setEditReference(e.target.value)}
+                                            placeholder="UTR or transaction note"
+                                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }}
+                                        />
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: '10px', marginTop: '14px', alignItems: 'center' }}>
+                                        {editingEntry._id && (
+                                            <button
+                                                type="button"
+                                                onClick={handleDeleteEntry}
+                                                disabled={deletingEdit || savingEdit}
+                                                style={{
+                                                    padding: '10px 14px',
+                                                    background: 'rgba(239, 68, 68, 0.15)',
+                                                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                                                    color: '#f87171',
+                                                    borderRadius: '8px',
+                                                    cursor: 'pointer',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '5px',
+                                                    fontSize: '12px',
+                                                    fontWeight: '700'
+                                                }}
+                                                title="Delete this ledger entry"
+                                            >
+                                                <Trash2 size={14} />
+                                                <span>{deletingEdit ? 'Deleting...' : 'Delete'}</span>
+                                            </button>
+                                        )}
+                                        <div style={{ flex: 1 }} />
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditingEntry(null)}
+                                            style={{ padding: '10px 16px', background: 'rgba(255,255,255,0.06)', color: 'white', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={savingEdit}
+                                            style={{ padding: '10px 20px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '800', fontSize: '13px' }}
+                                        >
+                                            {savingEdit ? 'Saving...' : 'Save Changes'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
             </motion.aside>
         </AnimatePresence>
     );

@@ -68,32 +68,6 @@ const BankSelector = ({
                     ))}
                 </select>
             )}
-
-            {/* 1-Day Bank Book Flow Preview (No Carry-Forward Balance) */}
-            {selectedBank && numAmount > 0 && (
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 12px',
-                    borderRadius: '10px',
-                    background: isCredit ? 'rgba(34, 197, 94, 0.12)' : 'rgba(56, 189, 248, 0.12)',
-                    border: isCredit ? '1px solid rgba(34, 197, 94, 0.25)' : '1px solid rgba(56, 189, 248, 0.25)',
-                    fontSize: '12px'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: isCredit ? '#4ade80' : '#38bdf8', fontWeight: '800' }}>
-                        <Sparkles size={14} />
-                        <span>
-                            {isCredit
-                                ? `+₹${numAmount.toLocaleString('en-IN')} will be credited (IN) to ${selectedBank.bankName}`
-                                : `-₹${numAmount.toLocaleString('en-IN')} will be debited (OUT) from ${selectedBank.bankName}`}
-                        </span>
-                    </div>
-                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>
-                        1-Day Bank Book
-                    </span>
-                </div>
-            )}
         </div>
     );
 };

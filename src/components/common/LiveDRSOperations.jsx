@@ -437,6 +437,14 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                 key,
                 bookingId: b._id,
                 dutyId: lastDuty?._id || null,
+                bookingObj: {
+                    ...b,
+                    totalAmount,
+                    advancePaid,
+                    guestFuelFilled,
+                    guestFuelAmount,
+                    balanceDue: netBalanceDue
+                },
                 dutyObj: lastDuty || {
                     _id: null,
                     bookingId: bCode,
@@ -510,6 +518,23 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                 key,
                 bookingId: bRef?._id || null,
                 dutyId: lastDuty._id,
+                bookingObj: {
+                    ...(bRef || {}),
+                    _id: bRef?._id || lastDuty._id,
+                    bookingCode: lastDuty.bookingId || bRef?.bookingCode || 'DRS',
+                    client: bRef?.client || lastDuty.client,
+                    clientName: lastDuty.clientName || bRef?.clientName || 'Guest',
+                    mobileNumber: lastDuty.mobileNumber || bRef?.mobileNumber || '',
+                    vehicleType: lastDuty.carType || bRef?.vehicleType || 'Car',
+                    travelStartDate: bRef?.travelStartDate || firstDuty?.date,
+                    travelEndDate: bRef?.travelEndDate || lastDuty?.date,
+                    createdAt: bRef?.createdAt || firstDuty?.createdAt || firstDuty?.date,
+                    totalAmount,
+                    advancePaid,
+                    guestFuelFilled,
+                    guestFuelAmount,
+                    balanceDue: netBalanceDue
+                },
                 dutyObj: lastDuty,
                 bookingCode: lastDuty.bookingId || bRef?.bookingCode || 'DRS',
                 clientName: lastDuty.clientName || bRef?.clientName || 'Guest',
@@ -643,6 +668,32 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
         }
         return rows;
     }, [breakdownMonth, completingRidesByDate]);
+
+    // Full Month Settlement Summary across all days of the selected month
+    const monthlyTotalSummary = useMemo(() => {
+        let totalPackage = 0;
+        let totalAdv = 0;
+        let totalFuel = 0;
+        let totalNetReceivable = 0;
+        let totalCompletingRides = 0;
+
+        (monthlyDailySettlementRows || []).forEach(row => {
+            totalPackage += (row.totalPackage || 0);
+            totalAdv += (row.totalAdv || 0);
+            totalFuel += (row.totalFuel || 0);
+            totalNetReceivable += (row.netPayable || 0);
+            totalCompletingRides += (row.completingCount || 0);
+        });
+
+        return {
+            totalPackage,
+            totalAdv,
+            totalFuel,
+            totalDeductions: totalAdv + totalFuel,
+            totalNetReceivable,
+            totalCompletingRides
+        };
+    }, [monthlyDailySettlementRows]);
 
     const handleUpdateRideField = (ride, field, value) => {
         setRideSettlementEdits(prev => {
@@ -1280,7 +1331,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.35)',
                         backdropFilter: 'blur(20px)'
                     }}>
-                        {/* Left: View Switcher */}
+                        {/* Left: Excel Sheet View Indicator */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                             <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.06)', borderRadius: '12px', padding: '3px', border: '1px solid rgba(255,255,255,0.1)' }}>
                                 <button
@@ -1301,25 +1352,6 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                 >
                                     <span>📊</span>
                                     <span>Excel Sheet View</span>
-                                </button>
-                                <button
-                                    onClick={() => setDrsDisplayMode('standard')}
-                                    style={{
-                                        padding: '7px 14px',
-                                        borderRadius: '9px',
-                                        border: 'none',
-                                        background: 'transparent',
-                                        color: 'rgba(255,255,255,0.7)',
-                                        fontWeight: '700',
-                                        fontSize: '12.5px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '6px'
-                                    }}
-                                >
-                                    <span>🗂️</span>
-                                    <span>Cards View</span>
                                 </button>
                             </div>
                         </div>
@@ -3994,25 +4026,22 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                     justifyContent: 'space-between',
                                     background: 'rgba(251, 191, 36, 0.02)'
                                 }}>
-                                    {/* LEFT SIDE: Total & Advance/Fuel Deduction (-) */}
+                                    {/* LEFT SIDE: Total Package (Full Month) */}
                                     <div style={{ flex: 1, paddingRight: '15px', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-                                        <div style={{ fontSize: '12.5px', color: '#94a3b8', marginBottom: '6px' }}>Total & Advance (-)</div>
+                                        <div style={{ fontSize: '12.5px', color: '#94a3b8', marginBottom: '6px' }}>Total Package</div>
                                         <div style={{ fontSize: '22px', fontWeight: '900', color: 'white', lineHeight: '1' }}>
-                                            ₹{activeDateSettlement.totalPackageAmount.toLocaleString('en-IN')}
-                                        </div>
-                                        <div style={{ fontSize: '14px', color: '#f87171', marginTop: '6px', fontWeight: '700' }}>
-                                            -₹{activeDateSettlement.totalDeductions.toLocaleString('en-IN')}
+                                            ₹{monthlyTotalSummary.totalPackage.toLocaleString('en-IN')}
                                         </div>
                                     </div>
 
-                                    {/* RIGHT SIDE: Balance Due */}
+                                    {/* RIGHT SIDE: Balance Due (Full Month) */}
                                     <div style={{ flex: 1, paddingLeft: '20px' }}>
                                         <div style={{ fontSize: '12.5px', color: '#94a3b8', marginBottom: '6px' }}>Balance Due</div>
                                         <div style={{ fontSize: '22px', fontWeight: '900', color: 'white', lineHeight: '1' }}>
-                                            {activeDateSettlement.completingCount}
+                                            {monthlyTotalSummary.totalCompletingRides}
                                         </div>
                                         <div style={{ fontSize: '15px', color: '#34d399', marginTop: '6px', fontWeight: '800' }}>
-                                            ₹{activeDateSettlement.totalNetReceivable.toLocaleString('en-IN')}
+                                            ₹{monthlyTotalSummary.totalNetReceivable.toLocaleString('en-IN')}
                                         </div>
                                     </div>
                                 </div>
@@ -4027,7 +4056,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                 gap: '10px'
                             }}>
                                 <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Date</div>
-                                <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Total & (-)</div>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Total Package</div>
                                 <div style={{ fontSize: '13px', fontWeight: '700', color: 'white' }}>Balance Due</div>
                                 <div></div>
                             </div>
@@ -4040,7 +4069,6 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                         const isHovered = hoveredBreakdownDay === row.dayNum;
                                         const hasRides = row.completingCount > 0;
                                         const isToday = row.dateStr === todayDateStr;
-                                        const totalMinus = row.totalAdv + row.totalFuel;
 
                                         return (
                                             <div
@@ -4099,13 +4127,10 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                                         </div>
                                                     </div>
 
-                                                    {/* Column 2: Total & (-) */}
+                                                    {/* Column 2: Total Package */}
                                                     <div>
-                                                        <div style={{ fontSize: '14.5px', color: hasRides ? (isToday ? '#fbbf24' : 'white') : 'rgba(255,255,255,0.4)', fontWeight: '700', marginBottom: '2px' }}>
+                                                        <div style={{ fontSize: '14.5px', color: hasRides ? (isToday ? '#fbbf24' : 'white') : 'rgba(255,255,255,0.4)', fontWeight: '700' }}>
                                                             {hasRides ? `₹${row.totalPackage.toLocaleString('en-IN')}` : '0'}
-                                                        </div>
-                                                        <div style={{ fontSize: '12px', color: hasRides ? (totalMinus > 0 ? '#f87171' : '#38bdf8') : 'rgba(255,255,255,0.3)', fontWeight: '600' }}>
-                                                            {hasRides ? `-₹${totalMinus.toLocaleString('en-IN')}` : '₹0'}
                                                         </div>
                                                     </div>
 
@@ -4134,7 +4159,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                                     </div>
                                                 </div>
 
-                                                {/* Click-to-Expand Simple Guest Amount List (Just like Leads.jsx) */}
+                                                {/* Click-to-Expand Simple Guest Amount List (Actual Package -> Balance Due -> Accounts button) */}
                                                 {isExpanded && hasRides && (
                                                     <div
                                                         style={{
@@ -4149,7 +4174,6 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                                         }}
                                                     >
                                                         {row.rides.map((ride) => {
-                                                            const deductAmt = ride.advancePaid + ride.guestFuelAmount;
                                                             return (
                                                                 <div
                                                                     key={ride.key}
@@ -4189,17 +4213,36 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                                                     </div>
 
                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', whiteSpace: 'nowrap', fontSize: '12.5px' }}>
-                                                                        <span style={{ color: '#94a3b8', fontWeight: '600' }}>
+                                                                        <span title="Actual Package" style={{ color: '#94a3b8', fontWeight: '600' }}>
                                                                             ₹{ride.totalAmount.toLocaleString('en-IN')}
                                                                         </span>
-                                                                        {deductAmt > 0 && (
-                                                                            <span style={{ color: '#f87171', fontWeight: '700' }}>
-                                                                                -₹{deductAmt.toLocaleString('en-IN')}
-                                                                            </span>
-                                                                        )}
-                                                                        <span style={{ color: '#34d399', fontWeight: '900' }}>
+                                                                        <span title="Balance Due" style={{ color: '#34d399', fontWeight: '900' }}>
                                                                             ₹{ride.netBalanceDue.toLocaleString('en-IN')}
                                                                         </span>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setLedgerModalBooking({
+                                                                                    ...(ride.bookingObj || {}),
+                                                                                    _dutyForPayment: ride.dutyObj
+                                                                                });
+                                                                            }}
+                                                                            title="Open Guest Account & Ledger Statement"
+                                                                            style={{
+                                                                                padding: '4px 10px',
+                                                                                borderRadius: '20px',
+                                                                                background: '#2563eb',
+                                                                                border: '1px solid rgba(59, 130, 246, 0.5)',
+                                                                                color: 'white',
+                                                                                fontSize: '11px',
+                                                                                fontWeight: '700',
+                                                                                cursor: 'pointer',
+                                                                                boxShadow: '0 2px 8px rgba(37, 99, 235, 0.35)'
+                                                                            }}
+                                                                        >
+                                                                            Accounts
+                                                                        </button>
                                                                     </div>
                                                                 </div>
                                                             );
@@ -4218,6 +4261,17 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                     </>
                 )}
             </AnimatePresence>
+
+            {/* Client Ledger & Account Statement Drawer */}
+            <ClientLedgerDrawer
+                booking={ledgerModalBooking}
+                onClose={() => setLedgerModalBooking(null)}
+                onAddEntry={ledgerModalBooking?._dutyForPayment?._id ? () => {
+                    const dutyToPay = ledgerModalBooking._dutyForPayment;
+                    setLedgerModalBooking(null);
+                    openPaymentModal(dutyToPay);
+                } : undefined}
+            />
         </div>
     );
 }

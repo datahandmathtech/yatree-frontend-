@@ -800,11 +800,7 @@ const ClientLedgers = () => {
                                         <option value="Cheque">📄 Cheque</option>
                                     </select>
                                 </div>
-                                {(paymentData.paymentMode === 'Cash' || !paymentData.paymentMode) ? (
-                                    <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.25)', color: '#4ade80', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span>💵 <strong>Synced to Cash Book:</strong> Amount will be credited to physical Cash in Hand.</span>
-                                    </div>
-                                ) : (
+                                {!(paymentData.paymentMode === 'Cash' || !paymentData.paymentMode) && (
                                     <BankSelector
                                         bankAccounts={bankAccounts}
                                         value={paymentData.bankAccountId}

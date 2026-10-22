@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useCompany } from '../context/CompanyContext';
 import { useTheme } from '../context/ThemeContext';
 import axios from '../api/axios';
@@ -16,6 +17,7 @@ import { generateTaxInvoicePDF } from '../utils/taxInvoicePdf';
 import ClientLedgerDrawer from '../components/common/ClientLedgerDrawer';
 import EditInvoiceModal from '../components/common/EditInvoiceModal';
 import EditBookingModal from '../components/common/EditBookingModal';
+import AssignDriverModal from '../components/common/AssignDriverModal';
 import BankSelector from '../components/common/BankSelector';
 import { getFinancialYear, getAvailableFinancialYears } from '../utils/istUtils';
 
@@ -38,6 +40,7 @@ export default function CompletedBookings() {
     const [loading, setLoading] = useState(false);
     const [ledgerModalBooking, setLedgerModalBooking] = useState(null);
     const [invoiceModalBooking, setInvoiceModalBooking] = useState(null);
+    const [assigningBooking, setAssigningBooking] = useState(null);
     const [editingBooking, setEditingBooking] = useState(null);
     const [activeActionMenu, setActiveActionMenu] = useState(null);
     const [viewItineraryBooking, setViewItineraryBooking] = useState(null);
@@ -53,11 +56,30 @@ export default function CompletedBookings() {
     const [bankAccountId, setBankAccountId] = useState('');
     const [savingPayment, setSavingPayment] = useState(false);
 
-    const [selectedFy, setSelectedFy] = useState('FY 26-27');
-    const [selectedMonth, setSelectedMonth] = useState('All Months');
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchParams] = useSearchParams();
+    const [selectedFy, setSelectedFy] = useState(() => searchParams.get('fy') || 'FY 26-27');
+    const [selectedMonth, setSelectedMonth] = useState(() => {
+        const m = searchParams.get('month');
+        return (m && MONTH_TABS.includes(m)) ? m : 'All Months';
+    });
+    const [searchTerm, setSearchTerm] = useState(() => searchParams.get('search') || searchParams.get('code') || '');
     const [showFyDropdown, setShowFyDropdown] = useState(false);
     const fyOptions = useMemo(() => getAvailableFinancialYears(bookings), [bookings]);
+
+    useEffect(() => {
+        const qParam = searchParams.get('search') || searchParams.get('code');
+        const mParam = searchParams.get('month');
+        const fyParam = searchParams.get('fy');
+        if (qParam !== null && qParam !== undefined && qParam !== '') {
+            setSearchTerm(qParam);
+        }
+        if (mParam && MONTH_TABS.includes(mParam)) {
+            setSelectedMonth(mParam);
+        }
+        if (fyParam) {
+            setSelectedFy(fyParam);
+        }
+    }, [searchParams]);
 
     // Sorting
     const [sortField, setSortField] = useState('travelEndDate');
@@ -283,11 +305,15 @@ export default function CompletedBookings() {
     const kpiStats = useMemo(() => {
         const totalRides = processedBookings.length;
         const packageValue = processedBookings.reduce((sum, b) => sum + (Number(b.packagePrice || b.totalAmount) || 0), 0);
-        const receivedAmount = processedBookings.reduce((sum, b) => sum + (Number(b.advancePaid) || 0), 0);
+        const receivedAmount = processedBookings.reduce((sum, b) => {
+            const fuel = b.guestFuelFilled ? (Number(b.guestFuelAmount) || 0) : 0;
+            return sum + (Number(b.advancePaid) || 0) + fuel;
+        }, 0);
         const balanceDue = processedBookings.reduce((sum, b) => {
             const pkg = Number(b.packagePrice || b.totalAmount) || 0;
-            const adv = Number(b.advancePaid) || 0;
-            const bal = Math.max(0, pkg - adv);
+            const fuel = b.guestFuelFilled ? (Number(b.guestFuelAmount) || 0) : 0;
+            const adv = (Number(b.advancePaid) || 0) + fuel;
+            const bal = b.balanceDue !== undefined ? Math.max(0, Number(b.balanceDue)) : Math.max(0, pkg - adv);
             return sum + bal;
         }, 0);
         const taxInvoices = processedBookings.length;
@@ -767,7 +793,7 @@ export default function CompletedBookings() {
                 overflow: 'visible',
                 marginBottom: '20px'
             }}>
-                <div style={{ overflowX: 'auto' }}>
+                <div style={{ overflowX: 'auto', minHeight: '420px', paddingBottom: activeActionMenu ? '220px' : '24px', transition: 'padding-bottom 0.2s ease' }}>
                     <table style={{
                         width: '100%',
                         borderCollapse: 'collapse',
@@ -830,6 +856,9 @@ export default function CompletedBookings() {
                                     </div>
                                 </th>
                                 <th style={{ padding: '11px 12px', fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                    Fleet
+                                </th>
+                                <th style={{ padding: '11px 12px', fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textAlign: 'center', whiteSpace: 'nowrap' }}>
                                     Ledger
                                 </th>
                                 <th style={{ padding: '11px 12px', fontSize: '11.5px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textAlign: 'center', whiteSpace: 'nowrap' }}>
@@ -843,7 +872,7 @@ export default function CompletedBookings() {
                         <tbody>
                             {paginatedBookings.length === 0 ? (
                                 <tr>
-                                    <td colSpan={10} style={{ padding: '40px 16px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>
+                                    <td colSpan={11} style={{ padding: '40px 16px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>
                                         No completed bookings found for {selectedMonth} {selectedFy}.
                                     </td>
                                 </tr>
@@ -851,8 +880,9 @@ export default function CompletedBookings() {
                                 paginatedBookings.map((bkg, idx) => {
                                     const serialNo = (currentPage - 1) * itemsPerPage + idx + 1;
                                     const pkgPrice = Number(bkg.packagePrice || bkg.totalAmount) || 0;
-                                    const recAmt = Number(bkg.advancePaid) || 0;
-                                    const bal = Math.max(0, pkgPrice - recAmt);
+                                    const fuelAmt = bkg.guestFuelFilled ? (Number(bkg.guestFuelAmount) || 0) : 0;
+                                    const recAmt = (Number(bkg.advancePaid) || 0) + fuelAmt;
+                                    const bal = bkg.balanceDue !== undefined ? Math.max(0, Number(bkg.balanceDue)) : Math.max(0, pkgPrice - recAmt);
                                     const daysCount = Array.isArray(bkg.itinerary) && bkg.itinerary.length > 0 
                                         ? bkg.itinerary.length 
                                         : 1;
@@ -927,6 +957,40 @@ export default function CompletedBookings() {
                                                         ₹0
                                                     </span>
                                                 )}
+                                            </td>
+
+                                            {/* Assigned Fleet / Driver */}
+                                            <td style={{ padding: '10px 10px', textAlign: 'center' }}>
+                                                {(() => {
+                                                    const veh = bkg.primaryVehicleNumber || (bkg.vehicleNumbers && bkg.vehicleNumbers[0]) || '';
+                                                    const drv = bkg.primaryDriverName || (bkg.driverNames && bkg.driverNames[0]) || '';
+                                                    const hasFleet = Boolean(veh || drv);
+                                                    const cleanVeh = veh ? veh.split('#')[0] : '';
+                                                    return (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setAssigningBooking(bkg)}
+                                                            style={{
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '5px',
+                                                                background: hasFleet ? 'rgba(56, 189, 248, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                                                                border: `1px solid ${hasFleet ? 'rgba(56, 189, 248, 0.35)' : 'rgba(245, 158, 11, 0.35)'}`,
+                                                                borderRadius: '8px',
+                                                                padding: '4px 8px',
+                                                                color: hasFleet ? '#38bdf8' : '#fbbf24',
+                                                                fontSize: '11px',
+                                                                fontWeight: '700',
+                                                                cursor: 'pointer',
+                                                                whiteSpace: 'nowrap'
+                                                            }}
+                                                            title="Assign / Reassign Drivers & Vehicles"
+                                                        >
+                                                            <Car size={12} />
+                                                            <span>{hasFleet ? ((bkg.vehicleNumbers && bkg.vehicleNumbers.length > 1) ? `Multiple Cars (${bkg.vehicleNumbers.length})` : (cleanVeh || drv)) : '+ Assign'}</span>
+                                                        </button>
+                                                    );
+                                                })()}
                                             </td>
 
                                             {/* Client Ledger */}
@@ -1021,6 +1085,13 @@ export default function CompletedBookings() {
                                                                 style={{ width: '100%', padding: '7px 10px', background: 'transparent', border: 'none', color: '#ffffff', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}
                                                             >
                                                                 <Edit size={13} color="#a78bfa" /> Edit Booking
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => { setActiveActionMenu(null); setAssigningBooking(bkg); }}
+                                                                style={{ width: '100%', padding: '7px 10px', background: 'transparent', border: 'none', color: '#ffffff', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}
+                                                            >
+                                                                <Car size={13} color="#38bdf8" /> Assign Drivers & Vehicles
                                                             </button>
                                                             <button
                                                                 type="button"
@@ -1690,6 +1761,9 @@ export default function CompletedBookings() {
                         setLedgerModalBooking(null);
                         setEditingBooking(bkg);
                     }}
+                    onEntryUpdated={() => {
+                        fetchCompletedBookings();
+                    }}
                 />
             )}
 
@@ -1761,11 +1835,7 @@ export default function CompletedBookings() {
                                         <option value="Bank Transfer / NEFT">🏦 Bank Transfer / NEFT</option>
                                     </select>
                                 </div>
-                                {(paymentMode === 'Cash' || paymentMode === 'Driver Cash') ? (
-                                    <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.25)', color: '#4ade80', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span>💵 <strong>Synced to 1-Day Cash Book:</strong> Amount will be recorded as Cash Received (IN).</span>
-                                    </div>
-                                ) : (
+                                {!(paymentMode === 'Cash' || paymentMode === 'Driver Cash') && (
                                     <BankSelector
                                         bankAccounts={bankAccounts}
                                         value={bankAccountId}
@@ -1797,7 +1867,7 @@ export default function CompletedBookings() {
                                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                                     <button type="button" onClick={() => setPaymentModalBooking(null)} style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
                                     <button type="submit" disabled={savingPayment} style={{ flex: 1, padding: '10px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '800' }}>
-                                        {savingPayment ? 'Saving...' : 'Save Payment & Unlock Invoice'}
+                                        {savingPayment ? 'Saving...' : 'Save Payment'}
                                     </button>
                                 </div>
                             </form>
@@ -1827,6 +1897,19 @@ export default function CompletedBookings() {
                         fetchCompletedBookings();
                         alert('Invoice updated successfully!');
                     }}
+                />
+            )}
+
+            {assigningBooking && (
+                <AssignDriverModal
+                    isOpen={Boolean(assigningBooking)}
+                    onClose={() => setAssigningBooking(null)}
+                    booking={assigningBooking}
+                    onSaved={() => {
+                        fetchCompletedBookings();
+                        setAssigningBooking(null);
+                    }}
+                    companyId={selectedCompany?._id}
                 />
             )}
         </div>

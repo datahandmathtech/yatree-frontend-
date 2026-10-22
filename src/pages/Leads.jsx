@@ -862,23 +862,37 @@ export default function Leads() {
                     gstIncluded: lead.inclusions?.gstIncluded !== false,
                     manualRemarks: lead.inclusions?.manualRemarks || ''
                 },
-                itinerary: (lead.itinerary || []).map((d, i) => {
-                    return {
-                        dayNo: d.dayNo || i + 1,
-                        date: toLocalDateString(d.date),
-                        time: d.time || '09:00 AM',
-                        isApg: d.isApg || d.time === 'APG',
-                        duty: d.duty || d.description || 'Standard Duty',
-                        description: d.duty || d.description || 'Standard Duty',
-                        vehicleType: d.vehicleType || lead.carType || 'Innova Crysta',
-                        vehicleCount: d.vehicleCount || lead.numberOfCars || 1,
-                        quantity: d.quantity || d.vehicleCount || lead.numberOfCars || 1,
-                        rate: d.rate !== undefined ? d.rate : 0,
-                        amount: d.amount !== undefined ? d.amount : 0
-                    };
-                }),
+                itinerary: (() => {
+                    const mapped = (lead.itinerary || []).map((d, i) => {
+                        const q = d.quantity || d.vehicleCount || lead.numberOfCars || 1;
+                        const r = d.rate !== undefined ? d.rate : 0;
+                        const a = d.amount !== undefined ? d.amount : (q * r);
+                        return {
+                            dayNo: d.dayNo || i + 1,
+                            date: toLocalDateString(d.date),
+                            time: d.time || '09:00 AM',
+                            isApg: d.isApg || d.time === 'APG',
+                            duty: d.duty || d.description || 'Standard Duty',
+                            description: d.duty || d.description || 'Standard Duty',
+                            vehicleType: d.vehicleType || lead.carType || 'Innova Crysta',
+                            vehicleCount: q,
+                            quantity: q,
+                            rate: r,
+                            amount: a
+                        };
+                    });
+                    return mapped;
+                })(),
                 extraCharges: lead.extraCharges || [],
-                totalAmount: lead.totalAmount || 0
+                totalAmount: (() => {
+                    const mapped = (lead.itinerary || []).map((d, i) => {
+                        const q = d.quantity || d.vehicleCount || lead.numberOfCars || 1;
+                        const r = d.rate !== undefined ? d.rate : 0;
+                        return d.amount !== undefined ? Number(d.amount) : (q * r);
+                    });
+                    const sum = mapped.reduce((a, b) => a + (Number(b) || 0), 0);
+                    return sum > 0 ? sum : (lead.totalAmount || 0);
+                })()
             });
 
             // Populate Vehicle Matrix state from lead
@@ -1756,8 +1770,13 @@ export default function Leads() {
                 if (l.status === 'Cancelled' || l.status === 'Lost' || l.priority === 'Lost') return false;
                 if (l.status !== 'Confirmed' && l.status !== 'Converted') return false;
                 
-                // Use advanceDate if available, otherwise updatedAt
-                const d = parseLeadDateInfo(l.advanceDate || l.updatedAt || l.createdAt);
+                // Use advanceDate if available, otherwise matched booking date or lead creation date (NEVER updatedAt)
+                const matchedBkg = (companyBookings || []).find(b =>
+                    (l.bookingId && (b._id === l.bookingId || b.bookingId === l.bookingId)) ||
+                    (l.clientCode && b.clientCode === l.clientCode)
+                );
+                const convDateRaw = l.advanceDate || matchedBkg?.advanceDate || matchedBkg?.bookingDate || matchedBkg?.createdAt || l.leadDate || l.createdAt;
+                const d = parseLeadDateInfo(convDateRaw);
                 return d && d.year === year && d.monthIdx === monthIdx && d.day === day;
             });
 
@@ -1791,7 +1810,7 @@ export default function Leads() {
             totalConversionsAmt,
             dailyList
         };
-    }, [sidebarLeads, leads, selectedSidebarMonth, SIDEBAR_MONTH_OPTIONS]);
+    }, [sidebarLeads, leads, companyBookings, selectedSidebarMonth, SIDEBAR_MONTH_OPTIONS]);
 
     // KPI Summary Calculations
     const kpiData = useMemo(() => {
@@ -2920,8 +2939,17 @@ export default function Leads() {
                                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
                                             {/* Record Advance / Confirm action */}
                                             {leadRideCompleted ? (
-                                                <a
-                                                    href="/admin/completed-bookings"
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const q = (searchTerm && searchTerm.trim()) ? searchTerm.trim() : (lead.clientCode || lead.bookingCode || lead.bookingId || '');
+                                                        const d = new Date(lead.travelStartDate || lead.createdAt || 0);
+                                                        const mList = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                                        const m = !isNaN(d.getTime()) ? mList[d.getMonth()] : 'All Months';
+                                                        const fy = getFinancialYear(lead.travelStartDate || lead.travelEndDate || lead.createdAt) || selectedFy || 'FY 26-27';
+                                                        const code = lead.clientCode || lead.bookingCode || lead.bookingId || '';
+                                                        navigate(`/admin/completed-bookings?search=${encodeURIComponent(q)}&month=${encodeURIComponent(m)}&fy=${encodeURIComponent(fy)}&code=${encodeURIComponent(code)}`);
+                                                    }}
                                                     style={{
                                                         padding: '5px 10px',
                                                         borderRadius: '8px',
@@ -2933,15 +2961,24 @@ export default function Leads() {
                                                         display: 'inline-flex',
                                                         alignItems: 'center',
                                                         gap: '4px',
-                                                        textDecoration: 'none'
+                                                        cursor: 'pointer'
                                                     }}
                                                     title="Trip Completed - View in Completed Bookings"
                                                 >
                                                     <CheckCircle size={12} /> Completed (View ➔)
-                                                </a>
+                                                </button>
                                             ) : leadConfirmed ? (
-                                                <a
-                                                    href="/admin/bookings"
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const q = (searchTerm && searchTerm.trim()) ? searchTerm.trim() : (lead.clientCode || lead.bookingCode || lead.bookingId || '');
+                                                        const d = new Date(lead.travelStartDate || lead.createdAt || 0);
+                                                        const mList = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                                        const m = !isNaN(d.getTime()) ? mList[d.getMonth()] : 'All Months';
+                                                        const fy = getFinancialYear(lead.travelStartDate || lead.travelEndDate || lead.createdAt) || selectedFy || 'FY 26-27';
+                                                        const code = lead.clientCode || lead.bookingCode || lead.bookingId || '';
+                                                        navigate(`/admin/bookings?search=${encodeURIComponent(q)}&month=${encodeURIComponent(m)}&fy=${encodeURIComponent(fy)}&code=${encodeURIComponent(code)}`);
+                                                    }}
                                                     style={{
                                                         padding: '5px 10px',
                                                         borderRadius: '8px',
@@ -2953,12 +2990,12 @@ export default function Leads() {
                                                         display: 'inline-flex',
                                                         alignItems: 'center',
                                                         gap: '4px',
-                                                        textDecoration: 'none'
+                                                        cursor: 'pointer'
                                                     }}
                                                     title="View in Confirmed Bookings"
                                                 >
                                                     <CheckCircle size={12} /> Confirmed (View ➔)
-                                                </a>
+                                                </button>
                                              ) : (lead.status === 'Cancelled' || lead.status === 'Lost' || lead.priority === 'Lost') ? (
                                                 <div style={{ display: 'inline-flex', gap: '5px' }}>
                                                     <button

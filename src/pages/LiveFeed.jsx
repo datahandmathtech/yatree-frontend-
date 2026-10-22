@@ -453,9 +453,6 @@ const LiveFeed = () => {
                         <div>
                             <div style={{ fontSize: '17px', fontWeight: '900', color: viewMode === 'drs' ? '#ffffff' : 'rgba(255, 255, 255, 0.85)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 Live DRS
-                                <span style={{ fontSize: '10px', background: '#fbbf24', color: '#000', padding: '2px 7px', borderRadius: '6px', fontWeight: '900' }}>
-                                    TODAY & TOMORROW
-                                </span>
                             </div>
                             <div style={{ fontSize: '11.5px', color: 'rgba(255, 255, 255, 0.5)', marginTop: '2px' }}>
                                 Dispatch Duties & Instant Direct Bookings

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useCompany } from '../context/CompanyContext';
 import { useTheme } from '../context/ThemeContext';
 import axios from '../api/axios';
@@ -15,6 +16,7 @@ import { generateBookingConfirmationPDF } from '../utils/bookingConfirmationPdf'
 import { generateTaxInvoicePDF } from '../utils/taxInvoicePdf';
 import { generateClientLedgerPDF } from '../utils/clientLedgerPdf';
 import EditBookingModal from '../components/common/EditBookingModal';
+import ClientLedgerDrawer from '../components/common/ClientLedgerDrawer';
 import BankSelector from '../components/common/BankSelector';
 import { getFinancialYear, getAvailableFinancialYears } from '../utils/istUtils';
 
@@ -63,14 +65,59 @@ const isDatePassedBooking = (bkg) => {
 export default function Bookings() {
     const { selectedCompany } = useCompany();
     const { theme } = useTheme();
+    const [searchParams] = useSearchParams();
 
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [selectedFy, setSelectedFy] = useState('FY 26-27');
+    const [selectedFy, setSelectedFy] = useState(() => searchParams.get('fy') || 'FY 26-27');
     const [showFyDropdown, setShowFyDropdown] = useState(false);
     const fyOptions = useMemo(() => getAvailableFinancialYears(bookings), [bookings]);
-    const [selectedMonth, setSelectedMonth] = useState('All Months');
-    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedMonth, setSelectedMonth] = useState(() => {
+        const m = searchParams.get('month');
+        return (m && MONTH_TABS.includes(m)) ? m : 'All Months';
+    });
+    const [searchTerm, setSearchTerm] = useState(() => searchParams.get('search') || searchParams.get('code') || '');
+
+    useEffect(() => {
+        const qParam = searchParams.get('search') || searchParams.get('code');
+        const mParam = searchParams.get('month');
+        const fyParam = searchParams.get('fy');
+        if (qParam !== null && qParam !== undefined && qParam !== '') {
+            setSearchTerm(qParam);
+        }
+        if (mParam && MONTH_TABS.includes(mParam)) {
+            setSelectedMonth(mParam);
+        }
+        if (fyParam) {
+            setSelectedFy(fyParam);
+        }
+    }, [searchParams]);
+
+    // Ensure if navigated with a specific booking code, the month & FY match the actual booking record
+    useEffect(() => {
+        const targetCode = searchParams.get('code');
+        if (targetCode && bookings.length > 0) {
+            const matched = bookings.find(b =>
+                (b.bookingCode && b.bookingCode.toLowerCase() === targetCode.toLowerCase()) ||
+                (b.clientCode && b.clientCode.toLowerCase() === targetCode.toLowerCase()) ||
+                (b.bookingId && b.bookingId.toLowerCase() === targetCode.toLowerCase())
+            );
+            if (matched) {
+                const d = new Date(matched.travelStartDate || matched.createdAt || 0);
+                if (!isNaN(d.getTime())) {
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    const actualMonth = months[d.getMonth()];
+                    if (actualMonth && MONTH_TABS.includes(actualMonth)) {
+                        setSelectedMonth(actualMonth);
+                    }
+                }
+                const actualFy = getFinancialYear(matched.travelStartDate || matched.travelEndDate || matched.createdAt);
+                if (actualFy) {
+                    setSelectedFy(actualFy);
+                }
+            }
+        }
+    }, [bookings, searchParams]);
 
     // Sorting state
     const [sortField, setSortField] = useState('createdAt');
@@ -237,20 +284,15 @@ export default function Bookings() {
                 driverPhone: src.driverPhone || '',
                 vehicleId: src.vehicleId || '',
                 vehicleNumber: src.vehicleNumber || '',
-                vehicleType: src.vehicleType || day.vehicleType,
-                time: src.time || '09:00 AM',
-                isApg: Boolean(src.isApg),
-                pickupPoint: src.pickupPoint || '',
-                duty: src.duty || '',
-                amount: src.amount !== undefined ? src.amount : day.amount
+                vehicleType: src.vehicleType || day.vehicleType
             };
         }));
         if (src.driverId) setMasterDriverId(src.driverId);
         if (src.vehicleNumber) setMasterVehicleNumber(src.vehicleNumber);
         if (mode === 'all') {
-            showTemporaryCopyBanner(`Copied Day ${sourceIdx + 1} (Driver, Vehicle, Time, Tour & Amount) across all ${assignItinerary.length} days!`);
+            showTemporaryCopyBanner(`Copied Day ${sourceIdx + 1} Driver & Vehicle across all ${assignItinerary.length} days!`);
         } else {
-            showTemporaryCopyBanner(`Copied Day ${sourceIdx + 1} data to Day ${sourceIdx + 2} → Day ${assignItinerary.length}!`);
+            showTemporaryCopyBanner(`Copied Day ${sourceIdx + 1} Driver & Vehicle to Day ${sourceIdx + 2} → Day ${assignItinerary.length}!`);
         }
     };
 
@@ -267,15 +309,10 @@ export default function Bookings() {
                 driverPhone: prevDay.driverPhone || '',
                 vehicleId: prevDay.vehicleId || '',
                 vehicleNumber: prevDay.vehicleNumber || '',
-                vehicleType: prevDay.vehicleType || day.vehicleType,
-                time: prevDay.time || '09:00 AM',
-                isApg: Boolean(prevDay.isApg),
-                pickupPoint: prevDay.pickupPoint || '',
-                duty: prevDay.duty || '',
-                amount: prevDay.amount !== undefined ? prevDay.amount : day.amount
+                vehicleType: prevDay.vehicleType || day.vehicleType
             };
         }));
-        showTemporaryCopyBanner(`Copied Day ${targetIdx} details into Day ${targetIdx + 1}!`);
+        showTemporaryCopyBanner(`Copied Day ${targetIdx} Driver & Vehicle into Day ${targetIdx + 1}!`);
     };
 
     const handleAddExtraAssignDay = () => {
@@ -770,8 +807,15 @@ export default function Bookings() {
     const kpiStats = useMemo(() => {
         const totalBookings = processedBookings.length;
         const packageValue = processedBookings.reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0);
-        const receivedAmount = processedBookings.reduce((sum, b) => sum + (Number(b.advancePaid) || 0), 0);
-        const balanceDue = processedBookings.reduce((sum, b) => sum + (Number(b.balanceDue !== undefined ? b.balanceDue : (b.totalAmount - b.advancePaid)) || 0), 0);
+        const receivedAmount = processedBookings.reduce((sum, b) => {
+            const fuelAmt = (b.guestFuelFilled || Number(b.guestFuelAmount) > 0) ? (Number(b.guestFuelAmount) || 0) : 0;
+            return sum + (Number(b.advancePaid) || 0) + fuelAmt;
+        }, 0);
+        const balanceDue = processedBookings.reduce((sum, b) => {
+            const fuelAmt = (b.guestFuelFilled || Number(b.guestFuelAmount) > 0) ? (Number(b.guestFuelAmount) || 0) : 0;
+            const bDue = b.balanceDue !== undefined ? Number(b.balanceDue) : Math.max(0, (Number(b.totalAmount) || 0) - (Number(b.advancePaid) || 0) - fuelAmt);
+            return sum + Math.max(0, bDue);
+        }, 0);
 
         return {
             totalBookings,
@@ -796,27 +840,30 @@ export default function Bookings() {
     };
 
     
-    const handleOpenLedger = async (bkg) => {
-        setLedgerModalBooking(bkg);
-        setLedgerEntries([]);
-        if (bkg.client) {
-            try {
-                const clientId = typeof bkg.client === 'object' ? bkg.client._id : bkg.client;
-                const { data } = await axios.get(`/api/clients/${clientId}/ledger`);
-                const bkgCode = bkg.bookingCode || bkg.bookingId;
-                const bkgLedger = (data || []).filter(entry => {
-                    if (['Payment', 'Advance', 'Fuel'].includes(entry.type)) {
-                        if (entry.referenceId === bkg._id) return true;
-                        if (bkgCode && entry.description && (entry.description.includes(bkgCode) || (bkg.bookingId && entry.description.includes(bkg.bookingId)))) return true;
-                        if (entry.type === 'Fuel' || entry.type === 'Payment' || entry.type === 'Advance') return true;
-                    }
-                    return false;
-                }).sort((a,b) => new Date(a.date) - new Date(b.date));
-                setLedgerEntries(bkgLedger);
-            } catch (err) {
-                console.error('Error fetching ledger', err);
-            }
+    const resolveEntryModeName = (entry, bkg = ledgerModalBooking) => {
+        if (entry.type === 'Fuel') return 'Guest Fuel';
+        if (entry.bankName) return entry.bankName;
+        if (entry.paymentMode && !['UPI / QR Code', 'Bank Transfer / NEFT', 'Advance Payment', 'Payment Received'].includes(entry.paymentMode)) {
+            if (/cash/i.test(entry.paymentMode)) return 'Cash';
+            return entry.paymentMode;
         }
+        const desc = entry.description || '';
+        const parenMatch = desc.match(/\(([^)]+)\)/);
+        if (parenMatch && parenMatch[1] && !/^Ref:/i.test(parenMatch[1].trim()) && !/^LK-/i.test(parenMatch[1].trim())) {
+            return parenMatch[1].trim();
+        }
+        const viaPart = desc.split('via ')[1]?.split(' (')[0]?.trim();
+        if (viaPart) {
+            if (/cash/i.test(viaPart)) return 'Cash';
+            if (!['UPI / QR Code', 'Bank Transfer / NEFT'].includes(viaPart)) return viaPart;
+        }
+        if (bkg?.bankName) return bkg.bankName;
+        if (bkg?.paymentMode && /cash/i.test(bkg.paymentMode)) return 'Cash';
+        return viaPart || (entry.type === 'Advance' ? 'Advance' : 'Bank');
+    };
+
+    const handleOpenLedger = (bkg) => {
+        setLedgerModalBooking(bkg);
     };
 
     const handleOpenPaymentModal = (bkg) => {
@@ -833,7 +880,7 @@ export default function Bookings() {
         try {
             if (selectedBooking._id && !String(selectedBooking._id).startsWith('bkg-mock')) {
                 const isCash = paymentMode === 'Cash' || paymentMode === 'Driver Cash';
-                await axios.post(`/api/bookings/${selectedBooking._id}/payment`, {
+                const { data } = await axios.post(`/api/bookings/${selectedBooking._id}/payment`, {
                     amount: Number(paymentAmount),
                     paymentMode,
                     paymentReference: paymentRef,
@@ -841,6 +888,14 @@ export default function Bookings() {
                     bankAccountId: !isCash ? bankAccountId : undefined
                 });
                 fetchBookings();
+                if (ledgerModalBooking && String(ledgerModalBooking._id) === String(selectedBooking._id)) {
+                    const updatedBkg = data?.booking ? { ...ledgerModalBooking, ...data.booking } : {
+                        ...ledgerModalBooking,
+                        advancePaid: (Number(ledgerModalBooking.advancePaid) || 0) + Number(paymentAmount),
+                        balanceDue: Math.max(0, (Number(ledgerModalBooking.totalAmount) || 0) - ((Number(ledgerModalBooking.advancePaid) || 0) + Number(paymentAmount)))
+                    };
+                    handleOpenLedger(updatedBkg);
+                }
             } else {
                 // Update local state for mock booking
                 setBookings(prev => prev.map(b => {
@@ -1299,6 +1354,9 @@ export default function Bookings() {
                 borderRadius: '14px',
                 border: '1px solid rgba(255, 255, 255, 0.08)',
                 overflowX: 'auto',
+                minHeight: '420px',
+                paddingBottom: activeActionMenu ? '220px' : '24px',
+                transition: 'padding-bottom 0.2s ease',
                 boxShadow: '0 8px 30px rgba(0,0,0,0.4)',
                 position: 'relative'
             }}>
@@ -1494,12 +1552,44 @@ export default function Bookings() {
 
                                         {/* 4. Received */}
                                         <td style={{ padding: '14px 16px', color: 'white', fontSize: '13px', fontWeight: '700' }}>
-                                            {(Number(bkg.advancePaid) || 0).toLocaleString('en-IN')}
+                                            {(() => {
+                                                const fuelAmt = (bkg.guestFuelFilled || Number(bkg.guestFuelAmount) > 0) ? (Number(bkg.guestFuelAmount) || 0) : 0;
+                                                const effRec = (Number(bkg.advancePaid) || 0) + fuelAmt;
+                                                return (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+                                                        <span>{effRec.toLocaleString('en-IN')}</span>
+                                                        {fuelAmt > 0 && (
+                                                            <span style={{
+                                                                fontSize: '10px',
+                                                                color: '#34d399',
+                                                                background: 'rgba(16, 185, 129, 0.15)',
+                                                                border: '1px solid rgba(16, 185, 129, 0.35)',
+                                                                borderRadius: '4px',
+                                                                padding: '1px 5px',
+                                                                fontWeight: '800'
+                                                            }}>
+                                                                + ₹{fuelAmt.toLocaleString('en-IN')} Fuel
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
                                         </td>
 
                                         {/* 5. Balance */}
                                         <td style={{ padding: '14px 16px', color: 'white', fontSize: '13px', fontWeight: '700' }}>
-                                            {(Number(bkg.balanceDue !== undefined ? bkg.balanceDue : (bkg.totalAmount - bkg.advancePaid)) || 0).toLocaleString('en-IN')}
+                                            {(() => {
+                                                const fuelAmt = (bkg.guestFuelFilled || Number(bkg.guestFuelAmount) > 0) ? (Number(bkg.guestFuelAmount) || 0) : 0;
+                                                const effRec = (Number(bkg.advancePaid) || 0) + fuelAmt;
+                                                const effBal = bkg.balanceDue !== undefined 
+                                                    ? Math.max(0, Number(bkg.balanceDue)) 
+                                                    : Math.max(0, (Number(bkg.totalAmount) || 0) - effRec);
+                                                return (
+                                                    <span style={{ color: effBal === 0 ? '#34d399' : '#fbbf24' }}>
+                                                        {effBal.toLocaleString('en-IN')}
+                                                    </span>
+                                                );
+                                            })()}
                                         </td>
 
                                         {/* 6. Trip Start */}
@@ -1542,89 +1632,109 @@ export default function Bookings() {
                                         <td style={{ padding: '14px 16px' }}>
                                               <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', alignItems: 'flex-start' }}>
                                                   {(() => {
-                                                      const drsArr = Array.isArray(bkg.drsDuties) ? bkg.drsDuties : [];
-                                                      const itinArr = Array.isArray(bkg.itinerary) ? bkg.itinerary : [];
-                                                      const isLiveInDrs = drsArr.length > 0;
+                                                       const drsArr = Array.isArray(bkg.drsDuties) ? bkg.drsDuties : [];
+                                                       const itinArr = Array.isArray(bkg.itinerary) ? bkg.itinerary : [];
+                                                       const isLiveInDrs = drsArr.length > 0;
 
-                                                      let drvName = null;
-                                                      let vehNum = null;
+                                                       const allVehiclesSet = new Set();
+                                                       const allDriversSet = new Set();
 
-                                                      const firstDrsAssigned = drsArr.find(d => d.driver?.name || d.customDriverName || d.vehicle?.carNumber || d.customCarNumber);
-                                                      if (firstDrsAssigned) {
-                                                          drvName = firstDrsAssigned.driver?.name || firstDrsAssigned.customDriverName || null;
-                                                          vehNum = firstDrsAssigned.vehicle?.carNumber || firstDrsAssigned.customCarNumber || null;
-                                                      }
+                                                       drsArr.forEach(d => {
+                                                           const v = (d.vehicle?.carNumber || d.customCarNumber || '').split('#')[0].trim();
+                                                           if (v) allVehiclesSet.add(v);
+                                                           const dr = (d.driver?.name || d.customDriverName || '').trim();
+                                                           if (dr) allDriversSet.add(dr);
+                                                       });
 
-                                                      if (!drvName && itinArr.length > 0) {
-                                                          const firstAssigned = itinArr.find(d => d.driverId || d.driverName || d.vehicleNumber);
-                                                          if (firstAssigned) {
-                                                              if (firstAssigned.driverName) drvName = firstAssigned.driverName;
-                                                              else if (firstAssigned.driverId) {
-                                                                  const foundDrv = driversList.find(d => String(d._id) === String(firstAssigned.driverId));
-                                                                  if (foundDrv) drvName = foundDrv.name;
-                                                              }
-                                                              if (!vehNum && firstAssigned.vehicleNumber) vehNum = firstAssigned.vehicleNumber;
-                                                          }
-                                                      }
+                                                       itinArr.forEach(it => {
+                                                           const v = (it.vehicleNumber || '').split('#')[0].trim();
+                                                           if (v) allVehiclesSet.add(v);
+                                                           let dr = (it.driverName || '').trim();
+                                                           if (!dr && it.driverId) {
+                                                               const foundDrv = driversList.find(d => String(d._id) === String(it.driverId));
+                                                               if (foundDrv) dr = foundDrv.name;
+                                                           }
+                                                           if (dr) allDriversSet.add(dr);
+                                                       });
 
-                                                      if (drvName || vehNum || isLiveInDrs) {
-                                                          return (
-                                                              <button
-                                                                  type="button"
-                                                                  onClick={() => handleOpenAssignDriver(bkg)}
-                                                                  style={{
-                                                                      padding: '6px 12px',
-                                                                      borderRadius: '10px',
-                                                                      fontSize: '11.5px',
-                                                                      fontWeight: '800',
-                                                                      background: 'linear-gradient(135deg, rgba(6, 95, 70, 0.55), rgba(4, 120, 87, 0.35))',
-                                                                      color: '#34d399',
-                                                                      border: '1px solid rgba(52, 211, 153, 0.45)',
-                                                                      display: 'flex',
-                                                                      flexDirection: 'column',
-                                                                      alignItems: 'flex-start',
-                                                                      gap: '3px',
-                                                                      cursor: 'pointer',
-                                                                      textAlign: 'left'
-                                                                  }}
-                                                                  title="Click to edit/view assigned drivers, vehicles & duty schedule (2-Way Synced with Live DRS)"
-                                                              >
-                                                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                      <span>👤 {drvName || 'Driver Pending'}</span>
-                                                                      <Edit size={11} color="#34d399" />
-                                                                  </div>
-                                                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: '#a7f3d0', fontWeight: '700' }}>
-                                                                      {vehNum && <span>🚗 {vehNum}</span>}
-                                                                  </div>
-                                                              </button>
-                                                          );
-                                                      } else {
-                                                          return (
-                                                              <button
-                                                                  type="button"
-                                                                  onClick={() => handleOpenAssignDriver(bkg)}
-                                                                  style={{
-                                                                      padding: '6px 14px',
-                                                                      borderRadius: '20px',
-                                                                      fontSize: '11px',
-                                                                      fontWeight: '900',
-                                                                      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15))',
-                                                                      color: '#fbbf24',
-                                                                      border: '1.5px solid rgba(245, 158, 11, 0.6)',
-                                                                      display: 'flex',
-                                                                      alignItems: 'center',
-                                                                      gap: '6px',
-                                                                      cursor: 'pointer',
-                                                                      boxShadow: '0 2px 10px rgba(245, 158, 11, 0.2)'
-                                                                  }}
-                                                                  title="Click to Assign Drivers & Vehicles and send to Live DRS"
-                                                                >
-                                                                  <Car size={13} color="#fbbf24" />
-                                                                  <span>+ Assign Car & Driver</span>
-                                                              </button>
-                                                          );
-                                                      }
-                                                  })()}
+                                                       const distinctVehicles = Array.from(allVehiclesSet);
+                                                       const distinctDrivers = Array.from(allDriversSet);
+                                                       const hasMultipleCars = distinctVehicles.length > 1 || (Number(bkg.numberOfCars) > 1);
+                                                       const hasMultipleDrivers = distinctDrivers.length > 1;
+
+                                                       const hasAnyAssignment = distinctVehicles.length > 0 || distinctDrivers.length > 0 || isLiveInDrs;
+
+                                                       if (hasAnyAssignment) {
+                                                           return (
+                                                               <button
+                                                                   type="button"
+                                                                   onClick={() => handleOpenAssignDriver(bkg)}
+                                                                   style={{
+                                                                       padding: '6px 12px',
+                                                                       borderRadius: '10px',
+                                                                       fontSize: '11.5px',
+                                                                       fontWeight: '800',
+                                                                       background: hasMultipleCars
+                                                                           ? 'linear-gradient(135deg, rgba(8, 145, 178, 0.4), rgba(14, 116, 144, 0.25))'
+                                                                           : 'linear-gradient(135deg, rgba(6, 95, 70, 0.55), rgba(4, 120, 87, 0.35))',
+                                                                       color: hasMultipleCars ? '#38bdf8' : '#34d399',
+                                                                       border: hasMultipleCars ? '1px solid rgba(56, 189, 248, 0.45)' : '1px solid rgba(52, 211, 153, 0.45)',
+                                                                       display: 'flex',
+                                                                       flexDirection: 'column',
+                                                                       alignItems: 'flex-start',
+                                                                       gap: '3px',
+                                                                       cursor: 'pointer',
+                                                                       textAlign: 'left'
+                                                                   }}
+                                                                   title={`Click to edit/view drivers & vehicles\nCars: ${distinctVehicles.join(', ') || 'Pending'}\nDrivers: ${distinctDrivers.join(', ') || 'Pending'}`}
+                                                               >
+                                                                   {hasMultipleCars ? (
+                                                                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                           <span>🚗 Multiple Cars ({distinctVehicles.length || bkg.numberOfCars || 2})</span>
+                                                                           <Edit size={11} color="#38bdf8" />
+                                                                       </div>
+                                                                   ) : (
+                                                                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                           <span>👤 {distinctDrivers[0] || 'Driver Pending'}</span>
+                                                                           <Edit size={11} color="#34d399" />
+                                                                       </div>
+                                                                   )}
+                                                                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: hasMultipleCars ? '#bae6fd' : '#a7f3d0', fontWeight: '700' }}>
+                                                                       {hasMultipleCars ? (
+                                                                           <span>{hasMultipleDrivers ? `👥 Multiple Drivers (${distinctDrivers.length})` : (distinctDrivers[0] ? `👤 ${distinctDrivers[0]}` : 'Drivers Assigned')}</span>
+                                                                       ) : (
+                                                                           distinctVehicles[0] && <span>🚗 ${distinctVehicles[0]}</span>
+                                                                       )}
+                                                                   </div>
+                                                               </button>
+                                                           );
+                                                       } else {
+                                                           return (
+                                                               <button
+                                                                   type="button"
+                                                                   onClick={() => handleOpenAssignDriver(bkg)}
+                                                                   style={{
+                                                                       padding: '6px 14px',
+                                                                       borderRadius: '20px',
+                                                                       fontSize: '11px',
+                                                                       fontWeight: '900',
+                                                                       background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15))',
+                                                                       color: '#fbbf24',
+                                                                       border: '1.5px solid rgba(245, 158, 11, 0.6)',
+                                                                       display: 'flex',
+                                                                       alignItems: 'center',
+                                                                       gap: '6px',
+                                                                       cursor: 'pointer',
+                                                                       boxShadow: '0 2px 10px rgba(245, 158, 11, 0.2)'
+                                                                   }}
+                                                                   title="Click to Assign Drivers & Vehicles and send to Live DRS"
+                                                                 >
+                                                                   <Car size={13} color="#fbbf24" />
+                                                                   <span>+ Assign Car & Driver</span>
+                                                               </button>
+                                                           );
+                                                       }
+                                                   })()}
                                                   {isDatePassedBooking(bkg) && (
                                                       <button
                                                           onClick={() => handleCompleteBooking(bkg)}
@@ -1681,46 +1791,52 @@ export default function Bookings() {
                                                 </button>
 
                                                 {activeActionMenu === (bkg._id || index) && (
-                                                    <div style={{
-                                                        position: 'absolute',
-                                                        right: 0,
-                                                        top: '100%',
-                                                        marginTop: '4px',
-                                                        background: '#0B1121',
-                                                        border: '1px solid rgba(255,255,255,0.1)',
-                                                        borderRadius: '12px',
-                                                        padding: '6px',
-                                                        width: '200px',
-                                                        zIndex: 100,
-                                                        boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
-                                                        textAlign: 'left'
-                                                    }}>
-                                                        <button onClick={() => { setActiveActionMenu(null); handleOpenAssignDriver(bkg); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
-                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> Assign Driver
-                                                        </button>
-                                                        <button onClick={() => { setActiveActionMenu(null); setDownloadOptionModal(bkg); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
-                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg> Generate PDF
-                                                        </button>
-                                                        <button onClick={() => { setActiveActionMenu(null); setSelectedBooking(bkg); setShowEditModal(true); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
-                                                            <Edit size={14} color="#a78bfa" /> Edit Booking
-                                                        </button>
-                                                        <button onClick={() => { setActiveActionMenu(null); setSelectedBooking(bkg); setShowPaymentModal(true); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
-                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Record Payment
-                                                        </button>
-                                                        <button onClick={() => { setActiveActionMenu(null); handleCompleteBooking(bkg); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: '#34d399', fontSize: '12.5px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
-                                                            <CheckCircle size={14} color="#34d399" /> Complete Trip
-                                                        </button>
-                                                        <button onClick={() => { setActiveActionMenu(null); shareOnWhatsApp(bkg); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
-                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg> WhatsApp Share
-                                                        </button>
-                                                        <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '4px 0' }}></div>
-                                                        <button onClick={() => { setActiveActionMenu(null); setSelectedBooking(bkg); setCancelReason('Customer request'); setShowCancelModal(true); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: '#f87171', fontSize: '12.5px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
-                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Cancel Booking
-                                                        </button>
-                                                        <button onClick={() => { setActiveActionMenu(null); handleDeleteBooking(bkg); }} style={{ width: '100%', padding: '8px 10px', background: 'transparent', border: 'none', color: '#ef4444', fontSize: '12.5px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
-                                                            <Trash2 size={14} color="#ef4444" /> Delete Booking
-                                                        </button>
-                                                    </div>
+                                                    <>
+                                                        <div
+                                                            style={{ position: 'fixed', inset: 0, zIndex: 99 }}
+                                                            onClick={() => setActiveActionMenu(null)}
+                                                        />
+                                                        <div style={{
+                                                            position: 'absolute',
+                                                            right: 0,
+                                                            top: '100%',
+                                                            marginTop: '6px',
+                                                            background: '#0B1121',
+                                                            border: '1px solid rgba(255,255,255,0.16)',
+                                                            borderRadius: '12px',
+                                                            padding: '8px',
+                                                            width: '210px',
+                                                            zIndex: 1000,
+                                                            boxShadow: '0 14px 44px rgba(0,0,0,0.75)',
+                                                            textAlign: 'left'
+                                                        }}>
+                                                            <button onClick={() => { setActiveActionMenu(null); handleOpenAssignDriver(bkg); }} style={{ width: '100%', padding: '9px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> Assign Driver
+                                                            </button>
+                                                            <button onClick={() => { setActiveActionMenu(null); setDownloadOptionModal(bkg); }} style={{ width: '100%', padding: '9px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg> Generate PDF
+                                                            </button>
+                                                            <button onClick={() => { setActiveActionMenu(null); setSelectedBooking(bkg); setShowEditModal(true); }} style={{ width: '100%', padding: '9px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                                <Edit size={14} color="#a78bfa" /> Edit Booking
+                                                            </button>
+                                                            <button onClick={() => { setActiveActionMenu(null); setSelectedBooking(bkg); setShowPaymentModal(true); }} style={{ width: '100%', padding: '9px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Record Payment
+                                                            </button>
+                                                            <button onClick={() => { setActiveActionMenu(null); handleCompleteBooking(bkg); }} style={{ width: '100%', padding: '9px 10px', background: 'transparent', border: 'none', color: '#34d399', fontSize: '12.5px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                                <CheckCircle size={14} color="#34d399" /> Complete Trip
+                                                            </button>
+                                                            <button onClick={() => { setActiveActionMenu(null); shareOnWhatsApp(bkg); }} style={{ width: '100%', padding: '9px 10px', background: 'transparent', border: 'none', color: 'white', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg> WhatsApp Share
+                                                            </button>
+                                                            <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '4px 0' }}></div>
+                                                            <button onClick={() => { setActiveActionMenu(null); setSelectedBooking(bkg); setCancelReason('Customer request'); setShowCancelModal(true); }} style={{ width: '100%', padding: '9px 10px', background: 'transparent', border: 'none', color: '#f87171', fontSize: '12.5px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Cancel Booking
+                                                            </button>
+                                                            <button onClick={() => { setActiveActionMenu(null); handleDeleteBooking(bkg); }} style={{ width: '100%', padding: '9px 10px', background: 'transparent', border: 'none', color: '#ef4444', fontSize: '12.5px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}>
+                                                                <Trash2 size={14} color="#ef4444" /> Delete Booking
+                                                            </button>
+                                                        </div>
+                                                    </>
                                                 )}
                                             </div>
                                         </td>
@@ -1827,11 +1943,7 @@ export default function Bookings() {
                                         <option value="Bank Transfer / NEFT">🏦 Bank Transfer / NEFT</option>
                                     </select>
                                 </div>
-                                {(paymentMode === 'Cash' || paymentMode === 'Driver Cash') ? (
-                                    <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.25)', color: '#4ade80', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span>💵 <strong>Synced to 1-Day Cash Book:</strong> Amount will be recorded as Cash Received (IN).</span>
-                                    </div>
-                                ) : (
+                                {!(paymentMode === 'Cash' || paymentMode === 'Driver Cash') && (
                                     <BankSelector
                                         bankAccounts={bankAccounts}
                                         value={bankAccountId}
@@ -2692,360 +2804,26 @@ export default function Bookings() {
             </AnimatePresence>
         
             {/* CLIENT LEDGER DRAWER */}
-            <AnimatePresence>
-                {ledgerModalBooking && (
-                    <>
-                        <motion.div
-                            key="bkg-ledger-backdrop"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setLedgerModalBooking(null)}
-                            style={{
-                                position: 'fixed',
-                                inset: 0,
-                                background: 'rgba(0, 0, 0, 0.7)',
-                                backdropFilter: 'blur(4px)',
-                                zIndex: 999998
-                            }}
-                        />
-                        <motion.aside
-                            key="bkg-ledger-panel"
-                            initial={{ x: '100%' }}
-                            animate={{ x: 0 }}
-                            exit={{ x: '100%' }}
-                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                            style={{
-                                position: 'fixed',
-                                top: 0,
-                                right: 0,
-                                width: '100%',
-                                maxWidth: '500px',
-                                height: '100vh',
-                                background: '#0b1120',
-                                borderLeft: '1px solid rgba(255,255,255,0.1)',
-                                zIndex: 999999,
-                                display: 'flex',
-                                flexDirection: 'column',
-                                boxShadow: '-10px 0 30px rgba(0,0,0,0.5)'
-                            }}
-                        >
-                            {/* Header */}
-                            <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div style={{ background: 'rgba(37, 99, 235, 0.2)', padding: '10px', borderRadius: '10px', color: '#60a5fa' }}>
-                                        <FileText size={20} />
-                                    </div>
-                                    <div>
-                                        <h2 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Client Ledger & Payment Statement</h2>
-                                        <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.5)', fontSize: '12px' }}>
-                                            Track package fare, payments received & pending balance.
-                                        </p>
-                                    </div>
-                                </div>
-                                <button onClick={() => setLedgerModalBooking(null)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}><X size={20} /></button>
-                            </div>
-
-                            {/* Scrollable Body */}
-                            <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
-                                {/* Top Stats */}
-                                {(() => {
-                                    const totalFare = Number(ledgerModalBooking.totalAmount) || 0;
-                                    const totalPaid = Number(ledgerModalBooking.advancePaid) || 0;
-                                    const balanceDue = ledgerModalBooking.balanceDue !== undefined ? Number(ledgerModalBooking.balanceDue) : Math.max(0, totalFare - totalPaid);
-                                    const isPaidFull = balanceDue <= 0;
-
-                                    return (
-                                        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '18px', marginBottom: '24px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <div style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '7px', borderRadius: '8px' }}><Car size={16} /></div>
-                                                    <div>
-                                                        <div style={{ color: 'white', fontWeight: '800', fontSize: '14px' }}>{ledgerModalBooking.vehicleType || 'Standard Vehicle'}</div>
-                                                        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>Client Booking & Trip Details</div>
-                                                    </div>
-                                                </div>
-                                                <div style={{ textAlign: 'right', fontSize: '13px', color: 'white', fontWeight: '700' }}>
-                                                    Client: <span style={{ color: '#60a5fa' }}>{ledgerModalBooking.clientName}</span>
-                                                </div>
-                                            </div>
-
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '16px', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px' }}>
-                                                <div>
-                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Trip Start</div>
-                                                    <div style={{ fontSize: '13px', color: 'white', fontWeight: '700' }}>{ledgerModalBooking.tripStartFormatted || new Date(ledgerModalBooking.travelStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</div>
-                                                </div>
-                                                <div>
-                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Trip End</div>
-                                                    <div style={{ fontSize: '13px', color: 'white', fontWeight: '700' }}>{ledgerModalBooking.tripEndFormatted || new Date(ledgerModalBooking.travelEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</div>
-                                                </div>
-                                                <div>
-                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Package Price</div>
-                                                    <div style={{ fontSize: '14px', color: 'white', fontWeight: '800' }}>₹{totalFare.toLocaleString('en-IN')}</div>
-                                                </div>
-                                            </div>
-
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '16px', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '16px' }}>
-                                                <div>
-                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '600' }}>Total Received</div>
-                                                    <div style={{ fontSize: '20px', color: '#10b981', fontWeight: '900' }}>₹{totalPaid.toLocaleString('en-IN')}</div>
-                                                </div>
-                                                <div>
-                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '600' }}>Balance Due</div>
-                                                    <div style={{ fontSize: '20px', color: isPaidFull ? '#10b981' : '#f59e0b', fontWeight: '900' }}>₹{balanceDue.toLocaleString('en-IN')}</div>
-                                                </div>
-                                                <div style={{ textAlign: 'right' }}>
-                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '600' }}>Payment Status</div>
-                                                    <div style={{ 
-                                                        padding: '5px 14px', borderRadius: '20px', fontSize: '11.5px', fontWeight: '800',
-                                                        background: isPaidFull ? 'rgba(16, 185, 129, 0.2)' : totalPaid > 0 ? 'rgba(245, 158, 11, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                                                        color: isPaidFull ? '#34d399' : totalPaid > 0 ? '#fbbf24' : '#f87171',
-                                                        border: isPaidFull ? '1px solid rgba(16, 185, 129, 0.4)' : totalPaid > 0 ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)'
-                                                    }}>
-                                                        {isPaidFull ? 'Paid in Full' : totalPaid > 0 ? `Part Paid (₹${balanceDue.toLocaleString('en-IN')} Due)` : 'Payment Due'}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-
-                                {/* Ledger Table */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '7px', borderRadius: '8px', color: 'rgba(255,255,255,0.7)' }}>
-                                            <FileText size={16} />
-                                        </div>
-                                        <div>
-                                            <h3 style={{ margin: 0, color: 'white', fontSize: '14px', fontWeight: '800' }}>Billing & Payment Statement</h3>
-                                            <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>Itemized breakdown of package charges and received payments.</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div style={{ width: '100%', overflowX: 'auto', marginBottom: '16px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
-                                        <thead>
-                                            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)' }}>
-                                                <th style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Date</th>
-                                                <th style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Particulars / Description</th>
-                                                <th style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', textAlign: 'right' }}>Package Fare (₹)</th>
-                                                <th style={{ padding: '12px 10px', color: '#34d399', fontWeight: '700', textAlign: 'right' }}>Paid / Received (₹)</th>
-                                                <th style={{ padding: '12px 10px', color: '#fbbf24', fontWeight: '700', textAlign: 'right' }}>Balance Due (₹)</th>
-                                                <th style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', textAlign: 'center' }}>Payment Mode</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {/* Row 1: Package Fare */}
-                                            {(() => {
-                                                const totalFare = Number(ledgerModalBooking.totalAmount) || 0;
-                                                const createdDate = ledgerModalBooking.createdAt ? new Date(ledgerModalBooking.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
-
-                                                return (
-                                                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.015)' }}>
-                                                        <td style={{ padding: '12px 10px', color: 'white', whiteSpace: 'nowrap' }}>{createdDate}</td>
-                                                        <td style={{ padding: '12px 10px' }}>
-                                                            <div style={{ color: 'white', fontWeight: '700' }}>Tour Package Booking Fare</div>
-                                                        </td>
-                                                        <td style={{ padding: '12px 10px', color: 'white', fontWeight: '700', textAlign: 'right' }}>₹{totalFare.toLocaleString('en-IN')}</td>
-                                                        <td style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.4)', textAlign: 'right' }}>—</td>
-                                                        <td style={{ padding: '12px 10px', color: 'white', fontWeight: '700', textAlign: 'right' }}>₹{totalFare.toLocaleString('en-IN')}</td>
-                                                        <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                                                            <span style={{ padding: '3px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', fontSize: '11px', fontWeight: '700' }}>
-                                                                Booking Confirmed
-                                                            </span>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })()}
-
-                                            {/* Subsequent Rows */}
-                                            {(() => {
-                                                const totalFare = Number(ledgerModalBooking.totalAmount) || 0;
-                                                let runBal = totalFare;
-                                                
-                                                // Prepare rows list
-                                                let displayEntries = [...ledgerEntries];
-                                                // If no ledger entries exist but advancePaid > 0, inject default advance entry
-                                                if (displayEntries.length === 0 && (ledgerModalBooking.advancePaid || 0) > 0) {
-                                                    displayEntries.push({
-                                                        date: ledgerModalBooking.advanceDate || ledgerModalBooking.createdAt || new Date(),
-                                                        type: 'Advance',
-                                                        amount: ledgerModalBooking.advancePaid,
-                                                        description: `Advance Received via ${ledgerModalBooking.paymentMode || 'UPI / QR Code'}`
-                                                    });
-                                                }
-
-                                                if (displayEntries.length === 0) {
-                                                    return (
-                                                        <tr>
-                                                            <td colSpan="6" style={{ padding: '24px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>
-                                                                No payments recorded yet. Click <b>+ Record Payment</b> below to add payment.
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                }
-
-                                                return displayEntries.map((entry, idx) => {
-                                                    const amt = Number(entry.amount) || 0;
-                                                    runBal -= amt;
-                                                    const isFuel = entry.type === 'Fuel';
-                                                    const isAdv = entry.type === 'Advance';
-                                                    const modeName = isFuel 
-                                                        ? 'Guest Fuel' 
-                                                        : (entry.description?.split('via ')[1]?.split(' (')[0] || (isAdv ? 'Advance Payment' : 'Payment Received'));
-
-                                                    return (
-                                                        <tr key={entry._id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: isFuel ? 'rgba(245, 158, 11, 0.04)' : 'transparent' }}>
-                                                            <td style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap' }}>
-                                                                {new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}
-                                                            </td>
-                                                            <td style={{ padding: '12px 10px' }}>
-                                                                {isFuel ? (
-                                                                    <div>
-                                                                        <div style={{ color: '#fbbf24', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                                                            <Fuel size={13} color="#fbbf24" />
-                                                                            <span>Fuel Paid by Guest</span>
-                                                                        </div>
-                                                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>
-                                                                            Deducted from booking balance {entry.description ? `(${entry.description.replace(/^Fuel paid by guest\s*/i, '')})` : ''}
-                                                                        </div>
-                                                                    </div>
-                                                                ) : (
-                                                                    <div>
-                                                                        <div style={{ color: '#34d399', fontWeight: '700' }}>
-                                                                            {isAdv ? 'Advance Payment Received' : 'Payment Received'}
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                            </td>
-                                                            <td style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.4)', textAlign: 'right' }}>—</td>
-                                                            <td style={{ padding: '12px 10px', color: '#10b981', fontWeight: '800', textAlign: 'right' }}>
-                                                                + ₹{amt.toLocaleString('en-IN')}
-                                                            </td>
-                                                            <td style={{ padding: '12px 10px', color: Math.max(0, runBal) === 0 ? '#10b981' : '#fbbf24', fontWeight: '800', textAlign: 'right' }}>
-                                                                ₹{Math.max(0, runBal).toLocaleString('en-IN')}
-                                                            </td>
-                                                            <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                                                                <span style={{ 
-                                                                    padding: '3px 8px', borderRadius: '6px', 
-                                                                    background: isFuel ? 'rgba(245, 158, 11, 0.18)' : 'rgba(16, 185, 129, 0.15)', 
-                                                                    color: isFuel ? '#fbbf24' : '#6ee7b7', 
-                                                                    fontSize: '11px', fontWeight: '700' 
-                                                                }}>
-                                                                    {modeName}
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                });
-                                            })()}
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                {/* Footer Banner */}
-                                {(() => {
-                                    const totalFare = Number(ledgerModalBooking.totalAmount) || 0;
-                                    const totalPaid = Number(ledgerModalBooking.advancePaid) || 0;
-                                    const balanceDue = ledgerModalBooking.balanceDue !== undefined ? Number(ledgerModalBooking.balanceDue) : Math.max(0, totalFare - totalPaid);
-
-                                    if (balanceDue <= 0) {
-                                        return (
-                                            <div style={{ background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '12px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                                                <div style={{ background: '#10b981', color: 'white', borderRadius: '50%', padding: '4px', display: 'flex' }}><CheckCircle size={16} /></div>
-                                                <div>
-                                                    <div style={{ color: '#34d399', fontWeight: '800', fontSize: '13px' }}>Booking Fully Paid & Settled</div>
-                                                    <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px', marginTop: '2px' }}>Total received ₹{totalPaid.toLocaleString('en-IN')}. Zero outstanding balance.</div>
-                                                </div>
-                                            </div>
-                                        );
-                                    } else {
-                                        return (
-                                            <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', padding: '12px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                                                <div style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', borderRadius: '50%', padding: '6px', display: 'flex' }}><Clock size={16} /></div>
-                                                <div>
-                                                    <div style={{ color: '#fbbf24', fontWeight: '800', fontSize: '13px' }}>₹{balanceDue.toLocaleString('en-IN')} Outstanding Balance Due</div>
-                                                    <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: '11px', marginTop: '2px' }}>Client has paid ₹{totalPaid.toLocaleString('en-IN')} of total ₹{totalFare.toLocaleString('en-IN')}.</div>
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-                                })()}
-
-                                {/* Buttons */}
-                                <div style={{ display: 'flex', gap: '12px' }}>
-                                    <button 
-                                        onClick={() => {
-                                            const totalFare = Number(ledgerModalBooking.totalAmount) || 0;
-                                            const totalPaid = Number(ledgerModalBooking.advancePaid) || 0;
-                                            const balanceDue = ledgerModalBooking.balanceDue !== undefined ? Number(ledgerModalBooking.balanceDue) : Math.max(0, totalFare - totalPaid);
-                                            if (balanceDue <= 0) {
-                                                alert('Booking is already fully paid and settled.');
-                                                return;
-                                            }
-                                            handleOpenPaymentModal(ledgerModalBooking);
-                                        }}
-                                        style={{ flex: 1, padding: '12px', background: '#fbbf24', color: '#000', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                                    >
-                                        <Plus size={16} /> Record Payment
-                                    </button>
-                                    <button 
-                                        onClick={() => {
-                                            const totalFare = Number(ledgerModalBooking.totalAmount) || 0;
-                                            const createdDate = ledgerModalBooking.createdAt ? new Date(ledgerModalBooking.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
-                                            const sDate = ledgerModalBooking.tripStartFormatted || (ledgerModalBooking.travelStartDate ? new Date(ledgerModalBooking.travelStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
-                                            const eDate = ledgerModalBooking.tripEndFormatted || (ledgerModalBooking.travelEndDate ? new Date(ledgerModalBooking.travelEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
-
-                                            let runBal = totalFare;
-                                            let pdfRows = [
-                                                {
-                                                    date: createdDate,
-                                                    particulars: `Tour Package Booking Fare (${sDate} to ${eDate})`,
-                                                    fare: totalFare,
-                                                    paid: null,
-                                                    balance: totalFare,
-                                                    mode: 'Booking Confirmed'
-                                                }
-                                            ];
-
-                                            let displayEntries = [...ledgerEntries];
-                                            if (displayEntries.length === 0 && (ledgerModalBooking.advancePaid || 0) > 0) {
-                                                displayEntries.push({
-                                                    date: ledgerModalBooking.advanceDate || ledgerModalBooking.createdAt || new Date(),
-                                                    type: 'Advance',
-                                                    amount: ledgerModalBooking.advancePaid,
-                                                    description: `Advance Received via ${ledgerModalBooking.paymentMode || 'UPI / QR Code'}`
-                                                });
-                                            }
-
-                                            displayEntries.forEach(entry => {
-                                                const amt = Number(entry.amount) || 0;
-                                                runBal -= amt;
-                                                const isFuel = entry.type === 'Fuel';
-                                                const isAdv = entry.type === 'Advance';
-                                                pdfRows.push({
-                                                    date: new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }),
-                                                    particulars: isFuel ? 'Fuel Paid by Guest (Deducted)' : (isAdv ? 'Advance Payment Received' : 'Payment Received'),
-                                                    fare: null,
-                                                    paid: amt,
-                                                    balance: Math.max(0, runBal),
-                                                    mode: isFuel ? 'Guest Fuel' : (entry.description?.split('via ')[1]?.split(' (')[0] || (isAdv ? 'Advance' : 'Payment'))
-                                                });
-                                            });
-
-                                            generateClientLedgerPDF(ledgerModalBooking, pdfRows, selectedCompany);
-                                        }}
-                                        style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '10px', fontWeight: '700', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-                                    >
-                                        <Download size={16} /> Download Ledger PDF
-                                    </button>
-                                </div>
-                            </div>
-                        </motion.aside>
-                    </>
-                )}
-            </AnimatePresence>
+            {ledgerModalBooking && (
+                <ClientLedgerDrawer
+                    booking={ledgerModalBooking}
+                    onClose={() => setLedgerModalBooking(null)}
+                    onAddEntry={() => {
+                        const bkg = ledgerModalBooking;
+                        setLedgerModalBooking(null);
+                        handleOpenPaymentModal(bkg);
+                    }}
+                    onEditBooking={() => {
+                        const bkg = ledgerModalBooking;
+                        setLedgerModalBooking(null);
+                        setSelectedBooking(bkg);
+                        setShowEditModal(true);
+                    }}
+                    onEntryUpdated={() => {
+                        fetchBookings();
+                    }}
+                />
+            )}
 
             {showEditModal && selectedBooking && (
                 <EditBookingModal 

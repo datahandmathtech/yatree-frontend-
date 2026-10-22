@@ -35,8 +35,8 @@ export default function Invoices() {
     const [showFyDropdown, setShowFyDropdown] = useState(false);
 
     // Sorting
-    const [sortField, setSortField] = useState('vchNo');
-    const [sortAsc, setSortAsc] = useState(true);
+    const [sortField, setSortField] = useState('date');
+    const [sortAsc, setSortAsc] = useState(false);
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -331,11 +331,18 @@ export default function Invoices() {
                 return sortAsc ? Number(valA) - Number(valB) : Number(valB) - Number(valA);
             }
             if (sortField === 'vchNo') {
-                return sortAsc ? Number(valA || 0) - Number(valB || 0) : Number(valB || 0) - Number(valA || 0);
+                const numA = parseInt(String(valA).replace(/\D+/g, ''), 10) || 0;
+                const numB = parseInt(String(valB).replace(/\D+/g, ''), 10) || 0;
+                return sortAsc ? numA - numB : numB - numA;
+            }
+            if (sortField === 'date') {
+                const dateA = new Date(a.rawDate || a.date).getTime() || 0;
+                const dateB = new Date(b.rawDate || b.date).getTime() || 0;
+                return sortAsc ? dateA - dateB : dateB - dateA;
             }
             return sortAsc
-                ? String(valA).localeCompare(String(valB))
-                : String(valB).localeCompare(String(valA));
+                ? String(valA || '').localeCompare(String(valB || ''))
+                : String(valB || '').localeCompare(String(valA || ''));
         });
 
         return list;

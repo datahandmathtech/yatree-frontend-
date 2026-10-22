@@ -154,7 +154,6 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
             const initExcl = Array.isArray(booking.excludedDates) ? booking.excludedDates : [];
             setExcludedDates(initExcl);
             setIsBreakTour(Boolean(booking.isBreakTour || initExcl.length > 0));
-            setTotalAmount(Number(booking.totalAmount || booking.packagePrice) || 0);
             setPickupPoint(booking.pickupPoint || booking.pickupLocation || '');
             setDropPoint(booking.dropPoint || booking.dropLocation || '');
             setGstMode(booking.gstMode || 'GST Inclusive');
@@ -172,25 +171,35 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
             setMatrixGstAmount(matrix.gstAmount ? String(matrix.gstAmount) : '');
             setTargetPerDay(matrix.targetPerDay ? String(matrix.targetPerDay) : '2500');
 
-            // Populate Itinerary
+            // Total and Itinerary initialization
+            let itinSum = 0;
             if (Array.isArray(booking.itinerary) && booking.itinerary.length > 0) {
-                setItinerary(booking.itinerary.map((d, i) => ({
-                    dayNo: d.dayNo || (i + 1),
-                    date: toLocalDateString(d.date),
-                    time: d.time || '09:00 AM',
-                    isApg: d.isApg || d.time === 'APG',
-                    duty: d.duty || d.description || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
-                    description: d.duty || d.description || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
-                    vehicleType: d.vehicleType || initialVeh,
-                    vehicleCount: d.vehicleCount || booking.numberOfCars || 1,
-                    quantity: d.quantity || d.vehicleCount || booking.numberOfCars || 1,
-                    rate: d.rate !== undefined ? d.rate : 0,
-                    amount: d.amount !== undefined ? d.amount : 0,
-                    pickupPoint: d.pickupPoint || '',
-                    vehicleNumber: d.vehicleNumber || '',
-                    driverName: d.driverName || '',
-                    driverPhone: d.driverPhone || ''
-                })));
+                const mappedItin = booking.itinerary.map((d, i) => {
+                    const q = Number(d.quantity || d.vehicleCount || booking.numberOfCars) || 1;
+                    const rawRate = Number(d.rate) || 0;
+                    const rawAmt = Number(d.amount) || 0;
+                    const r = rawRate > 0 ? rawRate : (rawAmt > 0 ? Math.round(rawAmt / q) : 0);
+                    const a = rawAmt > 0 ? rawAmt : (q * r);
+                    return {
+                        dayNo: d.dayNo || (i + 1),
+                        date: toLocalDateString(d.date),
+                        time: d.time || '09:00 AM',
+                        isApg: d.isApg || d.time === 'APG',
+                        duty: d.duty || d.description || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
+                        description: d.duty || d.description || (i === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
+                        vehicleType: d.vehicleType || initialVeh,
+                        vehicleCount: q,
+                        quantity: q,
+                        rate: r,
+                        amount: a,
+                        pickupPoint: d.pickupPoint || '',
+                        vehicleNumber: d.vehicleNumber || '',
+                        driverName: d.driverName || '',
+                        driverPhone: d.driverPhone || ''
+                    };
+                });
+                setItinerary(mappedItin);
+                itinSum = mappedItin.reduce((acc, curr) => acc + (Number(curr.amount) || (Number(curr.quantity || curr.vehicleCount || 1) * Number(curr.rate || 0)) || 0), 0);
             } else {
                 const sDate = toLocalDateString(booking.travelStartDate);
                 const eDate = toLocalDateString(booking.travelEndDate);
@@ -216,6 +225,12 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                     });
                 }
                 setItinerary(daysArr);
+            }
+
+            if (itinSum > 0) {
+                setTotalAmount(itinSum);
+            } else {
+                setTotalAmount(Number(booking.totalAmount || booking.packagePrice) || 0);
             }
 
             // Populate Remarks & Inclusions
@@ -255,6 +270,14 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
     const totalStayDays = Math.max(1, allTourDates.length);
     const activeCarDays = Math.max(1, totalStayDays - validExcludedDates.length);
 
+    const FUEL_TYPES = [
+        { type: 'Diesel', label: 'Diesel', icon: '⛽', rateUnit: '₹/L', avgUnit: 'km/l' },
+        { type: 'Petrol', label: 'Petrol', icon: '⛽', rateUnit: '₹/L', avgUnit: 'km/l' },
+        { type: 'CNG', label: 'CNG', icon: '🍃', rateUnit: '₹/kg', avgUnit: 'km/kg' },
+        { type: 'EV', label: 'Electric (EV)', icon: '⚡', rateUnit: '₹/unit', avgUnit: 'km/unit' }
+    ];
+    const currentFuelConfig = FUEL_TYPES.find(f => f.type === fuelType) || FUEL_TYPES[0];
+
     // Cost Matrix Calculations (uses activeCarDays when Break Tour is active)
     const numDays = activeCarDays;
     const kmVal = parseFloat(totalKmRun) || 0;
@@ -268,12 +291,27 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
     const targetPerDayVal = parseFloat(targetPerDay) || 2500;
     const totalTargetProfit = targetPerDayVal * numDays;
 
+    const calculatedItineraryTotal = useMemo(() => {
+        if (!Array.isArray(itinerary) || itinerary.length === 0) return 0;
+        return itinerary.reduce((sum, d) => sum + (Number(d.amount) || (Number(d.quantity || d.vehicleCount || 1) * Number(d.rate || 0)) || 0), 0);
+    }, [itinerary]);
+
+    const displayedTotalFare = calculatedItineraryTotal > 0 ? calculatedItineraryTotal : (Number(totalAmount) || 0);
+
     const totalCost = fuelCost + driverSalaryVal + nightHoldVal + tollVal + gstVal;
     const recommendedSaleFare = totalCost + totalTargetProfit;
-    const currentPkg = parseFloat(totalAmount) || 0;
+    const currentPkg = parseFloat(displayedTotalFare) || 0;
     const totalProfit = currentPkg - totalCost;
     const perDayProfit = numDays > 0 ? totalProfit / numDays : 0;
+    const diffFromTarget = perDayProfit - targetPerDayVal;
     const marginPercent = currentPkg > 0 ? Math.round((totalProfit / currentPkg) * 100) : 0;
+
+    const handleAutoMatrixGST = () => {
+        if (currentPkg > 0) {
+            const autoGst = Math.round(currentPkg - (currentPkg / 1.05));
+            setMatrixGstAmount(String(autoGst));
+        }
+    };
 
     // Simulation price calculation
     const matrixSimPriceVal = parseFloat(matrixSimSalePrice) || 0;
@@ -494,11 +532,27 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
         setSaving(true);
         try {
             const calculatedTotal = (itinerary && itinerary.length > 0)
-                ? itinerary.reduce((sum, d) => sum + (Number(d.amount) || Number(d.rate) || 0), 0)
-                : (Number(totalAmount) || 0);
-            const finalTotal = calculatedTotal > 0 ? calculatedTotal : (Number(totalAmount) || 0);
-            const finalVehicle = (itinerary && itinerary.length > 0 && itinerary[0].vehicleType) ? itinerary[0].vehicleType : vehicleType;
-            const finalPickup = (itinerary && itinerary.length > 0 && itinerary[0].pickupPoint) ? itinerary[0].pickupPoint : pickupPoint;
+                ? itinerary.reduce((sum, d) => sum + (Number(d.amount) || (Number(d.quantity || d.vehicleCount || 1) * Number(d.rate || 0)) || 0), 0)
+                : 0;
+            const explicitTotal = Number(totalAmount) || 0;
+            const finalTotal = calculatedTotal > 0 ? calculatedTotal : (explicitTotal > 0 ? explicitTotal : 0);
+
+            // Keep Day 1 lump-sum itinerary amount in sync if user updated Quoted Package Fare directly
+            let syncedItinerary = itinerary ? [...itinerary] : [];
+            if (finalTotal > 0 && syncedItinerary.length > 0) {
+                const restSum = syncedItinerary.slice(1).reduce((sum, d) => sum + (Number(d.amount) || Number(d.rate) || 0), 0);
+                if (restSum === 0 && Number(syncedItinerary[0].amount) !== finalTotal) {
+                    const qty = Number(syncedItinerary[0].quantity || syncedItinerary[0].vehicleCount) || 1;
+                    syncedItinerary[0] = {
+                        ...syncedItinerary[0],
+                        amount: finalTotal,
+                        ...(Number(syncedItinerary[0].rate) > 0 ? { rate: Math.round(finalTotal / qty) } : {})
+                    };
+                }
+            }
+
+            const finalVehicle = (syncedItinerary.length > 0 && syncedItinerary[0].vehicleType) ? syncedItinerary[0].vehicleType : vehicleType;
+            const finalPickup = (syncedItinerary.length > 0 && syncedItinerary[0].pickupPoint) ? syncedItinerary[0].pickupPoint : pickupPoint;
 
             const payload = {
                 bookingReference,
@@ -529,7 +583,7 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                 specialRemarks,
                 notes: specialRemarks,
                 inclusions,
-                itinerary,
+                itinerary: syncedItinerary,
                 vehicleMatrix: {
                     fuelType,
                     totalKmRun: kmVal,
@@ -539,7 +593,9 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                     driverSalary: driverSalaryVal,
                     nightHold: nightHoldVal,
                     tollAndParking: tollVal,
+                    gstType: inclusions?.gstIncluded ? '5% Included' : (gstMode || '5% Included'),
                     gstAmount: gstVal,
+                    packageValue: finalTotal,
                     targetPerDay: targetPerDayVal,
                     totalCost: Math.round(totalCost),
                     totalProfit: Math.round(totalProfit),
@@ -872,6 +928,20 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                                     onChange={e => {
                                         const val = e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0);
                                         setTotalAmount(val);
+                                        if (itinerary && itinerary.length > 0) {
+                                            const restSum = itinerary.slice(1).reduce((sum, d) => sum + (Number(d.amount) || Number(d.rate) || 0), 0);
+                                            if (restSum === 0) {
+                                                const numVal = Number(val) || 0;
+                                                const qty = Number(itinerary[0].quantity || itinerary[0].vehicleCount) || 1;
+                                                const updated = [...itinerary];
+                                                updated[0] = {
+                                                    ...updated[0],
+                                                    amount: numVal,
+                                                    ...(Number(updated[0].rate) > 0 ? { rate: Math.round(numVal / qty) } : {})
+                                                };
+                                                setItinerary(updated);
+                                            }
+                                        }
                                     }}
                                     style={{ ...darkInputStyle, color: '#fbbf24', fontWeight: '900' }}
                                 />
@@ -1010,190 +1080,384 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                     {/* ========================================================= */}
                     {/* SECTION 2: VEHICLE & COST MATRIX (Real-time P&L)          */}
                     {/* ========================================================= */}
-                    <div style={{ background: '#0a101d', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '18px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{
+                        background: '#090f1d',
+                        border: '1px solid rgba(59, 130, 246, 0.25)',
+                        borderRadius: '14px',
+                        padding: '18px',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                    }}>
+                        {/* Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                 <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#fbbf24', color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '11px' }}>2</span>
-                                <span style={{ color: '#fbbf24', fontSize: '12.5px', fontWeight: '800', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
-                                    Vehicle & Cost Matrix ({numDays} Active Car {numDays > 1 ? 'Days' : 'Day'}{validExcludedDates.length > 0 ? ` / ${totalStayDays}d Stay` : ''})
+                                <span style={{ fontSize: '16px' }}>🚗</span>
+                                <span style={{ fontSize: '13px', fontWeight: '800', color: '#60a5fa', letterSpacing: '0.4px', textTransform: 'uppercase' }}>
+                                    Vehicle Operating Matrix & Quotation Profit Margin
+                                </span>
+                                <span style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#93c5fd', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                                    Live P&L
                                 </span>
                             </div>
-
-                            {/* Fuel Type Pills */}
-                            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '2px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                {['Diesel', 'Petrol', 'CNG', 'EV'].map(ft => (
-                                    <button
-                                        key={ft}
-                                        type="button"
-                                        onClick={() => setFuelType(ft)}
-                                        style={{
-                                            padding: '4px 10px',
-                                            borderRadius: '6px',
-                                            border: 'none',
-                                            background: fuelType === ft ? '#3b82f6' : 'transparent',
-                                            color: fuelType === ft ? '#fff' : 'rgba(255,255,255,0.7)',
-                                            fontWeight: '800',
-                                            fontSize: '11px',
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        {ft}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Matrix Inputs Grid */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '16px' }}>
-                            <div>
-                                <label style={labelStyle}>Total KM Run</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    placeholder="Est. Km"
-                                    value={totalKmRun}
-                                    onChange={e => setTotalKmRun(e.target.value)}
-                                    style={darkInputStyle}
-                                />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Avg ({fuelType === 'EV' ? 'km/unit' : 'km/l'})</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    placeholder="Mileage"
-                                    value={vehicleAverage}
-                                    onChange={e => setVehicleAverage(e.target.value)}
-                                    style={darkInputStyle}
-                                />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Fuel Rate (₹)</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    placeholder="Rate"
-                                    value={fuelRate}
-                                    onChange={e => setFuelRate(e.target.value)}
-                                    style={darkInputStyle}
-                                />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Fuel Cost (Auto)</label>
-                                <div style={{ ...darkInputStyle, background: 'rgba(255,255,255,0.03)', color: '#38bdf8', fontWeight: '800' }}>
-                                    ₹{Math.round(fuelCost).toLocaleString('en-IN')}
-                                </div>
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Driver Salary (₹)</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    placeholder="0"
-                                    value={driverSalary}
-                                    onChange={e => setDriverSalary(e.target.value)}
-                                    style={darkInputStyle}
-                                />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Night Hold (₹)</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    placeholder="0"
-                                    value={nightHold}
-                                    onChange={e => setNightHold(e.target.value)}
-                                    style={darkInputStyle}
-                                />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Toll & Parking (₹)</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    placeholder="0"
-                                    value={tollAndParking}
-                                    onChange={e => setTollAndParking(e.target.value)}
-                                    style={darkInputStyle}
-                                />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Target Profit/Day</label>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    placeholder="2500"
-                                    value={targetPerDay}
-                                    onChange={e => setTargetPerDay(e.target.value)}
-                                    style={{ ...darkInputStyle, color: '#34d399', fontWeight: '800' }}
-                                />
-                            </div>
-                        </div>
-
-                        {/* Live P&L Summary Cards */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', background: 'rgba(0,0,0,0.25)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                            <div>
-                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '3px' }}>TOTAL TOUR COST</div>
-                                <div style={{ fontSize: '17px', fontWeight: '900', color: '#f87171' }}>
-                                    ₹{Math.round(totalCost).toLocaleString('en-IN')}
-                                </div>
-                            </div>
-                            <div>
-                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '3px' }}>TARGET PROFIT</div>
-                                <div style={{ fontSize: '17px', fontWeight: '900', color: '#34d399' }}>
-                                    ₹{Math.round(totalTargetProfit).toLocaleString('en-IN')}
-                                </div>
-                            </div>
-                            <div>
-                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '3px' }}>RECOMMENDED FARE</div>
-                                <div style={{ fontSize: '17px', fontWeight: '900', color: '#60a5fa' }}>
-                                    ₹{Math.round(recommendedSaleFare).toLocaleString('en-IN')}
-                                </div>
-                            </div>
-                            <div>
-                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '3px' }}>ACTUAL NET PROFIT</div>
-                                <div style={{ fontSize: '17px', fontWeight: '900', color: totalProfit >= 0 ? '#34d399' : '#f87171' }}>
-                                    ₹{Math.round(totalProfit).toLocaleString('en-IN')} ({marginPercent}%)
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Sale Price Simulator */}
-                        <div style={{ marginTop: '14px', padding: '10px 14px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '10px', border: '1px solid rgba(59, 130, 246, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <span style={{ fontSize: '12px', fontWeight: '800', color: '#93c5fd' }}>Sale Price Simulator:</span>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    placeholder="Test quote (e.g. 18000)"
-                                    value={matrixSimSalePrice}
-                                    onChange={e => setMatrixSimSalePrice(e.target.value)}
-                                    style={{ ...darkInputStyle, width: '180px', padding: '6px 10px' }}
-                                />
-                                {matrixSimPriceVal > 0 && (
-                                    <span style={{ fontSize: '12px', color: simNetProfit >= 0 ? '#34d399' : '#f87171', fontWeight: '700' }}>
-                                        Net Profit: ₹{Math.round(simNetProfit).toLocaleString('en-IN')} (₹{Math.round(simPerDayProfit)}/day)
+                            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span>
+                                    Active Car Usage: <strong style={{ color: '#fbbf24' }}>{numDays} Day{numDays > 1 ? 's' : ''}</strong>
+                                </span>
+                                {validExcludedDates.length > 0 && (
+                                    <span style={{ fontSize: '11px', color: '#f87171', background: 'rgba(239, 68, 68, 0.12)', padding: '2px 7px', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.3)', fontWeight: '700' }}>
+                                        ⏸️ Break Tour ({totalStayDays} Stay - {validExcludedDates.length} Off)
                                     </span>
                                 )}
                             </div>
-                            {matrixSimPriceVal > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={() => setTotalAmount(matrixSimPriceVal)}
-                                    style={{
-                                        background: 'rgba(59, 130, 246, 0.25)',
-                                        border: '1px solid #3b82f6',
-                                        color: '#93c5fd',
-                                        borderRadius: '6px',
-                                        padding: '4px 12px',
-                                        fontSize: '11px',
-                                        fontWeight: '800',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    Apply as Fare
-                                </button>
-                            )}
+                        </div>
+
+                        {/* Matrix Split: Left Inputs, Right Live Output */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: '16px' }}>
+                            {/* Left: Operating Expenses Inputs */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {/* Fuel Box */}
+                                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                        <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            ⛽ Fuel Consumption ({fuelType})
+                                        </span>
+                                        <span style={{ fontSize: '12.5px', color: '#f87171', fontWeight: '800' }}>
+                                            Cost: ₹{Math.round(fuelCost).toLocaleString('en-IN')}
+                                        </span>
+                                    </div>
+
+                                    {/* Fuel Type Selector Pills */}
+                                    <div style={{ marginBottom: '10px' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                                            {FUEL_TYPES.map(f => {
+                                                const isSelected = fuelType === f.type;
+                                                return (
+                                                    <button
+                                                        key={f.type}
+                                                        type="button"
+                                                        onClick={() => setFuelType(f.type)}
+                                                        style={{
+                                                            padding: '6px 4px',
+                                                            background: isSelected ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255,255,255,0.03)',
+                                                            border: isSelected ? '1.5px solid #3b82f6' : '1px solid rgba(255,255,255,0.08)',
+                                                            color: isSelected ? '#93c5fd' : 'rgba(255,255,255,0.65)',
+                                                            borderRadius: '6px',
+                                                            fontSize: '11px',
+                                                            fontWeight: isSelected ? '800' : '500',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            gap: '4px',
+                                                            transition: 'all 0.15s ease'
+                                                        }}
+                                                    >
+                                                        <span>{f.icon}</span>
+                                                        <span>{f.label}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '8px' }}>
+                                        <div>
+                                            <label style={labelStyle}>Total Km Run</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={totalKmRun}
+                                                placeholder="e.g. 1400"
+                                                onFocus={e => e.target.select()}
+                                                onChange={e => setTotalKmRun(e.target.value)}
+                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={{ ...labelStyle, color: '#60a5fa' }}>
+                                                Average ({currentFuelConfig.avgUnit})
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.5"
+                                                value={vehicleAverage}
+                                                placeholder={fuelType === 'CNG' ? 'e.g. 24' : 'e.g. 12'}
+                                                onFocus={e => e.target.select()}
+                                                onChange={e => setVehicleAverage(e.target.value)}
+                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px', borderColor: '#3b82f6' }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>
+                                                Rate ({currentFuelConfig.rateUnit})
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.1"
+                                                value={fuelRate}
+                                                placeholder="e.g. 94"
+                                                onFocus={e => e.target.select()}
+                                                onChange={e => setFuelRate(e.target.value)}
+                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px', borderColor: '#60a5fa' }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.45)', marginTop: '6px' }}>
+                                        {avgVal > 0 && rateVal > 0 ? (
+                                            `Formula: (${kmVal} km ÷ ${avgVal} ${currentFuelConfig.avgUnit}) × ₹${rateVal} = ₹${Math.round(fuelCost).toLocaleString('en-IN')}`
+                                        ) : (
+                                            `Enter Total KM, vehicle average (${currentFuelConfig.avgUnit}), and pump rate (${currentFuelConfig.rateUnit}).`
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Trip Expenses Box */}
+                                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px' }}>
+                                    <span style={{ fontSize: '12.5px', fontWeight: '700', color: 'white', display: 'block', marginBottom: '8px' }}>
+                                        🛠️ Duty & Trip Expenses (Kharcha)
+                                    </span>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                                        <div>
+                                            <label style={labelStyle}>Driver Salary (₹)</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={driverSalary}
+                                                placeholder="e.g. 3500"
+                                                onFocus={e => e.target.select()}
+                                                onChange={e => setDriverSalary(e.target.value)}
+                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style={labelStyle}>Night Hold (₹)</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={nightHold}
+                                                placeholder="e.g. 2000"
+                                                onFocus={e => e.target.select()}
+                                                onChange={e => setNightHold(e.target.value)}
+                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                        <div>
+                                            <label style={labelStyle}>Toll & Parking (₹)</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={tollAndParking}
+                                                placeholder="e.g. 2000"
+                                                onFocus={e => e.target.select()}
+                                                onChange={e => setTollAndParking(e.target.value)}
+                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <label style={labelStyle}>GST Amount (₹)</label>
+                                                {currentPkg > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleAutoMatrixGST}
+                                                        style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontSize: '11px', cursor: 'pointer', padding: 0, textDecoration: 'underline', marginBottom: '6px' }}
+                                                    >
+                                                        Auto 5% (₹{Math.round(currentPkg - (currentPkg / 1.05)).toLocaleString('en-IN')})
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={matrixGstAmount}
+                                                placeholder="e.g. 2143"
+                                                onFocus={e => e.target.select()}
+                                                onChange={e => setMatrixGstAmount(e.target.value)}
+                                                style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Target Benchmark Setting */}
+                                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '12px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <label style={{ ...labelStyle, color: '#93c5fd', margin: 0 }}>Benchmark Target Per Day (₹)</label>
+                                            <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                                                Innova: 2500 | Ciaz: 1500 | Dzire: 1000 | TT: 3500
+                                            </div>
+                                        </div>
+                                        <div style={{ width: '130px' }}>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={targetPerDay}
+                                                placeholder="e.g. 2500"
+                                                onFocus={e => e.target.select()}
+                                                onChange={e => setTargetPerDay(e.target.value)}
+                                                style={{ ...darkInputStyle, padding: '7px 10px', textAlign: 'right', borderColor: '#3b82f6', fontWeight: 'bold' }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right: Live Calculation Statement & Target Comparison */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                {/* Main Statement Card */}
+                                <div style={{ background: '#070b16', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px' }}>
+                                        <span style={{ fontSize: '13px', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <Calculator size={15} color="#fbbf24" /> P&L Live Statement
+                                        </span>
+                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+                                            {numDays} Active Car Day{numDays > 1 ? 's' : ''}{validExcludedDates.length > 0 ? ` (${totalStayDays}d Stay)` : ''}
+                                        </span>
+                                    </div>
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                        <span style={{ color: 'rgba(255,255,255,0.7)' }}>Quoted Package Fare:</span>
+                                        <span style={{ color: '#fbbf24', fontWeight: '800' }}>₹{Math.round(currentPkg).toLocaleString('en-IN')}</span>
+                                    </div>
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>Fuel Consumption:</span>
+                                        <span style={{ color: '#f87171' }}>- ₹{Math.round(fuelCost).toLocaleString('en-IN')}</span>
+                                    </div>
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>Driver + Night + Toll:</span>
+                                        <span style={{ color: '#f87171' }}>- ₹{Math.round(driverSalaryVal + nightHoldVal + tollVal).toLocaleString('en-IN')}</span>
+                                    </div>
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>GST Value:</span>
+                                        <span style={{ color: '#f87171' }}>- ₹{Math.round(gstVal).toLocaleString('en-IN')}</span>
+                                    </div>
+
+                                    <div style={{ height: '1px', background: 'rgba(255,255,255,0.08)', margin: '2px 0' }}></div>
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                                        <span style={{ color: 'rgba(255,255,255,0.8)', fontWeight: '600' }}>Total Cost:</span>
+                                        <span style={{ color: '#ef4444', fontWeight: '700' }}>₹{Math.round(totalCost).toLocaleString('en-IN')}</span>
+                                    </div>
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14.5px', background: totalProfit >= 0 ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)', padding: '9px 12px', borderRadius: '8px', border: `1px solid ${totalProfit >= 0 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}` }}>
+                                        <span style={{ color: 'white', fontWeight: '800' }}>Net Profit:</span>
+                                        <span style={{ color: totalProfit >= 0 ? '#4ade80' : '#f87171', fontWeight: '900' }}>
+                                            ₹{Math.round(totalProfit).toLocaleString('en-IN')}
+                                        </span>
+                                    </div>
+
+                                    {/* Per Day Profit & Benchmark Match */}
+                                    <div style={{ marginTop: '4px', background: '#0f172a', borderRadius: '10px', padding: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '4px' }}>
+                                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Per Day Profit:</span>
+                                            <span style={{ color: '#ffffff', fontWeight: '800' }}>₹{Math.round(perDayProfit).toLocaleString('en-IN')} / day</span>
+                                        </div>
+
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', alignItems: 'center' }}>
+                                            <span style={{ color: 'rgba(255,255,255,0.5)' }}>Target ({vehicleType || 'Car'}):</span>
+                                            <span style={{ color: '#93c5fd', fontWeight: '600' }}>₹{targetPerDayVal.toLocaleString('en-IN')} / day</span>
+                                        </div>
+
+                                        <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '6px 0' }}></div>
+
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.7)' }}>Profitability Status:</span>
+                                            <span style={{
+                                                fontSize: '12px',
+                                                fontWeight: '900',
+                                                padding: '3px 8px',
+                                                borderRadius: '6px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                background: diffFromTarget >= 0 ? 'rgba(74, 222, 128, 0.15)' : 'rgba(248, 113, 113, 0.15)',
+                                                color: diffFromTarget >= 0 ? '#4ade80' : '#f87171'
+                                            }}>
+                                                {diffFromTarget >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+                                                {diffFromTarget >= 0 ? '+' : '-'} ₹{Math.abs(Math.round(diffFromTarget)).toLocaleString('en-IN')} / day
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Quick Sale Price Simulator */}
+                                <div style={{ background: 'rgba(59, 130, 246, 0.04)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '12px', padding: '12px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <Sparkles size={14} color="#60a5fa" />
+                                            <span style={{ fontSize: '12px', fontWeight: '700', color: '#93c5fd' }}>
+                                                Sale Price Simulator
+                                            </span>
+                                        </div>
+                                        {matrixSimPriceVal > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setTotalAmount(matrixSimPriceVal);
+                                                    if (itinerary.length > 0) {
+                                                        const perDayAmt = Math.round(matrixSimPriceVal / itinerary.length);
+                                                        setItinerary(prev => prev.map((d, i) => {
+                                                            const qty = Number(d.quantity || d.vehicleCount || 1) || 1;
+                                                            const amt = i === prev.length - 1
+                                                                ? Math.max(0, matrixSimPriceVal - perDayAmt * (prev.length - 1))
+                                                                : perDayAmt;
+                                                            return { ...d, rate: Math.round(amt / qty), amount: amt };
+                                                        }));
+                                                    }
+                                                }}
+                                                style={{
+                                                    background: 'rgba(59, 130, 246, 0.2)',
+                                                    border: '1px solid #3b82f6',
+                                                    color: '#93c5fd',
+                                                    borderRadius: '4px',
+                                                    padding: '2px 8px',
+                                                    fontSize: '10.5px',
+                                                    fontWeight: '700',
+                                                    cursor: 'pointer'
+                                                }}
+                                            >
+                                                Apply as Fare
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                placeholder="Test quote (e.g. 45000)"
+                                                value={matrixSimSalePrice}
+                                                onChange={e => setMatrixSimSalePrice(e.target.value)}
+                                                style={{ ...darkInputStyle, padding: '7px 10px', fontSize: '12.5px', borderColor: 'rgba(59,130,246,0.4)' }}
+                                            />
+                                        </div>
+                                        <div style={{ flex: 1.2, background: '#070b16', padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', fontSize: '11.5px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Sim Profit:</span>
+                                                <span style={{ color: simNetProfit >= 0 ? '#4ade80' : '#f87171', fontWeight: '700' }}>
+                                                    ₹{Math.round(simNetProfit).toLocaleString('en-IN')}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Per Day:</span>
+                                                <span style={{ color: 'white', fontWeight: '700' }}>
+                                                    ₹{Math.round(simPerDayProfit).toLocaleString('en-IN')}/d
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -1347,7 +1611,7 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                                     Total Quoted Fare:
                                 </span>
                                 <span style={{ fontSize: '20px', fontWeight: '900', color: '#fbbf24' }}>
-                                    ₹{Number(totalAmount).toLocaleString('en-IN')}
+                                    ₹{Number(displayedTotalFare).toLocaleString('en-IN')}
                                 </span>
                             </div>
                         </div>

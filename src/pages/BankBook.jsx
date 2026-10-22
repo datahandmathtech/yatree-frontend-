@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Landmark, Plus, Search, Calendar, ArrowDownLeft, ArrowUpRight, 
     Wallet, CreditCard, Building2, CheckCircle, X, ExternalLink,
     Filter, RefreshCw, Trash2, Eye, Download, Image as ImageIcon,
-    Banknote, ArrowRightLeft, ShieldCheck, FileText, ArrowLeftRight
+    Banknote, ArrowRightLeft, ShieldCheck, FileText, ArrowLeftRight, Coins
 } from 'lucide-react';
 import axios from '../api/axios';
 import { useCompany } from '../context/CompanyContext';
@@ -59,10 +59,12 @@ const BankBook = ({ initialTab = 'bank' }) => {
 
     // Filters for Bank Book (Strictly 1-Day Book — No Carry-Forward)
     const [periodType, setPeriodType] = useState('daily');
+    const [cashPeriodType, setCashPeriodType] = useState('monthly'); // 'monthly' by default: "full month me sabse pehle dikhne chahiye"
     const [filterDate, setFilterDate] = useState(todayIST());
     const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
     const [filterYear, setFilterYear] = useState(new Date().getFullYear());
     const [searchTerm, setSearchTerm] = useState('');
+    const [typeFilter, setTypeFilter] = useState('ALL'); // 'ALL' | 'IN' | 'OUT'
 
     const shiftFilterDate = (deltaDays) => {
         if (!filterDate) return;
@@ -73,6 +75,20 @@ const BankBook = ({ initialTab = 'bank' }) => {
         const mm = String(d.getMonth() + 1).padStart(2, '0');
         const dd = String(d.getDate()).padStart(2, '0');
         setFilterDate(`${yyyy}-${mm}-${dd}`);
+    };
+
+    const shiftFilterMonth = (deltaMonths) => {
+        let newM = filterMonth + deltaMonths;
+        let newY = filterYear;
+        if (newM > 12) {
+            newM = 1;
+            newY += 1;
+        } else if (newM < 1) {
+            newM = 12;
+            newY -= 1;
+        }
+        setFilterMonth(newM);
+        setFilterYear(newY);
     };
 
     // Bank Modals
@@ -292,7 +308,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
         try {
             let url = `/api/cash/company/${selectedCompany._id}`;
             const params = [];
-            if (periodType === 'daily') {
+            if (cashPeriodType === 'daily') {
                 params.push(`date=${filterDate}`);
             } else {
                 params.push(`month=${filterMonth}&year=${filterYear}`);
@@ -309,13 +325,38 @@ const BankBook = ({ initialTab = 'bank' }) => {
 
             const { data } = await axios.get(url);
             setCashTransactions(data.transactions || []);
-            setCashStats(data.stats || { totalIn: 0, totalOut: 0, periodBalance: 0, currentBalance: 0 });
+            setCashStats(data.stats || { openingBalance: 0, totalIn: 0, totalOut: 0, periodBalance: 0, closingBalance: 0, currentBalance: 0 });
         } catch (err) {
             console.error('Error fetching cash transactions:', err);
         } finally {
             setCashLoading(false);
         }
     };
+
+    // Calculate running balance for each cash transaction based on chronological order
+    const cashBalanceMap = useMemo(() => {
+        const map = new Map();
+        let running = Number(cashStats.openingBalance) || 0;
+        const chronological = [...cashTransactions].sort((a, b) => {
+            const da = new Date(a.date).getTime();
+            const db = new Date(b.date).getTime();
+            if (da !== db) return da - db;
+            const ca = new Date(a.createdAt || 0).getTime();
+            const cb = new Date(b.createdAt || 0).getTime();
+            return ca - cb;
+        });
+
+        for (const tx of chronological) {
+            const amt = Number(tx.amount) || 0;
+            if (tx.type === 'IN') {
+                running += amt;
+            } else {
+                running -= amt;
+            }
+            map.set(String(tx._id), running);
+        }
+        return map;
+    }, [cashTransactions, cashStats.openingBalance]);
 
     useEffect(() => {
         if (selectedCompany?._id) {
@@ -332,7 +373,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
                 fetchCashTransactions();
             }
         }
-    }, [selectedCompany, activeTab, selectedBankId, periodType, filterDate, filterMonth, filterYear, searchTerm, cashCategoryFilter]);
+    }, [selectedCompany, activeTab, selectedBankId, periodType, cashPeriodType, filterDate, filterMonth, filterYear, searchTerm, cashCategoryFilter]);
 
     // ==========================================
     // HANDLERS: BANK BOOK
@@ -493,9 +534,19 @@ const BankBook = ({ initialTab = 'bank' }) => {
 
     const openEditTxModal = (tx) => {
         setEditingTx(tx);
+        let formattedDate = '';
+        if (tx.date) {
+            const d = new Date(tx.date);
+            if (!isNaN(d.getTime())) {
+                const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+                formattedDate = istDate.toISOString().substring(0, 10);
+            } else {
+                formattedDate = String(tx.date).substring(0, 10);
+            }
+        }
         setEditTxFormData({
             amount: tx.amount || '',
-            date: tx.date ? tx.date.substring(0, 10) : '',
+            date: formattedDate,
             description: tx.description || '',
             category: tx.category || '',
             paymentMode: tx.paymentMode || '',
@@ -515,7 +566,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
             await fetchBankTransactions();
         } catch (err) {
             console.error('Error editing tx:', err);
-            alert('Failed to edit transaction');
+            alert(err.response?.data?.message || 'Failed to edit transaction');
         } finally {
             setSubmittingEditTx(false);
         }
@@ -811,6 +862,12 @@ const BankBook = ({ initialTab = 'bank' }) => {
         outline: 'none'
     };
 
+    const darkDateInputStyle = {
+        ...darkInputStyle,
+        cursor: 'pointer',
+        colorScheme: 'dark'
+    };
+
     const selectedDepositBank = bankAccounts.find(b => b._id === depositFormData.bankAccountId) || bankAccounts[0];
     const selectedWithdrawBank = bankAccounts.find(b => b._id === withdrawFormData.bankAccountId) || bankAccounts[0];
 
@@ -1043,55 +1100,40 @@ const BankBook = ({ initialTab = 'bank' }) => {
                         ))}
                     </div>
 
-                    {/* Stats KPI Grid — Strictly 1-Day Book (No Carry-Forward / No Closing Balance) */}
+                    {/* Stats KPI Grid — Total Credit & Total Debit */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '15px', marginBottom: '15px' }}>
                         <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(34, 197, 94, 0.25)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>AAJ KITNA AAYA (RECEIVED IN)</span>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>TOTAL CREDIT (RECEIVED IN)</span>
                                 <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <ArrowDownLeft size={18} />
                                 </div>
                             </div>
                             <div style={{ fontSize: '26px', fontWeight: '900', color: '#4ade80' }}>
-                                +₹{(bankStats.totalIn || 0).toLocaleString('en-IN')}
+                                ₹{(bankStats.totalIn || 0).toLocaleString('en-IN')}
                             </div>
                             <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
-                                1-Day Bank Credit (Inflow) • {formatDateIST(filterDate)}
+                                Bank Credit (Inflow) • {formatDateIST(filterDate)}
                             </div>
                         </div>
 
                         <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>AAJ KITNA GAYA (PAID OUT)</span>
+                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>TOTAL DEBIT (PAID OUT)</span>
                                 <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <ArrowUpRight size={18} />
                                 </div>
                             </div>
                             <div style={{ fontSize: '26px', fontWeight: '900', color: '#f87171' }}>
-                                -₹{(bankStats.totalOut || 0).toLocaleString('en-IN')}
+                                ₹{(bankStats.totalOut || 0).toLocaleString('en-IN')}
                             </div>
                             <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
-                                1-Day Bank Debit (Outflow) • {formatDateIST(filterDate)}
-                            </div>
-                        </div>
-
-                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>1-DAY NET FLOW (IN - OUT)</span>
-                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Wallet size={18} />
-                                </div>
-                            </div>
-                            <div style={{ fontSize: '26px', fontWeight: '900', color: bankStats.periodBalance >= 0 ? '#60a5fa' : '#fb923c' }}>
-                                {bankStats.periodBalance > 0 ? '+' : ''}₹{(bankStats.periodBalance || 0).toLocaleString('en-IN')}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
-                                Selected Day Only • No Carry-Forward
+                                Bank Debit (Outflow) • {formatDateIST(filterDate)}
                             </div>
                         </div>
                     </div>
 
-                    {/* Controls Bar: 1-Day Date Navigator & Search */}
+                    {/* Controls Bar: 1-Day Date Navigator, Type Filter & Search */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                             <div style={{
@@ -1132,6 +1174,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                     value={filterDate}
                                     onChange={e => setFilterDate(e.target.value)}
                                     onClick={e => e.target.showPicker?.()}
+                                    onFocus={e => e.target.showPicker?.()}
                                     style={{
                                         padding: '6px 12px',
                                         background: 'rgba(0,0,0,0.4)',
@@ -1141,7 +1184,8 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                         outline: 'none',
                                         fontWeight: '800',
                                         fontSize: '13px',
-                                        cursor: 'pointer'
+                                        cursor: 'pointer',
+                                        colorScheme: 'dark'
                                     }}
                                 />
                                 <button
@@ -1180,6 +1224,36 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                     </button>
                                 )}
                             </div>
+
+                            {/* Type Filter (All / Credit IN / Debit OUT) */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                {[
+                                    { id: 'ALL', label: 'All Types', activeBg: '#3b82f6', activeColor: '#fff' },
+                                    { id: 'IN', label: 'Credit (IN)', activeBg: 'rgba(34, 197, 94, 0.25)', activeColor: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.45)' },
+                                    { id: 'OUT', label: 'Debit (OUT)', activeBg: 'rgba(239, 68, 68, 0.25)', activeColor: '#f87171', border: '1px solid rgba(239, 68, 68, 0.45)' }
+                                ].map(opt => {
+                                    const active = typeFilter === opt.id;
+                                    return (
+                                        <button
+                                            key={opt.id}
+                                            type="button"
+                                            onClick={() => setTypeFilter(opt.id)}
+                                            style={{
+                                                padding: '6px 12px',
+                                                borderRadius: '8px',
+                                                border: active && opt.border ? opt.border : '1px solid transparent',
+                                                background: active ? opt.activeBg : 'transparent',
+                                                color: active ? opt.activeColor : 'rgba(255,255,255,0.65)',
+                                                fontWeight: '800',
+                                                fontSize: '12px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         {/* Search */}
@@ -1202,7 +1276,30 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                 <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                                     <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Date</th>
                                     <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Bank Account</th>
-                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Type</th>
+                                    <th style={{ padding: '12px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <span>Type</span>
+                                            <select
+                                                value={typeFilter}
+                                                onChange={e => setTypeFilter(e.target.value)}
+                                                style={{
+                                                    background: '#0f172a',
+                                                    color: typeFilter === 'IN' ? '#4ade80' : typeFilter === 'OUT' ? '#f87171' : '#fff',
+                                                    border: '1px solid rgba(255,255,255,0.15)',
+                                                    borderRadius: '6px',
+                                                    padding: '2px 6px',
+                                                    fontSize: '10.5px',
+                                                    fontWeight: '800',
+                                                    cursor: 'pointer',
+                                                    outline: 'none'
+                                                }}
+                                            >
+                                                <option value="ALL">All</option>
+                                                <option value="IN">Credit (IN)</option>
+                                                <option value="OUT">Debit (OUT)</option>
+                                            </select>
+                                        </div>
+                                    </th>
                                     <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Particulars / Description</th>
                                     <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Mode & Category</th>
                                     <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>UTR / Ref</th>
@@ -1219,14 +1316,14 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                             Loading bank entries...
                                         </td>
                                     </tr>
-                                ) : transactions.length === 0 ? (
+                                ) : transactions.filter(tx => typeFilter === 'ALL' ? true : tx.type === typeFilter).length === 0 ? (
                                     <tr>
                                         <td colSpan="10" style={{ padding: '50px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
-                                            No bank transactions found for this period. Click "+ Record Bank Entry" to log a credit or debit.
+                                            No bank transactions found for this filter. Click "+ Record Bank Entry" to log a credit or debit.
                                         </td>
                                     </tr>
                                 ) : (
-                                    transactions.map(tx => {
+                                    transactions.filter(tx => typeFilter === 'ALL' ? true : tx.type === typeFilter).map(tx => {
                                         const isIn = tx.type === 'IN';
                                         return (
                                             <tr key={tx._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
@@ -1456,142 +1553,319 @@ const BankBook = ({ initialTab = 'bank' }) => {
                         </div>
                     </header>
 
-                    {/* Stats KPI Grid for Cash Book — Strictly 1-Day Book (No Carry-Forward) */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px', marginBottom: '28px' }}>
-                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                    {/* Stats KPI Grid for Cash Book: Opening Balance, Total In, Total Out, Closing Balance */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                        {/* 1. Opening Balance */}
+                        <div className="premium-glass" style={{ padding: '16px 18px', borderRadius: '18px', border: '1px solid rgba(148, 163, 184, 0.25)', background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.7) 100%)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>AAJ CASH KITNA AAYA (IN)</span>
-                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.75)', fontWeight: '800', letterSpacing: '0.4px' }}>OPENING BALANCE</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(148, 163, 184, 0.15)', color: '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Wallet size={17} />
+                                </div>
+                            </div>
+                            <div style={{ fontSize: '24px', fontWeight: '900', color: '#f1f5f9' }}>
+                                ₹{(cashStats.openingBalance || 0).toLocaleString('en-IN')}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
+                                {cashPeriodType === 'monthly' ? `Prior to 01/${String(filterMonth).padStart(2, '0')}/${filterYear}` : `Prior to ${formatDateIST(filterDate)}`}
+                            </div>
+                        </div>
+
+                        {/* 2. Total In (Credit) */}
+                        <div className="premium-glass" style={{ padding: '16px 18px', borderRadius: '18px', border: '1px solid rgba(16, 185, 129, 0.3)', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(6, 78, 59, 0.15) 100%)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ fontSize: '11.5px', color: '#4ade80', fontWeight: '800', letterSpacing: '0.4px' }}>TOTAL CASH CREDIT (IN)</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <ArrowDownLeft size={18} />
                                 </div>
                             </div>
-                            <div style={{ fontSize: '26px', fontWeight: '900', color: '#10b981' }}>
+                            <div style={{ fontSize: '24px', fontWeight: '900', color: '#10b981' }}>
                                 +₹{(cashStats.totalIn || 0).toLocaleString('en-IN')}
                             </div>
                             <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
-                                1-Day Cash Received • {formatDateIST(filterDate)}
+                                Received In • {cashPeriodType === 'monthly' ? `${MONTH_NAMES[filterMonth - 1]} ${filterYear}` : formatDateIST(filterDate)}
                             </div>
                         </div>
 
-                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                        {/* 3. Total Out (Debit) */}
+                        <div className="premium-glass" style={{ padding: '16px 18px', borderRadius: '18px', border: '1px solid rgba(239, 68, 68, 0.3)', background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(127, 29, 29, 0.15) 100%)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>AAJ CASH KITNA GAYA (OUT)</span>
-                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <span style={{ fontSize: '11.5px', color: '#f87171', fontWeight: '800', letterSpacing: '0.4px' }}>TOTAL CASH DEBIT (OUT)</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <ArrowUpRight size={18} />
                                 </div>
                             </div>
-                            <div style={{ fontSize: '26px', fontWeight: '900', color: '#f87171' }}>
+                            <div style={{ fontSize: '24px', fontWeight: '900', color: '#f87171' }}>
                                 -₹{(cashStats.totalOut || 0).toLocaleString('en-IN')}
                             </div>
                             <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
-                                1-Day Cash Paid Out • {formatDateIST(filterDate)}
+                                Paid Out • {cashPeriodType === 'monthly' ? `${MONTH_NAMES[filterMonth - 1]} ${filterYear}` : formatDateIST(filterDate)}
                             </div>
                         </div>
 
-                        <div className="premium-glass" style={{ padding: '15px', borderRadius: '20px', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                        {/* 4. Closing Balance */}
+                        <div className="premium-glass" style={{ padding: '16px 18px', borderRadius: '18px', border: '1px solid rgba(56, 189, 248, 0.35)', background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(12, 74, 110, 0.25) 100%)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '800' }}>1-DAY NET CASH FLOW (IN - OUT)</span>
-                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Wallet size={18} />
+                                <span style={{ fontSize: '11.5px', color: '#38bdf8', fontWeight: '800', letterSpacing: '0.4px' }}>CLOSING BALANCE (CASH IN HAND)</span>
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Coins size={18} />
                                 </div>
                             </div>
-                            <div style={{ fontSize: '26px', fontWeight: '900', color: cashStats.periodBalance >= 0 ? '#38bdf8' : '#fb923c' }}>
-                                {cashStats.periodBalance > 0 ? '+' : ''}₹{(cashStats.periodBalance || 0).toLocaleString('en-IN')}
+                            <div style={{ fontSize: '24px', fontWeight: '900', color: (cashStats.closingBalance ?? ((cashStats.openingBalance || 0) + (cashStats.totalIn || 0) - (cashStats.totalOut || 0))) >= 0 ? '#38bdf8' : '#f87171' }}>
+                                ₹{(cashStats.closingBalance ?? ((cashStats.openingBalance || 0) + (cashStats.totalIn || 0) - (cashStats.totalOut || 0))).toLocaleString('en-IN')}
                             </div>
                             <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
-                                Selected Day Only • No Carry-Forward
+                                Opening + IN - OUT (End of Period)
                             </div>
                         </div>
                     </div>
 
-                    {/* Controls Bar: 1-Day Date Navigator & Category & Search */}
+                    {/* Controls Bar: Mode Switcher (Full Month vs 1-Day), Period Navigator, Type Filter, Category & Search */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                            <div style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                padding: '8px 14px',
-                                borderRadius: '10px',
-                                background: 'rgba(16, 185, 129, 0.15)',
-                                border: '1px solid rgba(16, 185, 129, 0.35)',
-                                color: '#10b981',
-                                fontSize: '12px',
-                                fontWeight: '800'
-                            }}>
-                                <Calendar size={14} /> 1-Day Cash Book
+                            {/* Mode Toggle: Full Month vs 1-Day Daily */}
+                            <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setCashPeriodType('monthly')}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        padding: '7px 14px',
+                                        borderRadius: '8px',
+                                        background: cashPeriodType === 'monthly' ? '#10b981' : 'transparent',
+                                        color: cashPeriodType === 'monthly' ? '#000' : 'rgba(255,255,255,0.7)',
+                                        border: 'none',
+                                        fontSize: '12px',
+                                        fontWeight: '800',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <Calendar size={14} /> Full Month
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setCashPeriodType('daily')}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        padding: '7px 14px',
+                                        borderRadius: '8px',
+                                        background: cashPeriodType === 'daily' ? '#10b981' : 'transparent',
+                                        color: cashPeriodType === 'daily' ? '#000' : 'rgba(255,255,255,0.7)',
+                                        border: 'none',
+                                        fontSize: '12px',
+                                        fontWeight: '800',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <Calendar size={14} /> 1-Day Daily
+                                </button>
                             </div>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                <button
-                                    type="button"
-                                    onClick={() => shiftFilterDate(-1)}
-                                    style={{
-                                        padding: '6px 10px',
-                                        borderRadius: '8px',
-                                        border: 'none',
-                                        background: 'rgba(255,255,255,0.06)',
-                                        color: 'white',
-                                        fontWeight: '800',
-                                        fontSize: '12px',
-                                        cursor: 'pointer'
-                                    }}
-                                    title="Previous Day"
-                                >
-                                    ◀ Prev
-                                </button>
-                                <input
-                                    type="date"
-                                    value={filterDate}
-                                    onChange={e => setFilterDate(e.target.value)}
-                                    onClick={e => e.target.showPicker?.()}
-                                    style={{
-                                        padding: '6px 12px',
-                                        background: 'rgba(0,0,0,0.4)',
-                                        color: 'white',
-                                        borderRadius: '8px',
-                                        border: '1px solid rgba(255,255,255,0.12)',
-                                        outline: 'none',
-                                        fontWeight: '800',
-                                        fontSize: '13px',
-                                        cursor: 'pointer'
-                                    }}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => shiftFilterDate(1)}
-                                    style={{
-                                        padding: '6px 10px',
-                                        borderRadius: '8px',
-                                        border: 'none',
-                                        background: 'rgba(255,255,255,0.06)',
-                                        color: 'white',
-                                        fontWeight: '800',
-                                        fontSize: '12px',
-                                        cursor: 'pointer'
-                                    }}
-                                    title="Next Day"
-                                >
-                                    Next ▶
-                                </button>
-                                {filterDate !== todayIST() && (
+                            {/* Period Navigator: Month/Year selector OR Day selector */}
+                            {cashPeriodType === 'monthly' ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
                                     <button
                                         type="button"
-                                        onClick={() => setFilterDate(todayIST())}
+                                        onClick={() => shiftFilterMonth(-1)}
                                         style={{
-                                            padding: '6px 12px',
+                                            padding: '6px 10px',
                                             borderRadius: '8px',
                                             border: 'none',
-                                            background: '#10b981',
-                                            color: '#000',
+                                            background: 'rgba(255,255,255,0.06)',
+                                            color: 'white',
                                             fontWeight: '800',
                                             fontSize: '12px',
                                             cursor: 'pointer'
                                         }}
+                                        title="Previous Month"
                                     >
-                                        Today
+                                        ◀ Prev
                                     </button>
-                                )}
+                                    <select
+                                        value={filterMonth}
+                                        onChange={e => setFilterMonth(Number(e.target.value))}
+                                        style={{
+                                            padding: '6px 10px',
+                                            background: 'rgba(0,0,0,0.5)',
+                                            color: 'white',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(255,255,255,0.12)',
+                                            outline: 'none',
+                                            fontWeight: '800',
+                                            fontSize: '13px',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        {MONTH_NAMES.map((name, idx) => (
+                                            <option key={name} value={idx + 1} style={{ background: '#090f1d' }}>{name}</option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={filterYear}
+                                        onChange={e => setFilterYear(Number(e.target.value))}
+                                        style={{
+                                            padding: '6px 10px',
+                                            background: 'rgba(0,0,0,0.5)',
+                                            color: 'white',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(255,255,255,0.12)',
+                                            outline: 'none',
+                                            fontWeight: '800',
+                                            fontSize: '13px',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        {[2024, 2025, 2026, 2027, 2028].map(y => (
+                                            <option key={y} value={y} style={{ background: '#090f1d' }}>{y}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={() => shiftFilterMonth(1)}
+                                        style={{
+                                            padding: '6px 10px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            background: 'rgba(255,255,255,0.06)',
+                                            color: 'white',
+                                            fontWeight: '800',
+                                            fontSize: '12px',
+                                            cursor: 'pointer'
+                                        }}
+                                        title="Next Month"
+                                    >
+                                        Next ▶
+                                    </button>
+                                    {(filterMonth !== (new Date().getMonth() + 1) || filterYear !== new Date().getFullYear()) && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setFilterMonth(new Date().getMonth() + 1);
+                                                setFilterYear(new Date().getFullYear());
+                                            }}
+                                            style={{
+                                                padding: '6px 12px',
+                                                borderRadius: '8px',
+                                                border: 'none',
+                                                background: '#10b981',
+                                                color: '#000',
+                                                fontWeight: '800',
+                                                fontSize: '12px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            This Month
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => shiftFilterDate(-1)}
+                                        style={{
+                                            padding: '6px 10px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            background: 'rgba(255,255,255,0.06)',
+                                            color: 'white',
+                                            fontWeight: '800',
+                                            fontSize: '12px',
+                                            cursor: 'pointer'
+                                        }}
+                                        title="Previous Day"
+                                    >
+                                        ◀ Prev
+                                    </button>
+                                    <input
+                                        type="date"
+                                        value={filterDate}
+                                        onChange={e => setFilterDate(e.target.value)}
+                                        onClick={e => e.target.showPicker?.()}
+                                        onFocus={e => e.target.showPicker?.()}
+                                        style={{
+                                            padding: '6px 12px',
+                                            background: 'rgba(0,0,0,0.4)',
+                                            color: 'white',
+                                            borderRadius: '8px',
+                                            border: '1px solid rgba(255,255,255,0.12)',
+                                            outline: 'none',
+                                            fontWeight: '800',
+                                            fontSize: '13px',
+                                            cursor: 'pointer',
+                                            colorScheme: 'dark'
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => shiftFilterDate(1)}
+                                        style={{
+                                            padding: '6px 10px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            background: 'rgba(255,255,255,0.06)',
+                                            color: 'white',
+                                            fontWeight: '800',
+                                            fontSize: '12px',
+                                            cursor: 'pointer'
+                                        }}
+                                        title="Next Day"
+                                    >
+                                        Next ▶
+                                    </button>
+                                    {filterDate !== todayIST() && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setFilterDate(todayIST())}
+                                            style={{
+                                                padding: '6px 12px',
+                                                borderRadius: '8px',
+                                                border: 'none',
+                                                background: '#10b981',
+                                                color: '#000',
+                                                fontWeight: '800',
+                                                fontSize: '12px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Today
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Type Filter (All / Credit IN / Debit OUT) */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                {[
+                                    { id: 'ALL', label: 'All Types', activeBg: '#10b981', activeColor: '#000' },
+                                    { id: 'IN', label: 'Credit (IN)', activeBg: 'rgba(16, 185, 129, 0.25)', activeColor: '#4ade80', border: '1px solid rgba(16, 185, 129, 0.45)' },
+                                    { id: 'OUT', label: 'Debit (OUT)', activeBg: 'rgba(239, 68, 68, 0.25)', activeColor: '#f87171', border: '1px solid rgba(239, 68, 68, 0.45)' }
+                                ].map(opt => {
+                                    const active = typeFilter === opt.id;
+                                    return (
+                                        <button
+                                            key={opt.id}
+                                            type="button"
+                                            onClick={() => setTypeFilter(opt.id)}
+                                            style={{
+                                                padding: '6px 12px',
+                                                borderRadius: '8px',
+                                                border: active && opt.border ? opt.border : '1px solid transparent',
+                                                background: active ? opt.activeBg : 'transparent',
+                                                color: active ? opt.activeColor : 'rgba(255,255,255,0.65)',
+                                                fontWeight: '800',
+                                                fontSize: '12px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    );
+                                })}
                             </div>
 
                             {/* Category Filter */}
@@ -1633,32 +1907,57 @@ const BankBook = ({ initialTab = 'bank' }) => {
                             <thead>
                                 <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                                     <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Date</th>
-                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Type</th>
+                                    <th style={{ padding: '12px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <span>Type</span>
+                                            <select
+                                                value={typeFilter}
+                                                onChange={e => setTypeFilter(e.target.value)}
+                                                style={{
+                                                    background: '#0f172a',
+                                                    color: typeFilter === 'IN' ? '#10b981' : typeFilter === 'OUT' ? '#f87171' : '#fff',
+                                                    border: '1px solid rgba(255,255,255,0.15)',
+                                                    borderRadius: '6px',
+                                                    padding: '2px 6px',
+                                                    fontSize: '10.5px',
+                                                    fontWeight: '800',
+                                                    cursor: 'pointer',
+                                                    outline: 'none'
+                                                }}
+                                            >
+                                                <option value="ALL">All</option>
+                                                <option value="IN">Credit (IN)</option>
+                                                <option value="OUT">Debit (OUT)</option>
+                                            </select>
+                                        </div>
+                                    </th>
                                     <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Category</th>
                                     <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Particulars / Description</th>
                                     <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase' }}>Voucher / Slip Ref</th>
                                     <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'center' }}>Receipt</th>
-                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'right' }}>Cash Received (IN)</th>
-                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'right' }}>Cash Paid (OUT)</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'right' }}>Cash Credit (IN)</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'right' }}>Cash Debit (OUT)</th>
+                                    <th style={{ padding: '16px 20px', fontSize: '11px', color: '#38bdf8', fontWeight: '800', textTransform: 'uppercase', textAlign: 'right' }}>Balance (₹)</th>
                                     <th style={{ padding: '16px 20px', fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', textTransform: 'uppercase', textAlign: 'center' }}>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {cashLoading ? (
                                     <tr>
-                                        <td colSpan="9" style={{ padding: '50px', textAlign: 'center', color: 'rgba(255,255,255,0.5)' }}>
+                                        <td colSpan="10" style={{ padding: '50px', textAlign: 'center', color: 'rgba(255,255,255,0.5)' }}>
                                             Loading cash entries...
                                         </td>
                                     </tr>
-                                ) : cashTransactions.length === 0 ? (
+                                ) : cashTransactions.filter(tx => typeFilter === 'ALL' ? true : tx.type === typeFilter).length === 0 ? (
                                     <tr>
-                                        <td colSpan="9" style={{ padding: '50px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
-                                            No cash transactions recorded for this period. Click "+ Record Cash Entry" or "Deposit Cash to Bank" to log cash movement.
+                                        <td colSpan="10" style={{ padding: '50px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
+                                            No cash transactions recorded for this filter. Click "+ Record Cash Entry" or "Deposit Cash to Bank" to log cash movement.
                                         </td>
                                     </tr>
                                 ) : (
-                                    cashTransactions.map(tx => {
+                                    cashTransactions.filter(tx => typeFilter === 'ALL' ? true : tx.type === typeFilter).map(tx => {
                                         const isIn = tx.type === 'IN';
+                                        const rowBalance = cashBalanceMap.get(String(tx._id));
                                         return (
                                             <tr key={tx._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                                                 <td style={{ padding: '16px 20px', fontSize: '13px', whiteSpace: 'nowrap' }}>
@@ -1674,7 +1973,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                                         color: isIn ? '#10b981' : '#f87171',
                                                         border: `1px solid ${isIn ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
                                                     }}>
-                                                        {isIn ? 'CASH IN' : 'CASH OUT'}
+                                                        {isIn ? 'CREDIT (IN)' : 'DEBIT (OUT)'}
                                                     </span>
                                                 </td>
                                                 <td style={{ padding: '16px 20px' }}>
@@ -1731,10 +2030,13 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                                     )}
                                                 </td>
                                                 <td style={{ padding: '16px 20px', fontSize: '14px', fontWeight: '800', textAlign: 'right', color: '#10b981' }}>
-                                                    {isIn ? `+₹${(tx.amount || 0).toLocaleString('en-IN')}` : '-'}
+                                                    {isIn ? `₹${(tx.amount || 0).toLocaleString('en-IN')}` : '-'}
                                                 </td>
                                                 <td style={{ padding: '16px 20px', fontSize: '14px', fontWeight: '800', textAlign: 'right', color: '#f87171' }}>
-                                                    {!isIn ? `-₹${(tx.amount || 0).toLocaleString('en-IN')}` : '-'}
+                                                    {!isIn ? `₹${(tx.amount || 0).toLocaleString('en-IN')}` : '-'}
+                                                </td>
+                                                <td style={{ padding: '16px 20px', fontSize: '14px', fontWeight: '900', textAlign: 'right', color: (rowBalance ?? 0) >= 0 ? '#38bdf8' : '#f87171' }}>
+                                                    ₹{(rowBalance ?? 0).toLocaleString('en-IN')}
                                                 </td>
                                                 <td style={{ padding: '16px 20px', textAlign: 'center', display: 'flex', gap: '10px', justifyContent: 'center' }}>
                                                     <button
@@ -1773,6 +2075,25 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                     })
                                 )}
                             </tbody>
+                            {cashTransactions.length > 0 && (
+                                <tfoot style={{ background: 'rgba(255,255,255,0.03)', borderTop: '2px solid rgba(255,255,255,0.1)' }}>
+                                    <tr>
+                                        <td colSpan="6" style={{ padding: '14px 20px', fontSize: '12px', fontWeight: '800', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase' }}>
+                                            Total & Period Summary ({cashPeriodType === 'monthly' ? `${MONTH_NAMES[filterMonth - 1]} ${filterYear}` : formatDateIST(filterDate)})
+                                        </td>
+                                        <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: '900', color: '#10b981', textAlign: 'right' }}>
+                                            +₹{(cashStats.totalIn || 0).toLocaleString('en-IN')}
+                                        </td>
+                                        <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: '900', color: '#f87171', textAlign: 'right' }}>
+                                            -₹{(cashStats.totalOut || 0).toLocaleString('en-IN')}
+                                        </td>
+                                        <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: '900', color: (cashStats.closingBalance ?? ((cashStats.openingBalance || 0) + (cashStats.totalIn || 0) - (cashStats.totalOut || 0))) >= 0 ? '#38bdf8' : '#f87171', textAlign: 'right' }}>
+                                            ₹{(cashStats.closingBalance ?? ((cashStats.openingBalance || 0) + (cashStats.totalIn || 0) - (cashStats.totalOut || 0))).toLocaleString('en-IN')}
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            )}
                         </table>
                     </div>
                 </div>
@@ -2070,7 +2391,9 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                             type="date"
                                             value={txFormData.date}
                                             onChange={e => setTxFormData({ ...txFormData, date: e.target.value })}
-                                            style={darkInputStyle}
+                                            onClick={e => e.target.showPicker?.()}
+                                            onFocus={e => e.target.showPicker?.()}
+                                            style={darkDateInputStyle}
                                             required
                                         />
                                     </div>
@@ -2181,7 +2504,9 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                             type="date"
                                             value={depositFormData.date}
                                             onChange={e => setDepositFormData({ ...depositFormData, date: e.target.value })}
-                                            style={darkInputStyle}
+                                            onClick={e => e.target.showPicker?.()}
+                                            onFocus={e => e.target.showPicker?.()}
+                                            style={darkDateInputStyle}
                                             required
                                         />
                                     </div>
@@ -2304,7 +2629,9 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                             type="date"
                                             value={withdrawFormData.date}
                                             onChange={e => setWithdrawFormData({ ...withdrawFormData, date: e.target.value })}
-                                            style={darkInputStyle}
+                                            onClick={e => e.target.showPicker?.()}
+                                            onFocus={e => e.target.showPicker?.()}
+                                            style={darkDateInputStyle}
                                             required
                                         />
                                     </div>
@@ -2439,7 +2766,9 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                             type="date"
                                             value={cashFormData.date}
                                             onChange={e => setCashFormData({ ...cashFormData, date: e.target.value })}
-                                            style={darkInputStyle}
+                                            onClick={e => e.target.showPicker?.()}
+                                            onFocus={e => e.target.showPicker?.()}
+                                            style={darkDateInputStyle}
                                             required
                                         />
                                     </div>
@@ -2656,7 +2985,9 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                             type="date"
                                             value={editCashFormData.date}
                                             onChange={e => setEditCashFormData({ ...editCashFormData, date: e.target.value })}
-                                            style={darkInputStyle}
+                                            onClick={e => e.target.showPicker?.()}
+                                            onFocus={e => e.target.showPicker?.()}
+                                            style={darkDateInputStyle}
                                             required
                                         />
                                     </div>
@@ -2729,7 +3060,9 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                             type="date"
                                             value={editTxFormData.date}
                                             onChange={e => setEditTxFormData({ ...editTxFormData, date: e.target.value })}
-                                            style={darkInputStyle}
+                                            onClick={e => e.target.showPicker?.()}
+                                            onFocus={e => e.target.showPicker?.()}
+                                            style={darkDateInputStyle}
                                             required
                                         />
                                     </div>

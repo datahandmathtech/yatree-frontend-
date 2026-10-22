@@ -134,12 +134,14 @@ export const generateClientLedgerPDF = (booking, ledgerRows, company = {}) => {
         }
     });
 
-    const finalY = (doc).lastAutoTable.finalY + 10;
+    const finalY = (doc.lastAutoTable?.finalY || 110) + 10;
 
     // 4. Financial Summary Cards
-    const totalFare = booking.totalAmount || 0;
-    const totalPaid = booking.advancePaid || 0;
-    const balanceDue = booking.balanceDue !== undefined ? booking.balanceDue : Math.max(0, totalFare - totalPaid);
+    const totalFare = Number(booking.totalAmount) || 0;
+    const rowsPaidSum = (ledgerRows || []).reduce((acc, r) => acc + (Number(r.paid) || 0), 0);
+    const fuelAmt = booking.guestFuelFilled ? (Number(booking.guestFuelAmount) || 0) : 0;
+    const totalPaid = Math.max((Number(booking.advancePaid) || 0) + fuelAmt, rowsPaidSum);
+    const balanceDue = booking.balanceDue !== undefined ? Number(booking.balanceDue) : Math.max(0, totalFare - totalPaid);
 
     doc.setFillColor(241, 245, 249);
     doc.roundedRect(pageWidth - 95, finalY, 81, 32, 2, 2, 'F');
@@ -161,7 +163,11 @@ export const generateClientLedgerPDF = (booking, ledgerRows, company = {}) => {
     doc.setFont('helvetica', 'normal');
     doc.text('Balance Outstanding:', pageWidth - 90, finalY + 25);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(balanceDue <= 0 ? [16, 185, 129] : [239, 68, 68]);
+    if (balanceDue <= 0) {
+        doc.setTextColor(16, 185, 129);
+    } else {
+        doc.setTextColor(239, 68, 68);
+    }
     doc.text(`Rs. ${balanceDue.toLocaleString('en-IN')}`, pageWidth - 20, finalY + 25, { align: 'right' });
 
     // Status stamp
@@ -169,7 +175,7 @@ export const generateClientLedgerPDF = (booking, ledgerRows, company = {}) => {
         doc.setFontSize(11);
         doc.setTextColor(16, 185, 129);
         doc.setFont('helvetica', 'bold');
-        doc.text('PAID IN FULL', 20, finalY + 16);
+        doc.text('PAID', 20, finalY + 16);
     } else {
         doc.setFontSize(10);
         doc.setTextColor(239, 68, 68);

@@ -26,6 +26,30 @@ const getShortDateKey = (dateVal) => {
     return `${day}-${month}`;
 };
 
+// Formats time consistently with AM / PM (e.g., "09:00" -> "09:00 AM", "14:30" -> "02:30 PM", "APG" -> "APG")
+const formatConsistentTime = (timeVal) => {
+    if (!timeVal || !String(timeVal).trim()) return '09:00 AM';
+    const raw = String(timeVal).trim();
+    if (/^[a-zA-Z]+$/.test(raw)) return raw.toUpperCase();
+
+    const match = raw.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM|am|pm))?$/);
+    if (!match) return raw;
+
+    let hours = parseInt(match[1], 10);
+    const mins = match[2];
+    const periodArg = match[3] ? match[3].toUpperCase() : null;
+
+    if (periodArg) {
+        if (hours === 0) hours = 12;
+        if (hours > 12) hours = hours - 12;
+        return `${String(hours).padStart(2, '0')}:${mins} ${periodArg}`;
+    }
+
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const h12 = hours % 12 === 0 ? 12 : hours % 12;
+    return `${String(h12).padStart(2, '0')}:${mins} ${period}`;
+};
+
 export default function LiveDRSExcelView({
     duties = [],
     selectedCompany,
@@ -166,13 +190,60 @@ export default function LiveDRSExcelView({
 
     // Filter duties by Mode (Month, Single Date, Range) and Search
     const filteredDuties = useMemo(() => {
-        return (duties || []).filter(duty => {
+        const allValid = (duties || []).filter(duty => {
             if (!duty || !duty.date) return false;
             if (duty.status === 'Cancelled') return false;
-
             const d = new Date(duty.date);
-            if (isNaN(d.getTime())) return false;
+            return !isNaN(d.getTime());
+        });
 
+        const hasSearch = Boolean(searchFilter.trim());
+        if (hasSearch) {
+            const q = searchFilter.toLowerCase().trim();
+            const directMatches = allValid.filter(duty => {
+                const guest = (duty.clientName || '').toLowerCase();
+                const mob = (duty.mobileNumber || '').toString().toLowerCase();
+                const hotel = (duty.hotel || '').toLowerCase();
+                const dutyText = (duty.duty || duty.itinerary || '').toLowerCase();
+                const car = (duty.carType || duty.customCarNumber || duty.vehicle?.carNumber || '').toLowerCase();
+                const drv = (duty.driver?.name || duty.customDriverName || '').toLowerCase();
+                const bkgId = (duty.bookingId || '').toLowerCase();
+
+                return guest.includes(q) || mob.includes(q) || hotel.includes(q) ||
+                    dutyText.includes(q) || car.includes(q) || drv.includes(q) || bkgId.includes(q);
+            });
+
+            // Include all cross-month / multi-day sibling duties of any matched booking or guest package
+            const matchedRefIds = new Set();
+            const matchedCodes = new Set();
+            const matchedGuestKeys = new Set();
+
+            directMatches.forEach(d => {
+                const refId = d.bookingRef?._id ? String(d.bookingRef._id) : (typeof d.bookingRef === 'string' ? d.bookingRef : '');
+                if (refId) matchedRefIds.add(refId);
+                const code = (d.bookingId && d.bookingId !== 'DIRECT' && d.bookingId !== 'N/A') ? String(d.bookingId).trim() : '';
+                if (code) matchedCodes.add(code);
+                const guestName = (d.clientName || '').trim().toLowerCase();
+                const guestMob = String(d.mobileNumber || '').trim();
+                if (guestName) matchedGuestKeys.add(`${guestName}|${guestMob}`);
+            });
+
+            const directIds = new Set(directMatches.map(d => String(d._id)));
+            return allValid.filter(d => {
+                if (directIds.has(String(d._id))) return true;
+                const refId = d.bookingRef?._id ? String(d.bookingRef._id) : (typeof d.bookingRef === 'string' ? d.bookingRef : '');
+                if (refId && matchedRefIds.has(refId)) return true;
+                const code = (d.bookingId && d.bookingId !== 'DIRECT' && d.bookingId !== 'N/A') ? String(d.bookingId).trim() : '';
+                if (code && matchedCodes.has(code)) return true;
+                const guestName = (d.clientName || '').trim().toLowerCase();
+                const guestMob = String(d.mobileNumber || '').trim();
+                if (guestName && matchedGuestKeys.has(`${guestName}|${guestMob}`)) return true;
+                return false;
+            });
+        }
+
+        return allValid.filter(duty => {
+            const d = new Date(duty.date);
             const istString = d.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
             const istDate = new Date(istString);
             const m = istDate.getMonth() + 1; // 1 to 12
@@ -198,19 +269,6 @@ export default function LiveDRSExcelView({
                 if (rangeTo && dutyDateStr > rangeTo) return false;
             }
 
-            // Search filter
-            if (searchFilter.trim()) {
-                const q = searchFilter.toLowerCase();
-                const guest = (duty.clientName || '').toLowerCase();
-                const mob = (duty.mobileNumber || '').toString().toLowerCase();
-                const hotel = (duty.hotel || '').toLowerCase();
-                const dutyText = (duty.duty || duty.itinerary || '').toLowerCase();
-                const car = (duty.carType || duty.customCarNumber || '').toLowerCase();
-                const drv = (duty.driver?.name || duty.customDriverName || '').toLowerCase();
-
-                return guest.includes(q) || mob.includes(q) || hotel.includes(q) ||
-                    dutyText.includes(q) || car.includes(q) || drv.includes(q);
-            }
             return true;
         });
     }, [duties, filterMode, selectedMonth, selectedYear, singleDate, rangeFrom, rangeTo, searchFilter]);
@@ -265,6 +323,114 @@ export default function LiveDRSExcelView({
         return { totalRevenue, totalRides };
     }, [filteredDuties]);
 
+    // Map each booking / guest package to its first and last date (for C/Out column & cross-month visibility)
+    const packageEndDateLookup = useMemo(() => {
+        const byRef = {};
+        const byCode = {};
+        const byGuest = {};
+        const minByRef = {};
+        const minByCode = {};
+        const minByGuest = {};
+
+        const updateMax = (map, key, dateVal) => {
+            if (!key || !dateVal) return;
+            const ts = new Date(dateVal).getTime();
+            if (isNaN(ts)) return;
+            if (!map[key] || ts > map[key].ts) {
+                map[key] = { ts, dateVal };
+            }
+        };
+
+        const updateMin = (map, key, dateVal) => {
+            if (!key || !dateVal) return;
+            const ts = new Date(dateVal).getTime();
+            if (isNaN(ts)) return;
+            if (!map[key] || ts < map[key].ts) {
+                map[key] = { ts, dateVal };
+            }
+        };
+
+        (duties || []).forEach(d => {
+            if (!d || d.status === 'Cancelled') return;
+            const refId = d.bookingRef?._id ? String(d.bookingRef._id) : (typeof d.bookingRef === 'string' ? d.bookingRef : '');
+            const code = (d.bookingId && d.bookingId !== 'DIRECT' && d.bookingId !== 'N/A') ? String(d.bookingId).trim() : '';
+            const guestName = (d.clientName || '').trim().toLowerCase();
+            const guestMob = String(d.mobileNumber || '').trim();
+            const guestKey = guestName ? `${guestName}|${guestMob}` : '';
+
+            const endCandidates = [d.date, d.endDate, d.bookingRef?.travelEndDate].filter(Boolean);
+            endCandidates.forEach(dt => {
+                if (refId) updateMax(byRef, refId, dt);
+                if (code) updateMax(byCode, code, dt);
+                if (guestKey) updateMax(byGuest, guestKey, dt);
+            });
+
+            const startCandidates = [d.date, d.bookingRef?.travelStartDate].filter(Boolean);
+            startCandidates.forEach(dt => {
+                if (refId) updateMin(minByRef, refId, dt);
+                if (code) updateMin(minByCode, code, dt);
+                if (guestKey) updateMin(minByGuest, guestKey, dt);
+            });
+        });
+
+        return { byRef, byCode, byGuest, minByRef, minByCode, minByGuest };
+    }, [duties]);
+
+    const getDutyPackageEndDate = (duty) => {
+        if (!duty) return '—';
+        if (duty.cOut && String(duty.cOut).trim() && String(duty.cOut).trim() !== '—') {
+            return getShortDateKey(duty.cOut);
+        }
+        const refId = duty.bookingRef?._id ? String(duty.bookingRef._id) : (typeof duty.bookingRef === 'string' ? duty.bookingRef : '');
+        const code = (duty.bookingId && duty.bookingId !== 'DIRECT' && duty.bookingId !== 'N/A') ? String(duty.bookingId).trim() : '';
+        const guestName = (duty.clientName || '').trim().toLowerCase();
+        const guestMob = String(duty.mobileNumber || '').trim();
+        const guestKey = guestName ? `${guestName}|${guestMob}` : '';
+
+        const match =
+            (refId && packageEndDateLookup.byRef[refId]?.dateVal) ||
+            (code && packageEndDateLookup.byCode[code]?.dateVal) ||
+            duty.bookingRef?.travelEndDate ||
+            duty.endDate ||
+            (guestKey && packageEndDateLookup.byGuest[guestKey]?.dateVal) ||
+            duty.date;
+
+        return match ? getShortDateKey(match) : '—';
+    };
+
+    const getDutyCrossMonthInfo = (duty) => {
+        if (!duty) return null;
+        const refId = duty.bookingRef?._id ? String(duty.bookingRef._id) : (typeof duty.bookingRef === 'string' ? duty.bookingRef : '');
+        const code = (duty.bookingId && duty.bookingId !== 'DIRECT' && duty.bookingId !== 'N/A') ? String(duty.bookingId).trim() : '';
+        const guestName = (duty.clientName || '').trim().toLowerCase();
+        const guestMob = String(duty.mobileNumber || '').trim();
+        const guestKey = guestName ? `${guestName}|${guestMob}` : '';
+
+        const startRaw =
+            (refId && packageEndDateLookup.minByRef[refId]?.dateVal) ||
+            (code && packageEndDateLookup.minByCode[code]?.dateVal) ||
+            duty.bookingRef?.travelStartDate ||
+            (guestKey && packageEndDateLookup.minByGuest[guestKey]?.dateVal) ||
+            duty.date;
+
+        const endRaw =
+            (refId && packageEndDateLookup.byRef[refId]?.dateVal) ||
+            (code && packageEndDateLookup.byCode[code]?.dateVal) ||
+            duty.bookingRef?.travelEndDate ||
+            duty.endDate ||
+            (guestKey && packageEndDateLookup.byGuest[guestKey]?.dateVal) ||
+            duty.date;
+
+        const startKey = getShortDateKey(startRaw);
+        const endKey = getShortDateKey(endRaw);
+        const startM = startKey.split('-')[1];
+        const endM = endKey.split('-')[1];
+        if (startM && endM && startM !== endM) {
+            return { startKey, endKey };
+        }
+        return null;
+    };
+
     // Inline edit handlers
     const startInlineEdit = (duty) => {
         setInlineEditingId(duty._id);
@@ -272,10 +438,10 @@ export default function LiveDRSExcelView({
             hotel: duty.hotel || '',
             clientName: duty.clientName || '',
             mobileNumber: duty.mobileNumber || '',
-            time: duty.time || '09:00 AM',
+            time: formatConsistentTime(duty.time || '09:00 AM'),
             duty: duty.duty || duty.itinerary || '',
             revenue: duty.revenue || 0,
-            cOut: duty.cOut || '',
+            cOut: duty.cOut || getDutyPackageEndDate(duty) || '',
             carType: duty.carType || 'Sedan',
             customCarNumber: duty.vehicle?.carNumber || duty.customCarNumber || '',
             customDriverName: duty.driver?.name || duty.customDriverName || ''
@@ -650,79 +816,82 @@ export default function LiveDRSExcelView({
                             </tr>
                         ) : (
                             groupedByDate.map((group, groupIdx) => {
+                                const isSearchActive = Boolean(searchFilter.trim());
                                 return (
                                     <React.Fragment key={group.dateKey}>
-                                        {/* Blank Separator Row if not first group */}
-                                        {groupIdx > 0 && (
+                                        {/* Blank Separator Row if not first group (hidden when searching guest so dates appear continuously) */}
+                                        {groupIdx > 0 && !isSearchActive && (
                                             <tr style={{ height: '14px', background: '#070b14' }}>
                                                 <td colSpan="12" style={{ padding: 0, border: 'none' }}></td>
                                             </tr>
                                         )}
 
-                                        {/* Day Header Row: Date | So. No. | Hotel | Guest | Guest Mob | Time | Duty | Day Total Rate | C/Out | Car | Driver | Actions */}
-                                        <tr id={`date-block-${group.dateKey}`} style={{
-                                            background: '#0f172a',
-                                            borderTop: '2px solid rgba(255, 255, 255, 0.2)',
-                                            borderBottom: '1.5px solid rgba(255, 255, 255, 0.15)',
-                                            transition: 'all 0.4s'
-                                        }}>
-                                            <th
-                                                style={{
+                                        {/* Day Header Row: rendered per day normally, or only ONCE at the top when searching a guest */}
+                                        {(!isSearchActive || groupIdx === 0) && (
+                                            <tr id={`date-block-${group.dateKey}`} style={{
+                                                background: '#0f172a',
+                                                borderTop: '2px solid rgba(255, 255, 255, 0.2)',
+                                                borderBottom: '1.5px solid rgba(255, 255, 255, 0.15)',
+                                                transition: 'all 0.4s'
+                                            }}>
+                                                <th
+                                                    style={{
+                                                        padding: '10px 12px',
+                                                        width: '80px',
+                                                        background: '#fef08a',
+                                                        color: '#000000',
+                                                        fontWeight: '900',
+                                                        fontSize: '13px',
+                                                        textAlign: 'center',
+                                                        borderRight: '1px solid rgba(0,0,0,0.15)'
+                                                    }}
+                                                >
+                                                    {isSearchActive ? 'Date' : group.dateKey}
+                                                </th>
+                                                <th style={{ padding: '10px 8px', width: '55px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                    So. No.
+                                                </th>
+                                                <th style={{ padding: '10px 10px', width: '130px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                    Hotel
+                                                </th>
+                                                <th style={{ padding: '10px 12px', width: '160px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                    Guest
+                                                </th>
+                                                <th style={{ padding: '10px 10px', width: '120px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                    Guest Mob
+                                                </th>
+                                                <th style={{ padding: '10px 10px', width: '85px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                    Time
+                                                </th>
+                                                <th style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                    Duty
+                                                </th>
+                                                <th style={{
                                                     padding: '10px 12px',
-                                                    width: '80px',
+                                                    width: '100px',
+                                                    textAlign: 'right',
                                                     background: '#fef08a',
                                                     color: '#000000',
                                                     fontWeight: '900',
                                                     fontSize: '13px',
-                                                    textAlign: 'center',
                                                     borderRight: '1px solid rgba(0,0,0,0.15)'
-                                                }}
-                                            >
-                                                {group.dateKey}
-                                            </th>
-                                            <th style={{ padding: '10px 8px', width: '55px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                                                So. No.
-                                            </th>
-                                            <th style={{ padding: '10px 10px', width: '130px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                                                Hotel
-                                            </th>
-                                            <th style={{ padding: '10px 12px', width: '160px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                                                Guest
-                                            </th>
-                                            <th style={{ padding: '10px 10px', width: '120px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                                                Guest Mob
-                                            </th>
-                                            <th style={{ padding: '10px 10px', width: '85px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                                                Time
-                                            </th>
-                                            <th style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                                                Duty
-                                            </th>
-                                            <th style={{
-                                                padding: '10px 12px',
-                                                width: '100px',
-                                                textAlign: 'right',
-                                                background: '#fef08a',
-                                                color: '#000000',
-                                                fontWeight: '900',
-                                                fontSize: '13px',
-                                                borderRight: '1px solid rgba(0,0,0,0.15)'
-                                            }}>
-                                                ₹{group.totalFare.toLocaleString('en-IN')}
-                                            </th>
-                                            <th style={{ padding: '10px 10px', width: '80px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                                                C/Out
-                                            </th>
-                                            <th style={{ padding: '10px 10px', width: '125px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                                                Car
-                                            </th>
-                                            <th style={{ padding: '10px 10px', width: '140px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                                                Driver
-                                            </th>
-                                            <th style={{ padding: '10px 12px', width: '90px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px' }}>
-                                                Actions
-                                            </th>
-                                        </tr>
+                                                }}>
+                                                    ₹{(isSearchActive ? monthStats.totalRevenue : group.totalFare).toLocaleString('en-IN')}
+                                                </th>
+                                                <th style={{ padding: '10px 10px', width: '80px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                    C/Out
+                                                </th>
+                                                <th style={{ padding: '10px 10px', width: '125px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                    Car
+                                                </th>
+                                                <th style={{ padding: '10px 10px', width: '140px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                    Driver
+                                                </th>
+                                                <th style={{ padding: '10px 12px', width: '90px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px' }}>
+                                                    Actions
+                                                </th>
+                                            </tr>
+                                        )}
 
                                         {/* Duty Rows for this Date */}
                                         {group.duties.map((duty, idx) => {
@@ -733,15 +902,19 @@ export default function LiveDRSExcelView({
                                             const carLabel = duty.vehicle?.model || duty.vehicle?.type || duty.carType || 'Car';
                                             const driverName = duty.driver?.name || duty.customDriverName || '';
                                             const driverPhone = duty.driver?.mobile || duty.driver?.phone || '';
+                                            const crossMonthInfo = getDutyCrossMonthInfo(duty);
+                                            const rowSerial = isSearchActive
+                                                ? groupedByDate.slice(0, groupIdx).reduce((acc, g) => acc + g.duties.length, 0) + idx + 1
+                                                : idx + 1;
 
                                             if (isEditing) {
                                                 return (
                                                     <tr key={duty._id || idx} style={{ background: 'rgba(56, 189, 248, 0.08)', borderBottom: '1px solid rgba(56, 189, 248, 0.3)' }}>
                                                         <td style={{ padding: '8px', textAlign: 'center', color: 'rgba(255,255,255,0.5)', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
-                                                            {idx === 0 ? group.dateKey : ''}
+                                                            {isSearchActive || idx === 0 ? group.dateKey : ''}
                                                         </td>
                                                         <td style={{ padding: '8px', textAlign: 'center', fontWeight: '700', color: 'white', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
-                                                            {idx + 1}
+                                                            {rowSerial}
                                                         </td>
                                                         <td style={{ padding: '6px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
                                                             <input 
@@ -780,10 +953,12 @@ export default function LiveDRSExcelView({
                                                         </td>
                                                         <td style={{ padding: '6px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
                                                             <input 
-                                                                type="number"
+                                                                type="text"
+                                                                inputMode="numeric"
+                                                                className="no-spinner"
                                                                 value={inlineFormData.revenue}
-                                                                onChange={e => setInlineFormData({ ...inlineFormData, revenue: e.target.value })}
-                                                                style={{ width: '100%', padding: '5px 8px', background: '#0b1120', border: '1px solid #38bdf8', borderRadius: '5px', color: '#10b981', fontSize: '12px', fontWeight: '800', textAlign: 'right' }}
+                                                                onChange={e => setInlineFormData({ ...inlineFormData, revenue: e.target.value.replace(/[^0-9.]/g, '') })}
+                                                                style={{ width: '100%', padding: '5px 8px', background: '#0b1120', border: '1px solid #38bdf8', borderRadius: '5px', color: '#fef08a', fontSize: '12px', fontWeight: '800', textAlign: 'right' }}
                                                             />
                                                         </td>
                                                         <td style={{ padding: '6px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
@@ -841,15 +1016,15 @@ export default function LiveDRSExcelView({
                                                     }}
                                                     className="drs-excel-row"
                                                 >
-                                                    {/* Date column (first row of group displays date tag) */}
+                                                    {/* Date column (first row of group displays date tag, or every row when searching) */}
                                                     <td style={{
                                                         padding: '10px 12px',
                                                         textAlign: 'center',
                                                         fontWeight: '800',
-                                                        color: idx === 0 ? '#fef08a' : 'transparent',
+                                                        color: (isSearchActive || idx === 0) ? '#fef08a' : 'transparent',
                                                         borderRight: '1px solid rgba(255,255,255,0.06)'
                                                     }}>
-                                                        {idx === 0 ? group.dateKey : ''}
+                                                        {(isSearchActive || idx === 0) ? group.dateKey : ''}
                                                     </td>
 
                                                     {/* So. No. */}
@@ -860,7 +1035,7 @@ export default function LiveDRSExcelView({
                                                         color: 'rgba(255,255,255,0.85)',
                                                         borderRight: '1px solid rgba(255,255,255,0.06)'
                                                     }}>
-                                                        {idx + 1}
+                                                        {rowSerial}
                                                     </td>
 
                                                     {/* Hotel / Source */}
@@ -902,7 +1077,7 @@ export default function LiveDRSExcelView({
                                                         )}
                                                     </td>
 
-                                                    {/* Time (styled badge like Google Sheet Column F) */}
+                                                    {/* Time (styled badge like Google Sheet Column F, always with AM / PM) */}
                                                     <td style={{
                                                         padding: '10px 10px',
                                                         textAlign: 'center',
@@ -917,7 +1092,7 @@ export default function LiveDRSExcelView({
                                                             fontWeight: '800',
                                                             fontSize: '11.5px'
                                                         }}>
-                                                            {duty.time || '09:00 AM'}
+                                                            {formatConsistentTime(duty.time || '09:00 AM')}
                                                         </span>
                                                     </td>
 
@@ -931,20 +1106,20 @@ export default function LiveDRSExcelView({
                                                         {duty.duty || duty.itinerary || 'Local Sightseeing / Transfer'}
                                                     </td>
 
-                                                    {/* Rate (₹) */}
+                                                    {/* Rate (₹) - Always consistent yellow styling */}
                                                     <td style={{
                                                         padding: '10px 12px',
                                                         textAlign: 'right',
                                                         fontWeight: '900',
                                                         borderRight: '1px solid rgba(255,255,255,0.06)',
-                                                        background: isHighFare ? 'rgba(254, 240, 138, 0.18)' : 'transparent',
-                                                        color: isHighFare ? '#fef08a' : '#10b981',
+                                                        background: 'rgba(254, 240, 138, 0.18)',
+                                                        color: '#fef08a',
                                                         whiteSpace: 'nowrap'
                                                     }}>
                                                         ₹{fare.toLocaleString('en-IN')}
                                                     </td>
 
-                                                    {/* C/Out */}
+                                                    {/* C/Out - Last date of the package */}
                                                     <td style={{
                                                         padding: '10px 10px',
                                                         textAlign: 'center',
@@ -953,7 +1128,30 @@ export default function LiveDRSExcelView({
                                                         borderRight: '1px solid rgba(255,255,255,0.06)',
                                                         whiteSpace: 'nowrap'
                                                     }}>
-                                                        {duty.cOut || '—'}
+                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                                            <span>{getDutyPackageEndDate(duty)}</span>
+                                                            {crossMonthInfo && !isSearchActive && (
+                                                                <span
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (duty.clientName) setSearchFilter(duty.clientName);
+                                                                    }}
+                                                                    title="Cross-month package — click to view all days together"
+                                                                    style={{
+                                                                        fontSize: '9.5px',
+                                                                        color: '#fbbf24',
+                                                                        background: 'rgba(251, 191, 36, 0.14)',
+                                                                        border: '1px solid rgba(251, 191, 36, 0.35)',
+                                                                        borderRadius: '4px',
+                                                                        padding: '1px 5px',
+                                                                        fontWeight: '800',
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    {crossMonthInfo.startKey}➔{crossMonthInfo.endKey}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
 
                                                     {/* Car / Vehicle (Clickable to Assign Car & Driver) */}
@@ -1096,34 +1294,6 @@ export default function LiveDRSExcelView({
                                                 </tr>
                                             );
                                         })}
-
-                                        {/* Add Row under this Date */}
-                                        <tr style={{ background: 'rgba(255,255,255,0.015)', borderBottom: '1px dashed rgba(255,255,255,0.1)' }}>
-                                            <td colSpan="12" style={{ padding: '6px 14px' }}>
-                                                <button
-                                                    onClick={() => {
-                                                        if (onOpenDirectBooking) {
-                                                            onOpenDirectBooking(group.fullDate);
-                                                        }
-                                                    }}
-                                                    style={{
-                                                        padding: '4px 10px',
-                                                        background: 'transparent',
-                                                        border: '1px dashed rgba(251, 191, 36, 0.4)',
-                                                        borderRadius: '6px',
-                                                        color: '#fbbf24',
-                                                        fontSize: '11px',
-                                                        fontWeight: '700',
-                                                        cursor: 'pointer',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px'
-                                                    }}
-                                                >
-                                                    <Plus size={12} /> Add Duty on {group.dateKey}
-                                                </button>
-                                            </td>
-                                        </tr>
                                     </React.Fragment>
                                 );
                             })
