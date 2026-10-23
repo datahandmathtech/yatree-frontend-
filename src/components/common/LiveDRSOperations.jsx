@@ -662,12 +662,14 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
             let totalAdv = 0;
             let totalFuel = 0;
             let netPayable = 0;
+            let pendingCount = 0;
 
             rides.forEach(r => {
                 totalPackage += r.totalAmount;
                 totalAdv += r.advancePaid;
                 totalFuel += r.guestFuelAmount;
                 netPayable += r.netBalanceDue;
+                if (r.netBalanceDue > 0) pendingCount++;
             });
 
             rows.push({
@@ -675,6 +677,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                 dayNum: d,
                 rides,
                 completingCount: rides.length,
+                pendingCount,
                 totalPackage,
                 totalAdv,
                 totalFuel,
@@ -691,6 +694,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
         let totalFuel = 0;
         let totalNetReceivable = 0;
         let totalCompletingRides = 0;
+        let totalPendingRides = 0;
 
         (monthlyDailySettlementRows || []).forEach(row => {
             totalPackage += (row.totalPackage || 0);
@@ -698,6 +702,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
             totalFuel += (row.totalFuel || 0);
             totalNetReceivable += (row.netPayable || 0);
             totalCompletingRides += (row.completingCount || 0);
+            totalPendingRides += (row.pendingCount || 0);
         });
 
         return {
@@ -706,7 +711,8 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
             totalFuel,
             totalDeductions: totalAdv + totalFuel,
             totalNetReceivable,
-            totalCompletingRides
+            totalCompletingRides,
+            totalPendingRides
         };
     }, [monthlyDailySettlementRows]);
 
@@ -4105,7 +4111,10 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                     {/* LEFT SIDE: Total Package (Full Month) */}
                                     <div style={{ flex: 1, paddingRight: '15px', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
                                         <div style={{ fontSize: '12.5px', color: '#94a3b8', marginBottom: '6px' }}>Total Package</div>
-                                        <div style={{ fontSize: '22px', fontWeight: '900', color: 'white', lineHeight: '1' }}>
+                                        <div style={{ fontSize: '24px', fontWeight: '900', color: 'white', lineHeight: '1' }}>
+                                            {monthlyTotalSummary.totalCompletingRides}
+                                        </div>
+                                        <div style={{ fontSize: '15px', color: '#f8fafc', marginTop: '6px', fontWeight: '600' }}>
                                             ₹{monthlyTotalSummary.totalPackage.toLocaleString('en-IN')}
                                         </div>
                                     </div>
@@ -4113,10 +4122,10 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                     {/* RIGHT SIDE: Balance Due (Full Month) */}
                                     <div style={{ flex: 1, paddingLeft: '20px' }}>
                                         <div style={{ fontSize: '12.5px', color: '#94a3b8', marginBottom: '6px' }}>Balance Due</div>
-                                        <div style={{ fontSize: '22px', fontWeight: '900', color: 'white', lineHeight: '1' }}>
-                                            {monthlyTotalSummary.totalCompletingRides}
+                                        <div style={{ fontSize: '24px', fontWeight: '900', color: monthlyTotalSummary.totalPendingRides > 0 ? '#34d399' : 'white', lineHeight: '1' }}>
+                                            {monthlyTotalSummary.totalPendingRides}
                                         </div>
-                                        <div style={{ fontSize: '15px', color: '#34d399', marginTop: '6px', fontWeight: '800' }}>
+                                        <div style={{ fontSize: '15px', color: monthlyTotalSummary.totalPendingRides > 0 ? '#34d399' : '#94a3b8', marginTop: '6px', fontWeight: '800' }}>
                                             ₹{monthlyTotalSummary.totalNetReceivable.toLocaleString('en-IN')}
                                         </div>
                                     </div>
@@ -4144,6 +4153,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                         const isExpanded = expandedBreakdownDate === row.dateStr;
                                         const isHovered = hoveredBreakdownDay === row.dayNum;
                                         const hasRides = row.completingCount > 0;
+                                        const hasPending = (row.pendingCount || 0) > 0;
                                         const isToday = row.dateStr === todayDateStr;
 
                                         return (
@@ -4205,17 +4215,20 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
 
                                                     {/* Column 2: Total Package */}
                                                     <div>
-                                                        <div style={{ fontSize: '14.5px', color: hasRides ? (isToday ? '#fbbf24' : 'white') : 'rgba(255,255,255,0.4)', fontWeight: '700' }}>
-                                                            {hasRides ? `₹${row.totalPackage.toLocaleString('en-IN')}` : '0'}
+                                                        <div style={{ fontSize: '15px', color: hasRides ? (isToday ? '#fbbf24' : 'white') : 'rgba(255,255,255,0.4)', fontWeight: '700', marginBottom: '2px' }}>
+                                                            {row.completingCount}
+                                                        </div>
+                                                        <div style={{ fontSize: '12.5px', color: hasRides ? '#38bdf8' : 'rgba(255,255,255,0.3)', fontWeight: '600' }}>
+                                                            ₹{row.totalPackage.toLocaleString('en-IN')}
                                                         </div>
                                                     </div>
 
                                                     {/* Column 3: Balance Due */}
                                                     <div>
-                                                        <div style={{ fontSize: '15px', color: hasRides ? '#34d399' : 'rgba(255,255,255,0.4)', fontWeight: '700', marginBottom: '2px' }}>
-                                                            {row.completingCount}
+                                                        <div style={{ fontSize: '15px', color: hasPending ? '#34d399' : 'rgba(255,255,255,0.4)', fontWeight: '700', marginBottom: '2px' }}>
+                                                            {row.pendingCount || 0}
                                                         </div>
-                                                        <div style={{ fontSize: '12.5px', color: hasRides ? '#34d399' : 'rgba(255,255,255,0.3)', fontWeight: '700' }}>
+                                                        <div style={{ fontSize: '12.5px', color: hasPending ? '#34d399' : 'rgba(255,255,255,0.3)', fontWeight: '700' }}>
                                                             ₹{row.netPayable.toLocaleString('en-IN')}
                                                         </div>
                                                     </div>
