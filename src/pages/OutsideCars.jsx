@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from '../api/axios';
 import { Plus, Search, Trash2, Car, X, Save, ChevronLeft, ChevronRight, Calendar, Edit, MapPin, Briefcase, Layers, ShoppingCart, TrendingUp, FileText } from 'lucide-react';
@@ -30,7 +30,7 @@ const OutsideCars = () => {
     const [viewMode, setViewMode] = useState('monthly'); 
     const location = useLocation();
 
-    // ── AI AGENT SEARCH INTEGRATION ──
+    // â”€â”€ AI AGENT SEARCH INTEGRATION â”€â”€
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         const searchParam = params.get('search') || params.get('name') || params.get('vendor') || params.get('owner');
@@ -227,7 +227,7 @@ const OutsideCars = () => {
                 formatDateIST(v.carNumber?.split('#')[1] || v.createdAt),
                 v.ownerName,
                 `${v.model} - ${v.carNumber?.split('#')[0]}`,
-                v.property || 'Direct',
+                v.guestName || v.property || 'Direct',
                 v.dutyType || 'Standard',
                 `Rs. ${Number(((v.transactionType === 'Buy' && v.buyAmount) ? v.buyAmount : v.dutyAmount) || 0).toLocaleString('en-IN')}`
             ]);
@@ -482,7 +482,7 @@ const OutsideCars = () => {
     const totalPayable = filtered.reduce((sum, v) => sum + (v ? (Number((v.transactionType === 'Buy' && v.buyAmount) ? v.buyAmount : v.dutyAmount) || 0) : 0), 0);
     const totalDutiesCount = filtered.reduce((sum, v) => sum + (v?.dutyType ? v.dutyType.split(' + ').filter(Boolean).length : 0), 0);
 
-    // ── DYNAMIC FILTERS ──
+    // â”€â”€ DYNAMIC FILTERS â”€â”€
     const ownerBalances = vehicles.reduce((acc, v) => {
         const owner = v.ownerName?.trim();
         const dutyDate = v.carNumber?.split('#')[1];
@@ -610,7 +610,7 @@ const OutsideCars = () => {
                 .action-btn-hover-del:hover { background: rgba(244, 63, 94, 0.15) !important; }
             `}</style>
 
-            {/* ═══ PREMIUM DYNAMIC HEADER ═══ */}
+            {/* â•â•â• PREMIUM DYNAMIC HEADER â•â•â• */}
             <header style={{ padding: 'clamp(20px, 4vw, 40px) 0', position: 'relative' }}>
                 <div className="flex-resp" style={{ justifyContent: 'space-between', alignItems: 'center', gap: '24px', marginBottom: 'clamp(20px, 4vw, 32px)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(12px, 3vw, 20px)' }}>
@@ -647,7 +647,7 @@ const OutsideCars = () => {
                                     <motion.circle className="stat-circle-progress payout-glow" cx="50" cy="50" r="45" stroke={theme.primary} initial={{ strokeDasharray: "283 283", strokeDashoffset: 283 }} animate={{ strokeDashoffset: 0 }} transition={{ duration: 1.5, ease: "easeOut" }} />
                                 </svg>
                                 <span style={{ fontSize: '7px', fontWeight: '950', color: theme.primary, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '2px', position: 'relative', zIndex: 1 }}>Payout</span>
-                                <span style={{ color: 'white', fontSize: 'clamp(10px, 2.5vw, 14px)', fontWeight: '950', position: 'relative', zIndex: 1 }}>₹{totalPayable.toLocaleString()}</span>
+                                <span style={{ color: 'white', fontSize: 'clamp(10px, 2.5vw, 14px)', fontWeight: '950', position: 'relative', zIndex: 1 }}>â‚¹{totalPayable.toLocaleString()}</span>
                             </motion.div>
 
                             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }} style={{
@@ -667,7 +667,7 @@ const OutsideCars = () => {
                 </div>
             </header>
 
-            {/* ═══ CLEAN PREMIUM INTEGRATED CONTROL BAR ═══ */}
+            {/* â•â•â• CLEAN PREMIUM INTEGRATED CONTROL BAR â•â•â• */}
             <div className="glass-card" style={{ padding: 'clamp(12px, 2vw, 16px)', marginBottom: 'clamp(24px, 4vw, 32px)', background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '24px' }}>
                 <div className="flex-resp" style={{ gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
                     <div style={{ position: 'relative', flex: '2', minWidth: '200px' }}>
@@ -679,7 +679,7 @@ const OutsideCars = () => {
                             <option value="All">All Vendors</option>
                             {uniqueOwners.map(o => (
                                 <option key={o} value={o}>
-                                    {o} (₹{(ownerBalances[o] || 0).toLocaleString()})
+                                    {o} (â‚¹{(ownerBalances[o] || 0).toLocaleString()})
                                 </option>
                             ))}
                         </select>
@@ -739,7 +739,7 @@ const OutsideCars = () => {
                 </div>
             </div>
 
-            {/* ═══ TABLE VIEW (Desktop) ═══ */}
+            {/* â•â•â• TABLE VIEW (Desktop) â•â•â• */}
             <div className="hide-mobile table-responsive-wrapper" style={{ background: 'rgba(15, 23, 42, 0.2)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '24px', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
@@ -774,12 +774,12 @@ const OutsideCars = () => {
                                     </div>
                                 </td>
                                 <td style={{ padding: '16px 24px' }}>
-                                    <div style={{ fontSize: '14px', fontWeight: '800', color: 'white' }}>{v.property || 'Direct'}</div>
-                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: '4px' }}>{v.dutyType} {v.dropLocation && <>➜ {v.dropLocation}</>}</div>
+                                    <div style={{ fontSize: '14px', fontWeight: '800', color: 'white' }}>{v.guestName || v.property || 'Direct'}</div>
+                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: '4px' }}>{v.dutyType} {v.dropLocation && <>âžœ {v.dropLocation}</>}</div>
                                     {v.remarks && <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginTop: '4px', fontStyle: 'italic' }}>{v.remarks}</div>}
                                 </td>
                                 <td style={{ padding: '16px 24px', textAlign: 'right' }}>
-                                    <div style={{ fontSize: '16px', fontWeight: '1000', color: '#10b981' }}>₹{((v.transactionType === 'Buy' && v.buyAmount) ? v.buyAmount : v.dutyAmount)?.toLocaleString()}</div>
+                                    <div style={{ fontSize: '16px', fontWeight: '1000', color: '#10b981' }}>â‚¹{((v.transactionType === 'Buy' && v.buyAmount) ? v.buyAmount : v.dutyAmount)?.toLocaleString()}</div>
                                 </td>
                                 <td style={{ padding: '16px 24px', textAlign: 'right' }}>
                                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -793,7 +793,7 @@ const OutsideCars = () => {
                 </table>
             </div>
 
-            {/* ═══ CARD VIEW (Mobile) ═══ */}
+            {/* â•â•â• CARD VIEW (Mobile) â•â•â• */}
             <div className="show-mobile" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {filtered.map((v, idx) => (
                     <motion.div key={v._id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05 }} style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '20px', padding: '16px' }}>
@@ -806,14 +806,14 @@ const OutsideCars = () => {
                                 </div>
                             </div>
                             <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '16px', fontWeight: '1000', color: '#10b981' }}>₹{((v.transactionType === 'Buy' && v.buyAmount) ? v.buyAmount : v.dutyAmount)?.toLocaleString()}</div>
+                                <div style={{ fontSize: '16px', fontWeight: '1000', color: '#10b981' }}>â‚¹{((v.transactionType === 'Buy' && v.buyAmount) ? v.buyAmount : v.dutyAmount)?.toLocaleString()}</div>
                                 <span className={`badge-ext ${v.transactionType === 'Buy' ? 'bg-buy' : 'bg-sell'}`} style={{ fontSize: '6px', padding: '2px 6px' }}>{v.transactionType}</span>
                             </div>
                         </div>
                         <div style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', marginBottom: '12px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                                 <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', fontWeight: '800' }}>PROPERTY</span>
-                                <span style={{ fontSize: '11px', color: 'white', fontWeight: '900' }}>{v.property || 'Direct'}</span>
+                                <span style={{ fontSize: '11px', color: 'white', fontWeight: '900' }}>{v.guestName || v.property || 'Direct'}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', fontWeight: '800' }}>DATE</span>
@@ -834,7 +834,7 @@ const OutsideCars = () => {
                 ))}
             </div>
 
-            {/* ═══ MODAL ═══ */}
+            {/* â•â•â• MODAL â•â•â• */}
             <AnimatePresence>
                 {showModal && (
                     <div className="modal-overlay">
@@ -936,7 +936,7 @@ const OutsideCars = () => {
                                         </select>
                                     </div>
                                     <div className="premium-input-group">
-                                        <label className="premium-label">Payout Amount (₹) *</label>
+                                        <label className="premium-label">Payout Amount (â‚¹) *</label>
                                         <input type="number" className="premium-compact-input" required value={formData.dutyAmount} onChange={e => setFormData({ ...formData, dutyAmount: e.target.value })} placeholder="0.00" style={{ height: '52px', fontSize: '18px', fontWeight: '950', color: '#10b981' }} />
                                     </div>
                                 </div>

@@ -1658,27 +1658,14 @@ const FuelPage = () => {
                                         <div>
                                             <label style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Vehicle Number *</label>
                                             <SearchableSelect
-                                                options={[
-                                                    ...vehicles.map(v => ({ value: v._id, label: `${v.carNumber} (${v.model})` })),
-                                                    ...outsideVehicles.filter(ov => {
-                                                        const basePlate = ov.carNumber?.split('#')[0] || '';
-                                                        return !vehicles.some(v => v.carNumber === basePlate);
-                                                    }).reduce((unique, ov) => {
-                                                        const basePlate = ov.carNumber?.split('#')[0] || '';
-                                                        if (!unique.some(u => u.label.includes(basePlate))) {
-                                                            unique.push({ value: ov._id, label: `🔄 ${basePlate} (${ov.model || 'Outside'})` });
-                                                        }
-                                                        return unique;
-                                                    }, [])
-                                                ]}
+                                                options={vehicles.map(v => ({ value: v._id, label: `${v.carNumber} (${v.model})` }))}
                                                 value={formData.vehicleId}
                                                 onChange={(vid) => {
                                                     const selectedVehicle = vehicles.find(v => v._id === vid);
-                                                    const selectedOutside = outsideVehicles.find(v => v._id === vid);
                                                     const autoDriver = selectedVehicle?.currentDriver?.name || '';
                                                     setFormData({ ...formData, vehicleId: vid, driver: autoDriver });
                                                 }}
-                                                placeholder="Search Vehicle (Fleet + Outside)..."
+                                                placeholder="Search Company Vehicle..."
                                                 required={true}
                                             />
                                         </div>

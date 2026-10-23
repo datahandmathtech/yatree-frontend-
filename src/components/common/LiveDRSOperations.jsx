@@ -12,8 +12,10 @@ import PremiumDateInput from './PremiumDateInput';
 import { formatDateIST, formatTimeIST, todayIST, nowIST, toISTDateString } from '../../utils/istUtils';
 import { generateBookingConfirmationPDF } from '../../utils/bookingConfirmationPdf';
 import ClientLedgerDrawer from './ClientLedgerDrawer';
+import BankSelector from './BankSelector';
 import LiveDRSExcelView from './LiveDRSExcelView';
 import GoogleSheetSyncModal from './GoogleSheetSyncModal';
+import AssignDriverModal from './AssignDriverModal';
 import { Edit, Download, User } from 'lucide-react';
 
 // Smart Time Parser for Chronological Sorting
@@ -146,6 +148,14 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
     const [hoveredBookingId, setHoveredBookingId] = useState(null);
     const [activeActionMenu, setActiveActionMenu] = useState(null);
     const [ledgerModalBooking, setLedgerModalBooking] = useState(null);
+    // Booking-level Record Payment modal (identical to Confirmed Bookings -> Accounts -> Record Payment)
+    const [bkgPayBooking, setBkgPayBooking] = useState(null);
+    const [bkgPayAmount, setBkgPayAmount] = useState('');
+    const [bkgPayDate, setBkgPayDate] = useState(new Date().toISOString().split('T')[0]);
+    const [bkgPayMode, setBkgPayMode] = useState('Cash');
+    const [bkgPayBankId, setBkgPayBankId] = useState('');
+    const [bkgPayRef, setBkgPayRef] = useState('');
+    const [bkgPaySaving, setBkgPaySaving] = useState(false);
     const [showBookingAssignModal, setShowBookingAssignModal] = useState(false);
     const [assigningBooking, setAssigningBooking] = useState(null);
     const [assignItinerary, setAssignItinerary] = useState([]);
@@ -1047,6 +1057,67 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
         }
     };
 
+    // ----- Booking-level Record Payment (same as Confirmed Bookings) -----
+    const openBookingPaymentModal = (bkg) => {
+        if (!bkg) return;
+        const fuelAmt = bkg.guestFuelFilled ? (Number(bkg.guestFuelAmount) || 0) : 0;
+        const due = bkg.balanceDue !== undefined
+            ? Number(bkg.balanceDue)
+            : Math.max(0, (Number(bkg.totalAmount) || 0) - (Number(bkg.advancePaid) || 0) - fuelAmt);
+        setBkgPayBooking(bkg);
+        setBkgPayAmount(due > 0 ? String(due) : '');
+        setBkgPayDate(new Date().toISOString().split('T')[0]);
+        setBkgPayMode('Cash');
+        setBkgPayBankId(banks.length > 0 ? banks[0]._id : '');
+        setBkgPayRef('');
+    };
+
+    const handleBookingPaymentSubmit = async (e) => {
+        e.preventDefault();
+        if (!bkgPayBooking?._id) return;
+        setBkgPaySaving(true);
+        try {
+            const isCash = bkgPayMode === 'Cash' || bkgPayMode === 'Driver Cash';
+            const { data } = await axios.post(`/api/bookings/${bkgPayBooking._id}/payment`, {
+                amount: Number(bkgPayAmount),
+                paymentMode: bkgPayMode,
+                paymentReference: bkgPayRef,
+                paymentDate: bkgPayDate,
+                bankAccountId: !isCash ? bkgPayBankId : undefined
+            });
+            const paidBkg = bkgPayBooking;
+            setBkgPayBooking(null);
+            setBkgPayAmount('');
+            setBkgPayRef('');
+            fetchDuties();
+            fetchDropdowns();
+            alert('Payment recorded successfully!');
+            // Re-open the ledger with the updated booking (same as Confirmed Bookings)
+            const updatedBkg = data?.booking ? { ...paidBkg, ...data.booking } : {
+                ...paidBkg,
+                advancePaid: (Number(paidBkg.advancePaid) || 0) + Number(bkgPayAmount),
+                balanceDue: Math.max(0, (Number(paidBkg.balanceDue) || 0) - Number(bkgPayAmount))
+            };
+            setLedgerModalBooking(updatedBkg);
+        } catch (error) {
+            console.error('Error recording payment:', error);
+            alert(error.response?.data?.message || 'Failed to record payment');
+        } finally {
+            setBkgPaySaving(false);
+        }
+    };
+
+    const bkgPayInputStyle = {
+        width: '100%',
+        padding: '10px 14px',
+        borderRadius: '8px',
+        border: '1px solid rgba(255,255,255,0.12)',
+        background: 'rgba(0,0,0,0.3)',
+        color: 'white',
+        outline: 'none',
+        fontSize: '13px'
+    };
+
     // Direct Booking Submit Handler
     const handleDirectBookingSubmit = async (e) => {
         e.preventDefault();
@@ -1186,7 +1257,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
             fetchDuties();
         } catch (err) {
             console.error('Error editing duty:', err);
-            alert('Failed to update duty');
+            alert(err.response?.data?.message || 'Failed to update duty');
         } finally {
             setSavingEdit(false);
         }
@@ -4230,6 +4301,7 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
                                                                                 e.stopPropagation();
                                                                                 setLedgerModalBooking({
                                                                                     ...(ride.bookingObj || {}),
+                                                                                    _realBookingId: ride.bookingId || null,
                                                                                     _dutyForPayment: ride.dutyObj
                                                                                 });
                                                                             }}
@@ -4268,15 +4340,97 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
             </AnimatePresence>
 
             {/* Client Ledger & Account Statement Drawer */}
-            <ClientLedgerDrawer
-                booking={ledgerModalBooking}
-                onClose={() => setLedgerModalBooking(null)}
-                onAddEntry={ledgerModalBooking?._dutyForPayment?._id ? () => {
-                    const dutyToPay = ledgerModalBooking._dutyForPayment;
-                    setLedgerModalBooking(null);
-                    openPaymentModal(dutyToPay);
-                } : undefined}
-            />
+            {ledgerModalBooking && (
+                <ClientLedgerDrawer
+                    booking={ledgerModalBooking}
+                    onClose={() => setLedgerModalBooking(null)}
+                    onAddEntry={(ledgerModalBooking?._realBookingId || ledgerModalBooking?._dutyForPayment?._id || (ledgerModalBooking?._id && ledgerModalBooking?._realBookingId === undefined)) ? () => {
+                        const bkg = ledgerModalBooking;
+                        setLedgerModalBooking(null);
+                        const realId = bkg._realBookingId !== undefined ? bkg._realBookingId : bkg._id;
+                        if (realId) {
+                            // Same Record Payment flow as Confirmed Bookings -> Accounts
+                            openBookingPaymentModal({ ...bkg, _id: realId });
+                        } else {
+                            openPaymentModal(bkg._dutyForPayment);
+                        }
+                    } : undefined}
+                    onEntryUpdated={() => {
+                        fetchDuties();
+                        fetchDropdowns();
+                    }}
+                />
+            )}
+
+            {/* RECORD PAYMENT MODAL (identical to Confirmed Bookings) */}
+            <AnimatePresence>
+                {bkgPayBooking && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999999, padding: '20px' }}>
+                        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} style={{ width: '100%', maxWidth: '480px', background: '#0b1120', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '24px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                <h2 style={{ color: 'white', margin: 0, fontSize: '18px', fontWeight: '800' }}>Record Payment</h2>
+                                <button onClick={() => setBkgPayBooking(null)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}><X size={18} /></button>
+                            </div>
+                            <form onSubmit={handleBookingPaymentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Amount to Pay (₹)</label>
+                                        <input required type="number" min="1" value={bkgPayAmount} onChange={e => setBkgPayAmount(e.target.value)} style={bkgPayInputStyle} placeholder="Amount" />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Payment Date</label>
+                                        <input required type="date" value={bkgPayDate} onChange={e => setBkgPayDate(e.target.value)} onClick={e => e.target.showPicker?.()} style={{ ...bkgPayInputStyle, cursor: 'pointer' }} />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Payment Mode</label>
+                                    <select value={bkgPayMode} onChange={e => setBkgPayMode(e.target.value)} className="premium-compact-input" style={{ width: '100%', height: '40px' }}>
+                                        <option value="Cash">💵 Cash to Company (Cash Book)</option>
+                                        <option value="Driver Cash">💵 Driver Cash in Hand (Cash Book)</option>
+                                        <option value="UPI / QR Code">📱 UPI / QR Code (Bank Account)</option>
+                                        <option value="Bank Transfer / NEFT">🏦 Bank Transfer / NEFT</option>
+                                    </select>
+                                </div>
+                                {!(bkgPayMode === 'Cash' || bkgPayMode === 'Driver Cash') && (
+                                    <BankSelector
+                                        bankAccounts={banks}
+                                        value={bkgPayBankId}
+                                        onChange={setBkgPayBankId}
+                                        amount={bkgPayAmount}
+                                        label="Credit to Bank Account"
+                                        required
+                                    />
+                                )}
+                                <div>
+                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Reference / UTR (Optional)</label>
+                                    <input type="text" value={bkgPayRef} onChange={e => setBkgPayRef(e.target.value)} style={bkgPayInputStyle} placeholder="UTR or Transaction ID" />
+                                </div>
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                    <button type="button" onClick={() => setBkgPayBooking(null)} style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
+                                    <button type="submit" disabled={bkgPaySaving} style={{ flex: 1, padding: '10px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '8px', cursor: bkgPaySaving ? 'wait' : 'pointer', fontWeight: '800', opacity: bkgPaySaving ? 0.7 : 1 }}>{bkgPaySaving ? 'Saving...' : 'Save Payment'}</button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* ASSIGN DRIVER & VEHICLES MODAL WITH + CAR SUPPORT */}
+            <AnimatePresence>
+                {showBookingAssignModal && assigningBooking && (
+                    <AssignDriverModal
+                        key="live-drs-assign-modal"
+                        isOpen={showBookingAssignModal}
+                        booking={assigningBooking}
+                        companyId={selectedCompany?._id}
+                        onClose={() => setShowBookingAssignModal(false)}
+                        onSaved={() => {
+                            fetchAllCompanyBookings();
+                            fetchDuties();
+                        }}
+                    />
+                )}
+            </AnimatePresence>
         </div>
     );
 }

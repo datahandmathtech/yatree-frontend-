@@ -473,7 +473,7 @@ export default function LiveDRSExcelView({
             if (onRefresh) onRefresh();
         } catch (err) {
             console.error('Error saving inline DRS duty:', err);
-            alert('Failed to save duty');
+            alert(err.response?.data?.message || 'Failed to save duty');
         } finally {
             setSavingInline(false);
         }

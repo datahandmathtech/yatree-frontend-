@@ -396,7 +396,7 @@ export default function DRS() {
             setShowModal(false);
         } catch (error) {
             console.error('Error saving DRS duty:', error);
-            alert('Failed to save duty.');
+            alert(error.response?.data?.message || 'Failed to save duty.');
         }
     };
 

@@ -32,9 +32,10 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
     const fetchFleetData = async () => {
         try {
             const compId = companyId || (typeof booking?.company === 'object' ? booking?.company?._id : booking?.company);
+            if (!compId) return;
             const [dRes, vRes] = await Promise.all([
-                axios.get('/api/drivers' + (compId ? `?company=${compId}` : '')),
-                axios.get('/api/vehicles' + (compId ? `?company=${compId}` : ''))
+                axios.get(`/api/admin/drivers/${compId}?usePagination=false&status=active`).catch(() => ({ data: [] })),
+                axios.get(`/api/admin/vehicles/${compId}?usePagination=false`).catch(() => ({ data: [] }))
             ]);
             setDriversList(Array.isArray(dRes.data) ? dRes.data : (dRes.data?.drivers || []));
             setVehiclesList(Array.isArray(vRes.data) ? vRes.data : (vRes.data?.vehicles || []));
@@ -630,7 +631,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         {assignItinerary.map((day, idx) => {
                             const allDrivers = driversList || [];
-                            const allVehicles = vehiclesList || [];
+                            const allVehicles = (vehiclesList || []).filter(v => !v.isOutsideCar);
                             const matchedFleetDriver = allDrivers.find(d => String(d._id) === String(day.driverId));
                             const isCustomDriver = day.driverId === 'custom' || (!matchedFleetDriver && Boolean(day.driverName));
                             const matchedFleetVehicle = allVehicles.find(
@@ -940,25 +941,6 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                                     whiteSpace: 'nowrap'
                                                 }}
                                                 title="Copy Day 1 Driver & Vehicle to all days (preserves tour & rate)"
-                                            >
-                                                Copy Cab ↓
-                                            </button>
-                                        ) : idx > 0 && idx < assignItinerary.length - 1 ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleCopyDayToAll(idx, 'below')}
-                                                style={{
-                                                    padding: '5px 7px',
-                                                    background: 'rgba(56, 189, 248, 0.12)',
-                                                    color: '#38bdf8',
-                                                    border: '1px solid rgba(56, 189, 248, 0.3)',
-                                                    borderRadius: '6px',
-                                                    fontSize: '10.5px',
-                                                    fontWeight: '700',
-                                                    cursor: 'pointer',
-                                                    whiteSpace: 'nowrap'
-                                                }}
-                                                title="Copy this Driver & Vehicle to remaining days below (preserves tour & rate)"
                                             >
                                                 Copy Cab ↓
                                             </button>

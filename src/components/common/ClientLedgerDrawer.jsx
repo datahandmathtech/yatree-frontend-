@@ -43,15 +43,19 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
 
     const resolveEntryModeName = (entry) => {
         if (entry.type === 'Fuel') return 'Guest Fuel';
-        if (entry.bankName) return entry.bankName;
+        if (entry.bankName) {
+            const matched = bankAccounts.find(b => (b.bankName || '').toLowerCase().trim() === (entry.bankName || '').toLowerCase().trim());
+            return matched?.bankName || entry.bankName;
+        }
         if (entry.paymentMode && !['UPI / QR Code', 'Bank Transfer / NEFT', 'Advance Payment', 'Payment Received'].includes(entry.paymentMode)) {
             if (/cash/i.test(entry.paymentMode)) return 'Cash';
             return entry.paymentMode;
         }
         const desc = entry.description || '';
-        const parenMatch = desc.match(/\(([^)]+)\)/);
-        if (parenMatch && parenMatch[1] && !/^Ref:/i.test(parenMatch[1].trim()) && !/^LK-/i.test(parenMatch[1].trim())) {
-            return parenMatch[1].trim();
+        for (const b of bankAccounts) {
+            if (b.bankName && desc.toLowerCase().includes(b.bankName.toLowerCase())) {
+                return b.bankName;
+            }
         }
         const viaPart = desc.split('via ')[1]?.split(' (')[0]?.trim();
         if (viaPart) {
@@ -109,10 +113,20 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
         } else if (entry.paymentMode) {
             mode = entry.paymentMode;
         }
-        setEditMode(mode);
 
-        const matchedBank = bankAccounts.find(b => b.bankName && b.bankName.toLowerCase() === (entry.bankName || mode || '').toLowerCase());
-        setEditBankAccountId(matchedBank ? matchedBank._id : (bankAccounts[0]?._id || ''));
+        const rawSearch = (entry.bankName || mode || '').toLowerCase().trim();
+        const matchedBank = bankAccounts.find(b => {
+            const bName = (b.bankName || '').toLowerCase().trim();
+            return bName === rawSearch || bName.includes(rawSearch) || rawSearch.includes(bName);
+        });
+
+        if (matchedBank) {
+            mode = matchedBank.bankName;
+            setEditBankAccountId(matchedBank._id);
+        } else {
+            setEditBankAccountId(bankAccounts[0]?._id || '');
+        }
+        setEditMode(mode);
 
         // Extract reference
         const desc = entry.description || '';
@@ -134,8 +148,13 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
             }
 
             const isBank = !['Cash to Company', 'Driver Cash', 'Fuel (Guest)'].includes(editMode);
-            const selectedBank = isBank ? bankAccounts.find(b => b._id === editBankAccountId || b.bankName === editMode) : null;
+            const searchMode = (editMode || '').toLowerCase().trim();
+            const selectedBank = isBank
+                ? (bankAccounts.find(b => (b.bankName || '').toLowerCase().trim() === searchMode || (b.bankName || '').toLowerCase().includes(searchMode))
+                   || bankAccounts.find(b => String(b._id) === String(editBankAccountId)))
+                : null;
             const bankName = selectedBank?.bankName || (isBank ? editMode : 'Cash');
+            const finalBankAccountId = selectedBank?._id || (isBank ? editBankAccountId : undefined);
 
             if (editingEntry._id) {
                 await axios.put(`/api/clients/ledger/${editingEntry._id}`, {
@@ -143,14 +162,17 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                     date: editDate,
                     paymentMode: editingEntry.type === 'Fuel' ? 'Fuel (Guest)' : editMode,
                     bankName: bankName,
-                    bankAccountId: selectedBank?._id || editBankAccountId,
+                    bankAccountId: finalBankAccountId,
                     reference: editReference
                 });
             } else if (booking?._id) {
                 // If it's the booking's un-persisted initial advance
                 const diff = numAmt - (Number(editingEntry.amount) || 0);
                 await axios.put(`/api/bookings/single/${booking._id}`, {
-                    advancePaid: Math.max(0, (Number(booking.advancePaid) || 0) + diff)
+                    advancePaid: Math.max(0, (Number(booking.advancePaid) || 0) + diff),
+                    bankName: bankName,
+                    advanceDate: editDate,
+                    advanceBankAccountId: isBank ? (selectedBank?._id || undefined) : undefined
                 });
             }
 
@@ -167,14 +189,21 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
     };
 
     const handleDeleteEntry = async () => {
-        if (!editingEntry || !editingEntry._id) return;
+        if (!editingEntry) return;
         if (!window.confirm(`Delete this ${editingEntry.type} entry of ₹${Number(editingEntry.amount).toLocaleString('en-IN')}? This will update the client balance and booking dues.`)) {
             return;
         }
 
         try {
             setDeletingEdit(true);
-            await axios.delete(`/api/clients/ledger/${editingEntry._id}`);
+            if (editingEntry._id) {
+                await axios.delete(`/api/clients/ledger/${editingEntry._id}`);
+            } else if (booking?._id) {
+                // Initial advance stored only on the booking (no separate ledger row)
+                await axios.put(`/api/bookings/single/${booking._id}`, {
+                    advancePaid: Math.max(0, (Number(booking.advancePaid) || 0) - (Number(editingEntry.amount) || 0))
+                });
+            }
             alert('Entry deleted successfully!');
             setEditingEntry(null);
             await fetchLedger();
@@ -585,7 +614,12 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                                         <label style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginBottom: '5px' }}>Payment Mode</label>
                                         <select
                                             value={editMode}
-                                            onChange={e => setEditMode(e.target.value)}
+                                            onChange={e => {
+                                                const val = e.target.value;
+                                                setEditMode(val);
+                                                const matchedBank = bankAccounts.find(b => b.bankName === val);
+                                                if (matchedBank) setEditBankAccountId(matchedBank._id);
+                                            }}
                                             style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: '#0b1120', color: 'white', outline: 'none', fontSize: '13px', boxSizing: 'border-box' }}
                                         >
                                             {editingEntry.type === 'Fuel' && (
@@ -615,7 +649,7 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                                     </div>
 
                                     <div style={{ display: 'flex', gap: '10px', marginTop: '14px', alignItems: 'center' }}>
-                                        {editingEntry._id && (
+                                        {(editingEntry._id || booking?._id) && (
                                             <button
                                                 type="button"
                                                 onClick={handleDeleteEntry}

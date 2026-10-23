@@ -93,10 +93,94 @@ export default function CompletedBookings() {
         if (selectedCompany?._id) {
             fetchCompletedBookings();
             fetchBankAccounts();
+            fetchCompanyInvoices();
         } else {
             setBookings([]);
         }
     }, [selectedCompany]);
+
+    // Real Tax Invoices of this company (to show Generated / Not Generated state per booking)
+    const [companyInvoices, setCompanyInvoices] = useState([]);
+    const [generatingInvoiceFor, setGeneratingInvoiceFor] = useState(null);
+    const [editInvoiceId, setEditInvoiceId] = useState(null);
+
+    const fetchCompanyInvoices = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            const { data } = await axios.get(`/api/invoices/${selectedCompany._id}?limit=5000`);
+            setCompanyInvoices(Array.isArray(data?.invoices) ? data.invoices : []);
+        } catch (err) {
+            console.error('Error fetching invoices:', err);
+        }
+    };
+
+    const invoiceByBooking = useMemo(() => {
+        const map = new Map();
+        companyInvoices.forEach(inv => {
+            if (inv.status === 'Cancelled') return;
+            const bId = inv.booking?._id || inv.booking;
+            if (bId) map.set(`id:${String(bId)}`, inv);
+            if (inv.bookingId) map.set(`code:${String(inv.bookingId).trim()}`, inv);
+        });
+        return map;
+    }, [companyInvoices]);
+
+    const getBookingInvoice = (bkg) => {
+        if (!bkg) return null;
+        return invoiceByBooking.get(`id:${String(bkg._id)}`)
+            || (bkg.clientCode && invoiceByBooking.get(`code:${String(bkg.clientCode).trim()}`))
+            || (bkg.bookingId && invoiceByBooking.get(`code:${String(bkg.bookingId).trim()}`))
+            || (bkg.bookingCode && invoiceByBooking.get(`code:${String(bkg.bookingCode).trim()}`))
+            || null;
+    };
+
+    const handleGenerateInvoice = async (bkg) => {
+        if (!bkg?._id) return;
+        const code = bkg.bookingCode || bkg.clientCode || bkg.bookingId || '';
+        if (!window.confirm(`Generate Tax Invoice for ${code} (${bkg.clientName || 'Guest'})?\nIt will be added to Tax Invoices with the next serial number.`)) return;
+        try {
+            setGeneratingInvoiceFor(bkg._id);
+            const { data } = await axios.post(`/api/invoices/from-booking/${bkg._id}`);
+            await fetchCompanyInvoices();
+            alert(`Tax Invoice ${data?.invoiceNumber || ''} generated successfully!`);
+        } catch (err) {
+            console.error('Error generating invoice:', err);
+            alert(err.response?.data?.message || 'Failed to generate invoice');
+        } finally {
+            setGeneratingInvoiceFor(null);
+        }
+    };
+
+    const handleDownloadRealInvoice = (inv) => {
+        if (!inv) return;
+        const pdfData = {
+            invoiceNumber: inv.invoiceNumber,
+            date: inv.invoiceDate || new Date().toISOString(),
+            bookingId: inv.bookingId || '',
+            billTo: {
+                name: inv.billTo?.name || 'Valued Guest',
+                companyName: inv.billTo?.companyName || '',
+                mobile: inv.billTo?.mobile || '',
+                email: inv.billTo?.email || '',
+                address: inv.billTo?.address || 'Local Fleet Service',
+                gstin: inv.billTo?.gstin || '',
+                placeOfSupply: inv.billTo?.placeOfSupply || 'Rajasthan (08)'
+            },
+            items: Array.isArray(inv.items) && inv.items.length > 0 ? inv.items : [{
+                description: 'Rental & Travel Service',
+                sacCode: inv.sacCode || '996601',
+                quantity: 1,
+                rate: Number(inv.taxableAmount) || 0,
+                amount: Number(inv.taxableAmount) || 0
+            }],
+            gstMode: inv.gstMode || 'GST Inclusive',
+            gstRate: inv.gstRate ?? 5,
+            isInterState: Boolean(inv.isInterState),
+            advanceAdjusted: Number(inv.advanceAdjusted) || 0,
+            notes: inv.notes || 'Official Tax Invoice'
+        };
+        generateTaxInvoicePDF(pdfData, selectedCompany);
+    };
 
     const fetchBankAccounts = async () => {
         if (!selectedCompany?._id) return;
@@ -213,6 +297,7 @@ export default function CompletedBookings() {
             setPaymentAmount('');
             setPaymentRef('');
             await fetchCompletedBookings();
+            fetchCompanyInvoices();
             alert('Balance payment recorded! Tax Invoice is now ready.');
         } catch (error) {
             console.error('Error recording payment:', error);
@@ -344,6 +429,17 @@ export default function CompletedBookings() {
     };
 
     const handleDownloadInvoice = (bkg) => {
+        const realInv = getBookingInvoice(bkg);
+        if (realInv) {
+            handleDownloadRealInvoice(realInv);
+            return;
+        }
+        // No tax invoice yet -> generate it first (adds to Tax Invoices with serial number)
+        handleGenerateInvoice(bkg);
+    };
+
+    // eslint-disable-next-line no-unused-vars
+    const handleDownloadDraftInvoice = (bkg) => {
         const invoicePayload = {
             invoiceNumber: `INV-${bkg.bookingId?.replace('/', '-') || bkg._id?.slice(-5) || '001'}`,
             date: bkg.travelEndDate || bkg.travelStartDate || new Date().toISOString(),
@@ -1015,30 +1111,86 @@ export default function CompletedBookings() {
                                                 </button>
                                             </td>
 
-                                            {/* Tax Invoice (Compact button for all completed bookings) */}
+                                            {/* Tax Invoice: Red = not generated (click to generate) | Green = generated (click to edit) + Download */}
                                             <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleDownloadInvoice(bkg)}
-                                                    style={{
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                        background: 'rgba(2, 132, 199, 0.2)',
-                                                        border: '1px solid rgba(56, 189, 248, 0.35)',
-                                                        borderRadius: '16px',
-                                                        padding: '4px 10px',
-                                                        color: '#38bdf8',
-                                                        fontSize: '11px',
-                                                        fontWeight: '700',
-                                                        cursor: 'pointer',
-                                                        whiteSpace: 'nowrap'
-                                                    }}
-                                                    title="Download Official GST Tax Invoice"
-                                                >
-                                                    <Receipt size={11} />
-                                                    <span>Invoice</span>
-                                                </button>
+                                                {(() => {
+                                                    const inv = getBookingInvoice(bkg);
+                                                    if (!inv) {
+                                                        const busy = generatingInvoiceFor === bkg._id;
+                                                        return (
+                                                            <button
+                                                                type="button"
+                                                                disabled={busy}
+                                                                onClick={() => handleGenerateInvoice(bkg)}
+                                                                style={{
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '4px',
+                                                                    background: 'rgba(239, 68, 68, 0.18)',
+                                                                    border: '1px solid rgba(248, 113, 113, 0.5)',
+                                                                    borderRadius: '16px',
+                                                                    padding: '4px 10px',
+                                                                    color: '#f87171',
+                                                                    fontSize: '11px',
+                                                                    fontWeight: '800',
+                                                                    cursor: busy ? 'wait' : 'pointer',
+                                                                    whiteSpace: 'nowrap'
+                                                                }}
+                                                                title="Invoice not generated yet — click to generate Tax Invoice"
+                                                            >
+                                                                <Receipt size={11} />
+                                                                <span>{busy ? 'Generating...' : 'Invoice'}</span>
+                                                            </button>
+                                                        );
+                                                    }
+                                                    const shortNo = String(inv.invoiceNumber || '').replace(/^LK-/, '');
+                                                    return (
+                                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setEditInvoiceId(inv._id)}
+                                                                style={{
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '4px',
+                                                                    background: 'rgba(16, 185, 129, 0.18)',
+                                                                    border: '1px solid rgba(52, 211, 153, 0.5)',
+                                                                    borderRadius: '16px',
+                                                                    padding: '4px 10px',
+                                                                    color: '#34d399',
+                                                                    fontSize: '11px',
+                                                                    fontWeight: '800',
+                                                                    cursor: 'pointer',
+                                                                    whiteSpace: 'nowrap'
+                                                                }}
+                                                                title={`Tax Invoice ${inv.invoiceNumber} — click to edit`}
+                                                            >
+                                                                <CheckCircle size={11} />
+                                                                <span>{shortNo || 'Invoice'}</span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDownloadRealInvoice(inv)}
+                                                                style={{
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    background: 'rgba(2, 132, 199, 0.2)',
+                                                                    border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                                    borderRadius: '50%',
+                                                                    width: '24px',
+                                                                    height: '24px',
+                                                                    color: '#38bdf8',
+                                                                    cursor: 'pointer',
+                                                                    padding: 0
+                                                                }}
+                                                                title="Download Tax Invoice PDF"
+                                                            >
+                                                                <Download size={12} />
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })()}
                                             </td>
 
                                             {/* Action Menu (3-dot dropdown matching Confirmed Bookings) */}
@@ -1109,7 +1261,7 @@ export default function CompletedBookings() {
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                onClick={() => { setActiveActionMenu(null); setInvoiceModalBooking(bkg); }}
+                                                                onClick={() => { setActiveActionMenu(null); const inv = getBookingInvoice(bkg); if (inv) setEditInvoiceId(inv._id); else handleGenerateInvoice(bkg); }}
                                                                 style={{ width: '100%', padding: '7px 10px', background: 'transparent', border: 'none', color: '#ffffff', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', borderRadius: '6px' }}
                                                             >
                                                                 <FileText size={13} color="#fbbf24" /> Customize Invoice
@@ -1888,12 +2040,16 @@ export default function CompletedBookings() {
                 />
             )}
 
-            {invoiceModalBooking && (
-                <EditInvoiceModal 
-                    booking={invoiceModalBooking} 
-                    onClose={() => setInvoiceModalBooking(null)}
+            {(editInvoiceId || invoiceModalBooking) && (
+                <EditInvoiceModal
+                    invoiceId={editInvoiceId}
+                    booking={invoiceModalBooking}
+                    onClose={() => { setEditInvoiceId(null); setInvoiceModalBooking(null); }}
+                    onDownload={(inv) => handleDownloadRealInvoice(inv)}
                     onSuccess={() => {
+                        setEditInvoiceId(null);
                         setInvoiceModalBooking(null);
+                        fetchCompanyInvoices();
                         fetchCompletedBookings();
                         alert('Invoice updated successfully!');
                     }}
