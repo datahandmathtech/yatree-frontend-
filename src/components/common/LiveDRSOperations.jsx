@@ -75,7 +75,7 @@ const formatTripDate = (dateVal) => {
     return `${day} ${month} ${year}`;
 };
 
-export default function LiveDRSOperations({ selectedCompany, theme }) {
+export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalendar }) {
     const [duties, setDuties] = useState([]);
     const [loading, setLoading] = useState(false);
     const [dateTab, setDateTab] = useState('both'); // 'today', 'tomorrow', 'both', 'custom', 'range'
@@ -1440,6 +1440,32 @@ export default function LiveDRSOperations({ selectedCompany, theme }) {
 
                         {/* Right: Actions */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            {onOpenCalendar && (
+                                <button
+                                    onClick={onOpenCalendar}
+                                    style={{
+                                        height: '40px',
+                                        padding: '0 16px',
+                                        borderRadius: '12px',
+                                        background: 'rgba(16, 185, 129, 0.15)',
+                                        border: '1px solid rgba(16, 185, 129, 0.4)',
+                                        color: '#34d399',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        fontSize: '13px',
+                                        fontWeight: '800',
+                                        boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+                                        transition: 'all 0.2s'
+                                    }}
+                                    title="Open Master Fleet Availability Calendar"
+                                >
+                                    <span>📅</span>
+                                    <span>Master Calendar</span>
+                                </button>
+                            )}
+
                             {/* Daily Breakdown Button (Matches Leads.jsx exact Tally button style) */}
                             <button
                                 onClick={() => setShowDailyBreakdownDrawer(!showDailyBreakdownDrawer)}

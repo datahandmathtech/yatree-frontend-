@@ -1,4 +1,5 @@
 import LiveDRSOperations from '../components/common/LiveDRSOperations';
+import MasterFleetCalendar from '../components/common/MasterFleetCalendar';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import axios from '../api/axios';
@@ -113,8 +114,10 @@ const LiveFeed = () => {
     const [viewMode, setViewMode] = useState(() => {
         const params = new URLSearchParams(window.location.search);
         const modeParam = params.get('mode') || params.get('view');
-        return modeParam === 'drs' ? 'drs' : 'feed';
-    }); // 'feed' | 'drs'
+        if (modeParam === 'drs') return 'drs';
+        if (modeParam === 'calendar') return 'calendar';
+        return 'feed';
+    }); // 'feed' | 'drs' | 'calendar'
     const [activeTab, setActiveTab] = useState('drivers'); // 'drivers', 'vehicles', 'history'
     const [searchQuery, setSearchQuery] = useState('');
     const [currentTimeIST, setCurrentTimeIST] = useState(formatTimeIST(new Date()));
@@ -232,6 +235,7 @@ const LiveFeed = () => {
 
         const modeParam = params.get('mode') || params.get('view');
         if (modeParam === 'drs') setViewMode('drs');
+        else if (modeParam === 'calendar') setViewMode('calendar');
         else if (modeParam === 'feed') setViewMode('feed');
         if (searchParam) setSearchQuery(searchParam);
         if (tabParam) setActiveTab(tabParam);
@@ -367,10 +371,10 @@ const LiveFeed = () => {
             <style>{styles}</style>
             <SEO title="Live Fleet Control" description="Real-time mission control for drivers and vehicles." />
 
-            {/* TOP LEVEL DUAL BOXES: Live Feed vs Live DRS */}
+            {/* TOP LEVEL TRI-BOXES: Live Feed vs Live DRS vs Master Calendar */}
             <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
                 gap: '16px',
                 marginBottom: '26px'
             }}>
@@ -473,10 +477,73 @@ const LiveFeed = () => {
                         </span>
                     )}
                 </motion.div>
+
+                {/* Box 3: Master Calendar (Fleet Month Availability & Revenue Grid) */}
+                <motion.div
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                    onClick={() => setViewMode('calendar')}
+                    style={{
+                        background: viewMode === 'calendar'
+                            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(15, 23, 42, 0.9))'
+                            : 'rgba(255, 255, 255, 0.03)',
+                        border: viewMode === 'calendar' ? '2px solid #10b981' : '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: '20px',
+                        padding: '16px 20px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        boxShadow: viewMode === 'calendar' ? '0 10px 30px rgba(16, 185, 129, 0.25)' : 'none',
+                        transition: 'all 0.2s ease'
+                    }}
+                >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{
+                            width: '46px',
+                            height: '46px',
+                            borderRadius: '14px',
+                            background: viewMode === 'calendar' ? '#10b981' : 'rgba(255, 255, 255, 0.06)',
+                            color: viewMode === 'calendar' ? '#000000' : 'rgba(255, 255, 255, 0.7)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: '900'
+                        }}>
+                            <Calendar size={22} />
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '17px', fontWeight: '900', color: viewMode === 'calendar' ? '#ffffff' : 'rgba(255, 255, 255, 0.85)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                Master Calendar
+                            </div>
+                            <div style={{ fontSize: '11.5px', color: 'rgba(255, 255, 255, 0.5)', marginTop: '2px' }}>
+                                Fleet Month Availability & Revenue Grid
+                            </div>
+                        </div>
+                    </div>
+                    {viewMode === 'calendar' && (
+                        <span style={{ fontSize: '10px', background: '#10b981', color: '#000', padding: '3px 8px', borderRadius: '8px', fontWeight: '900' }}>
+                            ACTIVE
+                        </span>
+                    )}
+                </motion.div>
             </div>
 
-            {viewMode === 'drs' ? (
-                <LiveDRSOperations selectedCompany={selectedCompany} theme={theme} />
+            {viewMode === 'calendar' ? (
+                <MasterFleetCalendar
+                    selectedCompany={selectedCompany}
+                    theme={theme}
+                    onNavigateToDRS={(date) => {
+                        if (date) setSelectedDate(date);
+                        setViewMode('drs');
+                    }}
+                />
+            ) : viewMode === 'drs' ? (
+                <LiveDRSOperations
+                    selectedCompany={selectedCompany}
+                    theme={theme}
+                    onOpenCalendar={() => setViewMode('calendar')}
+                />
             ) : (
                 <>
 
