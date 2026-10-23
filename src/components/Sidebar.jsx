@@ -136,6 +136,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         vehicles: location.pathname.includes('/admin/fuel') || location.pathname.includes('/admin/border-tax') || location.pathname.includes('/admin/fastag') || location.pathname.includes('/admin/parking') || location.pathname.includes('/admin/driver-services') || location.pathname.includes('/admin/border-tax') || location.pathname.includes('/admin/fastag') || location.pathname.includes('/admin/accident-logs') || location.pathname.includes('/admin/warranties'),
         logbook: location.pathname.includes('/admin/log-book'),
         bookings: location.pathname.includes('/admin/leads') || location.pathname.includes('/admin/bookings') || location.pathname.includes('/admin/cancelled-bookings') || location.pathname.includes('/admin/completed-bookings') || location.pathname.includes('/admin/drs') || location.pathname.includes('/admin/client-ledgers') || location.pathname.includes('/admin/bank-book') || location.pathname.includes('/admin/invoices'),
+        corporate: location.pathname.includes('/admin/corporate'),
     });
 
     const toggleGroup = (group) => {
@@ -310,6 +311,13 @@ const Sidebar = ({ isOpen, onClose }) => {
                     <NavItem item={{ path: '/admin/bank-book', label: 'Bank Book / Ledger', labelKey: 'bank_book' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/cash-book', label: 'Cash Book / Ledger', labelKey: 'cash_book' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/invoices', label: 'Tax Invoices', labelKey: 'tax_invoices' }} onClick={onClose} isSubItem />
+                </NavGroup>
+
+                <NavGroup title="Corporate Fleet" icon={Building2} isOpen={openGroups.corporate} onToggle={() => toggleGroup('corporate')}>
+                    <NavItem item={{ path: '/admin/corporate?tab=contracts', label: 'Contracts & Rate Card' }} onClick={onClose} isSubItem />
+                    <NavItem item={{ path: '/admin/corporate?tab=register', label: 'Daily Transport Register' }} onClick={onClose} isSubItem />
+                    <NavItem item={{ path: '/admin/corporate?tab=duty-slips', label: 'On-call Duty Slips' }} onClick={onClose} isSubItem />
+                    <NavItem item={{ path: '/admin/corporate?tab=statement', label: 'Monthly Statement & Bill' }} onClick={onClose} isSubItem />
                 </NavGroup>
 
                 {hasAccess('driversService') && (

@@ -47,6 +47,7 @@ const DriversPanel = lazy(() => import('./pages/DriversPanel'));
 const ClientLedgers = lazy(() => import('./pages/ClientLedgers'));
 const BankBook = lazy(() => import('./pages/BankBook'));
 const Invoices = lazy(() => import('./pages/Invoices'));
+const CorporateManagement = lazy(() => import('./pages/CorporateManagement'));
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -161,6 +162,11 @@ const AdminRoutes = () => {
       <Route path="cash-book" element={canAccess('leads') ? <BankBook initialTab="cash" /> : <Navigate to="/admin" />} />
       <Route path="drs" element={canAccess('drs') ? <DRS /> : <Navigate to="/admin" />} />
       <Route path="invoices" element={canAccess('leads') ? <Invoices /> : <Navigate to="/admin" />} />
+      <Route path="corporate" element={<CorporateManagement />} />
+      <Route path="corporate-contracts" element={<CorporateManagement initialTab="contracts" />} />
+      <Route path="corporate-register" element={<CorporateManagement initialTab="register" />} />
+      <Route path="corporate-duty-slips" element={<CorporateManagement initialTab="duty-slips" />} />
+      <Route path="corporate-monthly-statement" element={<CorporateManagement initialTab="statement" />} />
       <Route path="live-feed" element={canAccess('liveFeed') || canAccess('vehiclesManagement') ? <LiveFeed /> : <Navigate to="/admin" />} />
       <Route path="live-map" element={canAccess('liveFeed') || canAccess('vehiclesManagement') ? <GPSMap /> : <Navigate to="/admin" />} />
       <Route path="log-book" element={canAccess('logBook') || canAccess('vehiclesManagement') ? <Reports /> : <Navigate to="/admin" />} />
