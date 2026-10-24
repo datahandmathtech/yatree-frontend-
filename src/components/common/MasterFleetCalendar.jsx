@@ -101,13 +101,21 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
         if (!selectedCompany?._id) return;
         setLoading(true);
         try {
-            const startDayStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`;
-            const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate();
-            const endDayStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+            // Include +-30 day buffer around selected month to seamlessly merge cross-month packages (e.g. 31/10 to 02/11)
+            const prevMonthDate = new Date(selectedYear, selectedMonth - 1, 1);
+            const py = prevMonthDate.getFullYear();
+            const pm = String(prevMonthDate.getMonth() + 1).padStart(2, '0');
+            const prevStartStr = `${py}-${pm}-01`;
+
+            const nextMonthDate = new Date(selectedYear, selectedMonth + 2, 0);
+            const ny = nextMonthDate.getFullYear();
+            const nm = String(nextMonthDate.getMonth() + 1).padStart(2, '0');
+            const nd = String(nextMonthDate.getDate()).padStart(2, '0');
+            const nextEndStr = `${ny}-${nm}-${nd}`;
 
             const [vRes, dRes, bRes] = await Promise.all([
                 axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false`).catch(() => ({ data: [] })),
-                axios.get(`/api/drs/${selectedCompany._id}?from=${startDayStr}&to=${endDayStr}`).catch(() => ({ data: [] })),
+                axios.get(`/api/drs/${selectedCompany._id}?from=${prevStartStr}&to=${nextEndStr}`).catch(() => ({ data: [] })),
                 axios.get(`/api/bookings/${selectedCompany._id}`).catch(() => ({ data: [] }))
             ]);
 
@@ -262,17 +270,37 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
 
             const flushSegment = () => {
                 if (segmentDays.length === 0) return;
-                const isMultiDay = segmentDays.length >= 2;
-                const totalDays = segmentDays.length;
                 const chosenTheme = PACKAGE_PALETTE[currentPaletteIdx % PACKAGE_PALETTE.length];
 
+                // Detect if booking spans across month boundaries
+                const primaryBkgId = segmentDays[0]?.slot?.duties?.[0]?.bookingId;
+                const allMatchingDuties = primaryBkgId
+                    ? duties.filter(d => d.bookingId === primaryBkgId)
+                    : [];
+                const matchingBkg = primaryBkgId
+                    ? bookings.find(b => b.bookingId === primaryBkgId)
+                    : null;
+
+                const allDatesSet = new Set([
+                    ...allMatchingDuties.map(d => d.date ? new Date(d.date).toISOString().split('T')[0] : '').filter(Boolean),
+                    ...(matchingBkg?.itinerary || []).map(it => it.date ? String(it.date).slice(0, 10) : '').filter(Boolean)
+                ]);
+                const sortedPackageDates = [...allDatesSet].sort();
+
+                const isMultiDay = segmentDays.length >= 2 || sortedPackageDates.length >= 2;
+                const totalDays = sortedPackageDates.length >= 2 ? sortedPackageDates.length : segmentDays.length;
+
                 segmentDays.forEach((item, dayIndex) => {
-                    const { slot } = item;
+                    const { slot, rowIdx } = item;
+                    const rowDateStr = rows[rowIdx]?.dateStr;
+                    const dateIdxInPackage = sortedPackageDates.indexOf(rowDateStr);
+
+                    const dayNo = (dateIdxInPackage >= 0 ? dateIdxInPackage + 1 : (dayIndex + 1));
                     slot.isPackage = isMultiDay;
                     slot.packageTotalDays = totalDays;
-                    slot.packageDayNumber = dayIndex + 1;
-                    slot.isPackageStart = (dayIndex === 0);
-                    slot.isPackageEnd = (dayIndex === totalDays - 1);
+                    slot.packageDayNumber = dayNo;
+                    slot.isPackageStart = (dayNo === 1);
+                    slot.isPackageEnd = (dayNo === totalDays);
                     slot.colorTheme = chosenTheme;
                 });
 
@@ -344,7 +372,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
         });
 
         return rows;
-    }, [selectedYear, selectedMonth, daysInMonth, fleetColumns, duties, todayStr]);
+    }, [selectedYear, selectedMonth, daysInMonth, fleetColumns, duties, bookings, todayStr]);
 
     // Bottom summary row (Booked days per vehicle & grand totals)
     const summary = useMemo(() => {
@@ -397,6 +425,38 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
         // 1. By bookingId
         if (bkgId) {
             const matches = duties.filter(d => d.bookingId === bkgId);
+            const matchingBkg = bookings.find(b => b.bookingId === bkgId);
+
+            if (matchingBkg && Array.isArray(matchingBkg.itinerary) && matchingBkg.itinerary.length > 1) {
+                const combinedDays = matchingBkg.itinerary.map((it, idx) => {
+                    const itDateStr = it.date ? String(it.date).slice(0, 10) : '';
+                    const matchedDuty = matches.find(d => d.date && new Date(d.date).toISOString().slice(0, 10) === itDateStr)
+                        || matches.find(d => Number(d.dayNo) === (it.dayNo || idx + 1));
+
+                    if (matchedDuty) return matchedDuty;
+
+                    return {
+                        _id: it._id || `itin_${idx}`,
+                        date: it.date,
+                        dayNo: it.dayNo || (idx + 1),
+                        hotel: it.hotel || it.pickupPoint || matchingBkg.hotel || '-',
+                        clientName: matchingBkg.clientName,
+                        mobileNumber: matchingBkg.mobileNumber,
+                        time: it.time || '09:00 AM',
+                        duty: it.duty || it.description || 'Tour Day',
+                        revenue: Number(it.amount || 0),
+                        status: 'Confirmed',
+                        bookingId: bkgId,
+                        driver: { name: it.driverName || selectedCellData.vehicle?.currentDriver?.name || 'Driver' },
+                        vehicle: { carNumber: it.vehicleNumber || selectedCellData.vehicle?.fullReg || selectedCellData.vehicle?.number }
+                    };
+                });
+
+                if (combinedDays.length > 1) {
+                    return [...combinedDays].sort((a, b) => new Date(a.date) - new Date(b.date));
+                }
+            }
+
             if (matches.length > 0) {
                 return [...matches].sort((a, b) => new Date(a.date) - new Date(b.date));
             }
@@ -442,7 +502,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
         }
 
         return selectedCellData.slot.duties;
-    }, [selectedCellData, duties, calendarGrid]);
+    }, [selectedCellData, duties, calendarGrid, bookings]);
 
     // Navigation functions
     const handlePrevMonth = () => {
@@ -785,37 +845,6 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                 </div>
             </div>
 
-            {/* COLOR LEGEND BAR */}
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '18px',
-                marginBottom: '16px',
-                fontSize: '12px',
-                color: '#94a3b8',
-                flexWrap: 'wrap'
-            }}>
-                <span style={{ fontWeight: '800', color: '#ffffff' }}>LEGEND:</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div style={{ width: '18px', height: '14px', background: '#2563eb', borderRadius: '3px' }} />
-                    <div style={{ width: '18px', height: '14px', background: '#7c3aed', borderRadius: '3px' }} />
-                    <div style={{ width: '18px', height: '14px', background: '#059669', borderRadius: '3px' }} />
-                    <div style={{ width: '18px', height: '14px', background: '#0d9488', borderRadius: '3px' }} />
-                    <span style={{ color: '#e2e8f0', fontWeight: '700' }}>Different Colors per Ride/Package (Blue, Purple, Emerald, Teal, etc.)</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div style={{ width: '18px', height: '14px', background: '#dc2626', borderRadius: '3px' }} />
-                    <span style={{ color: '#f87171', fontWeight: '700' }}>Past Idle / Unbooked (Red)</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div style={{ width: '18px', height: '14px', background: '#eab308', borderRadius: '3px' }} />
-                    <span style={{ color: '#fef08a', fontWeight: '700' }}>Today / Future Available (Yellow)</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
-                    <Info size={14} color="#38bdf8" />
-                    <span>Hover over any cell for full Driver, Guest, Route & Amount details</span>
-                </div>
-            </div>
 
             {/* THE EXCEL-STYLE MASTER GRID */}
             <div style={{

@@ -415,7 +415,7 @@ export default function Bookings() {
                 existingItin[i] ||
                 {};
 
-            const itemDateStr = itinItem.date ? String(itinItem.date).slice(0, 10) : defaultDateStr;
+            const itemDateStr = defaultDateStr || (itinItem.date ? String(itinItem.date).slice(0, 10) : '');
 
             const drsItem =
                 existingDrs.find(dr => dr.date && new Date(dr.date).toISOString().slice(0, 10) === itemDateStr) ||
@@ -1556,24 +1556,7 @@ export default function Bookings() {
                                             {(() => {
                                                 const fuelAmt = (bkg.guestFuelFilled || Number(bkg.guestFuelAmount) > 0) ? (Number(bkg.guestFuelAmount) || 0) : 0;
                                                 const effRec = (Number(bkg.advancePaid) || 0) + fuelAmt;
-                                                return (
-                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
-                                                        <span>{effRec.toLocaleString('en-IN')}</span>
-                                                        {fuelAmt > 0 && (
-                                                            <span style={{
-                                                                fontSize: '10px',
-                                                                color: '#34d399',
-                                                                background: 'rgba(16, 185, 129, 0.15)',
-                                                                border: '1px solid rgba(16, 185, 129, 0.35)',
-                                                                borderRadius: '4px',
-                                                                padding: '1px 5px',
-                                                                fontWeight: '800'
-                                                            }}>
-                                                                + ₹{fuelAmt.toLocaleString('en-IN')} Fuel
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                );
+                                                return effRec.toLocaleString('en-IN');
                                             })()}
                                         </td>
 
