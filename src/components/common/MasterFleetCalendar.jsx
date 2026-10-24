@@ -66,6 +66,21 @@ const isOutsideDuty = (duty) => {
     return false;
 };
 
+// Format date into DD-MM (e.g. 15-10, 20-10) for Excel-style package view
+const formatDayMonth = (dateVal) => {
+    if (!dateVal) return '--';
+    if (typeof dateVal === 'string' && /^\d{2}-\d{2}$/.test(dateVal)) return dateVal;
+    try {
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) return String(dateVal);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        return `${day}-${month}`;
+    } catch {
+        return String(dateVal);
+    }
+};
+
 export default function MasterFleetCalendar({ selectedCompany, theme = { primary: '#0ea5e9' }, onNavigateToDRS }) {
     // Current date in IST
     const todayStr = todayIST(); // 'YYYY-MM-DD'
@@ -368,6 +383,67 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
         };
     }, [fleetColumns, calendarGrid]);
 
+    // Compute all duties in the package when a cell is selected
+    const selectedPackageDuties = useMemo(() => {
+        if (!selectedCellData?.slot?.duties || selectedCellData.slot.duties.length === 0) {
+            return [];
+        }
+        const primary = selectedCellData.slot.duties[0];
+        const bkgId = primary.bookingId;
+        const bkgRef = primary.bookingRef?._id || primary.bookingRef;
+        const clientName = (primary.clientName || '').trim().toLowerCase();
+        const carNumStr = (selectedCellData.vehicle?.number || '').replace(/[^0-9]/g, '');
+
+        // 1. By bookingId
+        if (bkgId) {
+            const matches = duties.filter(d => d.bookingId === bkgId);
+            if (matches.length > 0) {
+                return [...matches].sort((a, b) => new Date(a.date) - new Date(b.date));
+            }
+        }
+
+        // 2. By bookingRef
+        if (bkgRef) {
+            const matches = duties.filter(d => {
+                const ref = d.bookingRef?._id || d.bookingRef;
+                return ref && String(ref) === String(bkgRef);
+            });
+            if (matches.length > 0) {
+                return [...matches].sort((a, b) => new Date(a.date) - new Date(b.date));
+            }
+        }
+
+        // 3. By clientName & car if package
+        if (selectedCellData.slot?.isPackage) {
+            const matches = duties.filter(d => {
+                const dCar = (d.vehicle?.carNumber || d.customCarNumber || '').replace(/[^0-9]/g, '');
+                const sameCar = carNumStr ? dCar.includes(carNumStr) : true;
+                const sameClient = (d.clientName || '').trim().toLowerCase() === clientName;
+                return sameCar && sameClient;
+            });
+            if (matches.length > 1) {
+                return [...matches].sort((a, b) => new Date(a.date) - new Date(b.date));
+            }
+        }
+
+        // 4. By calendarGrid segment in the same car column
+        if (selectedCellData.slot?.isPackage && selectedCellData.colIndex !== undefined) {
+            const colIdx = selectedCellData.colIndex;
+            const segmentDuties = [];
+            calendarGrid.forEach(r => {
+                const s = r.carSlots[colIdx];
+                if (s && s.isPackage && s.colorTheme === selectedCellData.slot.colorTheme && s.guestDisplay === selectedCellData.slot.guestDisplay) {
+                    segmentDuties.push(...s.duties);
+                }
+            });
+            if (segmentDuties.length > 1) {
+                return [...segmentDuties].sort((a, b) => new Date(a.date) - new Date(b.date));
+            }
+        }
+
+        return selectedCellData.slot.duties;
+    }, [selectedCellData, duties, calendarGrid]);
+
     // Navigation functions
     const handlePrevMonth = () => {
         if (selectedMonth === 0) {
@@ -432,6 +508,35 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
         link.click();
         document.body.removeChild(link);
     };
+
+    // Package view helper computations for Detail Modal
+    const isPackageView = Boolean(
+        selectedCellData &&
+        !selectedCellData.isOS &&
+        ((selectedPackageDuties && selectedPackageDuties.length > 1) || selectedCellData.slot?.isPackage)
+    );
+
+    const totalPackageFare = isPackageView
+        ? selectedPackageDuties.reduce((acc, d) => acc + Number(d.revenue || d.totalAmount || 0), 0)
+        : 0;
+
+    const packageDriver = isPackageView
+        ? (selectedPackageDuties.find(d => d.driver?.name || d.customDriverName)?.driver || selectedCellData?.vehicle?.currentDriver)
+        : null;
+
+    const packageDriverName = packageDriver?.name ||
+        (isPackageView ? selectedPackageDuties.find(d => d.customDriverName)?.customDriverName : null) ||
+        selectedCellData?.vehicle?.currentDriver?.name ||
+        'Fleet Driver';
+
+    const packageDriverPhone = packageDriver?.phone ||
+        packageDriver?.mobile ||
+        selectedCellData?.vehicle?.currentDriver?.mobile ||
+        '';
+
+    const packageBookingId = isPackageView
+        ? (selectedPackageDuties.find(d => d.bookingId)?.bookingId || selectedCellData?.slot?.duties?.[0]?.bookingId)
+        : null;
 
     return (
         <div style={{
@@ -714,11 +819,13 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
 
             {/* THE EXCEL-STYLE MASTER GRID */}
             <div style={{
-                overflowX: 'auto',
+                maxHeight: 'calc(100vh - 180px)',
+                overflow: 'auto',
                 border: '1px solid #2d3748',
                 borderRadius: '12px',
                 background: '#1a202c',
-                boxShadow: 'inset 0 2px 8px rgba(0, 0, 0, 0.4)'
+                boxShadow: 'inset 0 2px 8px rgba(0, 0, 0, 0.4)',
+                position: 'relative'
             }}>
                 <table style={{
                     width: '100%',
@@ -729,11 +836,37 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                 }}>
                     <thead>
                         {/* Header Row 1: Models & Group Titles */}
-                        <tr style={{ background: '#1e3a5f', color: '#ffffff', textAlign: 'center', borderBottom: '1px solid #4a5568' }}>
-                            <th rowSpan={2} style={{ padding: '8px 10px', borderRight: '1px solid #4a5568', width: '55px', fontWeight: '800' }}>
+                        <tr style={{ background: '#1e3a5f', color: '#ffffff', textAlign: 'center' }}>
+                            <th rowSpan={2} style={{
+                                position: 'sticky',
+                                top: 0,
+                                left: 0,
+                                zIndex: 50,
+                                background: '#1e3a5f',
+                                padding: '8px 10px',
+                                borderRight: '1px solid #4a5568',
+                                borderBottom: '2px solid #63b3ed',
+                                width: '55px',
+                                minWidth: '55px',
+                                maxWidth: '55px',
+                                fontWeight: '800'
+                            }}>
                                 Day
                             </th>
-                            <th rowSpan={2} style={{ padding: '8px 12px', borderRight: '2px solid #2b6cb0', width: '75px', fontWeight: '800' }}>
+                            <th rowSpan={2} style={{
+                                position: 'sticky',
+                                top: 0,
+                                left: '55px',
+                                zIndex: 50,
+                                background: '#1e3a5f',
+                                padding: '8px 12px',
+                                borderRight: '2px solid #2b6cb0',
+                                borderBottom: '2px solid #63b3ed',
+                                width: '75px',
+                                minWidth: '75px',
+                                maxWidth: '75px',
+                                fontWeight: '800'
+                            }}>
                                 Date
                             </th>
 
@@ -742,13 +875,19 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                 <th
                                     key={col.number}
                                     style={{
+                                        position: 'sticky',
+                                        top: 0,
+                                        zIndex: 35,
+                                        background: '#1e3a5f',
                                         padding: '6px 8px',
                                         borderRight: '1px solid #4a5568',
+                                        borderBottom: '1px solid #4a5568',
                                         minWidth: '84px',
                                         fontWeight: '800',
                                         fontSize: '12px',
                                         letterSpacing: '0.3px',
-                                        color: '#cbd5e1'
+                                        color: '#cbd5e1',
+                                        height: '32px'
                                     }}
                                 >
                                     {col.model}
@@ -757,39 +896,83 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
 
                             {/* OS Vehicles Header */}
                             <th style={{
+                                position: 'sticky',
+                                top: 0,
+                                zIndex: 35,
                                 padding: '6px 10px',
                                 borderRight: '2px solid #2b6cb0',
+                                borderBottom: '1px solid #4a5568',
                                 minWidth: '80px',
                                 fontWeight: '900',
                                 color: '#e2e8f0',
-                                background: '#234e70'
+                                background: '#234e70',
+                                height: '32px'
                             }}>
                                 OS
                             </th>
 
                             {/* Summary Columns */}
-                            <th rowSpan={2} style={{ padding: '8px 8px', borderRight: '1px solid #4a5568', width: '65px', fontWeight: '800', fontSize: '11px', background: '#1a365d' }}>
+                            <th rowSpan={2} style={{
+                                position: 'sticky',
+                                top: 0,
+                                zIndex: 35,
+                                padding: '8px 8px',
+                                borderRight: '1px solid #4a5568',
+                                borderBottom: '2px solid #63b3ed',
+                                width: '65px',
+                                fontWeight: '800',
+                                fontSize: '11px',
+                                background: '#1a365d'
+                            }}>
                                 Own booked
                             </th>
-                            <th rowSpan={2} style={{ padding: '8px 8px', borderRight: '1px solid #4a5568', width: '65px', fontWeight: '800', fontSize: '11px', background: '#1a365d' }}>
+                            <th rowSpan={2} style={{
+                                position: 'sticky',
+                                top: 0,
+                                zIndex: 35,
+                                padding: '8px 8px',
+                                borderRight: '1px solid #4a5568',
+                                borderBottom: '2px solid #63b3ed',
+                                width: '65px',
+                                fontWeight: '800',
+                                fontSize: '11px',
+                                background: '#1a365d'
+                            }}>
                                 Own free
                             </th>
-                            <th rowSpan={2} style={{ padding: '8px 10px', width: '85px', fontWeight: '900', fontSize: '12px', background: '#1a365d', color: '#fef08a' }}>
+                            <th rowSpan={2} style={{
+                                position: 'sticky',
+                                top: 0,
+                                zIndex: 35,
+                                padding: '8px 10px',
+                                borderBottom: '2px solid #63b3ed',
+                                width: '85px',
+                                fontWeight: '900',
+                                fontSize: '12px',
+                                background: '#1a365d',
+                                color: '#fef08a'
+                            }}>
                                 Day total
                             </th>
                         </tr>
 
                         {/* Header Row 2: Car Numbers & Driver hint */}
-                        <tr style={{ background: '#172e4c', color: '#ffffff', textAlign: 'center', borderBottom: '2px solid #63b3ed' }}>
+                        <tr style={{ background: '#172e4c', color: '#ffffff', textAlign: 'center' }}>
                             {fleetColumns.map((col) => (
                                 <th
                                     key={col.number}
                                     style={{
+                                        position: 'sticky',
+                                        top: '32px',
+                                        zIndex: 35,
+                                        background: '#172e4c',
                                         padding: '5px 8px',
                                         borderRight: '1px solid #4a5568',
+                                        borderBottom: '2px solid #63b3ed',
                                         fontWeight: '900',
                                         fontSize: '12px',
-                                        color: '#63b3ed'
+                                        color: '#63b3ed',
+                                        height: '30px'
                                     }}
                                     title={`${col.displayName} ${col.currentDriver ? `• Default Driver: ${col.currentDriver.name}` : ''}`}
                                 >
@@ -797,12 +980,17 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                 </th>
                             ))}
                             <th style={{
+                                position: 'sticky',
+                                top: '32px',
+                                zIndex: 35,
                                 padding: '5px 8px',
                                 borderRight: '2px solid #2b6cb0',
+                                borderBottom: '2px solid #63b3ed',
                                 fontWeight: '800',
                                 fontSize: '11px',
                                 color: '#cbd5e1',
-                                background: '#234e70'
+                                background: '#234e70',
+                                height: '30px'
                             }}>
                                 OS Vehicles
                             </th>
@@ -825,6 +1013,12 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                 >
                                     {/* Day Name */}
                                     <td style={{
+                                        position: 'sticky',
+                                        left: 0,
+                                        zIndex: 25,
+                                        width: '55px',
+                                        minWidth: '55px',
+                                        maxWidth: '55px',
                                         padding: '6px 8px',
                                         textAlign: 'center',
                                         fontWeight: '700',
@@ -832,13 +1026,19 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                         borderRight: '1px solid #2d3748',
                                         borderBottom: '1px solid #2d3748',
                                         fontSize: '11.5px',
-                                        background: isTodayRow ? 'rgba(56, 189, 248, 0.15)' : 'inherit'
+                                        background: isTodayRow ? '#1a3045' : (row.dayNum % 2 === 0 ? '#1e2430' : '#171d28')
                                     }}>
                                         {row.dayOfWeek}
                                     </td>
 
                                     {/* Date */}
                                     <td style={{
+                                        position: 'sticky',
+                                        left: '55px',
+                                        zIndex: 25,
+                                        width: '75px',
+                                        minWidth: '75px',
+                                        maxWidth: '75px',
                                         padding: '6px 10px',
                                         textAlign: 'center',
                                         fontWeight: '800',
@@ -847,7 +1047,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                         borderBottom: '1px solid #2d3748',
                                         fontSize: '11.5px',
                                         whiteSpace: 'nowrap',
-                                        background: isTodayRow ? 'rgba(56, 189, 248, 0.2)' : 'inherit'
+                                        background: isTodayRow ? '#1a3650' : (row.dayNum % 2 === 0 ? '#1e2430' : '#171d28')
                                     }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                                             {isTodayRow && (
@@ -867,7 +1067,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                     </td>
 
                                     {/* Vehicle Cells */}
-                                    {row.carSlots.map((slot) => {
+                                    {row.carSlots.map((slot, cIdx) => {
                                         const booked = slot.isBooked;
                                         const isPast = row.isPast;
                                         const isPkg = slot.isPackage;
@@ -896,6 +1096,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                                         formattedDate: row.formattedDate,
                                                         dayOfWeek: row.dayOfWeek,
                                                         vehicle: slot.col,
+                                                        colIndex: cIdx,
                                                         slot,
                                                         isBooked: booked,
                                                         isPackage: isPkg,
@@ -1070,8 +1271,10 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                 </tr>
                             );
                         })}
+                    </tbody>
 
-                        {/* BOTTOM SUMMARY ROW: Booked days per car */}
+                    {/* BOTTOM SUMMARY ROW: Booked days per car */}
+                    <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 40 }}>
                         <tr style={{
                             background: '#0f172a',
                             borderTop: '3px solid #38bdf8',
@@ -1080,6 +1283,10 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                             fontSize: '12px'
                         }}>
                             <td colSpan={2} style={{
+                                position: 'sticky',
+                                left: 0,
+                                zIndex: 45,
+                                background: '#0f172a',
                                 padding: '10px 12px',
                                 borderRight: '2px solid #4a5568',
                                 fontWeight: '950',
@@ -1094,6 +1301,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                 <td
                                     key={cSummary.number}
                                     style={{
+                                        background: '#0f172a',
                                         padding: '10px 4px',
                                         textAlign: 'center',
                                         fontWeight: '950',
@@ -1109,6 +1317,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
 
                             {/* OS Month Total */}
                             <td style={{
+                                background: '#0f172a',
                                 padding: '10px 6px',
                                 textAlign: 'center',
                                 fontWeight: '950',
@@ -1121,6 +1330,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
 
                             {/* Total Booked Days across fleet */}
                             <td style={{
+                                background: '#0f172a',
                                 padding: '10px 4px',
                                 textAlign: 'center',
                                 fontWeight: '950',
@@ -1132,6 +1342,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
 
                             {/* Empty under Own Free */}
                             <td style={{
+                                background: '#0f172a',
                                 padding: '10px 4px',
                                 textAlign: 'center',
                                 borderRight: '1px solid #2d3748',
@@ -1147,12 +1358,12 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                 fontWeight: '950',
                                 color: '#fef08a',
                                 fontSize: '13px',
-                                background: 'rgba(234, 179, 8, 0.15)'
+                                background: '#1e2836'
                             }} title="Grand Total Month Revenue">
                                 ₹{summary.grandTotalRevenue.toLocaleString('en-IN')}
                             </td>
                         </tr>
-                    </tbody>
+                    </tfoot>
                 </table>
             </div>
 
@@ -1186,17 +1397,18 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                 border: '1px solid rgba(255, 255, 255, 0.15)',
                                 borderRadius: '18px',
                                 width: '100%',
-                                maxWidth: '600px',
-                                maxHeight: '85vh',
+                                maxWidth: isPackageView ? '1060px' : '650px',
+                                maxHeight: '88vh',
                                 overflow: 'hidden',
                                 display: 'flex',
                                 flexDirection: 'column',
-                                boxShadow: '0 25px 50px rgba(0, 0, 0, 0.5)'
+                                boxShadow: '0 25px 50px rgba(0, 0, 0, 0.5)',
+                                transition: 'max-width 0.2s ease'
                             }}
                         >
                             {/* Modal Header */}
                             <div style={{
-                                padding: '18px 22px',
+                                padding: '16px 22px',
                                 background: 'rgba(0, 0, 0, 0.3)',
                                 borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
                                 display: 'flex',
@@ -1205,7 +1417,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                             }}>
                                 <div>
                                     <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '800', letterSpacing: '1px' }}>
-                                        {selectedCellData.dayOfWeek.toUpperCase()}, {selectedCellData.formattedDate}
+                                        {selectedCellData.dayOfWeek.toUpperCase()}, {selectedCellData.formattedDate} • FLEET MASTER DETAILS
                                     </div>
                                     <div style={{ fontSize: '18px', fontWeight: '900', color: '#ffffff', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                         {selectedCellData.isOS ? (
@@ -1219,17 +1431,17 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                             </>
                                         )}
 
-                                        {selectedCellData.slot?.isPackage && (
+                                        {isPackageView && (
                                             <span style={{
                                                 fontSize: '11px',
                                                 fontWeight: '900',
                                                 padding: '3px 8px',
                                                 borderRadius: '6px',
-                                                background: selectedCellData.slot.colorTheme?.bg || '#2563eb',
-                                                color: '#ffffff',
+                                                background: 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)',
+                                                color: '#000000',
                                                 letterSpacing: '0.5px'
                                             }}>
-                                                PACKAGE (DAY {selectedCellData.slot.packageDayNumber}/{selectedCellData.slot.packageTotalDays})
+                                                MULTI-DAY TOUR ({selectedPackageDuties.length} DAYS)
                                             </span>
                                         )}
                                     </div>
@@ -1294,6 +1506,173 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                                     </div>
                                                 </div>
                                             ))}
+                                        </div>
+                                    </div>
+                                ) : isPackageView ? (
+                                    /* IMAGE 2: COMPLETE MULTI-DAY PACKAGE BREAKDOWN TABLE */
+                                    <div>
+                                        {/* Top Package Details Banner */}
+                                        <div style={{
+                                            display: 'flex',
+                                            flexWrap: 'wrap',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            background: 'rgba(255, 255, 255, 0.04)',
+                                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                                            borderRadius: '12px',
+                                            padding: '12px 16px',
+                                            marginBottom: '16px'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase' }}>Assigned Vehicle</div>
+                                                    <div style={{ fontSize: '15px', fontWeight: '900', color: '#38bdf8' }}>
+                                                        🚗 {selectedCellData.vehicle?.model} {selectedCellData.vehicle?.number}
+                                                        {selectedCellData.vehicle?.fullReg && (
+                                                            <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600', marginLeft: '6px' }}>
+                                                                ({selectedCellData.vehicle?.fullReg})
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div style={{ width: '1px', height: '28px', background: 'rgba(255, 255, 255, 0.1)' }} />
+
+                                                <div>
+                                                    <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase' }}>Assigned Driver</div>
+                                                    <div style={{ fontSize: '15px', fontWeight: '900', color: '#fbbf24' }}>
+                                                        👨‍✈️ {packageDriverName} {packageDriverPhone && <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 'normal' }}>({packageDriverPhone})</span>}
+                                                    </div>
+                                                </div>
+
+                                                {packageBookingId && (
+                                                    <>
+                                                        <div style={{ width: '1px', height: '28px', background: 'rgba(255, 255, 255, 0.1)' }} />
+                                                        <div>
+                                                            <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase' }}>Booking ID</div>
+                                                            <div style={{ fontSize: '15px', fontWeight: '900', color: '#e2e8f0' }}>
+                                                                #{packageBookingId}
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+
+                                            {/* Package Badge */}
+                                            <div style={{
+                                                background: 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)',
+                                                color: '#000000',
+                                                padding: '6px 14px',
+                                                borderRadius: '8px',
+                                                fontWeight: '950',
+                                                fontSize: '13px',
+                                                letterSpacing: '0.3px',
+                                                boxShadow: '0 4px 12px rgba(234, 179, 8, 0.3)'
+                                            }}>
+                                                PACKAGE ({selectedPackageDuties.length} DAYS • TOTAL ₹{totalPackageFare.toLocaleString('en-IN')})
+                                            </div>
+                                        </div>
+
+                                        {/* Breakdown Table Matching Image 2 */}
+                                        <div style={{
+                                            overflowX: 'auto',
+                                            borderRadius: '10px',
+                                            border: '1px solid #4a5568',
+                                            background: '#0f172a'
+                                        }}>
+                                            <table style={{
+                                                width: '100%',
+                                                borderCollapse: 'collapse',
+                                                fontSize: '12.5px',
+                                                textAlign: 'left'
+                                            }}>
+                                                <thead>
+                                                    <tr style={{ background: '#fef08a', color: '#000000', fontWeight: '900', borderBottom: '2px solid #ca8a04' }}>
+                                                        <th style={{ padding: '10px 12px', borderRight: '1px solid #d4d4d8', width: '70px', textAlign: 'center' }}>Date</th>
+                                                        <th style={{ padding: '10px 10px', borderRight: '1px solid #d4d4d8', width: '80px', textAlign: 'center' }}>So. No.</th>
+                                                        <th style={{ padding: '10px 12px', borderRight: '1px solid #d4d4d8' }}>Hotel</th>
+                                                        <th style={{ padding: '10px 12px', borderRight: '1px solid #d4d4d8' }}>Guest</th>
+                                                        <th style={{ padding: '10px 12px', borderRight: '1px solid #d4d4d8' }}>Guest Mob</th>
+                                                        <th style={{ padding: '10px 12px', borderRight: '1px solid #d4d4d8', textAlign: 'center' }}>Time</th>
+                                                        <th style={{ padding: '10px 14px', borderRight: '1px solid #d4d4d8' }}>Duty</th>
+                                                        <th style={{ padding: '10px 14px', borderRight: '1px solid #d4d4d8', textAlign: 'right', fontWeight: '950', color: '#000000' }}>
+                                                            ₹{totalPackageFare.toLocaleString('en-IN')}
+                                                        </th>
+                                                        <th style={{ padding: '10px 12px', textAlign: 'center', width: '70px' }}>C/Out</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {selectedPackageDuties.map((duty, idx) => {
+                                                        const dutyDateStr = duty.date ? new Date(duty.date).toISOString().split('T')[0] : '';
+                                                        const isSelectedDay = dutyDateStr === selectedCellData.dateStr;
+                                                        const dateDisplay = formatDayMonth(duty.date);
+                                                        const dayNumber = duty.dayNo || (idx + 1);
+                                                        const fare = Number(duty.revenue || duty.totalAmount || 0);
+
+                                                        return (
+                                                            <tr
+                                                                key={duty._id || idx}
+                                                                style={{
+                                                                    background: isSelectedDay ? 'rgba(56, 189, 248, 0.22)' : (idx % 2 === 0 ? '#1e293b' : '#172033'),
+                                                                    borderBottom: '1px solid #334155',
+                                                                    borderLeft: isSelectedDay ? '4px solid #38bdf8' : '4px solid transparent',
+                                                                    fontWeight: isSelectedDay ? '700' : 'normal',
+                                                                    transition: 'background 0.15s ease'
+                                                                }}
+                                                            >
+                                                                <td style={{ padding: '10px 12px', borderRight: '1px solid #334155', textAlign: 'center', fontWeight: '900', color: isSelectedDay ? '#38bdf8' : '#ffffff' }}>
+                                                                    {dateDisplay}
+                                                                </td>
+                                                                <td style={{ padding: '10px 10px', borderRight: '1px solid #334155', textAlign: 'center' }}>
+                                                                    <span style={{
+                                                                        padding: '2px 8px',
+                                                                        borderRadius: '4px',
+                                                                        background: isSelectedDay ? '#38bdf8' : 'rgba(255, 255, 255, 0.08)',
+                                                                        color: isSelectedDay ? '#000000' : '#cbd5e1',
+                                                                        fontWeight: '800',
+                                                                        fontSize: '11.5px'
+                                                                    }}>
+                                                                        Day {dayNumber}
+                                                                    </span>
+                                                                </td>
+                                                                <td style={{ padding: '10px 12px', borderRight: '1px solid #334155', color: '#cbd5e1' }}>
+                                                                    {duty.hotel || '-'}
+                                                                </td>
+                                                                <td style={{ padding: '10px 12px', borderRight: '1px solid #334155', fontWeight: '800', color: '#ffffff' }}>
+                                                                    {duty.clientName || 'Guest'}
+                                                                </td>
+                                                                <td style={{ padding: '10px 12px', borderRight: '1px solid #334155', color: '#38bdf8', fontWeight: '700' }}>
+                                                                    {duty.mobileNumber || '-'}
+                                                                </td>
+                                                                <td style={{ padding: '10px 12px', borderRight: '1px solid #334155', textAlign: 'center' }}>
+                                                                    {duty.time || duty.pickupTime ? (
+                                                                        <span style={{
+                                                                            padding: '2px 6px',
+                                                                            borderRadius: '4px',
+                                                                            background: 'rgba(255, 255, 255, 0.06)',
+                                                                            color: '#fde047',
+                                                                            fontSize: '11px',
+                                                                            fontWeight: '700'
+                                                                        }}>
+                                                                            {duty.time || duty.pickupTime}
+                                                                        </span>
+                                                                    ) : '-'}
+                                                                </td>
+                                                                <td style={{ padding: '10px 14px', borderRight: '1px solid #334155', color: '#e2e8f0' }}>
+                                                                    {duty.duty || duty.itinerary || 'Regular Duty'}
+                                                                </td>
+                                                                <td style={{ padding: '10px 14px', borderRight: '1px solid #334155', textAlign: 'right', fontWeight: '900', color: '#4ade80' }}>
+                                                                    ₹{fare.toLocaleString('en-IN')}
+                                                                </td>
+                                                                <td style={{ padding: '10px 12px', textAlign: 'center', color: '#94a3b8' }}>
+                                                                    {duty.cOut || duty.checkOut || (duty.status === 'Completed' ? '✓' : '-')}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
                                         </div>
                                     </div>
                                 ) : (selectedCellData.slot?.duties && selectedCellData.slot.duties.length > 0) ? (
