@@ -80,7 +80,6 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
     const [bookings, setBookings] = useState([]);
     const [vehicles, setVehicles] = useState([]);
     const [selectedCellData, setSelectedCellData] = useState(null);
-    const [hoverTooltip, setHoverTooltip] = useState(null);
 
     // Fetch vehicles, DRS duties and bookings for selected month
     const fetchMonthData = async () => {
@@ -393,18 +392,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
         setSelectedMonth(initialMonth);
     };
 
-    // Tooltip Hover Handlers
-    const handleCellMouseEnter = (e, data) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        setHoverTooltip({
-            ...data,
-            rect
-        });
-    };
 
-    const handleCellMouseLeave = () => {
-        setHoverTooltip(null);
-    };
 
     // Export to CSV
     const exportToCSV = () => {
@@ -806,11 +794,6 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                     title={`${col.displayName} ${col.currentDriver ? `• Default Driver: ${col.currentDriver.name}` : ''}`}
                                 >
                                     <div>{col.number}</div>
-                                    {col.currentDriver?.name && (
-                                        <div style={{ fontSize: '9px', fontWeight: '600', color: '#94a3b8', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '72px', margin: '0 auto' }}>
-                                            {col.currentDriver.name.split(' ')[0]}
-                                        </div>
-                                    )}
                                 </th>
                             ))}
                             <th style={{
@@ -908,19 +891,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                             <td
                                                 key={slot.col.number}
                                                 onClick={() => {
-                                                    if (booked || slot.duties.length > 0) {
-                                                        setSelectedCellData({
-                                                            dateStr: row.dateStr,
-                                                            formattedDate: row.formattedDate,
-                                                            dayOfWeek: row.dayOfWeek,
-                                                            vehicle: slot.col,
-                                                            slot
-                                                        });
-                                                    }
-                                                }}
-                                                onMouseEnter={(e) => {
-                                                    if (booked) e.currentTarget.style.filter = 'brightness(1.15)';
-                                                    handleCellMouseEnter(e, {
+                                                    setSelectedCellData({
                                                         dateStr: row.dateStr,
                                                         formattedDate: row.formattedDate,
                                                         dayOfWeek: row.dayOfWeek,
@@ -933,9 +904,11 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                                         isToday: row.isToday
                                                     });
                                                 }}
+                                                onMouseEnter={(e) => {
+                                                    e.currentTarget.style.filter = 'brightness(1.18)';
+                                                }}
                                                 onMouseLeave={(e) => {
-                                                    if (booked) e.currentTarget.style.filter = 'none';
-                                                    handleCellMouseLeave();
+                                                    e.currentTarget.style.filter = 'none';
                                                 }}
                                                 style={{
                                                     background: bgColor,
@@ -1024,7 +997,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                     {/* OS Vehicles */}
                                     <td
                                         onClick={() => {
-                                            if (row.osDuties.length > 0) {
+                                            if (row.osDuties.length > 0 || row.osAmount > 0) {
                                                 setSelectedCellData({
                                                     dateStr: row.dateStr,
                                                     formattedDate: row.formattedDate,
@@ -1036,18 +1009,11 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                             }
                                         }}
                                         onMouseEnter={(e) => {
-                                            if (row.osAmount > 0) {
-                                                handleCellMouseEnter(e, {
-                                                    dateStr: row.dateStr,
-                                                    formattedDate: row.formattedDate,
-                                                    dayOfWeek: row.dayOfWeek,
-                                                    isOS: true,
-                                                    osAmount: row.osAmount,
-                                                    osDuties: row.osDuties
-                                                });
-                                            }
+                                            if (row.osAmount > 0) e.currentTarget.style.filter = 'brightness(1.18)';
                                         }}
-                                        onMouseLeave={handleCellMouseLeave}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.filter = 'none';
+                                        }}
                                         style={{
                                             padding: '6px 8px',
                                             textAlign: 'center',
@@ -1190,231 +1156,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                 </table>
             </div>
 
-            {/* INSTANT FLOATING HOVER TOOLTIP CARD */}
-            {hoverTooltip && (
-                <div
-                    style={{
-                        position: 'fixed',
-                        left: Math.max(12, Math.min(window.innerWidth - 360, (hoverTooltip.rect?.left || 100) + ((hoverTooltip.rect?.width || 0) / 2) - 170)),
-                        top: ((hoverTooltip.rect?.bottom || 100) + 10 + 350 > window.innerHeight)
-                            ? Math.max(10, (hoverTooltip.rect?.top || 100) - 360)
-                            : (hoverTooltip.rect?.bottom || 100) + 8,
-                        width: '340px',
-                        maxHeight: '430px',
-                        background: 'linear-gradient(145deg, #090f1d 0%, #151f32 100%)',
-                        border: `2px solid ${
-                            hoverTooltip.isBooked
-                                ? (hoverTooltip.colorTheme?.bg || '#2563eb')
-                                : hoverTooltip.isOS
-                                ? '#c084fc'
-                                : hoverTooltip.isPast
-                                ? '#ef4444'
-                                : '#eab308'
-                        }`,
-                        borderRadius: '16px',
-                        padding: '16px',
-                        color: '#ffffff',
-                        boxShadow: '0 25px 60px rgba(0, 0, 0, 0.85), 0 0 25px rgba(0, 0, 0, 0.5)',
-                        zIndex: 100000,
-                        pointerEvents: 'none',
-                        backdropFilter: 'blur(20px)',
-                        fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
-                    }}
-                >
-                    {/* Tooltip Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px', marginBottom: '12px' }}>
-                        <div>
-                            <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '800', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                                {hoverTooltip.dayOfWeek}, {hoverTooltip.formattedDate}
-                            </div>
-                            <div style={{ fontSize: '16px', fontWeight: '950', color: '#ffffff', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                {hoverTooltip.isOS ? (
-                                    <span>🟣 Outside Vehicles (OS)</span>
-                                ) : (
-                                    <>
-                                        <span>🚗 {hoverTooltip.vehicle?.model} {hoverTooltip.vehicle?.number}</span>
-                                        <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '600' }}>({hoverTooltip.vehicle?.fullReg})</span>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-
-                        <span style={{
-                            fontSize: '10px',
-                            fontWeight: '900',
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            background: hoverTooltip.isPackage
-                                ? 'rgba(59, 130, 246, 0.25)'
-                                : hoverTooltip.isBooked
-                                ? 'rgba(16, 185, 129, 0.2)'
-                                : hoverTooltip.isOS
-                                ? 'rgba(192, 132, 252, 0.2)'
-                                : hoverTooltip.isPast
-                                ? 'rgba(239, 68, 68, 0.2)'
-                                : 'rgba(234, 179, 8, 0.2)',
-                            color: hoverTooltip.isPackage
-                                ? '#93c5fd'
-                                : hoverTooltip.isBooked
-                                ? '#4ade80'
-                                : hoverTooltip.isOS
-                                ? '#c084fc'
-                                : hoverTooltip.isPast
-                                ? '#f87171'
-                                : '#fef08a',
-                            border: `1px solid ${
-                                hoverTooltip.isPackage
-                                    ? 'rgba(59, 130, 246, 0.5)'
-                                    : hoverTooltip.isBooked
-                                    ? 'rgba(16, 185, 129, 0.4)'
-                                    : hoverTooltip.isOS
-                                    ? 'rgba(192, 132, 252, 0.4)'
-                                    : hoverTooltip.isPast
-                                    ? 'rgba(239, 68, 68, 0.4)'
-                                    : 'rgba(234, 179, 8, 0.4)'
-                            }`
-                        }}>
-                            {hoverTooltip.isPackage
-                                ? `📦 PACKAGE (DAY ${hoverTooltip.slot?.packageDayNumber}/${hoverTooltip.slot?.packageTotalDays})`
-                                : hoverTooltip.isBooked
-                                ? hoverTooltip.slot?.tripTypeDisplay?.toUpperCase()
-                                : hoverTooltip.isOS
-                                ? 'OUTSIDE'
-                                : hoverTooltip.isPast
-                                ? 'IDLE'
-                                : 'AVAILABLE'}
-                        </span>
-                    </div>
-
-                    {/* Tooltip Content */}
-                    {hoverTooltip.isBooked ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {hoverTooltip.slot?.duties?.map((duty, idx) => {
-                                const dName = duty.driver?.name || duty.customDriverName || 'No Driver Assigned';
-                                const dMobile = duty.driver?.mobile || '';
-                                const cName = duty.clientName || 'Guest';
-                                const cMobile = duty.mobileNumber || '';
-                                const fare = Number(duty.revenue || duty.totalAmount || 0);
-
-                                return (
-                                    <div key={duty._id || idx} style={{
-                                        background: 'rgba(255, 255, 255, 0.04)',
-                                        border: '1px solid rgba(255, 255, 255, 0.08)',
-                                        borderRadius: '10px',
-                                        padding: '10px 12px'
-                                    }}>
-                                        {/* Assigned Driver Highlight Card */}
-                                        <div style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            background: 'rgba(251, 191, 36, 0.16)',
-                                            border: '1px solid rgba(251, 191, 36, 0.35)',
-                                            padding: '7px 10px',
-                                            borderRadius: '8px',
-                                            marginBottom: '8px'
-                                        }}>
-                                            <span style={{ fontSize: '16px' }}>👨‍✈️</span>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontSize: '9.5px', color: '#fde047', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                                    Assigned Driver
-                                                </div>
-                                                <div style={{ fontSize: '14px', fontWeight: '950', color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                    {dName} {dMobile && <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 'normal' }}>({dMobile})</span>}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Client & Fare Row */}
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                            <div>
-                                                <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '700' }}>GUEST</div>
-                                                <div style={{ fontSize: '13px', fontWeight: '800', color: '#38bdf8' }}>
-                                                    {cName} {cMobile && <span style={{ fontSize: '10.5px', color: '#94a3b8' }}>• {cMobile}</span>}
-                                                </div>
-                                            </div>
-                                            <div style={{ textAlign: 'right' }}>
-                                                <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '700' }}>FARE AMOUNT</div>
-                                                <div style={{ fontSize: '15px', fontWeight: '950', color: '#4ade80' }}>
-                                                    ₹{fare.toLocaleString('en-IN')}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Route Details */}
-                                        <div style={{ fontSize: '11.5px', color: '#cbd5e1', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                                            <div><strong>Route:</strong> {duty.duty || duty.itinerary || 'Regular Duty'}</div>
-                                            {duty.hotel && <div><strong>Hotel:</strong> {duty.hotel}</div>}
-                                            {duty.bookingId && <div><strong>Booking ID:</strong> <span style={{ color: '#fbbf24' }}>{duty.bookingId}</span></div>}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ) : hoverTooltip.isOS ? (
-                        <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', padding: '6px 10px', background: 'rgba(192, 132, 252, 0.15)', borderRadius: '8px' }}>
-                                <span style={{ fontSize: '12px', fontWeight: '800', color: '#e2e8f0' }}>Total OS Duties:</span>
-                                <span style={{ fontSize: '14px', fontWeight: '950', color: '#c084fc' }}>₹{hoverTooltip.osAmount?.toLocaleString('en-IN')}</span>
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '240px', overflowY: 'auto' }}>
-                                {hoverTooltip.osDuties?.map((d, i) => (
-                                    <div key={i} style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '8px 10px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.06)', fontSize: '11.5px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800' }}>
-                                            <span style={{ color: '#ffffff' }}>{d.clientName || 'Guest'}</span>
-                                            <span style={{ color: '#4ade80' }}>₹{(d.revenue || d.totalAmount || 0).toLocaleString('en-IN')}</span>
-                                        </div>
-                                        <div style={{ color: '#fbbf24', marginTop: '3px' }}>
-                                            👨‍✈️ Driver: <strong>{d.customDriverName || d.driver?.name || 'Outside Driver'}</strong>
-                                        </div>
-                                        <div style={{ color: '#94a3b8', marginTop: '2px' }}>
-                                            🚗 Car: {d.customCarNumber || d.vehicle?.carNumber || d.carType || 'Market Car'}
-                                        </div>
-                                        <div style={{ color: '#cbd5e1', marginTop: '2px' }}>
-                                            📍 {d.duty || d.itinerary || 'Duty'}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ) : hoverTooltip.isPast ? (
-                        <div style={{ padding: '10px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.25)', fontSize: '12.5px' }}>
-                            <div style={{ fontWeight: '800', color: '#f87171', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span>🔴</span>
-                                <span>Car Was Unbooked / Idle</span>
-                            </div>
-                            <div style={{ color: '#cbd5e1', fontSize: '11.5px', marginTop: '6px' }}>
-                                No duty was assigned to {hoverTooltip.vehicle?.displayName} on this date.
-                            </div>
-                            {hoverTooltip.vehicle?.currentDriver && (
-                                <div style={{ color: '#fbbf24', fontSize: '11.5px', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                                    Default Fleet Driver: <strong>{hoverTooltip.vehicle.currentDriver.name}</strong>
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div style={{ padding: '10px', background: 'rgba(234, 179, 8, 0.1)', borderRadius: '10px', border: '1px solid rgba(234, 179, 8, 0.25)', fontSize: '12.5px' }}>
-                            <div style={{ fontWeight: '800', color: '#fef08a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span>🟡</span>
-                                <span>Free & Available to Book</span>
-                            </div>
-                            <div style={{ color: '#cbd5e1', fontSize: '11.5px', marginTop: '6px' }}>
-                                This vehicle is currently free on {hoverTooltip.formattedDate}.
-                            </div>
-                            {hoverTooltip.vehicle?.currentDriver && (
-                                <div style={{ color: '#fbbf24', fontSize: '11.5px', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                                    Default Fleet Driver: <strong>{hoverTooltip.vehicle.currentDriver.name}</strong>
-                                </div>
-                            )}
-                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '8px', fontStyle: 'italic' }}>
-                                💡 Click cell to dispatch duty in Live DRS
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* DETAIL MODAL WHEN A CELL IS CLICKED */}
+            {/* DETAIL MODAL WHEN A CELL IS CLICKED (STAYS FIRMLY UNTIL CLOSED) */}
             <AnimatePresence>
                 {selectedCellData && (
                     <motion.div
@@ -1465,16 +1207,30 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                     <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '800', letterSpacing: '1px' }}>
                                         {selectedCellData.dayOfWeek.toUpperCase()}, {selectedCellData.formattedDate}
                                     </div>
-                                    <div style={{ fontSize: '18px', fontWeight: '900', color: '#ffffff', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ fontSize: '18px', fontWeight: '900', color: '#ffffff', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                         {selectedCellData.isOS ? (
                                             <span>Outside Vehicles (OS) Duties</span>
                                         ) : (
                                             <>
-                                                <span>{selectedCellData.vehicle?.model} {selectedCellData.vehicle?.number}</span>
+                                                <span>🚗 {selectedCellData.vehicle?.model} {selectedCellData.vehicle?.number}</span>
                                                 <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600' }}>
                                                     ({selectedCellData.vehicle?.fullReg})
                                                 </span>
                                             </>
+                                        )}
+
+                                        {selectedCellData.slot?.isPackage && (
+                                            <span style={{
+                                                fontSize: '11px',
+                                                fontWeight: '900',
+                                                padding: '3px 8px',
+                                                borderRadius: '6px',
+                                                background: selectedCellData.slot.colorTheme?.bg || '#2563eb',
+                                                color: '#ffffff',
+                                                letterSpacing: '0.5px'
+                                            }}>
+                                                PACKAGE (DAY {selectedCellData.slot.packageDayNumber}/{selectedCellData.slot.packageTotalDays})
+                                            </span>
                                         )}
                                     </div>
                                 </div>
@@ -1498,17 +1254,17 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                 </button>
                             </div>
 
-                            {/* Modal Body: List of Duties */}
+                            {/* Modal Body: List of Duties or Status */}
                             <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
                                 {selectedCellData.isOS ? (
                                     <div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', padding: '10px 14px', background: 'rgba(192, 132, 252, 0.1)', borderRadius: '10px', border: '1px solid rgba(192, 132, 252, 0.3)' }}>
                                             <span style={{ fontSize: '13px', fontWeight: '700', color: '#e2e8f0' }}>Total OS Duties:</span>
-                                            <span style={{ fontSize: '15px', fontWeight: '900', color: '#c084fc' }}>₹{selectedCellData.osAmount.toLocaleString('en-IN')}</span>
+                                            <span style={{ fontSize: '15px', fontWeight: '900', color: '#c084fc' }}>₹{(selectedCellData.osAmount || 0).toLocaleString('en-IN')}</span>
                                         </div>
 
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                            {selectedCellData.osDuties.map((duty, idx) => (
+                                            {(selectedCellData.osDuties || []).map((duty, idx) => (
                                                 <div key={duty._id || idx} style={{
                                                     background: 'rgba(255, 255, 255, 0.03)',
                                                     border: '1px solid rgba(255, 255, 255, 0.08)',
@@ -1540,46 +1296,99 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                             ))}
                                         </div>
                                     </div>
-                                ) : (
+                                ) : (selectedCellData.slot?.duties && selectedCellData.slot.duties.length > 0) ? (
                                     <div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', padding: '10px 14px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '10px', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
                                             <span style={{ fontSize: '13px', fontWeight: '700', color: '#e2e8f0' }}>Total Day Revenue:</span>
-                                            <span style={{ fontSize: '15px', fontWeight: '900', color: '#4ade80' }}>₹{selectedCellData.slot.revenue.toLocaleString('en-IN')}</span>
+                                            <span style={{ fontSize: '15px', fontWeight: '900', color: '#4ade80' }}>₹{(selectedCellData.slot.revenue || 0).toLocaleString('en-IN')}</span>
                                         </div>
 
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                            {selectedCellData.slot.duties.map((duty, idx) => (
-                                                <div key={duty._id || idx} style={{
-                                                    background: 'rgba(255, 255, 255, 0.03)',
-                                                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                                                    borderRadius: '12px',
-                                                    padding: '14px'
-                                                }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                                                        <div>
-                                                            <div style={{ fontSize: '15px', fontWeight: '800', color: '#ffffff' }}>
-                                                                {duty.clientName || 'Guest'}
-                                                            </div>
-                                                            {duty.mobileNumber && (
-                                                                <div style={{ fontSize: '12px', color: '#94a3b8' }}>
-                                                                    📞 {duty.mobileNumber}
+                                            {selectedCellData.slot.duties.map((duty, idx) => {
+                                                const dName = duty.driver?.name || duty.customDriverName || 'Not Assigned';
+                                                const dPhone = duty.driver?.phone || duty.driver?.mobile || '';
+                                                return (
+                                                    <div key={duty._id || idx} style={{
+                                                        background: 'rgba(255, 255, 255, 0.03)',
+                                                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                                                        borderRadius: '12px',
+                                                        padding: '14px'
+                                                    }}>
+                                                        {/* Assigned Driver Box */}
+                                                        <div style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '8px',
+                                                            background: 'rgba(251, 191, 36, 0.12)',
+                                                            border: '1px solid rgba(251, 191, 36, 0.3)',
+                                                            padding: '8px 12px',
+                                                            borderRadius: '8px',
+                                                            marginBottom: '10px'
+                                                        }}>
+                                                            <span style={{ fontSize: '16px' }}>👨‍✈️</span>
+                                                            <div style={{ flex: 1 }}>
+                                                                <div style={{ fontSize: '10px', color: '#fde047', fontWeight: '800', textTransform: 'uppercase' }}>Assigned Driver</div>
+                                                                <div style={{ fontSize: '14px', fontWeight: '900', color: '#ffffff' }}>
+                                                                    {dName} {dPhone && <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 'normal' }}>({dPhone})</span>}
                                                                 </div>
-                                                            )}
+                                                            </div>
                                                         </div>
-                                                        <span style={{ fontSize: '15px', fontWeight: '900', color: '#4ade80' }}>
-                                                            ₹{(duty.revenue || duty.totalAmount || 0).toLocaleString('en-IN')}
-                                                        </span>
-                                                    </div>
 
-                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px', color: '#cbd5e1', marginTop: '10px', padding: '8px 12px', background: 'rgba(0, 0, 0, 0.25)', borderRadius: '8px' }}>
-                                                        <div><strong>Assigned Driver:</strong> <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>{duty.driver?.name || duty.customDriverName || 'Not Assigned'}</span></div>
-                                                        <div><strong>Trip Scope:</strong> <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>{isOutsideDuty(duty) ? 'Outside' : 'City Local'}</span></div>
-                                                        <div><strong>Status:</strong> {duty.status || 'Active'}</div>
-                                                        <div style={{ gridColumn: '1 / -1' }}><strong>Duty / Route:</strong> {duty.duty || duty.itinerary || 'Regular Duty'}</div>
+                                                        {/* Guest & Fare */}
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                                                            <div>
+                                                                <div style={{ fontSize: '15px', fontWeight: '800', color: '#ffffff' }}>
+                                                                    {duty.clientName || 'Guest'}
+                                                                </div>
+                                                                {duty.mobileNumber && (
+                                                                    <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                                                                        📞 {duty.mobileNumber}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <span style={{ fontSize: '15px', fontWeight: '900', color: '#4ade80' }}>
+                                                                ₹{(duty.revenue || duty.totalAmount || 0).toLocaleString('en-IN')}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Route & Details */}
+                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px', color: '#cbd5e1', marginTop: '10px', padding: '8px 12px', background: 'rgba(0, 0, 0, 0.25)', borderRadius: '8px' }}>
+                                                            <div><strong>Trip Scope:</strong> <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>{isOutsideDuty(duty) ? 'Outside' : 'City Local'}</span></div>
+                                                            <div><strong>Status:</strong> {duty.status || 'Active'}</div>
+                                                            {duty.hotel && <div><strong>Hotel:</strong> {duty.hotel}</div>}
+                                                            {duty.bookingId && <div><strong>Booking ID:</strong> <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>{duty.bookingId}</span></div>}
+                                                            <div style={{ gridColumn: '1 / -1' }}><strong>Duty / Route:</strong> {duty.duty || duty.itinerary || 'Regular Duty'}</div>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
+                                    </div>
+                                ) : selectedCellData.isPast ? (
+                                    <div style={{ padding: '24px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '14px', border: '1px solid rgba(239, 68, 68, 0.25)', textAlign: 'center' }}>
+                                        <div style={{ fontSize: '36px', marginBottom: '8px' }}>🔴</div>
+                                        <div style={{ fontSize: '17px', fontWeight: '900', color: '#f87171' }}>Car Was Unbooked / Idle</div>
+                                        <div style={{ color: '#cbd5e1', fontSize: '13px', marginTop: '8px', lineHeight: 1.5 }}>
+                                            No duty was assigned to <strong>{selectedCellData.vehicle?.displayName}</strong> on {selectedCellData.formattedDate}.
+                                        </div>
+                                        {selectedCellData.vehicle?.currentDriver && (
+                                            <div style={{ color: '#fbbf24', fontSize: '12.5px', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                                                Default Fleet Driver: <strong>{selectedCellData.vehicle.currentDriver.name}</strong>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div style={{ padding: '24px', background: 'rgba(234, 179, 8, 0.08)', borderRadius: '14px', border: '1px solid rgba(234, 179, 8, 0.25)', textAlign: 'center' }}>
+                                        <div style={{ fontSize: '36px', marginBottom: '8px' }}>🟡</div>
+                                        <div style={{ fontSize: '17px', fontWeight: '900', color: '#fef08a' }}>Free & Available to Book</div>
+                                        <div style={{ color: '#cbd5e1', fontSize: '13px', marginTop: '8px', lineHeight: 1.5 }}>
+                                            <strong>{selectedCellData.vehicle?.displayName}</strong> is free and ready to dispatch on {selectedCellData.formattedDate}.
+                                        </div>
+                                        {selectedCellData.vehicle?.currentDriver && (
+                                            <div style={{ color: '#fbbf24', fontSize: '12.5px', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                                                Default Fleet Driver: <strong>{selectedCellData.vehicle.currentDriver.name}</strong>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>

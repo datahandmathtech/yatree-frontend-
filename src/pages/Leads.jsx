@@ -1754,6 +1754,45 @@ export default function Leads() {
             }
         }
 
+        // Also ensure direct bookings from companyBookings are included as conversions if not already linked
+        const countedBookingCodes = new Set();
+        for (let d = 1; d <= days; d++) {
+            convLeadsByDay[d].forEach(item => {
+                if (item.bookingId) countedBookingCodes.add(String(item.bookingId));
+                if (item.clientCode) countedBookingCodes.add(String(item.clientCode));
+            });
+        }
+
+        if (Array.isArray(companyBookings)) {
+            for (let i = 0; i < companyBookings.length; i++) {
+                const b = companyBookings[i];
+                if (!b || b.bookingStatus === 'Cancelled' || b.bookingStatus === 'Lost') continue;
+                const bCode = String(b.bookingId || b.clientCode || '');
+                if (bCode && countedBookingCodes.has(bCode)) continue;
+
+                const convDateRaw = b.advanceDate || b.bookingDate || b.travelStartDate || b.createdAt;
+                const dConv = parseLeadDateInfo(convDateRaw);
+                if (dConv && dConv.year === year && dConv.monthIdx === monthIdx && dConv.day >= 1 && dConv.day <= days) {
+                    const adaptedLead = {
+                        _id: b._id,
+                        leadId: b.bookingId || b.clientCode,
+                        clientCode: b.clientCode || b.bookingId,
+                        bookingId: b.bookingId || b.clientCode,
+                        clientName: b.clientName || 'Guest (TBA)',
+                        mobileNumber: b.mobileNumber || '',
+                        totalAmount: Number(b.totalAmount) || Number(b.packagePrice) || 0,
+                        advanceAmount: Number(b.advancePaid) || 0,
+                        advanceDate: convDateRaw,
+                        status: 'Confirmed',
+                        source: b.source || 'Live DRS Direct Booking',
+                        isDirectBooking: true
+                    };
+                    convLeadsByDay[dConv.day].push(adaptedLead);
+                    if (bCode) countedBookingCodes.add(bCode);
+                }
+            }
+        }
+
         const now = new Date();
         const isCurrentMonth = now.getFullYear() === year && now.getMonth() === monthIdx;
         const today = now.getDate();
@@ -1792,7 +1831,7 @@ export default function Leads() {
             totalConversionsAmt,
             dailyList
         };
-    }, [sidebarLeads, leads, bookingLookupMap, selectedSidebarMonth, SIDEBAR_MONTH_OPTIONS]);
+    }, [sidebarLeads, leads, companyBookings, bookingLookupMap, selectedSidebarMonth, SIDEBAR_MONTH_OPTIONS]);
 
     // KPI Summary Calculations
     const kpiData = useMemo(() => {
@@ -3428,7 +3467,7 @@ export default function Leads() {
                                     {sidebarStats.dailyList.map(item => {
                                         const isExpanded = expandedDailyDay === item.day;
                                         const isHovered = hoveredDailyDay === item.day;
-                                        const hasLeads = item.leadsCount > 0;
+                                        const hasLeads = item.leadsCount > 0 || item.convCount > 0;
                                         const isToday = item.isToday;
 
                                         return (

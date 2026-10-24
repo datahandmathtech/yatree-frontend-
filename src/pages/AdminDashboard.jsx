@@ -762,314 +762,75 @@ const AdminDashboard = () => {
                                                         <div className="alert-type" style={{ color: 'white', marginBottom: '8px', fontSize: '12px', fontWeight: '600' }}>
                                                             {allowance.type}
                                                         </div>
-                                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginBottom: '12px' }}>
+                                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginBottom: '8px' }}>
                                                             Date: {formatDateIST(allowance.date)} <br/> Vehicle: {allowance.carNumber}
                                                         </div>
+
+                                                        {/* Connected DRS Duty Details */}
+                                                        {allowance.drsDuty ? (
+                                                            <div style={{
+                                                                marginTop: '4px',
+                                                                marginBottom: '10px',
+                                                                padding: '8px 10px',
+                                                                borderRadius: '8px',
+                                                                background: 'rgba(15, 23, 42, 0.65)',
+                                                                border: '1px solid rgba(56, 189, 248, 0.3)'
+                                                            }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginBottom: '4px' }}>
+                                                                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#38bdf8', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                                        🚕 {allowance.drsDuty.duty || 'DRS Duty'}
+                                                                    </span>
+                                                                    {allowance.drsDuty.bookingId && (
+                                                                        <span style={{
+                                                                            fontSize: '9px',
+                                                                            fontWeight: '800',
+                                                                            color: '#fbbf24',
+                                                                            background: 'rgba(251, 191, 36, 0.15)',
+                                                                            padding: '2px 6px',
+                                                                            borderRadius: '4px',
+                                                                            border: '1px solid rgba(251, 191, 36, 0.3)'
+                                                                        }}>
+                                                                            #{allowance.drsDuty.bookingId}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                {allowance.drsDuty.guestName && (
+                                                                    <div style={{ fontSize: '11px', color: '#ffffff', fontWeight: '600', marginBottom: '2px' }}>
+                                                                        👤 {allowance.drsDuty.guestName}
+                                                                    </div>
+                                                                )}
+                                                                {(allowance.drsDuty.itinerary && allowance.drsDuty.itinerary !== allowance.drsDuty.duty) && (
+                                                                    <div style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '2px' }}>
+                                                                        📍 {allowance.drsDuty.itinerary}
+                                                                    </div>
+                                                                )}
+                                                                {(allowance.drsDuty.hotel || allowance.drsDuty.pickupPoint) && (
+                                                                    <div style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.5)' }}>
+                                                                        🏨 {allowance.drsDuty.hotel || allowance.drsDuty.pickupPoint} {allowance.drsDuty.time ? `• ${allowance.drsDuty.time}` : ''}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <div style={{
+                                                                marginTop: '4px',
+                                                                marginBottom: '10px',
+                                                                padding: '6px 8px',
+                                                                borderRadius: '6px',
+                                                                background: 'rgba(255, 255, 255, 0.03)',
+                                                                border: '1px dashed rgba(255, 255, 255, 0.1)',
+                                                                fontSize: '10px',
+                                                                color: 'rgba(255, 255, 255, 0.4)'
+                                                            }}>
+                                                                No DRS duty assigned for this date
+                                                            </div>
+                                                        )}
+
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
                                                             <button onClick={() => handleApproveRejectAllowance(allowance.attendanceId, allowance._id, 'approved')} style={{ background: '#10b981', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '800', cursor: 'pointer', flex: 1 }}>APPROVE</button>
                                                             <button onClick={() => handleApproveRejectAllowance(allowance.attendanceId, allowance._id, 'rejected')} style={{ background: '#f43f5e', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '8px', fontSize: '11px', fontWeight: '800', cursor: 'pointer', flex: 1 }}>REJECT</button>
                                                         </div>
                                                     </div>
                                                 ))}
-                                            </div>
-                                        ) : activeAlertModal === 'MaintenanceServices' ? (
-                                            <div>
-                                                {/* Header summary banner */}
-                                                {getFilteredAlerts('MaintenanceServices').length > 0 && (
-                                                    <div style={{
-                                                        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(239, 68, 68, 0.08))',
-                                                        border: '1px solid rgba(245, 158, 11, 0.25)',
-                                                        borderRadius: '16px',
-                                                        padding: '14px 18px',
-                                                        marginBottom: '20px',
-                                                        display: 'flex',
-                                                        justifyContent: 'space-between',
-                                                        alignItems: 'center',
-                                                        flexWrap: 'wrap',
-                                                        gap: '12px'
-                                                    }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                            <div style={{
-                                                                width: '40px',
-                                                                height: '40px',
-                                                                borderRadius: '12px',
-                                                                background: 'rgba(245, 158, 11, 0.2)',
-                                                                color: '#f59e0b',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                flexShrink: 0
-                                                            }}>
-                                                                <Wrench size={20} />
-                                                            </div>
-                                                            <div>
-                                                                <div style={{ color: '#ffffff', fontWeight: '800', fontSize: '14px' }}>
-                                                                    Fleet Service Threshold Alerts
-                                                                </div>
-                                                                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '12px' }}>
-                                                                    Vehicles that have exceeded or reached recommended manufacturer maintenance intervals.
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div style={{
-                                                            background: 'rgba(244, 63, 94, 0.2)',
-                                                            border: '1px solid rgba(244, 63, 94, 0.4)',
-                                                            color: '#f87171',
-                                                            borderRadius: '20px',
-                                                            padding: '5px 14px',
-                                                            fontSize: '12px',
-                                                            fontWeight: '800',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            gap: '6px'
-                                                        }}>
-                                                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f87171', display: 'inline-block' }} />
-                                                            {getFilteredAlerts('MaintenanceServices').length} Vehicles Need Service
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {getFilteredAlerts('MaintenanceServices').length === 0 ? (
-                                                    <div style={{
-                                                        padding: '60px 20px',
-                                                        textAlign: 'center',
-                                                        background: 'rgba(16, 185, 129, 0.05)',
-                                                        borderRadius: '20px',
-                                                        border: '1px dashed rgba(16, 185, 129, 0.25)'
-                                                    }}>
-                                                        <div style={{
-                                                            width: '64px',
-                                                            height: '64px',
-                                                            borderRadius: '50%',
-                                                            background: 'rgba(16, 185, 129, 0.15)',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            margin: '0 auto 16px',
-                                                            color: '#10b981'
-                                                        }}>
-                                                            <CheckCircle size={32} />
-                                                        </div>
-                                                        <h3 style={{ color: '#fff', fontSize: '18px', fontWeight: '700', margin: '0 0 6px 0' }}>
-                                                            All Fleet Vehicles Up To Date
-                                                        </h3>
-                                                        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', margin: 0 }}>
-                                                            No vehicles currently have overdue service intervals or pending routine maintenance.
-                                                        </p>
-                                                    </div>
-                                                ) : (
-                                                    <div className="expiry-alerts-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))' }}>
-                                                        {getFilteredAlerts('MaintenanceServices')
-                                                            .sort((a, b) => (a.daysLeft || 0) - (b.daysLeft || 0))
-                                                            .map((alert, index) => {
-                                                                const isOverdue = (alert.daysLeft || 0) <= 0;
-                                                                const isKmService = alert.type === 'Service' && !alert.expiryDate;
-                                                                const kmVal = Math.abs(alert.daysLeft || 0);
-
-                                                                let serviceTitle = alert.documentType || 'Regular Service';
-                                                                if (serviceTitle.includes('Regular Service')) {
-                                                                    serviceTitle = 'Regular Engine & Oil Service';
-                                                                } else if (serviceTitle.includes('Alignment') || serviceTitle.includes('Balancing') || serviceTitle.includes('Tyres')) {
-                                                                    serviceTitle = 'Wheel Alignment & Balancing';
-                                                                }
-
-                                                                return (
-                                                                    <div
-                                                                        key={index}
-                                                                        style={{
-                                                                            background: 'linear-gradient(145deg, rgba(26, 34, 53, 0.95), rgba(15, 23, 42, 0.98))',
-                                                                            border: isOverdue ? '1.5px solid rgba(244, 63, 94, 0.35)' : '1.5px solid rgba(245, 158, 11, 0.35)',
-                                                                            borderRadius: '20px',
-                                                                            padding: '20px',
-                                                                            position: 'relative',
-                                                                            overflow: 'hidden',
-                                                                            boxShadow: isOverdue ? '0 12px 28px -8px rgba(244, 63, 94, 0.2)' : '0 12px 28px -8px rgba(245, 158, 11, 0.2)',
-                                                                            display: 'flex',
-                                                                            flexDirection: 'column',
-                                                                            justifyContent: 'space-between',
-                                                                            gap: '16px'
-                                                                        }}
-                                                                    >
-                                                                        {/* Top Row: Indian Number Plate + Status Badge */}
-                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-                                                                            {/* Indian License Plate Badge */}
-                                                                            <div style={{
-                                                                                display: 'inline-flex',
-                                                                                alignItems: 'center',
-                                                                                background: '#090d16',
-                                                                                border: '1.5px solid rgba(255, 255, 255, 0.22)',
-                                                                                borderRadius: '8px',
-                                                                                padding: '3px 10px 3px 0',
-                                                                                overflow: 'hidden',
-                                                                                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                                                                                flexShrink: 0
-                                                                            }}>
-                                                                                <div style={{
-                                                                                    background: '#1d4ed8',
-                                                                                    color: '#fff',
-                                                                                    padding: '4px 6px',
-                                                                                    fontSize: '9px',
-                                                                                    fontWeight: '900',
-                                                                                    letterSpacing: '0.5px',
-                                                                                    display: 'flex',
-                                                                                    flexDirection: 'column',
-                                                                                    alignItems: 'center',
-                                                                                    justifyContent: 'center',
-                                                                                    lineHeight: 1,
-                                                                                    marginRight: '8px'
-                                                                                }}>
-                                                                                    <span>🇮🇳</span>
-                                                                                    <span style={{ fontSize: '7.5px', marginTop: '2px' }}>IND</span>
-                                                                                </div>
-                                                                                <span style={{
-                                                                                    color: '#ffffff',
-                                                                                    fontSize: '15px',
-                                                                                    fontWeight: '900',
-                                                                                    letterSpacing: '1.2px',
-                                                                                    fontFamily: 'monospace, -apple-system, sans-serif',
-                                                                                    whiteSpace: 'nowrap'
-                                                                                }}>
-                                                                                    {alert.identifier}
-                                                                                </span>
-                                                                            </div>
-
-                                                                            {/* Urgency Pill */}
-                                                                            <div style={{
-                                                                                display: 'inline-flex',
-                                                                                alignItems: 'center',
-                                                                                gap: '6px',
-                                                                                background: isOverdue ? 'rgba(244, 63, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                                                                                border: `1px solid ${isOverdue ? 'rgba(244, 63, 94, 0.45)' : 'rgba(245, 158, 11, 0.45)'}`,
-                                                                                color: isOverdue ? '#f87171' : '#fbbf24',
-                                                                                padding: '6px 12px',
-                                                                                borderRadius: '20px',
-                                                                                fontSize: '11px',
-                                                                                fontWeight: '800',
-                                                                                letterSpacing: '0.4px',
-                                                                                whiteSpace: 'nowrap'
-                                                                            }}>
-                                                                                {isOverdue ? <AlertTriangle size={13} color="#f87171" /> : <Clock size={13} color="#fbbf24" />}
-                                                                                <span>
-                                                                                    {isKmService
-                                                                                        ? (isOverdue ? `${kmVal.toLocaleString('en-IN')} KM Overdue` : `${kmVal.toLocaleString('en-IN')} KM Due`)
-                                                                                        : (isOverdue ? `${kmVal}d Overdue` : `${kmVal}d Due`)}
-                                                                                </span>
-                                                                            </div>
-                                                                        </div>
-
-                                                                        {/* Service Title & Urgency Description */}
-                                                                        <div>
-                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                                                                                <div style={{
-                                                                                    width: '28px',
-                                                                                    height: '28px',
-                                                                                    borderRadius: '8px',
-                                                                                    background: 'rgba(245, 158, 11, 0.15)',
-                                                                                    color: '#f59e0b',
-                                                                                    display: 'flex',
-                                                                                    alignItems: 'center',
-                                                                                    justifyContent: 'center',
-                                                                                    flexShrink: 0
-                                                                                }}>
-                                                                                    <Wrench size={14} />
-                                                                                </div>
-                                                                                <div style={{ color: '#ffffff', fontSize: '15px', fontWeight: '800', lineHeight: 1.2 }}>
-                                                                                    {serviceTitle}
-                                                                                </div>
-                                                                            </div>
-                                                                            <div style={{ color: isOverdue ? '#fb7185' : 'rgba(255,255,255,0.6)', fontSize: '12px', fontWeight: '600' }}>
-                                                                                {isOverdue ? '⚠️ Repair Immediately — Interval Exceeded' : 'Scheduled maintenance approaching'}
-                                                                            </div>
-                                                                        </div>
-
-                                                                        {/* Metric Bar (Odo info, trigger type, deficit) */}
-                                                                        <div style={{
-                                                                            background: 'rgba(0, 0, 0, 0.35)',
-                                                                            border: '1px solid rgba(255, 255, 255, 0.06)',
-                                                                            borderRadius: '12px',
-                                                                            padding: '10px 14px',
-                                                                            display: 'grid',
-                                                                            gridTemplateColumns: 'repeat(2, 1fr)',
-                                                                            gap: '12px'
-                                                                        }}>
-                                                                            <div>
-                                                                                <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: '10px', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.5px', marginBottom: '2px' }}>
-                                                                                    Current Odometer
-                                                                                </div>
-                                                                                <div style={{ color: '#ffffff', fontSize: '13px', fontWeight: '800', fontFamily: 'monospace, sans-serif' }}>
-                                                                                    {alert.currentKm ? `${Number(alert.currentKm).toLocaleString('en-IN')} KM` : '--'}
-                                                                                </div>
-                                                                            </div>
-                                                                            <div>
-                                                                                <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: '10px', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.5px', marginBottom: '2px' }}>
-                                                                                    Service Trigger
-                                                                                </div>
-                                                                                <div style={{ color: isOverdue ? '#f87171' : '#fbbf24', fontSize: '13px', fontWeight: '800' }}>
-                                                                                    {isKmService ? `${kmVal.toLocaleString('en-IN')} KM ${isOverdue ? 'Late' : 'Left'}` : (alert.expiryDate ? formatDateIST(alert.expiryDate) : 'KM Limit')}
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-
-                                                                        {/* Action Footer */}
-                                                                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                                                                            <button
-                                                                                onClick={() => {
-                                                                                    setActiveAlertModal(null);
-                                                                                    navigate('/admin/maintenance');
-                                                                                }}
-                                                                                style={{
-                                                                                    flex: 1,
-                                                                                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                                                                                    color: '#000000',
-                                                                                    border: 'none',
-                                                                                    borderRadius: '10px',
-                                                                                    padding: '10px 14px',
-                                                                                    fontSize: '12px',
-                                                                                    fontWeight: '800',
-                                                                                    cursor: 'pointer',
-                                                                                    display: 'flex',
-                                                                                    alignItems: 'center',
-                                                                                    justifyContent: 'center',
-                                                                                    gap: '6px',
-                                                                                    transition: 'all 0.2s ease',
-                                                                                    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.25)'
-                                                                                }}
-                                                                            >
-                                                                                <Wrench size={14} />
-                                                                                <span>Record Service</span>
-                                                                                <ArrowUpRight size={14} />
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => {
-                                                                                    setActiveAlertModal(null);
-                                                                                    navigate('/admin/vehicles');
-                                                                                }}
-                                                                                style={{
-                                                                                    background: 'rgba(255, 255, 255, 0.08)',
-                                                                                    color: '#ffffff',
-                                                                                    border: '1px solid rgba(255, 255, 255, 0.12)',
-                                                                                    borderRadius: '10px',
-                                                                                    padding: '10px 14px',
-                                                                                    fontSize: '12px',
-                                                                                    fontWeight: '700',
-                                                                                    cursor: 'pointer',
-                                                                                    display: 'flex',
-                                                                                    alignItems: 'center',
-                                                                                    justifyContent: 'center',
-                                                                                    gap: '6px',
-                                                                                    transition: 'all 0.2s ease'
-                                                                                }}
-                                                                                title="View vehicle details"
-                                                                            >
-                                                                                <Car size={14} />
-                                                                                <span>Vehicle</span>
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                    </div>
-                                                )}
                                             </div>
                                         ) : (
                                             <div className="expiry-alerts-grid">

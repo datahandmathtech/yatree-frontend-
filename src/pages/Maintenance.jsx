@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from '../api/axios';
+import BankSelector from '../components/common/BankSelector';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -131,6 +132,7 @@ const Maintenance = () => {
             billDate: '',
             amount: '',
             paymentMode: 'Cash',
+            bankAccountId: '',
             paymentStatus: 'Paid',
             currentKm: '',
             nextServiceKm: '',
@@ -152,6 +154,19 @@ const Maintenance = () => {
         if (typeParam) setFilterType(typeParam);
     }, [location.search]);
 
+    // Bank Accounts state for Cash vs Bank payment
+    const [bankAccounts, setBankAccounts] = useState([]);
+
+    const fetchBankAccounts = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            const banksRes = await axios.get(`/api/banks/company/${selectedCompany._id}`).catch(() => axios.get(`/api/admin/bank-accounts/${selectedCompany._id}`)).catch(() => ({ data: [] }));
+            setBankAccounts(Array.isArray(banksRes.data) ? banksRes.data : (banksRes.data?.bankAccounts || []));
+        } catch (err) {
+            console.error('Failed to fetch bank accounts in Maintenance', err);
+        }
+    };
+
     // Form State
     const [formData, setFormData] = useState({
         vehicleId: '',
@@ -165,6 +180,7 @@ const Maintenance = () => {
         billDate: '',
         amount: '',
         paymentMode: 'Cash',
+        bankAccountId: '',
         paymentStatus: 'Paid',
         paymentSource: 'Paid',
         currentKm: '',
@@ -220,6 +236,7 @@ const Maintenance = () => {
             fetchVehicles();
             fetchDrivers();
             fetchAllGarages();
+            fetchBankAccounts();
             if (viewMode === 'super') fetchAggregatedData();
         }
     }, [selectedCompany, selectedMonth, selectedYear, viewMode]);
@@ -419,6 +436,7 @@ const Maintenance = () => {
             billDate: '',
             amount: '',
             paymentMode: 'Cash',
+            bankAccountId: '',
             paymentStatus: 'Paid',
             paymentSource: 'Paid',
             currentKm: '',
@@ -449,6 +467,7 @@ const Maintenance = () => {
             billDate: record.billDate ? nowIST(record.billDate).toISOString().split('T')[0] : '',
             amount: record.amount,
             paymentMode: record.paymentMode || 'Cash',
+            bankAccountId: record.bankAccount?._id || record.bankAccount || '',
             paymentStatus: record.paymentStatus || 'Paid',
             paymentSource: record.paymentSource || 'Paid',
             currentKm: record.currentKm || '',
@@ -1422,6 +1441,26 @@ const Maintenance = () => {
                                                         fontWeight: '900', textTransform: 'uppercase',
                                                         border: `1px solid ${(record.paymentStatus === 'Due') ? 'rgba(244,63,94,0.3)' : 'rgba(16,185,129,0.3)'}`
                                                     }}>{record.paymentStatus || 'Paid'}</span>
+                                                    {record.paymentStatus !== 'Due' && (
+                                                        <span style={{
+                                                            fontSize: '9px', padding: '2px 7px', borderRadius: '4px',
+                                                            background: record.bankAccount ? 'rgba(59, 130, 246, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+                                                            color: record.bankAccount ? '#60a5fa' : '#facc15',
+                                                            fontWeight: '800',
+                                                            border: `1px solid ${record.bankAccount ? 'rgba(59, 130, 246, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`
+                                                        }}>
+                                                            {(() => {
+                                                                if (record.bankAccount) {
+                                                                    if (typeof record.bankAccount === 'object') {
+                                                                        return `🏦 ${record.bankAccount.accountName || record.bankAccount.bankName || 'Bank'}`;
+                                                                    }
+                                                                    const found = bankAccounts?.find(b => b._id === record.bankAccount);
+                                                                    return `🏦 ${found ? (found.accountName || found.bankName) : 'Bank'}`;
+                                                                }
+                                                                return '💵 Cash';
+                                                            })()}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td style={{ padding: '20px 25px', textAlign: 'right' }}>
@@ -1523,7 +1562,7 @@ const Maintenance = () => {
                                                 </div>
                                                 <div style={{ textAlign: 'right' }}>
                                                     <div style={{ color: '#10b981', fontWeight: '800', fontSize: '16px' }}>₹{Number(record.amount || 0).toLocaleString()}</div>
-                                                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', marginTop: '4px' }}>
+                                                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', marginTop: '4px', flexWrap: 'wrap' }}>
                                                         <span style={{
                                                             fontSize: '9px', padding: '2px 7px', borderRadius: '4px',
                                                             background: (record.paymentStatus === 'Due') ? 'rgba(244, 63, 94, 0.15)' : 'rgba(16, 185, 129, 0.15)',
@@ -1531,6 +1570,26 @@ const Maintenance = () => {
                                                             fontWeight: '900', textTransform: 'uppercase',
                                                             border: `1px solid ${(record.paymentStatus === 'Due') ? 'rgba(244,63,94,0.3)' : 'rgba(16,185,129,0.3)'}`
                                                         }}>{record.paymentStatus || 'Paid'}</span>
+                                                        {record.paymentStatus !== 'Due' && (
+                                                            <span style={{
+                                                                fontSize: '9px', padding: '2px 7px', borderRadius: '4px',
+                                                                background: record.bankAccount ? 'rgba(59, 130, 246, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+                                                                color: record.bankAccount ? '#60a5fa' : '#facc15',
+                                                                fontWeight: '800',
+                                                                border: `1px solid ${record.bankAccount ? 'rgba(59, 130, 246, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`
+                                                            }}>
+                                                                {(() => {
+                                                                    if (record.bankAccount) {
+                                                                        if (typeof record.bankAccount === 'object') {
+                                                                            return `🏦 ${record.bankAccount.accountName || record.bankAccount.bankName || 'Bank'}`;
+                                                                        }
+                                                                        const found = bankAccounts?.find(b => b._id === record.bankAccount);
+                                                                        return `🏦 ${found ? (found.accountName || found.bankName) : 'Bank'}`;
+                                                                    }
+                                                                    return '💵 Cash';
+                                                                })()}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1857,7 +1916,7 @@ const Maintenance = () => {
                                             </div>
 
                                             <div>
-                                                <label style={{ color: 'white', fontSize: '12px', marginBottom: '8px', display: 'block' }}>Payment Source</label>
+                                                <label style={{ color: 'white', fontSize: '12px', marginBottom: '8px', display: 'block' }}>Payment Status</label>
                                                 <select
                                                     className="input-field"
                                                     style={{
@@ -1872,15 +1931,96 @@ const Maintenance = () => {
                                                     <option value="Due" style={{ background: '#1e293b', color: '#f43f5e' }}>⚠️ Due (Pending Payment)</option>
                                                 </select>
                                             </div>
-                                            <div style={{ display: 'none' }}>
-                                                <label style={{ color: 'white', fontSize: '12px', marginBottom: '8px', display: 'block' }}>Payment Mode</label>
-                                                <select className="input-field" style={{ borderRadius: '10px' }} value={formData.paymentMode} onChange={(e) => setFormData({ ...formData, paymentMode: e.target.value })}>
-                                                    <option value="Cash" style={{ background: '#1e293b' }}>Cash</option>
-                                                    <option value="UPI" style={{ background: '#1e293b' }}>UPI / GPay</option>
-                                                    <option value="Bank Transfer" style={{ background: '#1e293b' }}>Bank Transfer</option>
-                                                    <option value="Credit Card" style={{ background: '#1e293b' }}>Credit Card</option>
-                                                </select>
-                                            </div>
+
+                                            {/* Office Payment Method: Cash vs Bank Account / UPI */}
+                                            {formData.paymentStatus !== 'Due' && (
+                                                <div style={{
+                                                    gridColumn: '1 / -1',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    gap: '12px',
+                                                    padding: '16px',
+                                                    background: 'rgba(255,255,255,0.02)',
+                                                    borderRadius: '14px',
+                                                    border: '1px solid rgba(255,255,255,0.06)'
+                                                }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                        Office Payment Method / Account
+                                                    </label>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setFormData({ ...formData, paymentMode: 'Cash', bankAccountId: '' })}
+                                                            style={{
+                                                                padding: '10px 12px',
+                                                                borderRadius: '10px',
+                                                                border: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                                background: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                                color: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                                                fontWeight: '800',
+                                                                fontSize: '12px',
+                                                                cursor: 'pointer',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                gap: '6px'
+                                                            }}
+                                                        >
+                                                            💵 Cash in Hand
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setFormData({ ...formData, paymentMode: 'Bank Transfer', bankAccountId: formData.bankAccountId || (bankAccounts[0]?._id || '') })}
+                                                            style={{
+                                                                padding: '10px 12px',
+                                                                borderRadius: '10px',
+                                                                border: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                                background: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                                color: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                                fontWeight: '800',
+                                                                fontSize: '12px',
+                                                                cursor: 'pointer',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                gap: '6px'
+                                                            }}
+                                                        >
+                                                            🏦 Bank Account / UPI
+                                                        </button>
+                                                    </div>
+
+                                                    {/* If Cash is chosen: Cash Book Indicator */}
+                                                    {(!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? (
+                                                        <div style={{
+                                                            background: 'rgba(16, 185, 129, 0.08)',
+                                                            border: '1px solid rgba(16, 185, 129, 0.25)',
+                                                            borderRadius: '12px',
+                                                            padding: '10px 14px',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'space-between',
+                                                            gap: '8px'
+                                                        }}>
+                                                            <div style={{ fontSize: '12px', color: '#10b981', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                <span>💵</span> Deducted from Office Cash in Hand (Cash Book)
+                                                            </div>
+                                                            {Number(formData.amount) > 0 && (
+                                                                <span style={{ fontSize: '13px', fontWeight: '900', color: '#f87171' }}>
+                                                                    -₹{Number(formData.amount).toLocaleString('en-IN')}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <BankSelector
+                                                            bankAccounts={bankAccounts}
+                                                            value={formData.bankAccountId}
+                                                            amount={formData.amount}
+                                                            onChange={(bId) => setFormData({ ...formData, bankAccountId: bId, paymentMode: 'Bank Transfer' })}
+                                                        />
+                                                    )}
+                                                </div>
+                                            )}
                                             <div>
                                                 <ImageUploader file={billPhoto} onChange={setBillPhoto} label="Bill Photo" color="var(--primary)" />
                                             </div>
