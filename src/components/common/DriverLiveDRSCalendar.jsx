@@ -96,7 +96,7 @@ export default function DriverLiveDRSCalendar({ isSubComponent = false }) {
     // Filters
     const [selectedDriverId, setSelectedDriverId] = useState('all'); // 'all' or driver._id
     const [searchQuery, setSearchQuery] = useState('');
-    const [viewMode, setViewMode] = useState('matrix'); // 'matrix' (Day 1-31 table) or 'cards' (Single driver calendar)
+    const [viewMode, setViewMode] = useState('schedule'); // 'schedule' (Date-Wise Schedule) or 'matrix' (31-Day Fleet Matrix)
 
     // Deep link from ?driver= query param
     useEffect(() => {
@@ -313,6 +313,47 @@ export default function DriverLiveDRSCalendar({ isSubComponent = false }) {
         };
     }, [driverRosterData]);
 
+    // Flattened & sorted duties for Date-Wise Schedule view (Date | Guest Details | Car)
+    const visibleScheduleDuties = useMemo(() => {
+        let list = [];
+        if (selectedDriverId !== 'all') {
+            list = [...(activeDriverData?.totalDuties || [])];
+        } else {
+            // Aggregate duties for all drivers in this month
+            driverRosterData.forEach(row => {
+                (row.totalDuties || []).forEach(d => {
+                    if (!list.some(existing => String(existing._id) === String(d._id))) {
+                        list.push(d);
+                    }
+                });
+            });
+        }
+
+        // Apply search query filter
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            list = list.filter(d => 
+                (d.clientName && d.clientName.toLowerCase().includes(q)) ||
+                (d.duty && d.duty.toLowerCase().includes(q)) ||
+                (d.customDriverName && d.customDriverName.toLowerCase().includes(q)) ||
+                (d.driver?.name && d.driver.name.toLowerCase().includes(q)) ||
+                (d.customCarNumber && d.customCarNumber.toLowerCase().includes(q)) ||
+                (d.vehicle?.carNumber && d.vehicle.carNumber.toLowerCase().includes(q)) ||
+                (d.hotel && d.hotel.toLowerCase().includes(q)) ||
+                (d.pickupPoint && d.pickupPoint.toLowerCase().includes(q)) ||
+                (d.bookingId && d.bookingId.toLowerCase().includes(q))
+            );
+        }
+
+        // Sort strictly by Date ascending, then by Time
+        return list.sort((a, b) => {
+            const da = new Date(a.date || 0).getTime();
+            const db = new Date(b.date || 0).getTime();
+            if (da !== db) return da - db;
+            return String(a.time || '').localeCompare(String(b.time || ''));
+        });
+    }, [selectedDriverId, activeDriverData, driverRosterData, searchQuery]);
+
     // Month Navigation
     const handlePrevMonth = () => {
         if (selectedMonth === 0) {
@@ -409,9 +450,12 @@ export default function DriverLiveDRSCalendar({ isSubComponent = false }) {
     };
 
     // Delete duty directly from Live DRS (/api/drs/:id)
-    const handleDeleteDuty = async () => {
-        if (!selectedDuty?._id) return;
-        if (!window.confirm(`Are you sure you want to delete this duty for "${selectedDuty.clientName || 'Guest'}"? This will remove it from Live DRS permanently.`)) {
+    const handleDeleteDuty = async (dutyParam = null) => {
+        const target = dutyParam || selectedDuty;
+        if (!target?._id) return;
+        const guestName = target.clientName || 'Guest';
+        const dateFormatted = target.date ? toISTDateString(target.date) : '';
+        if (!window.confirm(`Are you sure you want to delete this duty for "${guestName}" (${dateFormatted})? This will remove it from Live DRS permanently.`)) {
             return;
         }
 
@@ -419,9 +463,10 @@ export default function DriverLiveDRSCalendar({ isSubComponent = false }) {
         setModalError('');
 
         try {
-            await axios.delete(`/api/drs/${selectedDuty._id}`);
+            await axios.delete(`/api/drs/${target._id}`);
             await fetchData(true);
             setShowDutyModal(false);
+            setSelectedDuty(null);
         } catch (err) {
             console.error('Error deleting Live DRS duty:', err);
             setModalError(err.response?.data?.message || 'Failed to delete duty. Please try again.');
@@ -640,6 +685,61 @@ export default function DriverLiveDRSCalendar({ isSubComponent = false }) {
                     >
                         Today
                     </button>
+
+                    {/* View Mode Toggle: Date-Wise Schedule vs 31-Day Matrix */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        background: 'rgba(0, 0, 0, 0.4)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        borderRadius: '12px',
+                        padding: '3px',
+                        gap: '2px'
+                    }}>
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('schedule')}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '8px 14px',
+                                borderRadius: '9px',
+                                border: 'none',
+                                background: viewMode === 'schedule' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
+                                color: viewMode === 'schedule' ? '#000000' : '#94a3b8',
+                                fontWeight: '900',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                            }}
+                        >
+                            <ListFilter size={14} />
+                            Date-Wise Schedule
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('matrix')}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '8px 14px',
+                                borderRadius: '9px',
+                                border: 'none',
+                                background: viewMode === 'matrix' ? 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)' : 'transparent',
+                                color: viewMode === 'matrix' ? '#ffffff' : '#94a3b8',
+                                fontWeight: '900',
+                                fontSize: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                            }}
+                        >
+                            <Grid size={14} />
+                            31-Day Fleet Matrix
+                        </button>
+                    </div>
 
                     <button
                         onClick={() => fetchData(false)}
@@ -967,8 +1067,465 @@ export default function DriverLiveDRSCalendar({ isSubComponent = false }) {
                 </div>
             )}
 
-            {/* THE MASTER 1-31 ROSTER TABLE */}
-            <div style={{
+            {/* VIEW MODE 1: DATE-WISE SCHEDULE (Date | Guest Details | Car | Fare | Actions) */}
+            {viewMode === 'schedule' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {/* Header Columns Bar */}
+                    <div style={{
+                        display: 'none',
+                        gridTemplateColumns: '170px 1fr 240px 140px 120px',
+                        gap: '16px',
+                        padding: '12px 20px',
+                        background: '#1e293b',
+                        border: '1px solid #334155',
+                        borderRadius: '14px',
+                        color: '#94a3b8',
+                        fontSize: '11px',
+                        fontWeight: '900',
+                        letterSpacing: '0.8px',
+                        textTransform: 'uppercase'
+                    }} className="desktop-schedule-header">
+                        <div>📅 Date & Time</div>
+                        <div>👤 Guest Details & Itinerary</div>
+                        <div>🚗 Car (Konsi Car Hai Driver Ke Pass)</div>
+                        <div style={{ textAlign: 'right' }}>💰 Fare & Status</div>
+                        <div style={{ textAlign: 'center' }}>⚡ Actions</div>
+                    </div>
+
+                    {/* Schedule Duties List */}
+                    {visibleScheduleDuties.length === 0 ? (
+                        <div style={{
+                            background: '#131b2e',
+                            border: '1px solid #2d3748',
+                            borderRadius: '16px',
+                            padding: '60px 24px',
+                            textAlign: 'center',
+                            color: '#94a3b8'
+                        }}>
+                            <CalendarIcon size={52} color="#fbbf24" style={{ margin: '0 auto 16px', opacity: 0.6 }} />
+                            <div style={{ fontSize: '18px', fontWeight: '800', color: '#ffffff', marginBottom: '8px' }}>
+                                No Duties Found for {activeDriverData ? activeDriverData.driver.name : 'Selected Filter'} in {MONTH_NAMES[selectedMonth]} {selectedYear}
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#94a3b8', maxWidth: '440px', margin: '0 auto 18px' }}>
+                                There are no Live DRS duties matching this month and driver filter. You can add a duty or switch months above.
+                            </div>
+                            {activeDriverData && (
+                                <button
+                                    onClick={() => handleQuickAddForDriver(activeDriverData.driver, `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`)}
+                                    style={{
+                                        background: '#10b981',
+                                        color: '#ffffff',
+                                        border: 'none',
+                                        borderRadius: '10px',
+                                        padding: '10px 18px',
+                                        fontSize: '13px',
+                                        fontWeight: '800',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    + Add Duty for {activeDriverData.driver.name}
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        visibleScheduleDuties.map((duty, idx) => {
+                            const theme = getThemeForDuty(duty);
+                            const dutyDateStr = duty.date ? toISTDateString(duty.date) : '';
+                            const dutyDateParts = dutyDateStr.split('-').map(Number);
+                            const dayNum = dutyDateParts[2] ? String(dutyDateParts[2]).padStart(2, '0') : '01';
+                            const dayObj = new Date(dutyDateParts[0], (dutyDateParts[1] || 1) - 1, dutyDateParts[2] || 1);
+                            const weekday = DAY_NAMES[dayObj.getDay()] || '';
+                            const isToday = dutyDateStr === todayStr;
+
+                            const carDisplay = getCarDisplay(duty);
+                            const driverName = duty.driver?.name || duty.customDriverName || 'Driver Assigned';
+
+                            return (
+                                <div
+                                    key={duty._id || idx}
+                                    style={{
+                                        background: isToday
+                                            ? 'linear-gradient(135deg, rgba(3, 105, 161, 0.22) 0%, #131b2e 100%)'
+                                            : '#131b2e',
+                                        border: isToday ? '1.5px solid #38bdf8' : '1px solid #2d3748',
+                                        borderLeft: `6px solid ${theme.bg}`,
+                                        borderRadius: '16px',
+                                        padding: '16px 20px',
+                                        boxShadow: '0 4px 18px rgba(0,0,0,0.3)',
+                                        transition: 'all 0.15s ease'
+                                    }}
+                                >
+                                    {/* Master Calendar Package Theme Top Banner */}
+                                    <div style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        flexWrap: 'wrap',
+                                        gap: '8px',
+                                        marginBottom: '12px',
+                                        paddingBottom: '10px',
+                                        borderBottom: '1px solid rgba(255, 255, 255, 0.06)'
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                            {/* Color theme tour tag matching Master Fleet Calendar */}
+                                            <span style={{
+                                                background: theme.bg,
+                                                color: theme.text,
+                                                border: `1px solid ${theme.border}`,
+                                                padding: '3px 10px',
+                                                borderRadius: '7px',
+                                                fontSize: '11px',
+                                                fontWeight: '900',
+                                                letterSpacing: '0.4px',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '5px'
+                                            }}>
+                                                ● {duty.duty || duty.itinerary || 'Sightseeing Duty'}
+                                            </span>
+
+                                            {isToday && (
+                                                <span style={{
+                                                    background: '#0284c7',
+                                                    color: '#ffffff',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '6px',
+                                                    fontSize: '10px',
+                                                    fontWeight: '900',
+                                                    letterSpacing: '0.5px'
+                                                }}>
+                                                    ● TODAY'S LIVE DUTY
+                                                </span>
+                                            )}
+
+                                            {duty.bookingId && (
+                                                <span style={{
+                                                    background: 'rgba(255, 255, 255, 0.08)',
+                                                    color: '#fbbf24',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '6px',
+                                                    fontSize: '11px',
+                                                    fontWeight: '800'
+                                                }}>
+                                                    Booking: {duty.bookingId}
+                                                </span>
+                                            )}
+
+                                            {duty.dayNo && (
+                                                <span style={{
+                                                    background: 'rgba(168, 85, 247, 0.2)',
+                                                    color: '#c084fc',
+                                                    border: '1px solid rgba(168, 85, 247, 0.4)',
+                                                    padding: '2px 7px',
+                                                    borderRadius: '6px',
+                                                    fontSize: '10px',
+                                                    fontWeight: '800'
+                                                }}>
+                                                    Day {duty.dayNo}
+                                                </span>
+                                            )}
+
+                                            {selectedDriverId === 'all' && (
+                                                <span style={{
+                                                    background: 'rgba(56, 189, 248, 0.15)',
+                                                    color: '#38bdf8',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '6px',
+                                                    fontSize: '11px',
+                                                    fontWeight: '800',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px'
+                                                }}>
+                                                    <User size={12} /> {driverName}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Duty Time */}
+                                        <div style={{
+                                            background: 'rgba(255, 255, 255, 0.06)',
+                                            color: '#e2e8f0',
+                                            padding: '3px 10px',
+                                            borderRadius: '8px',
+                                            fontSize: '11.5px',
+                                            fontWeight: '800',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '5px'
+                                        }}>
+                                            <Clock size={12} color="#38bdf8" />
+                                            {duty.time || '10:00 AM'}
+                                        </div>
+                                    </div>
+
+                                    {/* 3 Explicit Columns: Date | Guest Details | Car | Fare | Actions */}
+                                    <div style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                                        gap: '14px',
+                                        alignItems: 'stretch'
+                                    }}>
+                                        {/* 1. DATE */}
+                                        <div style={{
+                                            background: 'rgba(0, 0, 0, 0.25)',
+                                            border: '1px solid rgba(255, 255, 255, 0.06)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between',
+                                            minWidth: '140px'
+                                        }}>
+                                            <div>
+                                                <div style={{ fontSize: '10px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                                    📅 DATE
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                                                    <span style={{ fontSize: '28px', fontWeight: '950', color: isToday ? '#38bdf8' : '#ffffff', lineHeight: 1 }}>
+                                                        {dayNum}
+                                                    </span>
+                                                    <div>
+                                                        <div style={{ fontSize: '13px', fontWeight: '800', color: '#e2e8f0' }}>{weekday}</div>
+                                                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                                                            {MONTH_NAMES[selectedMonth]?.slice(0, 3)} {selectedYear}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', fontSize: '11px', color: '#cbd5e1' }}>
+                                                Pickup: <strong>{duty.time || '10:00 AM'}</strong>
+                                            </div>
+                                        </div>
+
+                                        {/* 2. GUEST DETAILS */}
+                                        <div style={{
+                                            background: 'rgba(0, 0, 0, 0.25)',
+                                            border: '1px solid rgba(255, 255, 255, 0.06)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between',
+                                            flex: 2,
+                                            minWidth: '220px'
+                                        }}>
+                                            <div>
+                                                <div style={{ fontSize: '10px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                                    👤 GUEST DETAILS & ROUTE
+                                                </div>
+                                                <div style={{ fontSize: '15px', fontWeight: '900', color: '#ffffff', marginBottom: '6px' }}>
+                                                    {duty.clientName || 'Guest'}
+                                                </div>
+
+                                                {(duty.hotel || duty.pickupPoint) && (
+                                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px' }}>
+                                                        <MapPin size={13} color="#fbbf24" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                                        <div>
+                                                            {duty.hotel && <span>Hotel: <strong style={{ color: '#ffffff' }}>{duty.hotel}</strong> </span>}
+                                                            {duty.pickupPoint && duty.pickupPoint !== duty.hotel && (
+                                                                <span>| Pickup: <strong style={{ color: '#ffffff' }}>{duty.pickupPoint}</strong></span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {duty.guestRemarks && (
+                                                    <div style={{ fontSize: '11px', color: '#cbd5e1', fontStyle: 'italic', background: 'rgba(255, 255, 255, 0.03)', padding: '5px 8px', borderRadius: '6px', borderLeft: '3px solid #fbbf24' }}>
+                                                        Note: {duty.guestRemarks}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                {duty.mobileNumber ? (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                        <a
+                                                            href={`tel:${duty.mobileNumber}`}
+                                                            style={{
+                                                                background: '#10b981',
+                                                                color: '#ffffff',
+                                                                padding: '4px 10px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: '800',
+                                                                textDecoration: 'none',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '4px'
+                                                            }}
+                                                        >
+                                                            <Phone size={11} /> Call ({duty.mobileNumber})
+                                                        </a>
+                                                        <a
+                                                            href={`https://wa.me/91${duty.mobileNumber.replace(/\D/g, '').slice(-10)}`}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            style={{
+                                                                background: 'rgba(37, 211, 102, 0.15)',
+                                                                color: '#25D366',
+                                                                border: '1px solid rgba(37, 211, 102, 0.35)',
+                                                                padding: '4px 8px',
+                                                                borderRadius: '6px',
+                                                                fontSize: '11px',
+                                                                fontWeight: '800',
+                                                                textDecoration: 'none',
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '4px'
+                                                            }}
+                                                        >
+                                                            💬 WhatsApp
+                                                        </a>
+                                                    </div>
+                                                ) : (
+                                                    <span style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic' }}>No mobile provided</span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* 3. CAR (KONSI CAR HAI DRIVER KE PASS) */}
+                                        <div style={{
+                                            background: 'rgba(0, 0, 0, 0.25)',
+                                            border: '1px solid rgba(255, 255, 255, 0.06)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between',
+                                            minWidth: '180px'
+                                        }}>
+                                            <div>
+                                                <div style={{ fontSize: '10px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px' }}>
+                                                    🚗 CAR (KONSI CAR HAI PASS)
+                                                </div>
+                                                <div style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                    background: '#0f172a',
+                                                    border: '1.5px solid #38bdf8',
+                                                    padding: '5px 10px',
+                                                    borderRadius: '8px',
+                                                    marginBottom: '6px'
+                                                }}>
+                                                    <Car size={14} color="#38bdf8" />
+                                                    <span style={{ fontSize: '13px', fontWeight: '950', color: '#ffffff', fontFamily: 'monospace' }}>
+                                                        {duty.vehicle?.carNumber || duty.customCarNumber || 'CAR ASSIGNED'}
+                                                    </span>
+                                                </div>
+                                                <div style={{ fontSize: '12px', fontWeight: '800', color: '#38bdf8' }}>
+                                                    {duty.vehicle?.model || duty.carType || 'Fleet Cab'}
+                                                </div>
+                                            </div>
+
+                                            <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', fontSize: '11px', color: '#94a3b8' }}>
+                                                Driver: <strong style={{ color: '#ffffff' }}>{driverName}</strong>
+                                            </div>
+                                        </div>
+
+                                        {/* 4. FARE & STATUS */}
+                                        <div style={{
+                                            background: 'rgba(0, 0, 0, 0.25)',
+                                            border: '1px solid rgba(255, 255, 255, 0.06)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between',
+                                            minWidth: '120px',
+                                            textAlign: 'right'
+                                        }}>
+                                            <div>
+                                                <div style={{ fontSize: '10px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                                    FARE / REVENUE
+                                                </div>
+                                                <div style={{ fontSize: '20px', fontWeight: '950', color: '#fef08a' }}>
+                                                    ₹{(Number(duty.revenue) || 0).toLocaleString('en-IN')}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <span style={{
+                                                    background: duty.status === 'Completed' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(56, 189, 248, 0.2)',
+                                                    color: duty.status === 'Completed' ? '#34d399' : '#38bdf8',
+                                                    border: duty.status === 'Completed' ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(56, 189, 248, 0.4)',
+                                                    padding: '3px 8px',
+                                                    borderRadius: '6px',
+                                                    fontSize: '10.5px',
+                                                    fontWeight: '900',
+                                                    display: 'inline-block'
+                                                }}>
+                                                    ● {duty.status || 'Assigned'}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* 5. ACTIONS: Real-Time Live DRS Edit & Delete */}
+                                        <div style={{
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'center',
+                                            gap: '8px',
+                                            minWidth: '100px'
+                                        }}>
+                                            <button
+                                                onClick={() => openDutyModal(duty)}
+                                                title="Edit Live DRS Duty"
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '6px',
+                                                    background: 'rgba(56, 189, 248, 0.15)',
+                                                    border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                    color: '#38bdf8',
+                                                    padding: '8px 12px',
+                                                    borderRadius: '8px',
+                                                    fontSize: '11.5px',
+                                                    fontWeight: '800',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.15s ease'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.25)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.15)'}
+                                            >
+                                                <Edit2 size={13} /> Edit DRS
+                                            </button>
+
+                                            <button
+                                                onClick={() => handleDeleteDuty(duty)}
+                                                title="Delete from Live DRS"
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '6px',
+                                                    background: 'rgba(239, 68, 68, 0.12)',
+                                                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                    color: '#f87171',
+                                                    padding: '8px 12px',
+                                                    borderRadius: '8px',
+                                                    fontSize: '11.5px',
+                                                    fontWeight: '800',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.15s ease'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.22)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'}
+                                            >
+                                                <Trash2 size={13} /> Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            ) : (
+                /* THE MASTER 1-31 ROSTER TABLE (Matrix Mode) */
+                <div style={{
                 maxHeight: 'calc(100vh - 280px)',
                 overflowX: 'auto',
                 overflowY: 'auto',
@@ -1324,6 +1881,7 @@ export default function DriverLiveDRSCalendar({ isSubComponent = false }) {
                     </tbody>
                 </table>
             </div>
+            )}
 
             {/* LIVE DRS DUTY VIEW / EDIT / DELETE MODAL */}
             <AnimatePresence>

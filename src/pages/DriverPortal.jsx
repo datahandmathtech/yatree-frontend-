@@ -17,6 +17,7 @@ import {
     Clock,
     Wrench,
     ChevronLeft,
+    ChevronRight,
     Wallet,
     LayoutDashboard,
     Download,
@@ -139,6 +140,39 @@ const CameraModal = ({ side, onCapture, onClose }) => {
     );
 };
 
+const MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+// High-contrast color themes matching Master Fleet Calendar
+const PACKAGE_PALETTE = [
+    { name: 'Royal Blue', bg: '#2563eb', border: '#1d4ed8', badgeBg: 'rgba(0,0,0,0.35)', badgeText: '#bfdbfe', text: '#ffffff', glow: 'rgba(37, 99, 235, 0.35)' },
+    { name: 'Emerald', bg: '#059669', border: '#047857', badgeBg: 'rgba(0,0,0,0.35)', badgeText: '#a7f3d0', text: '#ffffff', glow: 'rgba(5, 150, 105, 0.35)' },
+    { name: 'Deep Purple', bg: '#7c3aed', border: '#6d28d9', badgeBg: 'rgba(0,0,0,0.35)', badgeText: '#ddd6fe', text: '#ffffff', glow: 'rgba(124, 58, 237, 0.35)' },
+    { name: 'Teal', bg: '#0d9488', border: '#0f766e', badgeBg: 'rgba(0,0,0,0.35)', badgeText: '#99f6e4', text: '#ffffff', glow: 'rgba(13, 148, 136, 0.35)' },
+    { name: 'Magenta Fuchsia', bg: '#c026d3', border: '#a21caf', badgeBg: 'rgba(0,0,0,0.35)', badgeText: '#f5d0fe', text: '#ffffff', glow: 'rgba(192, 38, 211, 0.35)' },
+    { name: 'Cerulean Cyan', bg: '#0284c7', border: '#0369a1', badgeBg: 'rgba(0,0,0,0.35)', badgeText: '#bae6fd', text: '#ffffff', glow: 'rgba(2, 132, 199, 0.35)' },
+    { name: 'Indigo', bg: '#4f46e5', border: '#4338ca', badgeBg: 'rgba(0,0,0,0.35)', badgeText: '#c7d2fe', text: '#ffffff', glow: 'rgba(79, 70, 229, 0.35)' },
+    { name: 'Plum Wine', bg: '#9d174d', border: '#831843', badgeBg: 'rgba(0,0,0,0.35)', badgeText: '#fbcfe8', text: '#ffffff', glow: 'rgba(157, 23, 77, 0.35)' },
+    { name: 'Forest Green', bg: '#15803d', border: '#166534', badgeBg: 'rgba(0,0,0,0.35)', badgeText: '#bbf7d0', text: '#ffffff', glow: 'rgba(21, 128, 61, 0.35)' },
+    { name: 'Dark Slate', bg: '#334155', border: '#1e293b', badgeBg: 'rgba(0,0,0,0.35)', badgeText: '#cbd5e1', text: '#ffffff', glow: 'rgba(51, 65, 85, 0.35)' },
+    { name: 'Electric Violet', bg: '#6366f1', border: '#4f46e5', badgeBg: 'rgba(0,0,0,0.35)', badgeText: '#e0e7ff', text: '#ffffff', glow: 'rgba(99, 102, 241, 0.35)' },
+    { name: 'Deep Ocean', bg: '#0369a1', border: '#075985', badgeBg: 'rgba(0,0,0,0.35)', badgeText: '#e0f2fe', text: '#ffffff', glow: 'rgba(3, 105, 161, 0.35)' }
+];
+
+const getThemeForRide = (ride) => {
+    if (!ride) return PACKAGE_PALETTE[0];
+    const key = String(ride.bookingId || ride.clientName || ride._id || 'tour');
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) {
+        hash = ((hash << 5) - hash) + key.charCodeAt(i);
+        hash |= 0;
+    }
+    const idx = Math.abs(hash) % PACKAGE_PALETTE.length;
+    return PACKAGE_PALETTE[idx];
+};
+
 const DriverPortal = () => {
     const { user, logout } = useAuth();
     const { language, setLanguage, t } = useLanguage();
@@ -195,10 +229,12 @@ const DriverPortal = () => {
     const [ledgerMonth, setLedgerMonth] = useState(new Date(Date.now() + 5.5 * 60 * 60 * 1000).getUTCMonth() + 1); // 1-12
     const [ledgerYear, setLedgerYear] = useState(new Date(Date.now() + 5.5 * 60 * 60 * 1000).getUTCFullYear());
 
-    // Upcoming Rides State
+    // Upcoming Rides State (Month Wise Calendar)
     const [upcomingRides, setUpcomingRides] = useState([]);
     const [ridesLoading, setRidesLoading] = useState(false);
     const [rideSearchQuery, setRideSearchQuery] = useState('');
+    const [ridesMonth, setRidesMonth] = useState(new Date(Date.now() + 5.5 * 60 * 60 * 1000).getUTCMonth() + 1); // 1-12
+    const [ridesYear, setRidesYear] = useState(new Date(Date.now() + 5.5 * 60 * 60 * 1000).getUTCFullYear());
 
     useEffect(() => {
         fetchDashboard();
@@ -208,9 +244,9 @@ const DriverPortal = () => {
         if (activeTab === 'ledger') {
             fetchLedger(ledgerMonth, ledgerYear);
         } else if (activeTab === 'rides') {
-            fetchUpcomingRides();
+            fetchUpcomingRides(ridesMonth, ridesYear);
         }
-    }, [activeTab, ledgerMonth, ledgerYear]);
+    }, [activeTab, ledgerMonth, ledgerYear, ridesMonth, ridesYear]);
 
     const fetchLedger = async (m, y) => {
         setLedgerLoading(true);
@@ -226,10 +262,11 @@ const DriverPortal = () => {
         }
     };
 
-    const fetchUpcomingRides = async () => {
+    const fetchUpcomingRides = async (m = ridesMonth, y = ridesYear) => {
         setRidesLoading(true);
         try {
-            const { data } = await axios.get('/api/driver/upcoming-rides', {
+            const monthParam = `${y}-${String(m).padStart(2, '0')}`;
+            const { data } = await axios.get(`/api/driver/upcoming-rides?month=${monthParam}`, {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
             if (data && Array.isArray(data.rides)) {
@@ -240,6 +277,30 @@ const DriverPortal = () => {
         } finally {
             setRidesLoading(false);
         }
+    };
+
+    const handlePrevRidesMonth = () => {
+        if (ridesMonth === 1) {
+            setRidesMonth(12);
+            setRidesYear(y => y - 1);
+        } else {
+            setRidesMonth(m => m - 1);
+        }
+    };
+
+    const handleNextRidesMonth = () => {
+        if (ridesMonth === 12) {
+            setRidesMonth(1);
+            setRidesYear(y => y + 1);
+        } else {
+            setRidesMonth(m => m + 1);
+        }
+    };
+
+    const handleTodayRidesMonth = () => {
+        const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+        setRidesMonth(istNow.getUTCMonth() + 1);
+        setRidesYear(istNow.getUTCFullYear());
     };
 
     const fetchDashboard = async () => {
@@ -2348,112 +2409,299 @@ const DriverPortal = () => {
                     )}
 
                     {/* ==================================================== */}
-                    {/* UPCOMING RIDES TAB                                   */}
+                    {/* UPCOMING RIDES TAB (Month Calendar & 3-Column Layout) */}
                     {/* ==================================================== */}
                     {activeTab === 'rides' && (
                         <div className="rides-section">
-                            {/* Rides Header & Search Bar */}
+                            {/* Month Navigation & Control Center */}
                             <div style={{
-                                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(217, 119, 6, 0.06) 100%)',
-                                border: '1px solid rgba(245, 158, 11, 0.25)',
-                                borderRadius: '16px',
+                                background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.9) 100%)',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                borderRadius: '18px',
                                 padding: 'clamp(16px, 3vw, 24px)',
-                                marginBottom: '24px'
+                                marginBottom: '22px',
+                                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.35)'
                             }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '16px' }}>
+                                {/* Month Header Bar */}
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: '14px',
+                                    marginBottom: '18px',
+                                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                                    paddingBottom: '16px'
+                                }}>
                                     <div>
-                                        <h2 style={{ color: 'white', margin: 0, fontSize: 'clamp(18px, 4vw, 22px)', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <Calendar size={22} color="#fbbf24" />
-                                            {t('myAssignedRides') || 'My Assigned Rides'}
-                                        </h2>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span style={{
+                                                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                                color: '#000',
+                                                padding: '4px 8px',
+                                                borderRadius: '8px',
+                                                fontSize: '11px',
+                                                fontWeight: '900',
+                                                textTransform: 'uppercase',
+                                                letterSpacing: '0.5px'
+                                            }}>
+                                                MONTHLY ROSTER
+                                            </span>
+                                            <h2 style={{ color: 'white', margin: 0, fontSize: 'clamp(18px, 4vw, 22px)', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <Calendar size={22} color="#fbbf24" />
+                                                {t('myAssignedRides') || 'My Assigned Rides'}
+                                            </h2>
+                                        </div>
                                         <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '12.5px', margin: '4px 0 0 0' }}>
-                                            All upcoming and scheduled duties assigned to you from DRS and Bookings.
+                                            Date-wise duties and vehicle allocation from Live DRS & Bookings.
                                         </p>
                                     </div>
 
-                                    <button
-                                        type="button"
-                                        onClick={fetchUpcomingRides}
-                                        disabled={ridesLoading}
-                                        style={{
-                                            padding: '8px 14px',
-                                            background: 'rgba(255,255,255,0.08)',
-                                            border: '1px solid rgba(255,255,255,0.15)',
-                                            color: 'white',
-                                            borderRadius: '10px',
-                                            fontWeight: '800',
-                                            fontSize: '12px',
-                                            cursor: 'pointer',
-                                            display: 'inline-flex',
+                                    {/* Month Selector Buttons */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                        <div style={{
+                                            display: 'flex',
                                             alignItems: 'center',
-                                            gap: '6px'
-                                        }}
-                                    >
-                                        <RefreshCw size={14} className={ridesLoading ? 'animate-spin' : ''} />
-                                        Refresh
-                                    </button>
+                                            background: 'rgba(0, 0, 0, 0.4)',
+                                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                                            borderRadius: '12px',
+                                            padding: '4px'
+                                        }}>
+                                            <button
+                                                type="button"
+                                                onClick={handlePrevRidesMonth}
+                                                title="Previous Month"
+                                                style={{
+                                                    background: 'transparent',
+                                                    border: 'none',
+                                                    color: 'white',
+                                                    width: '34px',
+                                                    height: '34px',
+                                                    borderRadius: '8px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    cursor: 'pointer',
+                                                    transition: 'background 0.2s'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                            >
+                                                <ChevronLeft size={18} />
+                                            </button>
+
+                                            {/* Month & Year Selectors */}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 8px' }}>
+                                                <select
+                                                    value={ridesMonth}
+                                                    onChange={(e) => setRidesMonth(Number(e.target.value))}
+                                                    style={{
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        color: '#fbbf24',
+                                                        fontWeight: '900',
+                                                        fontSize: '14px',
+                                                        cursor: 'pointer',
+                                                        outline: 'none'
+                                                    }}
+                                                >
+                                                    {MONTH_NAMES.map((name, idx) => (
+                                                        <option key={name} value={idx + 1} style={{ background: '#0f172a', color: 'white' }}>
+                                                            {name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+
+                                                <select
+                                                    value={ridesYear}
+                                                    onChange={(e) => setRidesYear(Number(e.target.value))}
+                                                    style={{
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        color: 'white',
+                                                        fontWeight: '800',
+                                                        fontSize: '14px',
+                                                        cursor: 'pointer',
+                                                        outline: 'none'
+                                                    }}
+                                                >
+                                                    {[ridesYear - 1, ridesYear, ridesYear + 1].map(yr => (
+                                                        <option key={yr} value={yr} style={{ background: '#0f172a', color: 'white' }}>
+                                                            {yr}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                onClick={handleNextRidesMonth}
+                                                title="Next Month"
+                                                style={{
+                                                    background: 'transparent',
+                                                    border: 'none',
+                                                    color: 'white',
+                                                    width: '34px',
+                                                    height: '34px',
+                                                    borderRadius: '8px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    cursor: 'pointer',
+                                                    transition: 'background 0.2s'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                            >
+                                                <ChevronRight size={18} />
+                                            </button>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={handleTodayRidesMonth}
+                                            style={{
+                                                padding: '8px 14px',
+                                                background: 'rgba(255, 255, 255, 0.08)',
+                                                border: '1px solid rgba(255, 255, 255, 0.15)',
+                                                color: 'white',
+                                                borderRadius: '10px',
+                                                fontWeight: '800',
+                                                fontSize: '12px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Today
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => fetchUpcomingRides(ridesMonth, ridesYear)}
+                                            disabled={ridesLoading}
+                                            style={{
+                                                padding: '8px 14px',
+                                                background: 'rgba(16, 185, 129, 0.15)',
+                                                border: '1px solid rgba(16, 185, 129, 0.35)',
+                                                color: '#10b981',
+                                                borderRadius: '10px',
+                                                fontWeight: '800',
+                                                fontSize: '12px',
+                                                cursor: 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '6px'
+                                            }}
+                                        >
+                                            <RefreshCw size={14} className={ridesLoading ? 'animate-spin' : ''} />
+                                            Refresh
+                                        </button>
+                                    </div>
                                 </div>
 
-                                {/* KPI Counters */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginTop: '12px' }}>
+                                {/* KPI Counters Strip */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '16px' }}>
                                     <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>Total Upcoming</span>
-                                        <div style={{ fontSize: '20px', fontWeight: '900', color: '#fbbf24', marginTop: '2px' }}>
+                                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>
+                                            {MONTH_NAMES[ridesMonth - 1]?.slice(0, 3)} {ridesYear} Total Rides
+                                        </span>
+                                        <div style={{ fontSize: '22px', fontWeight: '950', color: '#fbbf24', marginTop: '2px' }}>
                                             {upcomingRides.length} Duties
                                         </div>
                                     </div>
                                     <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>Today’s Duty</span>
-                                        <div style={{ fontSize: '20px', fontWeight: '900', color: upcomingRides.some(r => r.isToday) ? '#34d399' : 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
-                                            {upcomingRides.filter(r => r.isToday).length > 0 ? `${upcomingRides.filter(r => r.isToday).length} Active` : 'None Today'}
+                                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>
+                                            Today's Status
+                                        </span>
+                                        <div style={{ fontSize: '18px', fontWeight: '900', color: upcomingRides.some(r => r.isToday) ? '#34d399' : 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                                            {upcomingRides.filter(r => r.isToday).length > 0 ? `● ${upcomingRides.filter(r => r.isToday).length} Duty Today` : 'None Today'}
                                         </div>
                                     </div>
                                     <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>Vehicles Assigned</span>
-                                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#38bdf8', marginTop: '4px' }}>
-                                            {Array.from(new Set(upcomingRides.map(r => r.vehicleNumber).filter(Boolean))).slice(0, 2).join(', ') || 'Assigned'}
+                                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>
+                                            Vehicles Assigned
+                                        </span>
+                                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#38bdf8', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {Array.from(new Set(upcomingRides.map(r => r.vehicleNumber).filter(Boolean))).join(', ') || 'Assigned in Duty'}
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Filter Input */}
-                                <div style={{ marginTop: '14px' }}>
+                                {/* Filter Search Input */}
+                                <div>
                                     <input
                                         type="text"
-                                        placeholder="🔍 Search by Guest Name, Route, Date or Cab..."
+                                        placeholder="🔍 Search by Guest Name, Hotel, Car Number (e.g. RJ-27), or Tour..."
                                         value={rideSearchQuery}
                                         onChange={(e) => setRideSearchQuery(e.target.value)}
                                         style={{
                                             width: '100%',
-                                            padding: '10px 14px',
-                                            background: '#090f1d',
-                                            border: '1px solid rgba(255,255,255,0.12)',
+                                            padding: '11px 14px',
+                                            background: '#0a0f1d',
+                                            border: '1px solid rgba(255,255,255,0.14)',
                                             borderRadius: '10px',
                                             color: 'white',
                                             fontSize: '13px',
-                                            outline: 'none'
+                                            outline: 'none',
+                                            boxSizing: 'border-box'
                                         }}
                                     />
                                 </div>
                             </div>
 
+                            {/* Section Header: Date | Guest Details | Car Header Bar */}
+                            <div style={{
+                                display: 'none',
+                                gridTemplateColumns: '170px 1fr 220px',
+                                gap: '16px',
+                                padding: '10px 20px',
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                borderRadius: '12px',
+                                marginBottom: '12px',
+                                color: '#94a3b8',
+                                fontSize: '11px',
+                                fontWeight: '900',
+                                letterSpacing: '0.8px',
+                                textTransform: 'uppercase'
+                            }} className="desktop-roster-header">
+                                <div>📅 Date & Schedule</div>
+                                <div>👤 Guest Details & Tour Itinerary</div>
+                                <div>🚗 Car (Konsi Car Hai Driver Ke Pass)</div>
+                            </div>
+
                             {/* Rides List */}
                             {ridesLoading ? (
-                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '60px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '70px 20px' }}>
                                     <div className="spinner"></div>
                                 </div>
                             ) : upcomingRides.length === 0 ? (
-                                <div className="glass-card" style={{ padding: '48px 24px', textAlign: 'center' }}>
-                                    <Calendar size={48} color="#fbbf24" style={{ margin: '0 auto 16px', opacity: 0.6 }} />
+                                <div className="glass-card" style={{ padding: '50px 24px', textAlign: 'center', borderRadius: '18px' }}>
+                                    <Calendar size={52} color="#fbbf24" style={{ margin: '0 auto 16px', opacity: 0.6 }} />
                                     <h3 style={{ color: 'white', fontSize: '18px', fontWeight: '800', marginBottom: '8px' }}>
-                                        {t('noUpcomingRides')}
+                                        No Assigned Rides in {MONTH_NAMES[ridesMonth - 1]} {ridesYear}
                                     </h3>
-                                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', maxWidth: '420px', margin: '0 auto' }}>
-                                        Whenever dispatch assigns you a tour in the system, it will automatically appear here with pickup points, dates and guest numbers.
+                                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', maxWidth: '440px', margin: '0 auto 18px' }}>
+                                        No duties are assigned to you for this month yet. Use the month arrows above to check other months or tap "Today".
                                     </p>
+                                    <button
+                                        type="button"
+                                        onClick={handleTodayRidesMonth}
+                                        style={{
+                                            padding: '10px 20px',
+                                            background: '#f59e0b',
+                                            color: '#000',
+                                            border: 'none',
+                                            borderRadius: '10px',
+                                            fontWeight: '800',
+                                            fontSize: '13px',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        Jump to Current Month
+                                    </button>
                                 </div>
                             ) : (
-                                <div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                                     {upcomingRides
                                         .filter(ride => {
                                             if (!rideSearchQuery.trim()) return true;
@@ -2462,217 +2710,346 @@ const DriverPortal = () => {
                                                 (ride.clientName && ride.clientName.toLowerCase().includes(q)) ||
                                                 (ride.duty && ride.duty.toLowerCase().includes(q)) ||
                                                 (ride.pickupPoint && ride.pickupPoint.toLowerCase().includes(q)) ||
+                                                (ride.hotel && ride.hotel.toLowerCase().includes(q)) ||
                                                 (ride.vehicleNumber && ride.vehicleNumber.toLowerCase().includes(q)) ||
+                                                (ride.carType && ride.carType.toLowerCase().includes(q)) ||
                                                 (ride.dateStr && ride.dateStr.includes(q)) ||
                                                 (ride.bookingId && ride.bookingId.toLowerCase().includes(q))
                                             );
                                         })
-                                        .map((ride, idx) => (
-                                            <div
-                                                key={ride._id || idx}
-                                                className="glass-card"
-                                                style={{
-                                                    padding: '18px',
-                                                    background: ride.isToday
-                                                        ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.04) 100%)'
-                                                        : 'rgba(255, 255, 255, 0.03)',
-                                                    border: ride.isToday
-                                                        ? '1.5px solid rgba(16, 185, 129, 0.45)'
-                                                        : '1px solid rgba(255, 255, 255, 0.08)',
-                                                    borderRadius: '16px',
-                                                    marginBottom: '14px',
-                                                    boxShadow: ride.isToday
-                                                        ? '0 8px 24px rgba(16, 185, 129, 0.15)'
-                                                        : '0 4px 16px rgba(0,0,0,0.15)'
-                                                }}
-                                            >
-                                                {/* Header Bar */}
-                                                <div style={{
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    alignItems: 'center',
-                                                    flexWrap: 'wrap',
-                                                    gap: '10px',
-                                                    marginBottom: '14px',
-                                                    borderBottom: '1px solid rgba(255,255,255,0.06)',
-                                                    paddingBottom: '10px'
-                                                }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                        .map((ride, idx) => {
+                                            const theme = getThemeForRide(ride);
+                                            const rideDate = ride.date ? new Date(ride.date) : null;
+                                            const dayNum = rideDate ? String(rideDate.getDate()).padStart(2, '0') : (ride.dateStr?.slice(8, 10) || '01');
+                                            const weekdayName = rideDate ? rideDate.toLocaleDateString('en-US', { weekday: 'short' }) : '';
+                                            const monthShort = rideDate ? rideDate.toLocaleDateString('en-US', { month: 'short' }) : '';
+
+                                            return (
+                                                <div
+                                                    key={ride._id || idx}
+                                                    style={{
+                                                        background: ride.isToday
+                                                            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(15, 23, 42, 0.85) 100%)'
+                                                            : 'linear-gradient(135deg, rgba(20, 29, 47, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%)',
+                                                        border: ride.isToday
+                                                            ? '2px solid #10b981'
+                                                            : `1px solid ${theme.border}44`,
+                                                        borderLeft: `6px solid ${theme.bg}`,
+                                                        borderRadius: '16px',
+                                                        padding: '16px 20px',
+                                                        boxShadow: ride.isToday
+                                                            ? '0 8px 25px rgba(16, 185, 129, 0.25)'
+                                                            : '0 4px 18px rgba(0, 0, 0, 0.25)',
+                                                        transition: 'all 0.2s ease',
+                                                        position: 'relative'
+                                                    }}
+                                                >
+                                                    {/* Master Theme Top Strip */}
+                                                    <div style={{
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center',
+                                                        flexWrap: 'wrap',
+                                                        gap: '8px',
+                                                        marginBottom: '14px',
+                                                        paddingBottom: '10px',
+                                                        borderBottom: '1px solid rgba(255, 255, 255, 0.07)'
+                                                    }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                            {/* Master Calendar Theme Tour Tag */}
+                                                            <span style={{
+                                                                background: theme.bg,
+                                                                color: theme.text,
+                                                                border: `1px solid ${theme.border}`,
+                                                                padding: '4px 10px',
+                                                                borderRadius: '8px',
+                                                                fontSize: '11px',
+                                                                fontWeight: '900',
+                                                                letterSpacing: '0.4px',
+                                                                boxShadow: `0 2px 8px ${theme.glow || 'rgba(0,0,0,0.3)'}`
+                                                            }}>
+                                                                ● {ride.duty || 'Tour Duty'}
+                                                            </span>
+
+                                                            {ride.isToday ? (
+                                                                <span style={{
+                                                                    background: '#10b981',
+                                                                    color: '#000000',
+                                                                    padding: '3px 9px',
+                                                                    borderRadius: '8px',
+                                                                    fontSize: '10.5px',
+                                                                    fontWeight: '950',
+                                                                    letterSpacing: '0.5px',
+                                                                    animation: 'pulse 2s infinite'
+                                                                }}>
+                                                                    ● TODAY’S RIDE
+                                                                </span>
+                                                            ) : (
+                                                                <span style={{
+                                                                    background: 'rgba(255, 255, 255, 0.08)',
+                                                                    color: '#94a3b8',
+                                                                    padding: '3px 8px',
+                                                                    borderRadius: '6px',
+                                                                    fontSize: '10.5px',
+                                                                    fontWeight: '800'
+                                                                }}>
+                                                                    SCHEDULED
+                                                                </span>
+                                                            )}
+
+                                                            {ride.bookingId && (
+                                                                <span style={{
+                                                                    background: 'rgba(255, 255, 255, 0.06)',
+                                                                    color: '#e2e8f0',
+                                                                    padding: '3px 8px',
+                                                                    borderRadius: '6px',
+                                                                    fontSize: '11px',
+                                                                    fontWeight: '700'
+                                                                }}>
+                                                                    Booking: <strong style={{ color: '#fbbf24' }}>{ride.bookingId}</strong>
+                                                                </span>
+                                                            )}
+
+                                                            {ride.dayNo && (
+                                                                <span style={{
+                                                                    background: 'rgba(168, 85, 247, 0.2)',
+                                                                    color: '#c084fc',
+                                                                    border: '1px solid rgba(168, 85, 247, 0.4)',
+                                                                    padding: '3px 8px',
+                                                                    borderRadius: '6px',
+                                                                    fontSize: '10.5px',
+                                                                    fontWeight: '800'
+                                                                }}>
+                                                                    Day {ride.dayNo}
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Duty Time */}
                                                         <div style={{
-                                                            background: ride.isToday ? '#10b981' : '#1e3a8a',
-                                                            color: ride.isToday ? '#090d16' : '#93c5fd',
+                                                            background: 'rgba(56, 189, 248, 0.15)',
+                                                            color: '#38bdf8',
+                                                            border: '1px solid rgba(56, 189, 248, 0.35)',
                                                             padding: '4px 10px',
-                                                            borderRadius: '7px',
+                                                            borderRadius: '8px',
                                                             fontWeight: '900',
                                                             fontSize: '12px',
                                                             display: 'inline-flex',
                                                             alignItems: 'center',
                                                             gap: '5px'
                                                         }}>
-                                                            <Calendar size={13} /> {ride.dateFormatted || ride.dateStr}
+                                                            <Clock size={13} /> {ride.time || '10:00 AM'}
                                                         </div>
-
-                                                        {ride.isToday ? (
-                                                            <span style={{
-                                                                background: 'rgba(16, 185, 129, 0.25)',
-                                                                color: '#34d399',
-                                                                border: '1px solid rgba(16, 185, 129, 0.5)',
-                                                                padding: '3px 8px',
-                                                                borderRadius: '10px',
-                                                                fontSize: '10.5px',
-                                                                fontWeight: '900'
-                                                            }}>
-                                                                ● TODAY’S RIDE
-                                                            </span>
-                                                        ) : (
-                                                            <span style={{
-                                                                background: 'rgba(245, 158, 11, 0.15)',
-                                                                color: '#fbbf24',
-                                                                border: '1px solid rgba(245, 158, 11, 0.35)',
-                                                                padding: '3px 8px',
-                                                                borderRadius: '10px',
-                                                                fontSize: '10px',
-                                                                fontWeight: '800'
-                                                            }}>
-                                                                UPCOMING
-                                                            </span>
-                                                        )}
-
-                                                        {ride.bookingId && (
-                                                            <span style={{
-                                                                background: 'rgba(255,255,255,0.06)',
-                                                                color: 'rgba(255,255,255,0.7)',
-                                                                padding: '3px 8px',
-                                                                borderRadius: '6px',
-                                                                fontSize: '11px',
-                                                                fontWeight: '700'
-                                                            }}>
-                                                                Booking: <strong style={{ color: 'white' }}>{ride.bookingId}</strong>
-                                                            </span>
-                                                        )}
-
-                                                        {ride.dayNo && (
-                                                            <span style={{
-                                                                background: 'rgba(168, 85, 247, 0.15)',
-                                                                color: '#c084fc',
-                                                                padding: '3px 7px',
-                                                                borderRadius: '6px',
-                                                                fontSize: '10.5px',
-                                                                fontWeight: '800'
-                                                            }}>
-                                                                Day {ride.dayNo}
-                                                            </span>
-                                                        )}
                                                     </div>
 
+                                                    {/* THE 3 EXPLICIT COLUMNS: DATE | GUEST DETAILS | CAR */}
                                                     <div style={{
-                                                        background: 'rgba(56, 189, 248, 0.15)',
-                                                        color: '#38bdf8',
-                                                        border: '1px solid rgba(56, 189, 248, 0.35)',
-                                                        padding: '4px 10px',
-                                                        borderRadius: '8px',
-                                                        fontWeight: '900',
-                                                        fontSize: '12px',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '5px'
+                                                        display: 'grid',
+                                                        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                                                        gap: '16px',
+                                                        alignItems: 'stretch'
                                                     }}>
-                                                        <Clock size={13} /> {ride.time}
-                                                    </div>
-                                                </div>
-
-                                                {/* Content Grid */}
-                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
-                                                    {/* Guest Info */}
-                                                    <div style={{ background: 'rgba(0,0,0,0.25)', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                                        <div style={{ fontSize: '10px', fontWeight: '800', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: '4px' }}>
-                                                            {t('guestContact') || 'Guest Details'}
-                                                        </div>
-                                                        <div style={{ fontSize: '15px', fontWeight: '900', color: 'white', marginBottom: '8px' }}>
-                                                            {ride.clientName}
-                                                        </div>
-                                                        {ride.mobileNumber ? (
-                                                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                                                <a
-                                                                    href={`tel:${ride.mobileNumber}`}
-                                                                    style={{
-                                                                        padding: '6px 12px',
-                                                                        background: '#10b981',
-                                                                        color: 'white',
-                                                                        borderRadius: '7px',
-                                                                        fontWeight: '800',
-                                                                        fontSize: '11.5px',
-                                                                        textDecoration: 'none',
-                                                                        display: 'inline-flex',
-                                                                        alignItems: 'center',
-                                                                        gap: '5px'
-                                                                    }}
-                                                                >
-                                                                    <Phone size={13} /> {t('callGuest')} ({ride.mobileNumber})
-                                                                </a>
-                                                                <a
-                                                                    href={`https://wa.me/91${ride.mobileNumber.replace(/\D/g, '').slice(-10)}`}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    style={{
-                                                                        padding: '6px 10px',
-                                                                        background: 'rgba(37, 211, 102, 0.15)',
-                                                                        color: '#25D366',
-                                                                        border: '1px solid rgba(37, 211, 102, 0.35)',
-                                                                        borderRadius: '7px',
-                                                                        fontWeight: '800',
-                                                                        fontSize: '11.5px',
-                                                                        textDecoration: 'none',
-                                                                        display: 'inline-flex',
-                                                                        alignItems: 'center',
-                                                                        gap: '4px'
-                                                                    }}
-                                                                >
-                                                                    💬 WhatsApp
-                                                                </a>
-                                                            </div>
-                                                        ) : (
-                                                            <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
-                                                                Contact pending from guest
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Tour & Vehicle Info */}
-                                                    <div style={{ background: 'rgba(0,0,0,0.25)', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                                        <div style={{ fontSize: '10px', fontWeight: '800', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: '4px' }}>
-                                                            {t('dutyDetails') || 'Tour & Cab Details'}
-                                                        </div>
-                                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '6px' }}>
-                                                            <MapPin size={15} color="#fbbf24" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                                        {/* COLUMN 1: DATE */}
+                                                        <div style={{
+                                                            background: 'rgba(0, 0, 0, 0.3)',
+                                                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                                                            borderRadius: '14px',
+                                                            padding: '14px 16px',
+                                                            display: 'flex',
+                                                            flexDirection: 'column',
+                                                            justifyContent: 'space-between',
+                                                            minWidth: '150px'
+                                                        }}>
                                                             <div>
-                                                                <div style={{ fontSize: '13px', fontWeight: '800', color: '#fbbf24' }}>
-                                                                    {ride.duty}
+                                                                <div style={{ fontSize: '10px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '6px' }}>
+                                                                    📅 DATE
                                                                 </div>
-                                                                {ride.pickupPoint && (
-                                                                    <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.7)', marginTop: '2px' }}>
-                                                                        Pickup: <strong style={{ color: 'white' }}>{ride.pickupPoint}</strong>
+                                                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                                                                    <span style={{ fontSize: '32px', fontWeight: '950', color: ride.isToday ? '#34d399' : '#ffffff', lineHeight: 1 }}>
+                                                                        {dayNum}
+                                                                    </span>
+                                                                    <div>
+                                                                        <div style={{ fontSize: '13px', fontWeight: '800', color: '#e2e8f0' }}>
+                                                                            {weekdayName}
+                                                                        </div>
+                                                                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8' }}>
+                                                                            {monthShort} {rideDate?.getFullYear() || ridesYear}
+                                                                        </div>
                                                                     </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                                                                <span style={{ fontSize: '11px', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                    <Clock size={12} color="#38bdf8" /> Pickup: <strong>{ride.time || '10:00 AM'}</strong>
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* COLUMN 2: GUEST DETAILS */}
+                                                        <div style={{
+                                                            background: 'rgba(0, 0, 0, 0.3)',
+                                                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                                                            borderRadius: '14px',
+                                                            padding: '14px 16px',
+                                                            display: 'flex',
+                                                            flexDirection: 'column',
+                                                            justifyContent: 'space-between',
+                                                            flex: 2
+                                                        }}>
+                                                            <div>
+                                                                <div style={{ fontSize: '10px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '4px' }}>
+                                                                    👤 GUEST DETAILS & ITINERARY
+                                                                </div>
+                                                                <div style={{ fontSize: '16px', fontWeight: '900', color: '#ffffff', marginBottom: '8px' }}>
+                                                                    {ride.clientName || 'Valued Guest'}
+                                                                </div>
+
+                                                                {/* Pickup / Hotel Info */}
+                                                                {(ride.hotel || ride.pickupPoint) && (
+                                                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '8px' }}>
+                                                                        <MapPin size={14} color="#fbbf24" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                                                        <div style={{ fontSize: '12px', color: '#cbd5e1' }}>
+                                                                            {ride.hotel && <span>Hotel: <strong style={{ color: 'white' }}>{ride.hotel}</strong> </span>}
+                                                                            {ride.pickupPoint && ride.pickupPoint !== ride.hotel && (
+                                                                                <span> | Pickup: <strong style={{ color: 'white' }}>{ride.pickupPoint}</strong></span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Guest remarks */}
+                                                                {ride.guestRemarks && (
+                                                                    <div style={{
+                                                                        background: 'rgba(255,255,255,0.04)',
+                                                                        borderRadius: '8px',
+                                                                        padding: '6px 10px',
+                                                                        fontSize: '11px',
+                                                                        color: '#cbd5e1',
+                                                                        fontStyle: 'italic',
+                                                                        marginBottom: '8px',
+                                                                        borderLeft: '3px solid #fbbf24'
+                                                                    }}>
+                                                                        Note: {ride.guestRemarks}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Guest Mobile & 1-Click Action Buttons */}
+                                                            <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                                                                {ride.mobileNumber ? (
+                                                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                                        <a
+                                                                            href={`tel:${ride.mobileNumber}`}
+                                                                            style={{
+                                                                                padding: '6px 12px',
+                                                                                background: '#10b981',
+                                                                                color: 'white',
+                                                                                borderRadius: '8px',
+                                                                                fontWeight: '800',
+                                                                                fontSize: '11.5px',
+                                                                                textDecoration: 'none',
+                                                                                display: 'inline-flex',
+                                                                                alignItems: 'center',
+                                                                                gap: '5px'
+                                                                            }}
+                                                                        >
+                                                                            <Phone size={13} /> {t('callGuest')} ({ride.mobileNumber})
+                                                                        </a>
+                                                                        <a
+                                                                            href={`https://wa.me/91${ride.mobileNumber.replace(/\D/g, '').slice(-10)}`}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            style={{
+                                                                                padding: '6px 12px',
+                                                                                background: 'rgba(37, 211, 102, 0.15)',
+                                                                                color: '#25D366',
+                                                                                border: '1px solid rgba(37, 211, 102, 0.35)',
+                                                                                borderRadius: '8px',
+                                                                                fontWeight: '800',
+                                                                                fontSize: '11.5px',
+                                                                                textDecoration: 'none',
+                                                                                display: 'inline-flex',
+                                                                                alignItems: 'center',
+                                                                                gap: '4px'
+                                                                            }}
+                                                                        >
+                                                                            💬 WhatsApp
+                                                                        </a>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
+                                                                        Guest mobile pending from office
+                                                                    </span>
                                                                 )}
                                                             </div>
                                                         </div>
 
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', paddingTop: '6px', borderTop: '1px dashed rgba(255,255,255,0.08)' }}>
-                                                            <Car size={14} color="#38bdf8" />
-                                                            <span style={{ fontSize: '12px', fontWeight: '800', color: 'white' }}>
-                                                                {ride.vehicleNumber} <span style={{ color: '#38bdf8', fontSize: '11px' }}>({ride.carType})</span>
-                                                            </span>
-                                                        </div>
+                                                        {/* COLUMN 3: CAR (Konsi car hai driver ke pass) */}
+                                                        <div style={{
+                                                            background: 'rgba(0, 0, 0, 0.3)',
+                                                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                                                            borderRadius: '14px',
+                                                            padding: '14px 16px',
+                                                            display: 'flex',
+                                                            flexDirection: 'column',
+                                                            justifyContent: 'space-between',
+                                                            minWidth: '200px'
+                                                        }}>
+                                                            <div>
+                                                                <div style={{ fontSize: '10px', fontWeight: '900', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '6px' }}>
+                                                                    🚗 CAR (KONSI CAR HAI PASS)
+                                                                </div>
 
-                                                        {ride.guestRemarks && (
-                                                            <div style={{ marginTop: '6px', fontSize: '11px', color: '#cbd5e1', fontStyle: 'italic' }}>
-                                                                Note: {ride.guestRemarks}
+                                                                {/* Vehicle Number Plate */}
+                                                                <div style={{
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '8px',
+                                                                    background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                                                                    border: '2px solid #38bdf8',
+                                                                    padding: '6px 12px',
+                                                                    borderRadius: '8px',
+                                                                    marginBottom: '8px',
+                                                                    boxShadow: '0 2px 8px rgba(56, 189, 248, 0.2)'
+                                                                }}>
+                                                                    <Car size={16} color="#38bdf8" />
+                                                                    <span style={{
+                                                                        fontSize: '14px',
+                                                                        fontWeight: '950',
+                                                                        color: '#ffffff',
+                                                                        letterSpacing: '1px',
+                                                                        fontFamily: 'monospace'
+                                                                    }}>
+                                                                        {ride.vehicleNumber || 'CAR ASSIGNED'}
+                                                                    </span>
+                                                                </div>
+
+                                                                {/* Car Model / Type */}
+                                                                <div style={{ fontSize: '12.5px', fontWeight: '800', color: '#38bdf8', marginTop: '2px' }}>
+                                                                    {ride.carType || 'Fleet Cab'}
+                                                                </div>
                                                             </div>
-                                                        )}
+
+                                                            <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                                                                <span style={{
+                                                                    background: 'rgba(16, 185, 129, 0.15)',
+                                                                    color: '#34d399',
+                                                                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                                                                    padding: '3px 8px',
+                                                                    borderRadius: '6px',
+                                                                    fontSize: '10px',
+                                                                    fontWeight: '800',
+                                                                    display: 'inline-block'
+                                                                }}>
+                                                                    ● Assigned to You
+                                                                </span>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                 </div>
                             )}
                         </div>
