@@ -395,13 +395,25 @@ const FuelPage = () => {
             if (!userInfo?.token) return;
 
             const targetDate = overrideDate || toDate;
-            const isToday = targetDate === new Date().toLocaleDateString('en-CA');
-            const exactDateParam = !isToday ? '&exactDate=true' : '';
             const vehicleParam = vehicleId ? `&exactVehicleId=${vehicleId}` : '';
-            const { data } = await axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&driverType=All&toDate=${targetDate}${exactDateParam}${vehicleParam}`, {
+            const { data } = await axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&driverType=All&toDate=${targetDate}${vehicleParam}`, {
                 headers: { Authorization: `Bearer ${userInfo.token}` }
             });
-            setDrivers(data.drivers || []);
+            const fetchedDrivers = data.drivers || [];
+            setDrivers(fetchedDrivers);
+
+            // Auto-select the vehicle's driver if a vehicle is selected
+            if (vehicleId && fetchedDrivers.length > 0) {
+                setFormData(prev => {
+                    if (prev.driver && fetchedDrivers.some(d => d.name === prev.driver)) {
+                        return prev;
+                    }
+                    return {
+                        ...prev,
+                        driver: fetchedDrivers[0].name
+                    };
+                });
+            }
         } catch (err) { console.error(err); }
     };
 
@@ -1661,9 +1673,10 @@ const FuelPage = () => {
                                                 options={vehicles.map(v => ({ value: v._id, label: `${v.carNumber} (${v.model})` }))}
                                                 value={formData.vehicleId}
                                                 onChange={(vid) => {
-                                                    const selectedVehicle = vehicles.find(v => v._id === vid);
+                                                    const selectedVehicle = vehicles.find(v => v._id === vid) || outsideVehicles.find(v => v._id === vid);
                                                     const autoDriver = selectedVehicle?.currentDriver?.name || '';
-                                                    setFormData({ ...formData, vehicleId: vid, driver: autoDriver });
+                                                    setFormData(prev => ({ ...prev, vehicleId: vid, driver: autoDriver }));
+                                                    fetchDrivers(formData.date, vid);
                                                 }}
                                                 placeholder="Search Company Vehicle..."
                                                 required={true}
@@ -1941,37 +1954,75 @@ const FuelPage = () => {
                                             <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Fuel Station Name</label>
                                             <input className="input-field" placeholder="e.g. HP Petrol Pump" value={formData.stationName} onChange={(e) => setFormData({ ...formData, stationName: e.target.value })} style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 15px' }} />
                                         </div>
-                                        <div style={{ display: 'flex', gap: '15px' }}>
-                                            <div style={{ flex: 1 }}>
-                                                <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Company Driver</label>
-                                                <select
-                                                    className="input-field"
-                                                    value={!drivers.find(d => d.name === formData.driver && d.isFreelancer) ? formData.driver : ''}
-                                                    onChange={(e) => setFormData({ ...formData, driver: e.target.value })}
-                                                    disabled={!!(formData.driver && drivers.find(d => d.name === formData.driver && d.isFreelancer))}
-                                                    style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 10px', cursor: 'pointer', opacity: (formData.driver && drivers.find(d => d.name === formData.driver && d.isFreelancer)) ? 0.3 : 1 }}
-                                                >
-                                                    <option value="" style={{ background: '#1e293b' }}>Select Company</option>
-                                                    {drivers.filter(d => !d.isFreelancer).map(d => (
-                                                        <option key={d._id} value={d.name} style={{ background: '#1e293b' }}>{d.name}</option>
-                                                    ))}
-                                                </select>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <div style={{ display: 'flex', gap: '15px' }}>
+                                                <div style={{ flex: 1 }}>
+                                                    <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Company Driver</label>
+                                                    <select
+                                                        className="input-field"
+                                                        value={!drivers.find(d => d.name === formData.driver && d.isFreelancer) ? formData.driver : ''}
+                                                        onChange={(e) => setFormData({ ...formData, driver: e.target.value })}
+                                                        disabled={!!(formData.driver && drivers.find(d => d.name === formData.driver && d.isFreelancer))}
+                                                        style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 10px', cursor: 'pointer', opacity: (formData.driver && drivers.find(d => d.name === formData.driver && d.isFreelancer)) ? 0.3 : 1 }}
+                                                    >
+                                                        <option value="" style={{ background: '#1e293b' }}>Select Company</option>
+                                                        {drivers.filter(d => !d.isFreelancer).map(d => (
+                                                            <option key={d._id} value={d.name} style={{ background: '#1e293b' }}>{d.name}</option>
+                                                        ))}
+                                                        {formData.driver && !drivers.some(d => d.name === formData.driver) && (
+                                                            <option value={formData.driver} style={{ background: '#1e293b' }}>{formData.driver}</option>
+                                                        )}
+                                                    </select>
+                                                </div>
+                                                <div style={{ flex: 1 }}>
+                                                    <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Freelancer</label>
+                                                    <select
+                                                        className="input-field"
+                                                        value={drivers.find(d => d.name === formData.driver && d.isFreelancer) ? formData.driver : (drivers.find(d => d.name === formData.driver) ? '' : formData.driver)}
+                                                        onChange={(e) => setFormData({ ...formData, driver: e.target.value })}
+                                                        disabled={!!(formData.driver && drivers.find(d => d.name === formData.driver && !d.isFreelancer))}
+                                                        style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 10px', cursor: 'pointer', opacity: (formData.driver && drivers.find(d => d.name === formData.driver && !d.isFreelancer)) ? 0.3 : 1 }}
+                                                    >
+                                                        <option value="" style={{ background: '#1e293b' }}>Select Free.</option>
+                                                        {drivers.filter(d => d.isFreelancer).map(d => (
+                                                            <option key={d._id} value={d.name} style={{ background: '#1e293b' }}>{d.name}</option>
+                                                        ))}
+                                                        {formData.driver && !drivers.some(d => d.name === formData.driver) && (
+                                                            <option value={formData.driver} style={{ background: '#1e293b' }}>{formData.driver}</option>
+                                                        )}
+                                                    </select>
+                                                </div>
                                             </div>
-                                            <div style={{ flex: 1 }}>
-                                                <label style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Freelancer</label>
-                                                <select
-                                                    className="input-field"
-                                                    value={drivers.find(d => d.name === formData.driver && d.isFreelancer) ? formData.driver : ''}
-                                                    onChange={(e) => setFormData({ ...formData, driver: e.target.value })}
-                                                    disabled={!!(formData.driver && drivers.find(d => d.name === formData.driver && !d.isFreelancer))}
-                                                    style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: 'white', padding: '0 10px', cursor: 'pointer', opacity: (formData.driver && drivers.find(d => d.name === formData.driver && !d.isFreelancer)) ? 0.3 : 1 }}
-                                                >
-                                                    <option value="" style={{ background: '#1e293b' }}>Select Free.</option>
-                                                    {drivers.filter(d => d.isFreelancer).map(d => (
-                                                        <option key={d._id} value={d.name} style={{ background: '#1e293b' }}>{d.name}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
+                                            {formData.driver && (
+                                                <div style={{
+                                                    padding: '6px 12px',
+                                                    background: 'rgba(16, 185, 129, 0.1)',
+                                                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                                                    borderRadius: '8px',
+                                                    fontSize: '11px',
+                                                    color: '#34d399',
+                                                    fontWeight: '800',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between'
+                                                }}>
+                                                    <span>🚗 Active Driver on Vehicle: <strong>{formData.driver}</strong></span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData(prev => ({ ...prev, driver: '' }))}
+                                                        style={{
+                                                            background: 'transparent',
+                                                            border: 'none',
+                                                            color: '#f87171',
+                                                            fontSize: '11px',
+                                                            cursor: 'pointer',
+                                                            fontWeight: '800'
+                                                        }}
+                                                    >
+                                                        Clear / Change
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
