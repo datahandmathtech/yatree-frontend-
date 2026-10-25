@@ -14,7 +14,6 @@ import SEO from '../components/SEO';
 import { todayIST, formatDateIST, nowIST, toISTDateString } from '../utils/istUtils';
 import ImageUploader from '../components/common/ImageUploader';
 import SearchableSelect from '../components/common/SearchableSelect';
-import SmartGuestBookingSelector from '../components/common/SmartGuestBookingSelector';
 import BankSelector from '../components/common/BankSelector';
 
 const CarUtility = () => {
@@ -1133,7 +1132,6 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
     // Sync form values on editing starting/stopping or utility tab switching
     useEffect(() => {
         if (editingItem) {
-            const isGuest = editingItem.paidBy === 'Guest' || editingItem.paymentSource === 'Guest';
             setForm({
                 amount: editingItem.amount || '',
                 remarks: editingItem.remarks || editingItem.description || '',
@@ -1143,14 +1141,14 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 billDate: toISTDateString(editingItem.billDate || editingItem.date || ''),
                 validTill: toISTDateString(editingItem.validTill || ''),
                 driverId: editingItem.driver?._id || editingItem.driver || '',
-                paymentMode: editingItem.method || editingItem.paymentMode || 'UPI',
+                paymentMode: editingItem.method || editingItem.paymentMode || 'Cash',
                 vehicleId: vehicle?._id || editingItem.vehicle?._id || editingItem.vehicle || editingItem.vehicleId || '',
-                paymentSource: isGuest ? 'Guest' : 'Office',
-                paidBy: isGuest ? 'Guest' : 'Company',
+                paymentSource: 'Office',
+                paidBy: 'Company',
                 bankAccountId: editingItem.bankAccount?._id || editingItem.bankAccount || editingItem.bankAccountId || '',
-                bookingId: editingItem.bookingId || '',
-                bookingRef: editingItem.bookingRef || editingItem.booking?._id || '',
-                guestName: editingItem.guestName || ''
+                bookingId: '',
+                bookingRef: '',
+                guestName: ''
             });
         } else {
             // Default date inside active month cycle
@@ -1169,7 +1167,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 driverId: '', 
                 vehicleId: vehicle?._id || '', 
                 paymentSource: 'Office', 
-                paymentMode: 'UPI',
+                paymentMode: 'Cash',
                 paidBy: 'Company',
                 bankAccountId: '',
                 bookingId: '',
@@ -1192,15 +1190,12 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
             if (type === 'fastag') {
                 const formData = new FormData();
                 formData.append('amount', form.amount);
-                formData.append('method', form.paymentMode || 'UPI');
+                formData.append('method', form.paymentMode || 'Cash');
                 formData.append('remarks', form.remarks || '');
                 formData.append('date', finalDate);
-                formData.append('paidBy', form.paidBy || 'Company');
-                formData.append('paymentSource', form.paidBy === 'Guest' ? 'Guest' : 'Office');
+                formData.append('paidBy', 'Company');
+                formData.append('paymentSource', 'Office');
                 if (form.bankAccountId) formData.append('bankAccountId', form.bankAccountId);
-                if (form.bookingId) formData.append('bookingId', form.bookingId);
-                if (form.bookingRef) formData.append('bookingRef', form.bookingRef);
-                if (form.guestName) formData.append('guestName', form.guestName);
                 if (file) formData.append('receiptPhoto', file);
                 if (companyId) formData.append('companyId', companyId);
 
@@ -1212,7 +1207,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
             } else if (type === 'border') {
                 const fd = new FormData();
                 Object.keys(form).forEach(k => {
-                    if (form[k] !== undefined && form[k] !== null && !['date', 'billDate', 'vehicleId'].includes(k)) {
+                    if (form[k] !== undefined && form[k] !== null && !['date', 'billDate', 'vehicleId', 'bookingId', 'bookingRef', 'guestName'].includes(k)) {
                         fd.set(k, form[k]);
                     }
                 });
@@ -1220,8 +1215,8 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 fd.set('billDate', finalDate);
                 if (companyId) fd.set('companyId', companyId);
                 fd.set('vehicleId', targetVehicleId);
-                fd.set('paidBy', form.paidBy || 'Company');
-                fd.set('paymentSource', form.paidBy === 'Guest' ? 'Guest' : 'Office');
+                fd.set('paidBy', 'Company');
+                fd.set('paymentSource', 'Office');
 
                 if (file) fd.set('receiptPhoto', file);
 
@@ -1234,7 +1229,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 // type === 'services' (Other Expense)
                 const fd = new FormData();
                 Object.keys(form).forEach(k => {
-                    if (form[k] !== undefined && form[k] !== null && !['date', 'billDate', 'vehicleId'].includes(k)) {
+                    if (form[k] !== undefined && form[k] !== null && !['date', 'billDate', 'vehicleId', 'bookingId', 'bookingRef', 'guestName'].includes(k)) {
                         fd.set(k, form[k]);
                     }
                 });
@@ -1246,8 +1241,8 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 fd.set('remarks', form.remarks || '');
                 if (companyId) fd.set('companyId', companyId);
                 fd.set('vehicleId', targetVehicleId);
-                fd.set('paidBy', form.paidBy || 'Company');
-                fd.set('paymentSource', form.paidBy === 'Guest' ? 'Guest' : 'Office');
+                fd.set('paidBy', 'Company');
+                fd.set('paymentSource', 'Office');
                 if (form.driverId) fd.set('driverId', form.driverId);
 
                 if (file) {
@@ -1361,169 +1356,94 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                             <input type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="0.00" style={{ fontSize: '20px', fontWeight: '800', color }} />
                         </div>
 
-                        {/* Paid By: By Company vs By Guest */}
-                        <div className="premium-input-container">
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <CreditCard size={12} /> Paid By / Expense Source
+                        {/* Payment Account / Method Selector (Paid by Company) */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                <CreditCard size={12} /> Payment Method (Paid by Company)
                             </label>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '6px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                                 <button
                                     type="button"
-                                    onClick={() => setForm({ ...form, paidBy: 'Company', paymentSource: 'Office', paymentMode: form.paymentMode || 'UPI', bookingId: '', bookingRef: '', guestName: '' })}
+                                    onClick={() => setForm({ ...form, paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company', paymentSource: 'Office' })}
                                     style={{
                                         padding: '10px 12px',
-                                        borderRadius: '12px',
-                                        border: form.paidBy === 'Company' ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
-                                        background: form.paidBy === 'Company' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
-                                        color: form.paidBy === 'Company' ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                        borderRadius: '10px',
+                                        border: (form.paymentMode === 'Cash' || (!form.bankAccountId && form.paymentMode !== 'UPI' && form.paymentMode !== 'Bank Transfer')) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                        background: (form.paymentMode === 'Cash' || (!form.bankAccountId && form.paymentMode !== 'UPI' && form.paymentMode !== 'Bank Transfer')) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                        color: (form.paymentMode === 'Cash' || (!form.bankAccountId && form.paymentMode !== 'UPI' && form.paymentMode !== 'Bank Transfer')) ? '#10b981' : 'rgba(255,255,255,0.6)',
                                         fontWeight: '800',
                                         fontSize: '12px',
                                         cursor: 'pointer',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        gap: '6px',
-                                        transition: 'all 0.2s ease'
+                                        gap: '6px'
                                     }}
                                 >
-                                    <Building2 size={14} /> 🏢 By Company
+                                    💵 Cash in Hand
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setForm({ ...form, paidBy: 'Guest', paymentSource: 'Guest', paymentMode: 'Cash by Guest', bankAccountId: '' })}
+                                    onClick={() => setForm({ ...form, paymentMode: form.paymentMode === 'Cash' ? 'UPI' : (form.paymentMode || 'UPI'), bankAccountId: form.bankAccountId || (bankAccounts[0]?._id || ''), paidBy: 'Company', paymentSource: 'Office' })}
                                     style={{
                                         padding: '10px 12px',
-                                        borderRadius: '12px',
-                                        border: form.paidBy === 'Guest' ? '2px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)',
-                                        background: form.paidBy === 'Guest' ? 'rgba(251, 191, 36, 0.15)' : 'rgba(255,255,255,0.03)',
-                                        color: form.paidBy === 'Guest' ? '#fbbf24' : 'rgba(255,255,255,0.6)',
+                                        borderRadius: '10px',
+                                        border: (form.paymentMode !== 'Cash' && (form.bankAccountId || form.paymentMode === 'UPI' || form.paymentMode === 'Bank Transfer')) ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                        background: (form.paymentMode !== 'Cash' && (form.bankAccountId || form.paymentMode === 'UPI' || form.paymentMode === 'Bank Transfer')) ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                        color: (form.paymentMode !== 'Cash' && (form.bankAccountId || form.paymentMode === 'UPI' || form.paymentMode === 'Bank Transfer')) ? '#38bdf8' : 'rgba(255,255,255,0.6)',
                                         fontWeight: '800',
                                         fontSize: '12px',
                                         cursor: 'pointer',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        gap: '6px',
-                                        transition: 'all 0.2s ease'
+                                        gap: '6px'
                                     }}
                                 >
-                                    <UserCheck size={14} /> 👤 By Guest
+                                    🏦 Bank Account
                                 </button>
                             </div>
-                        </div>
 
-                        {/* Dynamic Section: Bank Account vs Cash in Hand selection when By Company */}
-                        {form.paidBy === 'Company' && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                    Payment Account / Method
-                                </label>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => setForm({ ...form, paymentMode: 'Cash', bankAccountId: '' })}
-                                        style={{
-                                            padding: '10px 12px',
-                                            borderRadius: '10px',
-                                            border: (form.paymentMode === 'Cash' || (!form.bankAccountId && form.paymentMode !== 'UPI' && form.paymentMode !== 'Bank Transfer')) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
-                                            background: (form.paymentMode === 'Cash' || (!form.bankAccountId && form.paymentMode !== 'UPI' && form.paymentMode !== 'Bank Transfer')) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
-                                            color: (form.paymentMode === 'Cash' || (!form.bankAccountId && form.paymentMode !== 'UPI' && form.paymentMode !== 'Bank Transfer')) ? '#10b981' : 'rgba(255,255,255,0.6)',
-                                            fontWeight: '800',
-                                            fontSize: '12px',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            gap: '6px'
-                                        }}
-                                    >
-                                        💵 Cash in Hand
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setForm({ ...form, paymentMode: form.paymentMode === 'Cash' ? 'UPI' : (form.paymentMode || 'UPI'), bankAccountId: form.bankAccountId || (bankAccounts[0]?._id || '') })}
-                                        style={{
-                                            padding: '10px 12px',
-                                            borderRadius: '10px',
-                                            border: (form.paymentMode !== 'Cash' && (form.bankAccountId || form.paymentMode === 'UPI' || form.paymentMode === 'Bank Transfer')) ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
-                                            background: (form.paymentMode !== 'Cash' && (form.bankAccountId || form.paymentMode === 'UPI' || form.paymentMode === 'Bank Transfer')) ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
-                                            color: (form.paymentMode !== 'Cash' && (form.bankAccountId || form.paymentMode === 'UPI' || form.paymentMode === 'Bank Transfer')) ? '#38bdf8' : 'rgba(255,255,255,0.6)',
-                                            fontWeight: '800',
-                                            fontSize: '12px',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            gap: '6px'
-                                        }}
-                                    >
-                                        🏦 Bank Account
-                                    </button>
-                                </div>
-
-                                {/* If Cash is chosen: Live Cash in Hand Balance Impact */}
-                                {form.paymentMode === 'Cash' ? (
-                                    <div style={{
-                                        background: 'rgba(16, 185, 129, 0.08)',
-                                        border: '1px solid rgba(16, 185, 129, 0.25)',
-                                        borderRadius: '12px',
-                                        padding: '12px 14px',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '8px'
-                                    }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Current Cash in Hand:</span>
-                                            <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '900' }}>₹{(selectedCompany?.cashBalance || 0).toLocaleString('en-IN')}</span>
-                                        </div>
-                                        {Number(form.amount) > 0 && (
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(16, 185, 129, 0.2)', paddingTop: '6px' }}>
-                                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Cash Balance After:</span>
-                                                <span style={{
-                                                    fontSize: '14px',
-                                                    fontWeight: '950',
-                                                    color: ((selectedCompany?.cashBalance || 0) - Number(form.amount)) < 0 ? '#f43f5e' : '#10b981'
-                                                }}>
-                                                    ₹{((selectedCompany?.cashBalance || 0) - Number(form.amount)).toLocaleString('en-IN')}
-                                                </span>
-                                            </div>
-                                        )}
-                                        <div style={{ fontSize: '11px', color: '#10b981', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                            <span>💵</span> Deducts from Cash in Hand & logs in Cash Book
-                                        </div>
+                            {/* If Cash is chosen: Live Cash in Hand Balance Impact */}
+                            {form.paymentMode === 'Cash' ? (
+                                <div style={{
+                                    background: 'rgba(16, 185, 129, 0.08)',
+                                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                                    borderRadius: '12px',
+                                    padding: '12px 14px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Current Cash in Hand:</span>
+                                        <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '900' }}>₹{(selectedCompany?.cashBalance || 0).toLocaleString('en-IN')}</span>
                                     </div>
-                                ) : (
-                                    <BankSelector
-                                        bankAccounts={bankAccounts}
-                                        value={form.bankAccountId}
-                                        amount={form.amount}
-                                        onChange={(bId) => setForm({ ...form, bankAccountId: bId })}
-                                    />
-                                )}
-                            </div>
-                        )}
-
-                        {/* Dynamic Section: Tour Booking selection when By Guest */}
-                        {form.paidBy === 'Guest' && (
-                            <SmartGuestBookingSelector
-                                bookings={bookings}
-                                selectedDate={form.date || form.billDate}
-                                selectedDriverId={form.driverId}
-                                selectedVehicleId={vehicle?._id || form.vehicleId}
-                                value={{
-                                    bookingRef: form.bookingRef,
-                                    bookingId: form.bookingId,
-                                    guestName: form.guestName
-                                }}
-                                amount={form.amount}
-                                onChange={({ bookingRef, bookingId, guestName }) => setForm({
-                                    ...form,
-                                    bookingRef,
-                                    bookingId,
-                                    guestName
-                                })}
-                            />
-                        )}
+                                    {Number(form.amount) > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(16, 185, 129, 0.2)', paddingTop: '6px' }}>
+                                            <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Cash Balance After:</span>
+                                            <span style={{
+                                                fontSize: '14px',
+                                                fontWeight: '950',
+                                                color: ((selectedCompany?.cashBalance || 0) - Number(form.amount)) < 0 ? '#f43f5e' : '#10b981'
+                                            }}>
+                                                ₹{((selectedCompany?.cashBalance || 0) - Number(form.amount)).toLocaleString('en-IN')}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <div style={{ fontSize: '11px', color: '#10b981', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        <span>💵</span> Deducts from Cash in Hand & logs in Cash Book
+                                    </div>
+                                </div>
+                            ) : (
+                                <BankSelector
+                                    bankAccounts={bankAccounts}
+                                    value={form.bankAccountId}
+                                    amount={form.amount}
+                                    onChange={(bId) => setForm({ ...form, bankAccountId: bId, paymentMode: 'UPI', paidBy: 'Company', paymentSource: 'Office' })}
+                                />
+                            )}
+                        </div>
 
                         <div style={type === 'border' ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' } : {}}>
                             <div
