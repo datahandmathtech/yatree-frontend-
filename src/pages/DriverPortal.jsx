@@ -235,6 +235,7 @@ const DriverPortal = () => {
     const [rideSearchQuery, setRideSearchQuery] = useState('');
     const [ridesMonth, setRidesMonth] = useState(new Date(Date.now() + 5.5 * 60 * 60 * 1000).getUTCMonth() + 1); // 1-12
     const [ridesYear, setRidesYear] = useState(new Date(Date.now() + 5.5 * 60 * 60 * 1000).getUTCFullYear());
+    const [rosterViewMode, setRosterViewMode] = useState('upcoming'); // 'upcoming' | 'dutiesOnly' | 'fullMonth'
 
     useEffect(() => {
         fetchDashboard();
@@ -345,6 +346,77 @@ const DriverPortal = () => {
             (ride.bookingId && ride.bookingId.toLowerCase().includes(q))
         ));
     }, [activeUpcomingRides, rideSearchQuery]);
+
+    // Generate Excel-like date rows for the selected month (matches Master Calendar matrix format from user image)
+    const excelRosterRows = useMemo(() => {
+        const todayStr = todayIST(); // 'YYYY-MM-DD'
+        const todayDayNum = parseInt(todayStr.slice(8, 10), 10) || 1;
+        const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+        const curMo = istNow.getUTCMonth() + 1;
+        const curYr = istNow.getUTCFullYear();
+        const isCurrentMonth = (ridesYear === curYr && ridesMonth === curMo);
+
+        const totalDays = new Date(ridesYear, ridesMonth, 0).getDate();
+        const startDay = (isCurrentMonth && rosterViewMode === 'upcoming') ? todayDayNum : 1;
+
+        const rows = [];
+        for (let d = startDay; d <= totalDays; d++) {
+            const dateObj = new Date(ridesYear, ridesMonth - 1, d);
+            const dateStr = `${ridesYear}-${String(ridesMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const weekday = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+            const monthShort = dateObj.toLocaleDateString('en-US', { month: 'short' });
+            const isToday = dateStr === todayStr;
+
+            // Find duties matching this date from activeUpcomingRides
+            const matchingDuties = (activeUpcomingRides || []).filter(r => r.dateStr === dateStr);
+
+            if (matchingDuties.length === 0) {
+                if (rosterViewMode !== 'dutiesOnly') {
+                    rows.push({
+                        rowId: `empty-${dateStr}`,
+                        dayNum: d,
+                        dateStr,
+                        formattedDate: `${String(d).padStart(2, '0')}-${monthShort}`,
+                        weekday,
+                        isToday,
+                        duty: null
+                    });
+                }
+            } else {
+                matchingDuties.forEach((duty, subIdx) => {
+                    rows.push({
+                        rowId: `${duty._id || dateStr}-${subIdx}`,
+                        dayNum: d,
+                        dateStr,
+                        formattedDate: `${String(d).padStart(2, '0')}-${monthShort}`,
+                        weekday,
+                        isToday,
+                        duty,
+                        dutyIndex: subIdx,
+                        totalDutiesOnDate: matchingDuties.length
+                    });
+                });
+            }
+        }
+
+        // Apply search query if present
+        if (!rideSearchQuery.trim()) return rows;
+        const q = rideSearchQuery.toLowerCase();
+        return rows.filter(r => {
+            if (!r.duty) return false;
+            const d = r.duty;
+            return (
+                (d.clientName && d.clientName.toLowerCase().includes(q)) ||
+                (d.duty && d.duty.toLowerCase().includes(q)) ||
+                (d.hotel && d.hotel.toLowerCase().includes(q)) ||
+                (d.pickupPoint && d.pickupPoint.toLowerCase().includes(q)) ||
+                (d.vehicleNumber && d.vehicleNumber.toLowerCase().includes(q)) ||
+                (d.carType && d.carType.toLowerCase().includes(q)) ||
+                (r.dateStr && r.dateStr.includes(q)) ||
+                (d.bookingId && d.bookingId.toLowerCase().includes(q))
+            );
+        });
+    }, [ridesYear, ridesMonth, rosterViewMode, activeUpcomingRides, rideSearchQuery]);
 
 
     const handlePasswordUpdate = async () => {
@@ -2675,127 +2747,95 @@ const DriverPortal = () => {
                                 </div>
                             </div>
 
-                            {/* Scoped CSS for responsive 3-column table/grid layout */}
-                            <style>{`
-                                .driver-roster-header {
-                                    display: none;
-                                    grid-template-columns: 220px 1fr 180px;
-                                    gap: 16px;
-                                    padding: 11px 18px;
-                                    background: rgba(255, 255, 255, 0.04);
-                                    border: 1px solid rgba(255, 255, 255, 0.08);
-                                    border-radius: 12px;
-                                    margin-bottom: 12px;
-                                    color: #94a3b8;
-                                    font-size: 11.5px;
-                                    font-weight: 900;
-                                    letter-spacing: 0.8px;
-                                    text-transform: uppercase;
-                                    box-sizing: border-box;
-                                }
-                                .driver-roster-card {
-                                    border-radius: 14px;
-                                    box-sizing: border-box;
-                                    transition: transform 0.15s ease, box-shadow 0.15s ease;
-                                }
-                                @media (min-width: 768px) {
-                                    .driver-roster-header {
-                                        display: grid !important;
-                                    }
-                                    .driver-roster-card {
-                                        display: grid !important;
-                                        grid-template-columns: 220px 1fr 180px !important;
-                                        gap: 16px !important;
-                                        align-items: center !important;
-                                        padding: 14px 18px !important;
-                                    }
-                                    .driver-roster-col-date {
-                                        border-right: 1px solid rgba(255, 255, 255, 0.08);
-                                        padding-right: 14px;
-                                        display: flex;
-                                        flex-direction: column;
-                                        gap: 6px;
-                                    }
-                                    .driver-roster-col-guest {
-                                        display: flex;
-                                        flex-direction: column;
-                                        gap: 6px;
-                                        min-width: 0;
-                                    }
-                                    .driver-roster-col-car {
-                                        border-left: 1px solid rgba(255, 255, 255, 0.08);
-                                        padding-left: 14px;
-                                        display: flex;
-                                        flex-direction: column;
-                                        align-items: flex-end;
-                                        justify-content: center;
-                                        gap: 6px;
-                                        text-align: right;
-                                    }
-                                }
-                                @media (max-width: 767px) {
-                                    .driver-roster-header {
-                                        display: none !important;
-                                    }
-                                    .driver-roster-card {
-                                        display: flex !important;
-                                        flex-direction: column !important;
-                                        gap: 10px !important;
-                                        padding: 12px 14px !important;
-                                    }
-                                    .driver-roster-col-date {
-                                        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-                                        padding-bottom: 8px;
-                                        display: flex;
-                                        flex-direction: column;
-                                        gap: 6px;
-                                    }
-                                    .driver-roster-col-guest {
-                                        display: flex;
-                                        flex-direction: column;
-                                        gap: 6px;
-                                    }
-                                    .driver-roster-col-car {
-                                        border-top: 1px dashed rgba(255, 255, 255, 0.1);
-                                        padding-top: 8px;
-                                        display: flex;
-                                        flex-direction: row;
-                                        align-items: center;
-                                        justify-content: space-between;
-                                        gap: 8px;
-                                    }
-                                }
-                            `}</style>
+                            {/* Filter & View Mode Controls Strip */}
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                flexWrap: 'wrap',
+                                gap: '10px',
+                                marginBottom: '14px'
+                            }}>
+                                {/* View Mode Toggle Buttons */}
+                                <div style={{
+                                    display: 'inline-flex',
+                                    background: 'rgba(0, 0, 0, 0.4)',
+                                    borderRadius: '10px',
+                                    padding: '3px',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                                    gap: '4px'
+                                }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setRosterViewMode('upcoming')}
+                                        style={{
+                                            padding: '6px 12px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            fontSize: '11.5px',
+                                            fontWeight: '800',
+                                            cursor: 'pointer',
+                                            background: rosterViewMode === 'upcoming' ? '#3b82f6' : 'transparent',
+                                            color: rosterViewMode === 'upcoming' ? '#ffffff' : '#94a3b8',
+                                            transition: 'all 0.15s ease'
+                                        }}
+                                    >
+                                        ⚡ Today Onwards
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setRosterViewMode('dutiesOnly')}
+                                        style={{
+                                            padding: '6px 12px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            fontSize: '11.5px',
+                                            fontWeight: '800',
+                                            cursor: 'pointer',
+                                            background: rosterViewMode === 'dutiesOnly' ? '#10b981' : 'transparent',
+                                            color: rosterViewMode === 'dutiesOnly' ? '#ffffff' : '#94a3b8',
+                                            transition: 'all 0.15s ease'
+                                        }}
+                                    >
+                                        🚗 Only Duty Days
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setRosterViewMode('fullMonth')}
+                                        style={{
+                                            padding: '6px 12px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            fontSize: '11.5px',
+                                            fontWeight: '800',
+                                            cursor: 'pointer',
+                                            background: rosterViewMode === 'fullMonth' ? '#8b5cf6' : 'transparent',
+                                            color: rosterViewMode === 'fullMonth' ? '#ffffff' : '#94a3b8',
+                                            transition: 'all 0.15s ease'
+                                        }}
+                                    >
+                                        📅 Full Month (1 to {new Date(ridesYear, ridesMonth, 0).getDate()})
+                                    </button>
+                                </div>
 
-                            {/* Section Header: Date | Guest Details | Car Header Bar (Matches user drawing!) */}
-                            <div className="driver-roster-header">
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <Calendar size={13} color="#fbbf24" />
-                                    <span>Date & Time</span>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <UserIcon size={13} color="#38bdf8" />
-                                    <span>Guest Details & Tour</span>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
-                                    <Car size={13} color="#34d399" />
-                                    <span>Car (Konsi Car)</span>
+                                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '700' }}>
+                                    Showing <span style={{ color: '#fbbf24', fontWeight: '900' }}>{excelRosterRows.length}</span> rows
                                 </div>
                             </div>
 
-                            {/* Rides List */}
+                            {/* Excel-Like Table (Matches Master Calendar Matrix from User Image) */}
                             {ridesLoading ? (
                                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '70px 20px' }}>
                                     <div className="spinner"></div>
                                 </div>
-                            ) : filteredUpcomingRides.length === 0 ? (
+                            ) : excelRosterRows.length === 0 ? (
                                 <div className="glass-card" style={{ padding: '50px 24px', textAlign: 'center', borderRadius: '18px' }}>
                                     <Calendar size={52} color="#fbbf24" style={{ margin: '0 auto 16px', opacity: 0.6 }} />
                                     <h3 style={{ color: 'white', fontSize: '18px', fontWeight: '800', marginBottom: '8px' }}>
-                                        No Current or Upcoming Rides in {MONTH_NAMES[ridesMonth - 1]} {ridesYear}
+                                        No Duties Found in {MONTH_NAMES[ridesMonth - 1]} {ridesYear}
                                     </h3>
                                     <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', maxWidth: '440px', margin: '0 auto 18px' }}>
-                                        Only today's duties and upcoming scheduled rides are displayed.
+                                        No duties match the selected view or search query.
                                     </p>
                                     <button
                                         type="button"
@@ -2815,254 +2855,394 @@ const DriverPortal = () => {
                                     </button>
                                 </div>
                             ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                    {filteredUpcomingRides.map((ride, idx) => {
-                                        const theme = getThemeForRide(ride);
-                                        const rideDate = ride.date ? new Date(ride.date) : null;
-                                        const dayNum = rideDate ? String(rideDate.getDate()).padStart(2, '0') : (ride.dateStr?.slice(8, 10) || '01');
-                                        const weekdayName = rideDate ? rideDate.toLocaleDateString('en-US', { weekday: 'short' }) : '';
-                                        const monthShort = rideDate ? rideDate.toLocaleDateString('en-US', { month: 'short' }) : '';
+                                <div style={{
+                                    width: '100%',
+                                    overflowX: 'auto',
+                                    WebkitOverflowScrolling: 'touch',
+                                    background: '#090f1d',
+                                    borderRadius: '12px',
+                                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)'
+                                }}>
+                                    <table style={{
+                                        width: '100%',
+                                        borderCollapse: 'collapse',
+                                        fontSize: '12px',
+                                        fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+                                        minWidth: '760px',
+                                        textAlign: 'left'
+                                    }}>
+                                        <thead>
+                                            <tr style={{
+                                                background: '#1e3a5f',
+                                                color: '#ffffff',
+                                                borderBottom: '2px solid #3b82f6',
+                                                fontSize: '11.5px',
+                                                fontWeight: '900',
+                                                letterSpacing: '0.5px',
+                                                textTransform: 'uppercase'
+                                            }}>
+                                                <th style={{
+                                                    padding: '10px 12px',
+                                                    width: '92px',
+                                                    minWidth: '92px',
+                                                    borderRight: '1px solid rgba(255,255,255,0.12)',
+                                                    position: 'sticky',
+                                                    left: 0,
+                                                    background: '#1e3a5f',
+                                                    zIndex: 20,
+                                                    textAlign: 'center'
+                                                }}>
+                                                    📅 Date
+                                                </th>
+                                                <th style={{
+                                                    padding: '10px 14px',
+                                                    borderRight: '1px solid rgba(255,255,255,0.12)',
+                                                    minWidth: '220px'
+                                                }}>
+                                                    👤 Guest Details & Tour (Master Calendar)
+                                                </th>
+                                                <th style={{
+                                                    padding: '10px 14px',
+                                                    borderRight: '1px solid rgba(255,255,255,0.12)',
+                                                    minWidth: '180px'
+                                                }}>
+                                                    🚗 Car (Konsi Car Hai Driver Ke Pass)
+                                                </th>
+                                                <th style={{
+                                                    padding: '10px 12px',
+                                                    borderRight: '1px solid rgba(255,255,255,0.12)',
+                                                    minWidth: '160px'
+                                                }}>
+                                                    ⏰ Time & Hotel
+                                                </th>
+                                                <th style={{
+                                                    padding: '10px 12px',
+                                                    width: '140px',
+                                                    textAlign: 'center'
+                                                }}>
+                                                    📞 Actions
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {excelRosterRows.map((row, idx) => {
+                                                const duty = row.duty;
+                                                const theme = duty ? getThemeForRide(duty) : null;
 
-                                        return (
-                                            <div
-                                                key={ride._id || idx}
-                                                className="driver-roster-card"
-                                                style={{
-                                                    background: ride.isToday
-                                                        ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(15, 23, 42, 0.95) 100%)'
-                                                        : 'linear-gradient(135deg, rgba(20, 29, 47, 0.85) 0%, rgba(15, 23, 42, 0.95) 100%)',
-                                                    border: ride.isToday
-                                                        ? '1.5px solid #10b981'
-                                                        : `1px solid ${theme.border}44`,
-                                                    borderLeft: `5px solid ${theme.bg}`,
-                                                    boxShadow: ride.isToday
-                                                        ? '0 6px 20px rgba(16, 185, 129, 0.2)'
-                                                        : '0 3px 12px rgba(0, 0, 0, 0.25)'
-                                                }}
-                                            >
-                                                {/* --- COLUMN 1: DATE (Date & Time) --- */}
-                                                <div className="driver-roster-col-date">
-                                                    <div style={{
-                                                        background: ride.isToday ? '#10b981' : theme.bg,
-                                                        color: '#ffffff',
-                                                        padding: '3px 9px',
-                                                        borderRadius: '6px',
-                                                        fontSize: '12.5px',
-                                                        fontWeight: '900',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '5px',
-                                                        width: 'fit-content'
-                                                    }}>
-                                                        <Calendar size={13} />
-                                                        <span>{dayNum} {weekdayName}, {monthShort} {rideDate?.getFullYear() || ridesYear}</span>
-                                                    </div>
+                                                return (
+                                                    <tr
+                                                        key={row.rowId || idx}
+                                                        style={{
+                                                            background: row.isToday
+                                                                ? 'rgba(16, 185, 129, 0.08)'
+                                                                : (idx % 2 === 0 ? '#0d1527' : '#080d19'),
+                                                            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                                                            transition: 'background 0.15s ease'
+                                                        }}
+                                                    >
+                                                        {/* --- 1. DATE CELL (Sticky Left) --- */}
+                                                        <td style={{
+                                                            padding: '7px 8px',
+                                                            borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+                                                            position: 'sticky',
+                                                            left: 0,
+                                                            zIndex: 10,
+                                                            background: row.isToday ? '#1a3650' : (idx % 2 === 0 ? '#0d1527' : '#080d19'),
+                                                            textAlign: 'center',
+                                                            verticalAlign: 'middle'
+                                                        }}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                                                {row.isToday && (
+                                                                    <span style={{
+                                                                        fontSize: '8.5px',
+                                                                        background: '#38bdf8',
+                                                                        color: '#000000',
+                                                                        padding: '1px 5px',
+                                                                        borderRadius: '3px',
+                                                                        fontWeight: '950',
+                                                                        letterSpacing: '0.4px',
+                                                                        marginBottom: '1px'
+                                                                    }}>
+                                                                        TODAY
+                                                                    </span>
+                                                                )}
+                                                                <span style={{
+                                                                    fontWeight: '900',
+                                                                    color: row.isToday ? '#ffffff' : (row.weekday === 'Sun' ? '#f87171' : '#e2e8f0'),
+                                                                    fontSize: '12px',
+                                                                    whiteSpace: 'nowrap'
+                                                                }}>
+                                                                    {row.formattedDate}
+                                                                </span>
+                                                                <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '700' }}>
+                                                                    {row.weekday}
+                                                                </span>
+                                                            </div>
+                                                        </td>
 
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                                        {ride.isToday ? (
-                                                            <span style={{
-                                                                background: 'rgba(16, 185, 129, 0.25)',
-                                                                color: '#34d399',
-                                                                border: '1px solid rgba(16, 185, 129, 0.5)',
-                                                                padding: '2px 7px',
-                                                                borderRadius: '6px',
-                                                                fontSize: '10.5px',
-                                                                fontWeight: '950'
+                                                        {/* --- 2. GUEST DETAILS CELL (Exact Image 2 Master Calendar Theme) --- */}
+                                                        {duty ? (
+                                                            <td style={{
+                                                                padding: '6px 8px',
+                                                                borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+                                                                verticalAlign: 'middle',
+                                                                background: theme.bg,
+                                                                borderLeft: `4px solid ${theme.border}`,
+                                                                color: '#ffffff'
                                                             }}>
-                                                                ● TODAY
-                                                            </span>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                    {/* Guest Name */}
+                                                                    <span style={{
+                                                                        fontSize: '12.5px',
+                                                                        fontWeight: '950',
+                                                                        color: '#ffffff',
+                                                                        letterSpacing: '0.1px',
+                                                                        textShadow: '0 1px 2px rgba(0,0,0,0.6)'
+                                                                    }}>
+                                                                        {duty.clientName || 'Guest'}
+                                                                    </span>
+
+                                                                    {/* Duty Type in uppercase */}
+                                                                    {duty.duty && (
+                                                                        <span style={{
+                                                                            fontSize: '9.5px',
+                                                                            fontWeight: '900',
+                                                                            letterSpacing: '0.4px',
+                                                                            textTransform: 'uppercase',
+                                                                            color: theme.badgeText || '#e0f2fe',
+                                                                            lineHeight: 1.2
+                                                                        }}>
+                                                                            ● {duty.duty}
+                                                                        </span>
+                                                                    )}
+
+                                                                    {/* Day Badge & Booking ID */}
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px', flexWrap: 'wrap' }}>
+                                                                        {duty.dayNo && (
+                                                                            <span style={{
+                                                                                fontSize: '8.5px',
+                                                                                fontWeight: '950',
+                                                                                background: 'rgba(0, 0, 0, 0.4)',
+                                                                                color: '#ffffff',
+                                                                                padding: '1px 5px',
+                                                                                borderRadius: '3px',
+                                                                                letterSpacing: '0.3px'
+                                                                            }}>
+                                                                                DAY {duty.dayNo}
+                                                                            </span>
+                                                                        )}
+                                                                        {duty.bookingId && (
+                                                                            <span style={{
+                                                                                fontSize: '8.5px',
+                                                                                fontWeight: '800',
+                                                                                background: 'rgba(0, 0, 0, 0.25)',
+                                                                                color: '#fef08a',
+                                                                                padding: '1px 4px',
+                                                                                borderRadius: '3px'
+                                                                            }}>
+                                                                                {duty.bookingId}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </td>
                                                         ) : (
-                                                            <span style={{
-                                                                background: 'rgba(255, 255, 255, 0.08)',
-                                                                color: '#94a3b8',
-                                                                padding: '2px 6px',
-                                                                borderRadius: '5px',
-                                                                fontSize: '10px',
-                                                                fontWeight: '800'
-                                                            }}>
-                                                                UPCOMING
-                                                            </span>
-                                                        )}
-
-                                                        <span style={{
-                                                            background: 'rgba(56, 189, 248, 0.15)',
-                                                            color: '#38bdf8',
-                                                            border: '1px solid rgba(56, 189, 248, 0.3)',
-                                                            padding: '2px 7px',
-                                                            borderRadius: '6px',
-                                                            fontSize: '11px',
-                                                            fontWeight: '900',
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '4px'
-                                                        }}>
-                                                            <Clock size={11} /> {ride.time || '10:00 AM'}
-                                                        </span>
-                                                    </div>
-
-                                                    {(ride.bookingId || ride.dayNo) && (
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
-                                                            {ride.bookingId && (
-                                                                <span style={{
-                                                                    background: 'rgba(251, 191, 36, 0.15)',
-                                                                    color: '#fbbf24',
-                                                                    padding: '1px 6px',
-                                                                    borderRadius: '4px',
-                                                                    fontSize: '10px',
-                                                                    fontWeight: '800'
-                                                                }}>
-                                                                    Bkg: {ride.bookingId}
-                                                                </span>
-                                                            )}
-                                                            {ride.dayNo && (
-                                                                <span style={{
-                                                                    background: 'rgba(168, 85, 247, 0.2)',
-                                                                    color: '#c084fc',
-                                                                    padding: '1px 6px',
-                                                                    borderRadius: '4px',
-                                                                    fontSize: '10px',
-                                                                    fontWeight: '800'
-                                                                }}>
-                                                                    Day {ride.dayNo}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {/* --- COLUMN 2: GUEST DETAILS (Center) --- */}
-                                                <div className="driver-roster-col-guest">
-                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-                                                        <span style={{ fontSize: '15px', fontWeight: '900', color: '#ffffff', letterSpacing: '0.2px' }}>
-                                                            👤 {ride.clientName || 'Guest'}
-                                                        </span>
-
-                                                        {/* Tour Tag in Master Calendar Theme Color */}
-                                                        {ride.duty && (
-                                                            <span style={{
-                                                                background: `${theme.bg}25`,
-                                                                color: theme.badgeText || '#e2e8f0',
-                                                                border: `1px solid ${theme.border}66`,
-                                                                padding: '2px 8px',
-                                                                borderRadius: '6px',
+                                                            <td style={{
+                                                                padding: '8px 10px',
+                                                                borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+                                                                verticalAlign: 'middle',
+                                                                background: '#eab308',
+                                                                color: '#713f12',
+                                                                fontWeight: '900',
                                                                 fontSize: '11px',
-                                                                fontWeight: '800',
-                                                                whiteSpace: 'nowrap'
+                                                                textAlign: 'center',
+                                                                letterSpacing: '0.3px'
                                                             }}>
-                                                                ● {ride.duty}
-                                                            </span>
+                                                                Available / Rest Day
+                                                            </td>
                                                         )}
-                                                    </div>
 
-                                                    {(ride.hotel || ride.pickupPoint) && (
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#cbd5e1' }}>
-                                                            <MapPin size={12} color="#fbbf24" style={{ flexShrink: 0 }} />
-                                                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                                {ride.hotel ? `Hotel: ${ride.hotel}` : ''}
-                                                                {ride.pickupPoint && ride.pickupPoint !== ride.hotel ? ` • Pickup: ${ride.pickupPoint}` : ''}
-                                                            </span>
-                                                        </div>
-                                                    )}
+                                                        {/* --- 3. CAR CELL (Konsi Car Hai Driver Ke Pass) --- */}
+                                                        {duty ? (
+                                                            <td style={{
+                                                                padding: '7px 10px',
+                                                                borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+                                                                verticalAlign: 'middle'
+                                                            }}>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                                    <div style={{
+                                                                        fontSize: '12px',
+                                                                        fontWeight: '950',
+                                                                        color: '#38bdf8',
+                                                                        background: 'rgba(56, 189, 248, 0.12)',
+                                                                        border: '1px solid rgba(56, 189, 248, 0.3)',
+                                                                        padding: '2px 7px',
+                                                                        borderRadius: '5px',
+                                                                        fontFamily: 'monospace',
+                                                                        letterSpacing: '0.5px',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '5px',
+                                                                        width: 'fit-content'
+                                                                    }}>
+                                                                        <Car size={12} color="#38bdf8" />
+                                                                        <span>{duty.vehicleNumber || 'Assigned'}</span>
+                                                                    </div>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                        {duty.carType && (
+                                                                            <span style={{ fontSize: '10.5px', color: '#94a3b8', fontWeight: '700' }}>
+                                                                                {duty.carType}
+                                                                            </span>
+                                                                        )}
+                                                                        <span style={{
+                                                                            background: 'rgba(16, 185, 129, 0.15)',
+                                                                            color: '#34d399',
+                                                                            fontSize: '9px',
+                                                                            fontWeight: '800',
+                                                                            padding: '1px 5px',
+                                                                            borderRadius: '3px'
+                                                                        }}>
+                                                                            ● Assigned
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                        ) : (
+                                                            <td style={{
+                                                                padding: '7px 10px',
+                                                                borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+                                                                verticalAlign: 'middle',
+                                                                color: '#64748b',
+                                                                textAlign: 'center',
+                                                                fontSize: '12px'
+                                                            }}>
+                                                                —
+                                                            </td>
+                                                        )}
 
-                                                    {ride.guestRemarks && (
-                                                        <div style={{
-                                                            fontSize: '11px',
-                                                            color: '#fef08a',
-                                                            background: 'rgba(251, 191, 36, 0.08)',
-                                                            borderLeft: '3px solid #fbbf24',
-                                                            padding: '2px 8px',
-                                                            borderRadius: '4px',
-                                                            fontStyle: 'italic'
-                                                        }}>
-                                                            Note: {ride.guestRemarks}
-                                                        </div>
-                                                    )}
+                                                        {/* --- 4. TIME & HOTEL CELL --- */}
+                                                        {duty ? (
+                                                            <td style={{
+                                                                padding: '7px 10px',
+                                                                borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+                                                                verticalAlign: 'middle'
+                                                            }}>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                                    <div style={{
+                                                                        fontSize: '11px',
+                                                                        fontWeight: '800',
+                                                                        color: '#38bdf8',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '4px'
+                                                                    }}>
+                                                                        <Clock size={11} /> {duty.time || '10:00 AM'}
+                                                                    </div>
+                                                                    {(duty.hotel || duty.pickupPoint) && (
+                                                                        <div style={{ fontSize: '11px', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                            <MapPin size={11} color="#fbbf24" style={{ flexShrink: 0 }} />
+                                                                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '170px' }} title={duty.hotel || duty.pickupPoint}>
+                                                                                {duty.hotel || duty.pickupPoint}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+                                                                    {duty.guestRemarks && (
+                                                                        <div style={{
+                                                                            fontSize: '10px',
+                                                                            color: '#fef08a',
+                                                                            fontStyle: 'italic',
+                                                                            maxWidth: '170px',
+                                                                            overflow: 'hidden',
+                                                                            textOverflow: 'ellipsis',
+                                                                            whiteSpace: 'nowrap'
+                                                                        }} title={duty.guestRemarks}>
+                                                                            Note: {duty.guestRemarks}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        ) : (
+                                                            <td style={{
+                                                                padding: '7px 10px',
+                                                                borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+                                                                verticalAlign: 'middle',
+                                                                color: '#64748b',
+                                                                textAlign: 'center',
+                                                                fontSize: '12px'
+                                                            }}>
+                                                                —
+                                                            </td>
+                                                        )}
 
-                                                    {ride.mobileNumber && (
-                                                        <div style={{ display: 'flex', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
-                                                            <a
-                                                                href={`tel:${ride.mobileNumber}`}
-                                                                style={{
-                                                                    padding: '3px 8px',
-                                                                    background: '#10b981',
-                                                                    color: 'white',
-                                                                    borderRadius: '6px',
-                                                                    fontWeight: '800',
-                                                                    fontSize: '11px',
-                                                                    textDecoration: 'none',
-                                                                    display: 'inline-flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '4px'
-                                                                }}
-                                                            >
-                                                                <Phone size={11} /> Call ({ride.mobileNumber})
-                                                            </a>
-                                                            <a
-                                                                href={`https://wa.me/91${ride.mobileNumber.replace(/\D/g, '').slice(-10)}`}
-                                                                target="_blank"
-                                                                rel="noreferrer"
-                                                                style={{
-                                                                    padding: '3px 8px',
-                                                                    background: 'rgba(37, 211, 102, 0.15)',
-                                                                    color: '#25D366',
-                                                                    border: '1px solid rgba(37, 211, 102, 0.35)',
-                                                                    borderRadius: '6px',
-                                                                    fontWeight: '800',
-                                                                    fontSize: '11px',
-                                                                    textDecoration: 'none',
-                                                                    display: 'inline-flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '3px'
-                                                                }}
-                                                            >
-                                                                💬 WhatsApp
-                                                            </a>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {/* --- COLUMN 3: CAR (Konsi Car / Chota Data) --- */}
-                                                <div className="driver-roster-col-car">
-                                                    <div style={{
-                                                        fontSize: '12.5px',
-                                                        fontWeight: '900',
-                                                        color: '#38bdf8',
-                                                        background: 'rgba(56, 189, 248, 0.12)',
-                                                        border: '1px solid rgba(56, 189, 248, 0.3)',
-                                                        padding: '3px 8px',
-                                                        borderRadius: '6px',
-                                                        fontFamily: 'monospace',
-                                                        letterSpacing: '0.5px',
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '5px',
-                                                        whiteSpace: 'nowrap'
-                                                    }}>
-                                                        <Car size={13} color="#38bdf8" />
-                                                        <span>{ride.vehicleNumber || 'Assigned'}</span>
-                                                    </div>
-
-                                                    {ride.carType && (
-                                                        <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '700' }}>
-                                                            {ride.carType}
-                                                        </span>
-                                                    )}
-
-                                                    <span style={{
-                                                        background: 'rgba(16, 185, 129, 0.15)',
-                                                        color: '#34d399',
-                                                        fontSize: '9.5px',
-                                                        fontWeight: '800',
-                                                        padding: '1px 6px',
-                                                        borderRadius: '4px',
-                                                        width: 'fit-content'
-                                                    }}>
-                                                        ● Assigned
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                                        {/* --- 5. ACTION CELL (Call & WhatsApp) --- */}
+                                                        {duty ? (
+                                                            <td style={{
+                                                                padding: '7px 8px',
+                                                                verticalAlign: 'middle',
+                                                                textAlign: 'center'
+                                                            }}>
+                                                                {duty.mobileNumber ? (
+                                                                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                                                        <a
+                                                                            href={`tel:${duty.mobileNumber}`}
+                                                                            style={{
+                                                                                padding: '3px 7px',
+                                                                                background: '#10b981',
+                                                                                color: '#ffffff',
+                                                                                borderRadius: '5px',
+                                                                                fontWeight: '900',
+                                                                                fontSize: '10.5px',
+                                                                                textDecoration: 'none',
+                                                                                display: 'inline-flex',
+                                                                                alignItems: 'center',
+                                                                                gap: '3px'
+                                                                            }}
+                                                                            title={`Call ${duty.mobileNumber}`}
+                                                                        >
+                                                                            <Phone size={10} /> Call
+                                                                        </a>
+                                                                        <a
+                                                                            href={`https://wa.me/91${duty.mobileNumber.replace(/\D/g, '').slice(-10)}`}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            style={{
+                                                                                padding: '3px 7px',
+                                                                                background: 'rgba(37, 211, 102, 0.15)',
+                                                                                color: '#25D366',
+                                                                                border: '1px solid rgba(37, 211, 102, 0.35)',
+                                                                                borderRadius: '5px',
+                                                                                fontWeight: '900',
+                                                                                fontSize: '10.5px',
+                                                                                textDecoration: 'none',
+                                                                                display: 'inline-flex',
+                                                                                alignItems: 'center',
+                                                                                gap: '3px'
+                                                                            }}
+                                                                        >
+                                                                            💬 WA
+                                                                        </a>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span style={{ fontSize: '10px', color: '#64748b' }}>No Contact</span>
+                                                                )}
+                                                            </td>
+                                                        ) : (
+                                                            <td style={{
+                                                                padding: '7px 8px',
+                                                                verticalAlign: 'middle',
+                                                                color: '#64748b',
+                                                                textAlign: 'center',
+                                                                fontSize: '12px'
+                                                            }}>
+                                                                —
+                                                            </td>
+                                                        )}
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
                                 </div>
                             )}
                         </div>
