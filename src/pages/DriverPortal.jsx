@@ -235,7 +235,7 @@ const DriverPortal = () => {
     const [rideSearchQuery, setRideSearchQuery] = useState('');
     const [ridesMonth, setRidesMonth] = useState(new Date(Date.now() + 5.5 * 60 * 60 * 1000).getUTCMonth() + 1); // 1-12
     const [ridesYear, setRidesYear] = useState(new Date(Date.now() + 5.5 * 60 * 60 * 1000).getUTCFullYear());
-    const [rosterViewMode, setRosterViewMode] = useState('upcoming'); // 'upcoming' | 'dutiesOnly' | 'fullMonth'
+    const [selectedDutyModal, setSelectedDutyModal] = useState(null);
 
     useEffect(() => {
         fetchDashboard();
@@ -355,9 +355,12 @@ const DriverPortal = () => {
         const curMo = istNow.getUTCMonth() + 1;
         const curYr = istNow.getUTCFullYear();
         const isCurrentMonth = (ridesYear === curYr && ridesMonth === curMo);
+        const isPastMonth = (ridesYear < curYr) || (ridesYear === curYr && ridesMonth < curMo);
+
+        if (isPastMonth) return [];
 
         const totalDays = new Date(ridesYear, ridesMonth, 0).getDate();
-        const startDay = (isCurrentMonth && rosterViewMode === 'upcoming') ? todayDayNum : 1;
+        const startDay = isCurrentMonth ? todayDayNum : 1;
 
         const rows = [];
         for (let d = startDay; d <= totalDays; d++) {
@@ -371,17 +374,15 @@ const DriverPortal = () => {
             const matchingDuties = (activeUpcomingRides || []).filter(r => r.dateStr === dateStr);
 
             if (matchingDuties.length === 0) {
-                if (rosterViewMode !== 'dutiesOnly') {
-                    rows.push({
-                        rowId: `empty-${dateStr}`,
-                        dayNum: d,
-                        dateStr,
-                        formattedDate: `${String(d).padStart(2, '0')}-${monthShort}`,
-                        weekday,
-                        isToday,
-                        duty: null
-                    });
-                }
+                rows.push({
+                    rowId: `empty-${dateStr}`,
+                    dayNum: d,
+                    dateStr,
+                    formattedDate: `${String(d).padStart(2, '0')}-${monthShort}`,
+                    weekday,
+                    isToday,
+                    duty: null
+                });
             } else {
                 matchingDuties.forEach((duty, subIdx) => {
                     rows.push({
@@ -416,7 +417,7 @@ const DriverPortal = () => {
                 (d.bookingId && d.bookingId.toLowerCase().includes(q))
             );
         });
-    }, [ridesYear, ridesMonth, rosterViewMode, activeUpcomingRides, rideSearchQuery]);
+    }, [ridesYear, ridesMonth, activeUpcomingRides, rideSearchQuery]);
 
 
     const handlePasswordUpdate = async () => {
@@ -2697,36 +2698,8 @@ const DriverPortal = () => {
                                     </div>
                                 </div>
 
-                                {/* KPI Counters Strip */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '16px' }}>
-                                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>
-                                            {MONTH_NAMES[ridesMonth - 1]?.slice(0, 3)} {ridesYear} Total Rides
-                                        </span>
-                                        <div style={{ fontSize: '22px', fontWeight: '950', color: '#fbbf24', marginTop: '2px' }}>
-                                            {activeUpcomingRides.length} Duties
-                                        </div>
-                                    </div>
-                                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>
-                                            Today's Status
-                                        </span>
-                                        <div style={{ fontSize: '18px', fontWeight: '900', color: activeUpcomingRides.some(r => r.isToday) ? '#34d399' : 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
-                                            {activeUpcomingRides.filter(r => r.isToday).length > 0 ? `● ${activeUpcomingRides.filter(r => r.isToday).length} Duty Today` : 'None Today'}
-                                        </div>
-                                    </div>
-                                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                        <span style={{ fontSize: '10.5px', fontWeight: '800', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>
-                                            Vehicles Assigned
-                                        </span>
-                                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#38bdf8', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {Array.from(new Set(activeUpcomingRides.map(r => r.vehicleNumber).filter(Boolean))).join(', ') || 'Assigned in Duty'}
-                                        </div>
-                                    </div>
-                                </div>
-
                                 {/* Filter Search Input */}
-                                <div>
+                                <div style={{ marginTop: '12px' }}>
                                     <input
                                         type="text"
                                         placeholder="🔍 Search by Guest Name, Hotel, Car Number (e.g. RJ-27), or Tour..."
@@ -2747,79 +2720,41 @@ const DriverPortal = () => {
                                 </div>
                             </div>
 
-                            {/* Filter & View Mode Controls Strip */}
+                            {/* Unified Roster Info Header (Single View) */}
                             <div style={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
                                 flexWrap: 'wrap',
-                                gap: '10px',
-                                marginBottom: '14px'
+                                gap: '8px',
+                                marginBottom: '12px',
+                                padding: '8px 14px',
+                                background: 'rgba(255, 255, 255, 0.03)',
+                                borderRadius: '10px',
+                                border: '1px solid rgba(255, 255, 255, 0.08)'
                             }}>
-                                {/* View Mode Toggle Buttons */}
-                                <div style={{
-                                    display: 'inline-flex',
-                                    background: 'rgba(0, 0, 0, 0.4)',
-                                    borderRadius: '10px',
-                                    padding: '3px',
-                                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                                    gap: '4px'
-                                }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => setRosterViewMode('upcoming')}
-                                        style={{
-                                            padding: '6px 12px',
-                                            borderRadius: '8px',
-                                            border: 'none',
-                                            fontSize: '11.5px',
-                                            fontWeight: '800',
-                                            cursor: 'pointer',
-                                            background: rosterViewMode === 'upcoming' ? '#3b82f6' : 'transparent',
-                                            color: rosterViewMode === 'upcoming' ? '#ffffff' : '#94a3b8',
-                                            transition: 'all 0.15s ease'
-                                        }}
-                                    >
-                                        ⚡ Today Onwards
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setRosterViewMode('dutiesOnly')}
-                                        style={{
-                                            padding: '6px 12px',
-                                            borderRadius: '8px',
-                                            border: 'none',
-                                            fontSize: '11.5px',
-                                            fontWeight: '800',
-                                            cursor: 'pointer',
-                                            background: rosterViewMode === 'dutiesOnly' ? '#10b981' : 'transparent',
-                                            color: rosterViewMode === 'dutiesOnly' ? '#ffffff' : '#94a3b8',
-                                            transition: 'all 0.15s ease'
-                                        }}
-                                    >
-                                        🚗 Only Duty Days
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setRosterViewMode('fullMonth')}
-                                        style={{
-                                            padding: '6px 12px',
-                                            borderRadius: '8px',
-                                            border: 'none',
-                                            fontSize: '11.5px',
-                                            fontWeight: '800',
-                                            cursor: 'pointer',
-                                            background: rosterViewMode === 'fullMonth' ? '#8b5cf6' : 'transparent',
-                                            color: rosterViewMode === 'fullMonth' ? '#ffffff' : '#94a3b8',
-                                            transition: 'all 0.15s ease'
-                                        }}
-                                    >
-                                        📅 Full Month (1 to {new Date(ridesYear, ridesMonth, 0).getDate()})
-                                    </button>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    <span style={{
+                                        background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                                        color: '#ffffff',
+                                        padding: '3px 10px',
+                                        borderRadius: '6px',
+                                        fontSize: '11.5px',
+                                        fontWeight: '900',
+                                        letterSpacing: '0.3px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px'
+                                    }}>
+                                        <Calendar size={13} /> {MONTH_NAMES[ridesMonth - 1]} {ridesYear}
+                                    </span>
+                                    <span style={{ fontSize: '11.5px', color: '#94a3b8', fontWeight: '700' }}>
+                                        Schedule & Duties <span style={{ color: '#38bdf8' }}>(Click any duty row to view full details)</span>
+                                    </span>
                                 </div>
 
                                 <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '700' }}>
-                                    Showing <span style={{ color: '#fbbf24', fontWeight: '900' }}>{excelRosterRows.length}</span> rows
+                                    Total Days / Duties: <span style={{ color: '#fbbf24', fontWeight: '900' }}>{excelRosterRows.length}</span>
                                 </div>
                             </div>
 
@@ -2933,12 +2868,24 @@ const DriverPortal = () => {
                                                 return (
                                                     <tr
                                                         key={row.rowId || idx}
+                                                        onClick={() => {
+                                                            if (duty) {
+                                                                setSelectedDutyModal({
+                                                                    ...duty,
+                                                                    rowFormattedDate: row.formattedDate,
+                                                                    weekday: row.weekday,
+                                                                    isToday: row.isToday
+                                                                });
+                                                            }
+                                                        }}
+                                                        title={duty ? 'Click to view full duty details' : undefined}
                                                         style={{
                                                             background: row.isToday
                                                                 ? 'rgba(16, 185, 129, 0.08)'
                                                                 : (idx % 2 === 0 ? '#0d1527' : '#080d19'),
                                                             borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                                                            transition: 'background 0.15s ease'
+                                                            transition: 'background 0.15s ease',
+                                                            cursor: duty ? 'pointer' : 'default'
                                                         }}
                                                     >
                                                         {/* --- 1. DATE CELL (Sticky Left) --- */}
@@ -3175,57 +3122,88 @@ const DriverPortal = () => {
                                                             </td>
                                                         )}
 
-                                                        {/* --- 5. ACTION CELL (Call & WhatsApp) --- */}
+                                                        {/* --- 5. ACTION CELL (Call, WhatsApp & View Details) --- */}
                                                         {duty ? (
                                                             <td style={{
                                                                 padding: '7px 8px',
                                                                 verticalAlign: 'middle',
                                                                 textAlign: 'center'
                                                             }}>
-                                                                {duty.mobileNumber ? (
-                                                                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                                                                        <a
-                                                                            href={`tel:${duty.mobileNumber}`}
-                                                                            style={{
-                                                                                padding: '3px 7px',
-                                                                                background: '#10b981',
-                                                                                color: '#ffffff',
-                                                                                borderRadius: '5px',
-                                                                                fontWeight: '900',
-                                                                                fontSize: '10.5px',
-                                                                                textDecoration: 'none',
-                                                                                display: 'inline-flex',
-                                                                                alignItems: 'center',
-                                                                                gap: '3px'
-                                                                            }}
-                                                                            title={`Call ${duty.mobileNumber}`}
-                                                                        >
-                                                                            <Phone size={10} /> Call
-                                                                        </a>
-                                                                        <a
-                                                                            href={`https://wa.me/91${duty.mobileNumber.replace(/\D/g, '').slice(-10)}`}
-                                                                            target="_blank"
-                                                                            rel="noreferrer"
-                                                                            style={{
-                                                                                padding: '3px 7px',
-                                                                                background: 'rgba(37, 211, 102, 0.15)',
-                                                                                color: '#25D366',
-                                                                                border: '1px solid rgba(37, 211, 102, 0.35)',
-                                                                                borderRadius: '5px',
-                                                                                fontWeight: '900',
-                                                                                fontSize: '10.5px',
-                                                                                textDecoration: 'none',
-                                                                                display: 'inline-flex',
-                                                                                alignItems: 'center',
-                                                                                gap: '3px'
-                                                                            }}
-                                                                        >
-                                                                            💬 WA
-                                                                        </a>
-                                                                    </div>
-                                                                ) : (
-                                                                    <span style={{ fontSize: '10px', color: '#64748b' }}>No Contact</span>
-                                                                )}
+                                                                <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                                    {duty.mobileNumber && (
+                                                                        <>
+                                                                            <a
+                                                                                href={`tel:${duty.mobileNumber}`}
+                                                                                onClick={(e) => e.stopPropagation()}
+                                                                                style={{
+                                                                                    padding: '3px 7px',
+                                                                                    background: '#10b981',
+                                                                                    color: '#ffffff',
+                                                                                    borderRadius: '5px',
+                                                                                    fontWeight: '900',
+                                                                                    fontSize: '10.5px',
+                                                                                    textDecoration: 'none',
+                                                                                    display: 'inline-flex',
+                                                                                    alignItems: 'center',
+                                                                                    gap: '3px'
+                                                                                }}
+                                                                                title={`Call ${duty.mobileNumber}`}
+                                                                            >
+                                                                                <Phone size={10} /> Call
+                                                                            </a>
+                                                                            <a
+                                                                                href={`https://wa.me/91${duty.mobileNumber.replace(/\D/g, '').slice(-10)}`}
+                                                                                target="_blank"
+                                                                                rel="noreferrer"
+                                                                                onClick={(e) => e.stopPropagation()}
+                                                                                style={{
+                                                                                    padding: '3px 7px',
+                                                                                    background: 'rgba(37, 211, 102, 0.15)',
+                                                                                    color: '#25D366',
+                                                                                    border: '1px solid rgba(37, 211, 102, 0.35)',
+                                                                                    borderRadius: '5px',
+                                                                                    fontWeight: '900',
+                                                                                    fontSize: '10.5px',
+                                                                                    textDecoration: 'none',
+                                                                                    display: 'inline-flex',
+                                                                                    alignItems: 'center',
+                                                                                    gap: '3px'
+                                                                                }}
+                                                                                title="WhatsApp Guest"
+                                                                            >
+                                                                                💬 WA
+                                                                            </a>
+                                                                        </>
+                                                                    )}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setSelectedDutyModal({
+                                                                                ...duty,
+                                                                                rowFormattedDate: row.formattedDate,
+                                                                                weekday: row.weekday,
+                                                                                isToday: row.isToday
+                                                                            });
+                                                                        }}
+                                                                        style={{
+                                                                            padding: '3px 7px',
+                                                                            background: 'rgba(56, 189, 248, 0.15)',
+                                                                            color: '#38bdf8',
+                                                                            border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                                            borderRadius: '5px',
+                                                                            fontWeight: '900',
+                                                                            fontSize: '10.5px',
+                                                                            cursor: 'pointer',
+                                                                            display: 'inline-flex',
+                                                                            alignItems: 'center',
+                                                                            gap: '2px'
+                                                                        }}
+                                                                        title="View Duty Details"
+                                                                    >
+                                                                        👁️ View
+                                                                    </button>
+                                                                </div>
                                                             </td>
                                                         ) : (
                                                             <td style={{
@@ -3249,6 +3227,490 @@ const DriverPortal = () => {
                     )}
                 </div>
             </div>
+            {/* --- DUTY DETAILS POPUP MODAL (Click to view full info) --- */}
+            {selectedDutyModal && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.78)',
+                        backdropFilter: 'blur(6px)',
+                        zIndex: 99999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '16px'
+                    }}
+                    onClick={() => setSelectedDutyModal(null)}
+                >
+                    <div
+                        style={{
+                            background: 'linear-gradient(145deg, #111827 0%, #0d1527 100%)',
+                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            borderRadius: '20px',
+                            boxShadow: '0 25px 60px rgba(0, 0, 0, 0.7)',
+                            width: '100%',
+                            maxWidth: '540px',
+                            overflow: 'hidden',
+                            color: '#ffffff',
+                            animation: 'fadeIn 0.2s ease-out'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div style={{
+                            padding: '16px 20px',
+                            background: 'rgba(255, 255, 255, 0.04)',
+                            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{
+                                    width: '36px',
+                                    height: '36px',
+                                    borderRadius: '10px',
+                                    background: 'rgba(56, 189, 248, 0.15)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    border: '1px solid rgba(56, 189, 248, 0.3)'
+                                }}>
+                                    <Car size={18} color="#38bdf8" />
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '15px', fontWeight: '900', color: '#ffffff' }}>
+                                        Duty Details
+                                    </div>
+                                    <div style={{ fontSize: '11.5px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span>📅 {selectedDutyModal.rowFormattedDate || selectedDutyModal.dateFormatted}</span>
+                                        {selectedDutyModal.weekday && <span>• {selectedDutyModal.weekday}</span>}
+                                        {selectedDutyModal.isToday && (
+                                            <span style={{
+                                                fontSize: '9px',
+                                                background: '#38bdf8',
+                                                color: '#000000',
+                                                padding: '1px 5px',
+                                                borderRadius: '3px',
+                                                fontWeight: '950'
+                                            }}>
+                                                TODAY
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedDutyModal(null)}
+                                style={{
+                                    background: 'rgba(255, 255, 255, 0.08)',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    color: '#ffffff',
+                                    width: '32px',
+                                    height: '32px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease'
+                                }}
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '75vh', overflowY: 'auto' }}>
+                            {/* Guest Details Card */}
+                            <div style={{
+                                padding: '14px 16px',
+                                borderRadius: '14px',
+                                background: 'rgba(255, 255, 255, 0.03)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{
+                                            width: '30px',
+                                            height: '30px',
+                                            borderRadius: '50%',
+                                            background: '#3b82f6',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}>
+                                            <UserIcon size={16} color="#ffffff" />
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: '16px', fontWeight: '950', color: '#ffffff' }}>
+                                                {selectedDutyModal.clientName || 'Guest'}
+                                            </div>
+                                            {selectedDutyModal.bookingId && (
+                                                <div style={{ fontSize: '11px', color: '#fef08a', fontWeight: '800' }}>
+                                                    Booking ID: {selectedDutyModal.bookingId}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {selectedDutyModal.dayNo && (
+                                        <span style={{
+                                            fontSize: '10.5px',
+                                            fontWeight: '950',
+                                            background: '#f59e0b',
+                                            color: '#000000',
+                                            padding: '2px 8px',
+                                            borderRadius: '6px',
+                                            letterSpacing: '0.4px'
+                                        }}>
+                                            DAY {selectedDutyModal.dayNo}
+                                        </span>
+                                    )}
+                                </div>
+
+                                {selectedDutyModal.duty && (
+                                    <div style={{
+                                        marginTop: '10px',
+                                        padding: '8px 12px',
+                                        background: 'rgba(59, 130, 246, 0.12)',
+                                        borderLeft: '3px solid #3b82f6',
+                                        borderRadius: '6px',
+                                        fontSize: '12px',
+                                        fontWeight: '800',
+                                        color: '#bfdbfe',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.3px'
+                                    }}>
+                                        {selectedDutyModal.duty}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Details Grid */}
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(2, 1fr)',
+                                gap: '10px'
+                            }}>
+                                {/* Assigned Car */}
+                                <div style={{
+                                    padding: '12px',
+                                    borderRadius: '12px',
+                                    background: 'rgba(255, 255, 255, 0.03)',
+                                    border: '1px solid rgba(255, 255, 255, 0.07)'
+                                }}>
+                                    <div style={{ fontSize: '10.5px', color: '#94a3b8', fontWeight: '700', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <Car size={12} color="#38bdf8" /> ASSIGNED CAR
+                                    </div>
+                                    <div style={{
+                                        fontSize: '13px',
+                                        fontWeight: '950',
+                                        color: '#38bdf8',
+                                        fontFamily: 'monospace',
+                                        letterSpacing: '0.5px'
+                                    }}>
+                                        {selectedDutyModal.vehicleNumber || 'Assigned'}
+                                    </div>
+                                    {selectedDutyModal.carType && (
+                                        <div style={{ fontSize: '11px', color: '#cbd5e1', fontWeight: '700', marginTop: '2px' }}>
+                                            {selectedDutyModal.carType}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Reporting Time */}
+                                <div style={{
+                                    padding: '12px',
+                                    borderRadius: '12px',
+                                    background: 'rgba(255, 255, 255, 0.03)',
+                                    border: '1px solid rgba(255, 255, 255, 0.07)'
+                                }}>
+                                    <div style={{ fontSize: '10.5px', color: '#94a3b8', fontWeight: '700', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <Clock size={12} color="#fbbf24" /> REPORTING TIME
+                                    </div>
+                                    <div style={{ fontSize: '13px', fontWeight: '950', color: '#fbbf24' }}>
+                                        {selectedDutyModal.time || '10:00 AM'}
+                                    </div>
+                                    <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: '700', marginTop: '2px' }}>
+                                        IST Time
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Guest Complete Tour Plan (Guest Ka True Plan) */}
+                            {selectedDutyModal.tourPlan && selectedDutyModal.tourPlan.length > 0 && (
+                                <div style={{
+                                    padding: '14px',
+                                    borderRadius: '14px',
+                                    background: 'rgba(56, 189, 248, 0.05)',
+                                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '10px'
+                                }}>
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                                        paddingBottom: '8px'
+                                    }}>
+                                        <span style={{
+                                            fontSize: '11px',
+                                            fontWeight: '900',
+                                            color: '#38bdf8',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.4px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '6px'
+                                        }}>
+                                            🗺️ Guest Complete Tour Plan ({selectedDutyModal.tourPlan.length} Days)
+                                        </span>
+                                        {selectedDutyModal.bookingId && (
+                                            <span style={{ fontSize: '10px', color: '#fef08a', fontWeight: '800' }}>
+                                                {selectedDutyModal.bookingId}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {selectedDutyModal.tourPlan.map((tp, tpIdx) => {
+                                            const isDutyDay = Boolean(
+                                                tp.isCurrentDay ||
+                                                (tp.dayNo && tp.dayNo === selectedDutyModal.dayNo) ||
+                                                (tp.dateStr && tp.dateStr === selectedDutyModal.dateStr)
+                                            );
+                                            return (
+                                                <div
+                                                    key={tpIdx}
+                                                    style={{
+                                                        padding: '10px 12px',
+                                                        borderRadius: '10px',
+                                                        background: isDutyDay ? 'rgba(56, 189, 248, 0.14)' : 'rgba(0, 0, 0, 0.35)',
+                                                        border: isDutyDay ? '1.5px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.06)',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '4px'
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                                            <span style={{
+                                                                fontSize: '9.5px',
+                                                                fontWeight: '950',
+                                                                background: isDutyDay ? '#38bdf8' : '#334155',
+                                                                color: isDutyDay ? '#000000' : '#ffffff',
+                                                                padding: '2px 7px',
+                                                                borderRadius: '4px',
+                                                                letterSpacing: '0.3px'
+                                                            }}>
+                                                                DAY {tp.dayNo || tpIdx + 1}
+                                                            </span>
+                                                            <span style={{ fontSize: '11.5px', fontWeight: '800', color: isDutyDay ? '#ffffff' : '#cbd5e1' }}>
+                                                                {tp.dateFormatted || tp.dateStr} {tp.weekday && `(${tp.weekday})`}
+                                                            </span>
+                                                        </div>
+                                                        {isDutyDay && (
+                                                            <span style={{
+                                                                fontSize: '9px',
+                                                                fontWeight: '950',
+                                                                background: '#10b981',
+                                                                color: '#000000',
+                                                                padding: '1px 6px',
+                                                                borderRadius: '4px'
+                                                            }}>
+                                                                THIS DUTY
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div style={{
+                                                        fontSize: '13px',
+                                                        fontWeight: '900',
+                                                        color: isDutyDay ? '#ffffff' : '#e2e8f0',
+                                                        marginTop: '2px',
+                                                        lineHeight: 1.3
+                                                    }}>
+                                                        {tp.duty || tp.description || 'Tour Route'}
+                                                    </div>
+
+                                                    {(tp.pickupPoint || tp.time || tp.vehicleNumber) && (
+                                                        <div style={{
+                                                            fontSize: '11px',
+                                                            color: '#94a3b8',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '10px',
+                                                            flexWrap: 'wrap',
+                                                            marginTop: '2px',
+                                                            paddingTop: '4px',
+                                                            borderTop: '1px dashed rgba(255, 255, 255, 0.08)'
+                                                        }}>
+                                                            {tp.time && <span>⏰ {tp.time}</span>}
+                                                            {tp.pickupPoint && <span>📍 {tp.pickupPoint}</span>}
+                                                            {tp.vehicleNumber && <span style={{ color: '#38bdf8', fontFamily: 'monospace' }}>🚗 {tp.vehicleNumber}</span>}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Drop Location */}
+                            {selectedDutyModal.dropLocation && (
+                                <div style={{
+                                    padding: '10px 14px',
+                                    borderRadius: '12px',
+                                    background: 'rgba(255, 255, 255, 0.03)',
+                                    border: '1px solid rgba(255, 255, 255, 0.07)'
+                                }}>
+                                    <div style={{ fontSize: '10.5px', color: '#94a3b8', fontWeight: '700', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <MapPin size={12} color="#10b981" /> DROP LOCATION
+                                    </div>
+                                    <div style={{ fontSize: '12.5px', color: '#ffffff', fontWeight: '800' }}>
+                                        {selectedDutyModal.dropLocation}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Hotel / Pickup Point */}
+                            {(selectedDutyModal.hotel || selectedDutyModal.pickupPoint) && (
+                                <div style={{
+                                    padding: '12px 14px',
+                                    borderRadius: '12px',
+                                    background: 'rgba(255, 255, 255, 0.03)',
+                                    border: '1px solid rgba(255, 255, 255, 0.07)'
+                                }}>
+                                    <div style={{ fontSize: '10.5px', color: '#94a3b8', fontWeight: '700', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <MapPin size={12} color="#f87171" /> HOTEL / PICKUP LOCATION
+                                    </div>
+                                    <div style={{ fontSize: '13px', color: '#ffffff', fontWeight: '800', lineHeight: 1.4 }}>
+                                        {selectedDutyModal.hotel || selectedDutyModal.pickupPoint}
+                                    </div>
+                                    {selectedDutyModal.pickupPoint && selectedDutyModal.hotel && selectedDutyModal.pickupPoint !== selectedDutyModal.hotel && (
+                                        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px' }}>
+                                            Pickup: {selectedDutyModal.pickupPoint}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Remarks Note */}
+                            {selectedDutyModal.guestRemarks && (
+                                <div style={{
+                                    padding: '12px 14px',
+                                    borderRadius: '12px',
+                                    background: 'rgba(251, 191, 36, 0.08)',
+                                    border: '1px solid rgba(251, 191, 36, 0.25)'
+                                }}>
+                                    <div style={{ fontSize: '10.5px', color: '#fbbf24', fontWeight: '800', marginBottom: '4px' }}>
+                                        ⚠️ SPECIAL REMARKS / NOTES
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#fef3c7', lineHeight: 1.4 }}>
+                                        {selectedDutyModal.guestRemarks}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Contact Section */}
+                            <div style={{
+                                padding: '14px',
+                                borderRadius: '14px',
+                                background: 'rgba(16, 185, 129, 0.06)',
+                                border: '1px solid rgba(16, 185, 129, 0.2)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                flexWrap: 'wrap',
+                                gap: '10px'
+                            }}>
+                                <div>
+                                    <div style={{ fontSize: '10.5px', color: '#34d399', fontWeight: '800' }}>
+                                        GUEST CONTACT
+                                    </div>
+                                    <div style={{ fontSize: '14px', fontWeight: '950', color: '#ffffff', letterSpacing: '0.3px', marginTop: '2px' }}>
+                                        {selectedDutyModal.mobileNumber || 'No Phone Number'}
+                                    </div>
+                                </div>
+                                {selectedDutyModal.mobileNumber && (
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <a
+                                            href={`tel:${selectedDutyModal.mobileNumber}`}
+                                            style={{
+                                                padding: '7px 14px',
+                                                background: '#10b981',
+                                                color: '#ffffff',
+                                                borderRadius: '8px',
+                                                fontWeight: '900',
+                                                fontSize: '12px',
+                                                textDecoration: 'none',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            <Phone size={13} /> Call
+                                        </a>
+                                        <a
+                                            href={`https://wa.me/91${selectedDutyModal.mobileNumber.replace(/\D/g, '').slice(-10)}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            style={{
+                                                padding: '7px 14px',
+                                                background: '#25D366',
+                                                color: '#ffffff',
+                                                borderRadius: '8px',
+                                                fontWeight: '900',
+                                                fontSize: '12px',
+                                                textDecoration: 'none',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            💬 WhatsApp
+                                        </a>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div style={{
+                            padding: '12px 20px',
+                            background: 'rgba(255, 255, 255, 0.02)',
+                            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                            display: 'flex',
+                            justifyContent: 'flex-end'
+                        }}>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedDutyModal(null)}
+                                style={{
+                                    padding: '8px 18px',
+                                    borderRadius: '8px',
+                                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                                    background: 'rgba(255, 255, 255, 0.08)',
+                                    color: '#ffffff',
+                                    fontWeight: '800',
+                                    fontSize: '12px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
