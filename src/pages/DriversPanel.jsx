@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { User, Car, IndianRupee, Users, AlertCircle } from 'lucide-react';
+import { User, Car, IndianRupee, Users, AlertCircle, Calendar } from 'lucide-react';
 import { motion } from 'framer-motion';
 import SEO from '../components/SEO';
 
@@ -8,6 +8,7 @@ import Drivers from './Drivers';
 import Reports from './Reports';
 import DriverSalaries from './DriverSalaries';
 import DriverPerformance from './DriverPerformance';
+import DriverLiveDRSCalendar from '../components/common/DriverLiveDRSCalendar';
 
 import { X } from 'lucide-react'; // Added X for modal
 
@@ -49,6 +50,7 @@ const DriversPanel = () => {
 
     const navItems = [
         { id: 'drivers', title: 'DRIVERS', icon: User },
+        { id: 'drs-roster', title: 'LIVE DRS ROSTER (1-31)', icon: Calendar },
         // { id: 'dutys', title: 'DUTYS', icon: Car },
         { id: 'settlement', title: 'Salaries', icon: IndianRupee },
         { id: 'performance', title: 'Performance', icon: AlertCircle }
@@ -62,6 +64,8 @@ const DriversPanel = () => {
         switch (activeTab) {
             case 'drivers':
                 return <Drivers isSubComponent={true} />;
+            case 'drs-roster':
+                return <DriverLiveDRSCalendar isSubComponent={true} />;
             case 'dutys':
                 return <Reports isSubComponent={true} />;
             case 'settlement':

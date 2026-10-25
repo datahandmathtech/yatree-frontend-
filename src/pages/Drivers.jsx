@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from '../api/axios';
-import { Plus, Minus, Search, Filter, MoreVertical, Trash2, Edit2, ShieldAlert, User as UserIcon, Users, Clock, FileText, CheckCircle, XCircle, Briefcase, IndianRupee, Eye, X, User, AlertTriangle } from 'lucide-react';
+import { Plus, Minus, Search, Filter, MoreVertical, Trash2, Edit2, ShieldAlert, User as UserIcon, Users, Clock, FileText, CheckCircle, XCircle, Briefcase, IndianRupee, Eye, X, User, AlertTriangle, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useCompany } from '../context/CompanyContext';
@@ -783,6 +783,14 @@ const Drivers = ({ isSubComponent = false }) => {
                                                             </div>
                                                         )}
                                                     </div>
+                                                    <button
+                                                        onClick={() => navigate(`/admin/drivers-panel?tab=drs-roster&driver=${encodeURIComponent(driver.name)}`)}
+                                                        className="glass-card-hover-effect"
+                                                        style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', width: '36px', height: '36px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer' }}
+                                                        title="View Live DRS Duties (1-31 Days)"
+                                                    >
+                                                        <Calendar size={16} />
+                                                    </button>
                                                     <button
                                                         onClick={() => navigate(`/admin/drivers-panel?tab=settlement&driver=${driver.name}`)}
                                                         className="glass-card-hover-effect"

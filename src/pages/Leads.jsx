@@ -340,17 +340,62 @@ export default function Leads() {
     // Daily Breakdown Expanded Day
     const [expandedBreakdownDay, setExpandedBreakdownDay] = useState(null);
 
-    // Vehicle Matrix State (Direct Operating Expenses & Live Margin Analysis)
-    const [matrixFuelType, setMatrixFuelType] = useState('Diesel');
-    const [matrixTotalKmRun, setMatrixTotalKmRun] = useState('');
-    const [matrixVehicleAverage, setMatrixVehicleAverage] = useState('');
-    const [matrixFuelRate, setMatrixFuelRate] = useState('');
-    const [matrixDriverSalary, setMatrixDriverSalary] = useState('');
-    const [matrixNightHold, setMatrixNightHold] = useState('');
-    const [matrixTollAndParking, setMatrixTollAndParking] = useState('');
-    const [matrixGstAmount, setMatrixGstAmount] = useState('');
-    const [matrixTargetPerDay, setMatrixTargetPerDay] = useState('2500');
-    const [matrixSimSalePrice, setMatrixSimSalePrice] = useState('');
+    // Vehicle Matrix State (Multi-Option Direct Operating Expenses & Live Margin Analysis)
+    const createNewMatrixItem = (idx = 0, carName = 'Innova Crysta') => ({
+        id: 'vm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        title: `Option ${idx + 1}: ${carName}`,
+        carType: carName,
+        fuelType: 'Diesel',
+        totalKmRun: '',
+        vehicleAverage: '',
+        fuelRate: '',
+        driverSalary: '',
+        nightHold: '',
+        tollAndParking: '',
+        gstAmount: '',
+        targetPerDay: '2500',
+        packageValue: '',
+        simSalePrice: ''
+    });
+
+    const [vehicleMatrices, setVehicleMatrices] = useState([createNewMatrixItem(0, 'Innova Crysta')]);
+    const [activeMatrixIndex, setActiveMatrixIndex] = useState(0);
+
+    const updateActiveMatrix = (field, value) => {
+        setVehicleMatrices(prev => {
+            const copy = [...prev];
+            const idx = (activeMatrixIndex >= 0 && activeMatrixIndex < copy.length) ? activeMatrixIndex : 0;
+            copy[idx] = { ...copy[idx], [field]: value };
+            return copy;
+        });
+    };
+
+    const addMatrixOption = (carName = 'Sedan') => {
+        setVehicleMatrices(prev => {
+            const nextIdx = prev.length;
+            const newOption = createNewMatrixItem(nextIdx, carName);
+            if (prev.length > 0 && prev[0].totalKmRun) {
+                newOption.totalKmRun = prev[0].totalKmRun;
+            }
+            if (prev.length > 0 && prev[0].driverSalary) {
+                newOption.driverSalary = prev[0].driverSalary;
+            }
+            if (prev.length > 0 && prev[0].nightHold) {
+                newOption.nightHold = prev[0].nightHold;
+            }
+            if (prev.length > 0 && prev[0].tollAndParking) {
+                newOption.tollAndParking = prev[0].tollAndParking;
+            }
+            return [...prev, newOption];
+        });
+        setActiveMatrixIndex(vehicleMatrices.length);
+    };
+
+    const removeMatrixOption = (indexToRemove) => {
+        if (vehicleMatrices.length <= 1) return;
+        setVehicleMatrices(prev => prev.filter((_, i) => i !== indexToRemove));
+        setActiveMatrixIndex(prev => Math.max(0, prev >= indexToRemove ? prev - 1 : prev));
+    };
 
     const [formData, setFormData] = useState({
         bookingReference: 'Direct',
@@ -412,7 +457,19 @@ export default function Leads() {
     const totalStayDays = Math.max(1, allTourDates.length || formData.itinerary?.length || 1);
     const activeCarDays = Math.max(1, totalStayDays - validExcludedDates.length);
 
-    // Vehicle Matrix Math Calculations
+    // Vehicle Matrix Math Calculations (derived from active selected option)
+    const activeMatrix = vehicleMatrices[activeMatrixIndex] || vehicleMatrices[0] || {};
+    const matrixFuelType = activeMatrix.fuelType || 'Diesel';
+    const matrixTotalKmRun = activeMatrix.totalKmRun !== undefined ? activeMatrix.totalKmRun : '';
+    const matrixVehicleAverage = activeMatrix.vehicleAverage !== undefined ? activeMatrix.vehicleAverage : '';
+    const matrixFuelRate = activeMatrix.fuelRate !== undefined ? activeMatrix.fuelRate : '';
+    const matrixDriverSalary = activeMatrix.driverSalary !== undefined ? activeMatrix.driverSalary : '';
+    const matrixNightHold = activeMatrix.nightHold !== undefined ? activeMatrix.nightHold : '';
+    const matrixTollAndParking = activeMatrix.tollAndParking !== undefined ? activeMatrix.tollAndParking : '';
+    const matrixGstAmount = activeMatrix.gstAmount !== undefined ? activeMatrix.gstAmount : '';
+    const matrixTargetPerDay = activeMatrix.targetPerDay !== undefined ? activeMatrix.targetPerDay : '2500';
+    const matrixSimSalePrice = activeMatrix.simSalePrice !== undefined ? activeMatrix.simSalePrice : '';
+
     const currentFuelConfig = FUEL_TYPES.find(f => f.type === matrixFuelType) || FUEL_TYPES[0];
     const matrixKmVal = parseFloat(matrixTotalKmRun) || 0;
     const matrixAvgVal = parseFloat(matrixVehicleAverage) || 0;
@@ -423,7 +480,7 @@ export default function Leads() {
     const matrixNightHoldVal = parseFloat(matrixNightHold) || 0;
     const matrixTollVal = parseFloat(matrixTollAndParking) || 0;
     const matrixGstVal = parseFloat(matrixGstAmount) || 0;
-    const matrixPackageVal = parseFloat(formData.totalAmount) || 0;
+    const matrixPackageVal = parseFloat(activeMatrix.packageValue) || parseFloat(formData.totalAmount) || 0;
 
     const matrixDaysVal = activeCarDays;
     const matrixTargetPerDayVal = parseFloat(matrixTargetPerDay) || 0;
@@ -438,15 +495,16 @@ export default function Leads() {
     const matrixSimPerDay = matrixDaysVal > 0 ? (matrixSimProfit / matrixDaysVal) : 0;
 
     const handleAutoMatrixGST = () => {
-        const pkg = parseFloat(formData.totalAmount) || 0;
+        const pkg = parseFloat(activeMatrix.packageValue) || parseFloat(formData.totalAmount) || 0;
         if (pkg > 0) {
             const autoGst = Math.round(pkg - (pkg / 1.05));
-            setMatrixGstAmount(String(autoGst));
+            updateActiveMatrix('gstAmount', String(autoGst));
         }
     };
 
     const applySimPriceToQuotation = (price) => {
         const val = Math.max(0, parseFloat(price) || 0);
+        updateActiveMatrix('packageValue', val);
         setFormData(prev => ({
             ...prev,
             totalAmount: val
@@ -865,17 +923,19 @@ export default function Leads() {
             });
 
             // Populate Vehicle Matrix state from lead
-            const matrix = lead.vehicleMatrix || {};
-            setMatrixFuelType(matrix.fuelType || 'Diesel');
-            setMatrixTotalKmRun(matrix.totalKmRun ? String(matrix.totalKmRun) : '');
-            setMatrixVehicleAverage(matrix.vehicleAverage ? String(matrix.vehicleAverage) : '');
-            setMatrixFuelRate(matrix.fuelRate ? String(matrix.fuelRate) : '');
-            setMatrixDriverSalary(matrix.driverSalary ? String(matrix.driverSalary) : '');
-            setMatrixNightHold(matrix.nightHold ? String(matrix.nightHold) : '');
-            setMatrixTollAndParking(matrix.tollAndParking ? String(matrix.tollAndParking) : '');
-            setMatrixGstAmount(matrix.gstAmount ? String(matrix.gstAmount) : '');
-            setMatrixTargetPerDay(matrix.targetPerDay ? String(matrix.targetPerDay) : '2500');
-            setMatrixSimSalePrice('');
+            if (lead.vehicleMatrices && Array.isArray(lead.vehicleMatrices) && lead.vehicleMatrices.length > 0) {
+                setVehicleMatrices(lead.vehicleMatrices);
+            } else if (lead.vehicleMatrix && (lead.vehicleMatrix.totalKmRun || lead.vehicleMatrix.fuelCost)) {
+                setVehicleMatrices([{
+                    ...lead.vehicleMatrix,
+                    id: 'vm_1',
+                    title: `Option 1: ${lead.carType || 'Vehicle'}`,
+                    carType: lead.carType || 'Innova Crysta'
+                }]);
+            } else {
+                setVehicleMatrices([createNewMatrixItem(0, lead.carType || 'Innova Crysta')]);
+            }
+            setActiveMatrixIndex(0);
         } else {
             setEditingLead(null);
             setShowDetailedItinerary(false);
@@ -883,16 +943,8 @@ export default function Leads() {
             fetchNextClientCodePreview(today);
 
             // Reset Vehicle Matrix state for new lead
-            setMatrixFuelType('Diesel');
-            setMatrixTotalKmRun('');
-            setMatrixVehicleAverage('');
-            setMatrixFuelRate('');
-            setMatrixDriverSalary('');
-            setMatrixNightHold('');
-            setMatrixTollAndParking('');
-            setMatrixGstAmount('');
-            setMatrixTargetPerDay('2500');
-            setMatrixSimSalePrice('');
+            setVehicleMatrices([createNewMatrixItem(0, 'Innova Crysta')]);
+            setActiveMatrixIndex(0);
 
             setFormData({
                 bookingReference: 'Direct',
@@ -961,6 +1013,27 @@ export default function Leads() {
                 perDayProfit: Math.round(matrixPerDayProfit)
             };
 
+            const finalVehicleMatrices = vehicleMatrices.map((m, idx) => {
+                const mKm = parseFloat(m.totalKmRun) || 0;
+                const mAvg = parseFloat(m.vehicleAverage) || 0;
+                const mRate = parseFloat(m.fuelRate) || 0;
+                const mFuelCost = mAvg > 0 ? (mKm / mAvg) * mRate : 0;
+                const mDrv = parseFloat(m.driverSalary) || 0;
+                const mNight = parseFloat(m.nightHold) || 0;
+                const mToll = parseFloat(m.tollAndParking) || 0;
+                const mGst = parseFloat(m.gstAmount) || 0;
+                const mPkg = parseFloat(m.packageValue) || (idx === activeMatrixIndex ? matrixPackageVal : (parseFloat(formData.totalAmount) || 0));
+                const mTotCost = mFuelCost + mDrv + mNight + mToll + mGst;
+                const mProfit = mPkg - mTotCost;
+                return {
+                    ...m,
+                    fuelCost: Math.round(mFuelCost),
+                    totalCost: Math.round(mTotCost),
+                    totalProfit: Math.round(mProfit),
+                    perDayProfit: matrixDaysVal > 0 ? Math.round(mProfit / matrixDaysVal) : 0
+                };
+            });
+
             const finalStatus = formData.priority === 'Lost'
                 ? 'Lost'
                 : (editingLead && editingLead.status === 'Lost' && formData.priority !== 'Lost' ? 'New' : formData.status);
@@ -972,6 +1045,7 @@ export default function Leads() {
                 activeDaysCount: activeCarDays,
                 status: finalStatus,
                 vehicleMatrix: finalVehicleMatrix,
+                vehicleMatrices: finalVehicleMatrices,
                 clientName: finalClientName,
                 mobileNumber: finalMobileNumber,
                 bookingReference: isAgent ? 'Travel Agent' : formData.bookingReference,
@@ -5278,7 +5352,7 @@ export default function Leads() {
                                     )}
 
                                     {/* ========================================================= */}
-                                    {/* VEHICLE MATRIX (LIVE PROFIT & OPERATING EXPENSES)         */}
+                                    {/* VEHICLE MATRIX (MULTI-OPTION PROFIT & OPERATING EXPENSES)  */}
                                     {/* ========================================================= */}
                                     <div style={{
                                         marginTop: '16px',
@@ -5296,7 +5370,7 @@ export default function Leads() {
                                                     Vehicle Operating Matrix & Quotation Profit Margin
                                                 </span>
                                                 <span style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#93c5fd', fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-                                                    Live P&L
+                                                    {vehicleMatrices.length} Option{vehicleMatrices.length > 1 ? 's' : ''} Added
                                                 </span>
                                             </div>
                                             <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -5308,6 +5382,187 @@ export default function Leads() {
                                                         ⏸️ Break Tour ({totalStayDays} Stay - {validExcludedDates.length} Off)
                                                     </span>
                                                 )}
+                                            </div>
+                                        </div>
+
+                                        {/* Multi-Option Vehicle Tabs & "+ Add Matrix Option" Bar */}
+                                        <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            flexWrap: 'wrap',
+                                            marginBottom: '16px',
+                                            paddingBottom: '12px',
+                                            borderBottom: '1px dashed rgba(255,255,255,0.08)'
+                                        }}>
+                                            {vehicleMatrices.map((m, idx) => {
+                                                const isActive = activeMatrixIndex === idx;
+                                                return (
+                                                    <div
+                                                        key={m.id || idx}
+                                                        onClick={() => setActiveMatrixIndex(idx)}
+                                                        style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '8px',
+                                                            padding: '7px 12px',
+                                                            borderRadius: '10px',
+                                                            background: isActive ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(37, 99, 235, 0.35))' : 'rgba(255, 255, 255, 0.03)',
+                                                            border: isActive ? '1.5px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.08)',
+                                                            color: isActive ? '#93c5fd' : 'rgba(255, 255, 255, 0.65)',
+                                                            fontWeight: isActive ? '800' : '600',
+                                                            fontSize: '12px',
+                                                            cursor: 'pointer',
+                                                            boxShadow: isActive ? '0 4px 15px rgba(59, 130, 246, 0.25)' : 'none',
+                                                            transition: 'all 0.15s ease'
+                                                        }}
+                                                    >
+                                                        <span>🚗</span>
+                                                        <span>{m.title || `Option ${idx + 1}: ${m.carType || 'Car'}`}</span>
+                                                        {vehicleMatrices.length > 1 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (window.confirm(`Remove option "${m.title || m.carType}"?`)) {
+                                                                        removeMatrixOption(idx);
+                                                                    }
+                                                                }}
+                                                                style={{
+                                                                    background: 'transparent',
+                                                                    border: 'none',
+                                                                    color: '#f87171',
+                                                                    cursor: 'pointer',
+                                                                    padding: '0 2px',
+                                                                    fontSize: '13px',
+                                                                    fontWeight: '900',
+                                                                    lineHeight: 1
+                                                                }}
+                                                                title="Delete this vehicle matrix option"
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+
+                                            {/* + Add Option Button */}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => addMatrixOption('Sedan')}
+                                                    style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '5px',
+                                                        padding: '7px 14px',
+                                                        borderRadius: '10px',
+                                                        background: 'rgba(245, 158, 11, 0.12)',
+                                                        border: '1.5px dashed rgba(245, 158, 11, 0.5)',
+                                                        color: '#fbbf24',
+                                                        fontWeight: '800',
+                                                        fontSize: '12px',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.15s ease'
+                                                    }}
+                                                    title="Add another Vehicle Operating Matrix (e.g. for Sedan, Ertiga, Innova, Tempo, etc.)"
+                                                >
+                                                    <Plus size={14} /> + Add Vehicle Matrix Option
+                                                </button>
+
+                                                <select
+                                                    value=""
+                                                    onChange={(e) => {
+                                                        if (e.target.value) {
+                                                            addMatrixOption(e.target.value);
+                                                            e.target.value = '';
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        background: '#0a101d',
+                                                        border: '1px solid rgba(245, 158, 11, 0.3)',
+                                                        color: '#fbbf24',
+                                                        padding: '6px 10px',
+                                                        borderRadius: '8px',
+                                                        fontSize: '11px',
+                                                        fontWeight: '700',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                    title="Quick add a specific car category"
+                                                >
+                                                    <option value="">+ Quick Add Car...</option>
+                                                    <option value="Sedan">Sedan (Dzire/Etios)</option>
+                                                    <option value="Ertiga">Ertiga (6+1)</option>
+                                                    <option value="Innova Crysta">Innova Crysta</option>
+                                                    <option value="Innova Hycross">Innova Hycross</option>
+                                                    <option value="SUV">SUV (Fortuner/Endeavour)</option>
+                                                    <option value="Tempo Traveller">Tempo Traveller (12-17)</option>
+                                                    <option value="Mini Bus">Mini Bus (20-25)</option>
+                                                    <option value="Coach Bus">Luxury Coach (40+)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {/* Active Matrix Config Bar: Title & Quoted Fare Override */}
+                                        <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                                            gap: '12px',
+                                            marginBottom: '16px',
+                                            padding: '10px 14px',
+                                            background: 'rgba(59, 130, 246, 0.06)',
+                                            borderRadius: '10px',
+                                            border: '1px solid rgba(59, 130, 246, 0.2)'
+                                        }}>
+                                            <div>
+                                                <label style={{ ...labelStyle, color: '#93c5fd' }}>Option Label / Vehicle Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={activeMatrix.title || ''}
+                                                    onChange={e => updateActiveMatrix('title', e.target.value)}
+                                                    placeholder="e.g. Option 1: Innova Crysta"
+                                                    style={{ ...darkInputStyle, padding: '7px 10px', fontSize: '12.5px', fontWeight: '700' }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ ...labelStyle, color: '#93c5fd' }}>Car Category</label>
+                                                <select
+                                                    value={activeMatrix.carType || formData.carType}
+                                                    onChange={e => {
+                                                        const newCar = e.target.value;
+                                                        updateActiveMatrix('carType', newCar);
+                                                        if (!activeMatrix.title || activeMatrix.title.startsWith('Option')) {
+                                                            updateActiveMatrix('title', `Option ${activeMatrixIndex + 1}: ${newCar}`);
+                                                        }
+                                                    }}
+                                                    style={{ ...darkInputStyle, padding: '7px 10px', fontSize: '12.5px', cursor: 'pointer' }}
+                                                >
+                                                    {ALL_VEHICLES.map(v => (
+                                                        <option key={v} value={v} style={{ background: '#090f1d' }}>{v}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <label style={{ ...labelStyle, color: '#fbbf24' }}>Quoted Package Fare for this Car (₹)</label>
+                                                    {formData.totalAmount > 0 && activeMatrix.packageValue && Number(activeMatrix.packageValue) !== Number(formData.totalAmount) && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateActiveMatrix('packageValue', '')}
+                                                            style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '10px', cursor: 'pointer', padding: 0 }}
+                                                        >
+                                                            Reset to Lead Fare
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <input
+                                                    type="number"
+                                                    value={activeMatrix.packageValue !== undefined && activeMatrix.packageValue !== '' ? activeMatrix.packageValue : (formData.totalAmount || '')}
+                                                    onChange={e => updateActiveMatrix('packageValue', e.target.value)}
+                                                    placeholder={String(formData.totalAmount || 'e.g. 35000')}
+                                                    style={{ ...darkInputStyle, padding: '7px 10px', fontSize: '13px', fontWeight: '800', color: '#fbbf24', borderColor: '#f59e0b' }}
+                                                />
                                             </div>
                                         </div>
 
@@ -5337,7 +5592,7 @@ export default function Leads() {
                                                                     <button
                                                                         key={f.type}
                                                                         type="button"
-                                                                        onClick={() => setMatrixFuelType(f.type)}
+                                                                        onClick={() => updateActiveMatrix('fuelType', f.type)}
                                                                         style={{
                                                                             padding: '6px 4px',
                                                                             background: isSelected ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255,255,255,0.03)',
@@ -5370,7 +5625,7 @@ export default function Leads() {
                                                                 value={matrixTotalKmRun}
                                                                 placeholder="e.g. 1400"
                                                                 onFocus={e => e.target.select()}
-                                                                onChange={e => setMatrixTotalKmRun(e.target.value)}
+                                                                onChange={e => updateActiveMatrix('totalKmRun', e.target.value)}
                                                                 style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
                                                             />
                                                         </div>
@@ -5384,7 +5639,7 @@ export default function Leads() {
                                                                 value={matrixVehicleAverage}
                                                                 placeholder={matrixFuelType === 'CNG' ? 'e.g. 24' : 'e.g. 12'}
                                                                 onFocus={e => e.target.select()}
-                                                                onChange={e => setMatrixVehicleAverage(e.target.value)}
+                                                                onChange={e => updateActiveMatrix('vehicleAverage', e.target.value)}
                                                                 style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px', borderColor: '#3b82f6' }}
                                                             />
                                                         </div>
@@ -5398,7 +5653,7 @@ export default function Leads() {
                                                                 value={matrixFuelRate}
                                                                 placeholder="e.g. 94"
                                                                 onFocus={e => e.target.select()}
-                                                                onChange={e => setMatrixFuelRate(e.target.value)}
+                                                                onChange={e => updateActiveMatrix('fuelRate', e.target.value)}
                                                                 style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px', borderColor: '#60a5fa' }}
                                                             />
                                                         </div>
@@ -5426,7 +5681,7 @@ export default function Leads() {
                                                                 value={matrixDriverSalary}
                                                                 placeholder="e.g. 3500"
                                                                 onFocus={e => e.target.select()}
-                                                                onChange={e => setMatrixDriverSalary(e.target.value)}
+                                                                onChange={e => updateActiveMatrix('driverSalary', e.target.value)}
                                                                 style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
                                                             />
                                                         </div>
@@ -5437,7 +5692,7 @@ export default function Leads() {
                                                                 value={matrixNightHold}
                                                                 placeholder="e.g. 2000"
                                                                 onFocus={e => e.target.select()}
-                                                                onChange={e => setMatrixNightHold(e.target.value)}
+                                                                onChange={e => updateActiveMatrix('nightHold', e.target.value)}
                                                                 style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
                                                             />
                                                         </div>
@@ -5451,7 +5706,7 @@ export default function Leads() {
                                                                 value={matrixTollAndParking}
                                                                 placeholder="e.g. 2000"
                                                                 onFocus={e => e.target.select()}
-                                                                onChange={e => setMatrixTollAndParking(e.target.value)}
+                                                                onChange={e => updateActiveMatrix('tollAndParking', e.target.value)}
                                                                 style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
                                                             />
                                                         </div>
@@ -5473,7 +5728,7 @@ export default function Leads() {
                                                                 value={matrixGstAmount}
                                                                 placeholder="e.g. 2000"
                                                                 onFocus={e => e.target.select()}
-                                                                onChange={e => setMatrixGstAmount(e.target.value)}
+                                                                onChange={e => updateActiveMatrix('gstAmount', e.target.value)}
                                                                 style={{ ...darkInputStyle, padding: '8px 10px', fontSize: '12.5px' }}
                                                             />
                                                         </div>
@@ -5495,7 +5750,7 @@ export default function Leads() {
                                                                 value={matrixTargetPerDay}
                                                                 placeholder="e.g. 2500"
                                                                 onFocus={e => e.target.select()}
-                                                                onChange={e => setMatrixTargetPerDay(e.target.value)}
+                                                                onChange={e => updateActiveMatrix('targetPerDay', e.target.value)}
                                                                 style={{ ...darkInputStyle, padding: '7px 10px', textAlign: 'right', borderColor: '#3b82f6', fontWeight: 'bold' }}
                                                             />
                                                         </div>
@@ -5511,7 +5766,7 @@ export default function Leads() {
                                                 <div style={{ background: '#070b16', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '9px' }}>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px' }}>
                                                         <span style={{ fontSize: '13px', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                            <Calculator size={15} color="#fbbf24" /> P&L Live Statement
+                                                            <Calculator size={15} color="#fbbf24" /> P&L Live Statement ({activeMatrix.title || activeMatrix.carType || 'Option'})
                                                         </span>
                                                         <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
                                                             {matrixDaysVal} Active Car Day{matrixDaysVal > 1 ? 's' : ''}{validExcludedDates.length > 0 ? ` (${totalStayDays}d Stay)` : ''}
@@ -5560,7 +5815,7 @@ export default function Leads() {
                                                         </div>
 
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', alignItems: 'center' }}>
-                                                            <span style={{ color: 'rgba(255,255,255,0.5)' }}>Target ({formData.carType || 'Car'}):</span>
+                                                            <span style={{ color: 'rgba(255,255,255,0.5)' }}>Target ({activeMatrix.carType || formData.carType || 'Car'}):</span>
                                                             <span style={{ color: '#93c5fd', fontWeight: '600' }}>₹{matrixTargetPerDayVal.toLocaleString('en-IN')} / day</span>
                                                         </div>
 
@@ -5621,7 +5876,7 @@ export default function Leads() {
                                                                 placeholder="Test Rate (e.g. 40000)"
                                                                 value={matrixSimSalePrice}
                                                                 onFocus={e => e.target.select()}
-                                                                onChange={e => setMatrixSimSalePrice(e.target.value)}
+                                                                onChange={e => updateActiveMatrix('simSalePrice', e.target.value)}
                                                                 style={{ ...darkInputStyle, padding: '7px 10px', fontSize: '12px' }}
                                                             />
                                                         </div>
@@ -5641,6 +5896,78 @@ export default function Leads() {
                                             </div>
 
                                         </div>
+
+                                        {/* Multi-Option Comparison Strip (When 2 or more options exist) */}
+                                        {vehicleMatrices.length > 1 && (
+                                            <div style={{
+                                                marginTop: '16px',
+                                                padding: '12px',
+                                                background: 'rgba(0,0,0,0.3)',
+                                                borderRadius: '12px',
+                                                border: '1px solid rgba(255,255,255,0.08)'
+                                            }}>
+                                                <div style={{ fontSize: '12px', fontWeight: '800', color: '#93c5fd', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <span>📊</span> Side-by-Side Quotation Options Comparison ({vehicleMatrices.length} Options)
+                                                </div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(200px, 1fr))`, gap: '10px' }}>
+                                                    {vehicleMatrices.map((m, idx) => {
+                                                        const mKm = parseFloat(m.totalKmRun) || 0;
+                                                        const mAvg = parseFloat(m.vehicleAverage) || 0;
+                                                        const mRate = parseFloat(m.fuelRate) || 0;
+                                                        const mFuelCost = mAvg > 0 ? (mKm / mAvg) * mRate : 0;
+                                                        const mDrv = parseFloat(m.driverSalary) || 0;
+                                                        const mNight = parseFloat(m.nightHold) || 0;
+                                                        const mToll = parseFloat(m.tollAndParking) || 0;
+                                                        const mGst = parseFloat(m.gstAmount) || 0;
+                                                        const mPkg = parseFloat(m.packageValue) || (idx === activeMatrixIndex ? matrixPackageVal : (parseFloat(formData.totalAmount) || 0));
+                                                        const mCost = mFuelCost + mDrv + mNight + mToll + mGst;
+                                                        const mProfit = mPkg - mCost;
+                                                        const mPerDay = matrixDaysVal > 0 ? Math.round(mProfit / matrixDaysVal) : 0;
+                                                        const isSelected = activeMatrixIndex === idx;
+
+                                                        return (
+                                                            <div
+                                                                key={m.id || idx}
+                                                                onClick={() => setActiveMatrixIndex(idx)}
+                                                                style={{
+                                                                    background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.02)',
+                                                                    border: isSelected ? '1.5px solid #3b82f6' : '1px solid rgba(255,255,255,0.06)',
+                                                                    borderRadius: '10px',
+                                                                    padding: '10px',
+                                                                    cursor: 'pointer',
+                                                                    display: 'flex',
+                                                                    flexDirection: 'column',
+                                                                    gap: '4px'
+                                                                }}
+                                                            >
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                    <span style={{ fontSize: '12px', fontWeight: '800', color: isSelected ? '#93c5fd' : 'white' }}>
+                                                                        {m.title || `Option ${idx + 1}`}
+                                                                    </span>
+                                                                    <span style={{ fontSize: '10px', color: '#94a3b8' }}>
+                                                                        {m.carType || 'Car'}
+                                                                    </span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px' }}>
+                                                                    <span style={{ color: 'rgba(255,255,255,0.5)' }}>Fare:</span>
+                                                                    <span style={{ color: '#fbbf24', fontWeight: '700' }}>₹{Math.round(mPkg).toLocaleString('en-IN')}</span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px' }}>
+                                                                    <span style={{ color: 'rgba(255,255,255,0.5)' }}>Cost:</span>
+                                                                    <span style={{ color: '#f87171' }}>₹{Math.round(mCost).toLocaleString('en-IN')}</span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                                                                    <span style={{ color: 'white', fontWeight: '700' }}>Net Profit:</span>
+                                                                    <span style={{ color: mProfit >= 0 ? '#4ade80' : '#f87171', fontWeight: '900' }}>
+                                                                        ₹{Math.round(mProfit).toLocaleString('en-IN')} ({mPerDay >= 0 ? `+₹${mPerDay}` : `-₹${Math.abs(mPerDay)}`}/d)
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
