@@ -1392,6 +1392,102 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                 ₹{summary.grandTotalRevenue.toLocaleString('en-IN')}
                             </td>
                         </tr>
+
+                        {/* BOTTOM SUMMARY ROW 2: Cars' Own Total Sale / Revenue */}
+                        <tr style={{
+                            background: '#090d16',
+                            borderTop: '1px solid rgba(74, 222, 128, 0.35)',
+                            color: '#ffffff',
+                            fontWeight: '900',
+                            fontSize: '11.5px'
+                        }}>
+                            <td colSpan={2} style={{
+                                position: 'sticky',
+                                left: 0,
+                                zIndex: 45,
+                                background: '#090d16',
+                                padding: '10px 12px',
+                                borderRight: '2px solid #4a5568',
+                                fontWeight: '950',
+                                color: '#4ade80',
+                                letterSpacing: '0.5px',
+                                whiteSpace: 'nowrap'
+                            }}>
+                                💰 Total Sale (Cars)
+                            </td>
+
+                            {/* Revenue per Fleet Car */}
+                            {summary.carBookedDays.map((cSummary) => (
+                                <td
+                                    key={`sale-${cSummary.number}`}
+                                    style={{
+                                        background: '#090d16',
+                                        padding: '10px 4px',
+                                        textAlign: 'center',
+                                        fontWeight: '950',
+                                        color: cSummary.totalRevenue > 0 ? '#4ade80' : 'rgba(255,255,255,0.3)',
+                                        borderRight: '1px solid #2d3748',
+                                        fontSize: '11.5px',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                    title={`${cSummary.number} Month Total Sale: ₹${cSummary.totalRevenue.toLocaleString('en-IN')}`}
+                                >
+                                    ₹{cSummary.totalRevenue.toLocaleString('en-IN')}
+                                </td>
+                            ))}
+
+                            {/* OS Month Total */}
+                            <td style={{
+                                background: '#090d16',
+                                padding: '10px 6px',
+                                textAlign: 'center',
+                                fontWeight: '950',
+                                color: '#c084fc',
+                                borderRight: '2px solid #4a5568',
+                                fontSize: '11.5px',
+                                whiteSpace: 'nowrap'
+                            }} title="Total Outside Vehicle Revenue">
+                                ₹{summary.totalOsRevenue.toLocaleString('en-IN')}
+                            </td>
+
+                            {/* Fleet Subtotal Revenue */}
+                            <td style={{
+                                background: '#090d16',
+                                padding: '10px 4px',
+                                textAlign: 'center',
+                                fontWeight: '950',
+                                color: '#38bdf8',
+                                borderRight: '1px solid #2d3748',
+                                fontSize: '11.5px',
+                                whiteSpace: 'nowrap'
+                            }} title="Total Fleet Revenue (Excluding OS)">
+                                ₹{(summary.grandTotalRevenue - summary.totalOsRevenue).toLocaleString('en-IN')}
+                            </td>
+
+                            {/* Empty under Own Free */}
+                            <td style={{
+                                background: '#090d16',
+                                padding: '10px 4px',
+                                textAlign: 'center',
+                                borderRight: '1px solid #2d3748',
+                                color: '#64748b'
+                            }}>
+                                -
+                            </td>
+
+                            {/* Grand Total Revenue */}
+                            <td style={{
+                                padding: '10px 10px',
+                                textAlign: 'right',
+                                fontWeight: '950',
+                                color: '#fef08a',
+                                fontSize: '13px',
+                                background: '#161f2e',
+                                whiteSpace: 'nowrap'
+                            }} title="Grand Total Month Revenue">
+                                ₹{summary.grandTotalRevenue.toLocaleString('en-IN')}
+                            </td>
+                        </tr>
                     </tfoot>
                 </table>
             </div>

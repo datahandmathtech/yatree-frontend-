@@ -434,6 +434,29 @@ export default function LiveDRSExcelView({
     // Inline edit handlers
     const startInlineEdit = (duty) => {
         setInlineEditingId(duty._id);
+
+        const curDriverId = duty.driver?._id ? String(duty.driver._id) : (duty.driver ? String(duty.driver) : '');
+        const curVehicleId = duty.vehicle?._id ? String(duty.vehicle._id) : (duty.vehicle ? String(duty.vehicle) : '');
+
+        let matchedDriver = null;
+        if (curDriverId) {
+            matchedDriver = (drivers || []).find(d => String(d._id) === String(curDriverId));
+        } else if (duty.customDriverName) {
+            const cName = (duty.customDriverName || '').trim().toLowerCase();
+            matchedDriver = (drivers || []).find(d => (d.name || '').trim().toLowerCase() === cName);
+        }
+
+        let matchedVehicle = null;
+        if (curVehicleId) {
+            matchedVehicle = (vehicles || []).find(v => String(v._id) === String(curVehicleId));
+        } else if (duty.customCarNumber) {
+            const rawNo = (duty.customCarNumber || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            matchedVehicle = (vehicles || []).find(v => (v.carNumber || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === rawNo);
+        }
+
+        const effectiveDriverId = matchedDriver ? matchedDriver._id : curDriverId;
+        const effectiveVehicleId = matchedVehicle ? matchedVehicle._id : curVehicleId;
+
         setInlineFormData({
             hotel: duty.hotel || '',
             clientName: duty.clientName || '',
@@ -442,9 +465,12 @@ export default function LiveDRSExcelView({
             duty: duty.duty || duty.itinerary || '',
             revenue: duty.revenue || 0,
             cOut: duty.cOut || getDutyPackageEndDate(duty) || '',
-            carType: duty.carType || 'Sedan',
-            customCarNumber: duty.vehicle?.carNumber || duty.customCarNumber || '',
-            customDriverName: duty.driver?.name || duty.customDriverName || ''
+            carType: duty.carType || (matchedVehicle ? (matchedVehicle.type || matchedVehicle.model) : 'Sedan'),
+            vehicleId: effectiveVehicleId || '',
+            customCarNumber: duty.vehicle?.carNumber || duty.customCarNumber || (matchedVehicle?.carNumber || ''),
+            driverId: effectiveDriverId || '',
+            customDriverName: duty.driver?.name || duty.customDriverName || (matchedDriver?.name || ''),
+            driverMobile: duty.driver?.mobile || duty.driver?.phone || duty.driverMobile || (matchedDriver?.mobile || matchedDriver?.phone || '')
         });
     };
 
@@ -466,8 +492,11 @@ export default function LiveDRSExcelView({
                 revenue: Number(inlineFormData.revenue) || 0,
                 cOut: inlineFormData.cOut,
                 carType: inlineFormData.carType,
+                vehicle: inlineFormData.vehicleId || null,
                 customCarNumber: inlineFormData.customCarNumber,
-                customDriverName: inlineFormData.customDriverName
+                driver: inlineFormData.driverId || null,
+                customDriverName: inlineFormData.customDriverName,
+                driverMobile: inlineFormData.driverMobile
             });
             setInlineEditingId(null);
             if (onRefresh) onRefresh();
@@ -968,21 +997,97 @@ export default function LiveDRSExcelView({
                                                                 style={{ width: '100%', padding: '5px 4px', background: '#0b1120', border: '1px solid #38bdf8', borderRadius: '5px', color: 'white', fontSize: '12px', textAlign: 'center' }}
                                                             />
                                                         </td>
-                                                        <td style={{ padding: '6px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
-                                                            <input 
-                                                                value={inlineFormData.customCarNumber}
-                                                                onChange={e => setInlineFormData({ ...inlineFormData, customCarNumber: e.target.value.toUpperCase() })}
-                                                                placeholder="Car No (e.g. RJ27TA9053)"
-                                                                style={{ width: '100%', padding: '5px 8px', background: '#0b1120', border: '1px solid #38bdf8', borderRadius: '5px', color: '#38bdf8', fontSize: '12px', fontWeight: '700' }}
-                                                            />
+                                                        {/* Car Selector */}
+                                                        <td style={{ padding: '6px', borderRight: '1px solid rgba(255,255,255,0.06)', minWidth: '135px' }}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                <select
+                                                                    value={inlineFormData.vehicleId || ''}
+                                                                    onChange={(e) => {
+                                                                        const selectedId = e.target.value;
+                                                                        if (selectedId) {
+                                                                            const vObj = (vehicles || []).find(v => String(v._id) === String(selectedId));
+                                                                            setInlineFormData(prev => ({
+                                                                                ...prev,
+                                                                                vehicleId: selectedId,
+                                                                                customCarNumber: vObj?.carNumber || prev.customCarNumber,
+                                                                                carType: vObj?.type || vObj?.model || prev.carType
+                                                                            }));
+                                                                        } else {
+                                                                            setInlineFormData(prev => ({
+                                                                                ...prev,
+                                                                                vehicleId: '',
+                                                                                customCarNumber: prev.customCarNumber || ''
+                                                                            }));
+                                                                        }
+                                                                    }}
+                                                                    style={{ width: '100%', padding: '4px 6px', background: '#0b1120', border: '1px solid #38bdf8', borderRadius: '5px', color: '#38bdf8', fontSize: '11px', fontWeight: '700', outline: 'none' }}
+                                                                >
+                                                                    <option value="">-- Outside / Custom Car --</option>
+                                                                    {(vehicles || []).map(v => (
+                                                                        <option key={v._id} value={v._id}>
+                                                                            {v.carNumber} {v.model ? `(${v.model})` : ''}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                                {(!inlineFormData.vehicleId || !(vehicles || []).some(v => String(v._id) === String(inlineFormData.vehicleId))) && (
+                                                                    <input 
+                                                                        value={inlineFormData.customCarNumber}
+                                                                        onChange={e => setInlineFormData(prev => ({ ...prev, customCarNumber: e.target.value.toUpperCase(), vehicleId: '' }))}
+                                                                        placeholder="Type Car No (e.g. RJ27TA9053)"
+                                                                        style={{ width: '100%', padding: '3px 6px', background: '#0b1120', border: '1px dashed #38bdf8', borderRadius: '4px', color: '#38bdf8', fontSize: '11px', fontWeight: '700' }}
+                                                                    />
+                                                                )}
+                                                            </div>
                                                         </td>
-                                                        <td style={{ padding: '6px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
-                                                            <input 
-                                                                value={inlineFormData.customDriverName}
-                                                                onChange={e => setInlineFormData({ ...inlineFormData, customDriverName: e.target.value })}
-                                                                placeholder="Driver Name"
-                                                                style={{ width: '100%', padding: '5px 8px', background: '#0b1120', border: '1px solid #4ade80', borderRadius: '5px', color: '#4ade80', fontSize: '12px', fontWeight: '700' }}
-                                                            />
+
+                                                        {/* Driver Selector */}
+                                                        <td style={{ padding: '6px', borderRight: '1px solid rgba(255,255,255,0.06)', minWidth: '150px' }}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                <select
+                                                                    value={inlineFormData.driverId || ''}
+                                                                    onChange={(e) => {
+                                                                        const selectedId = e.target.value;
+                                                                        if (selectedId) {
+                                                                            const dObj = (drivers || []).find(d => String(d._id) === String(selectedId));
+                                                                            if (dObj) {
+                                                                                const linkedVehId = dObj.assignedVehicle?._id || (typeof dObj.assignedVehicle === 'string' ? dObj.assignedVehicle : '');
+                                                                                setInlineFormData(prev => ({
+                                                                                    ...prev,
+                                                                                    driverId: dObj._id,
+                                                                                    customDriverName: dObj.name,
+                                                                                    driverMobile: dObj.mobile || dObj.phone || '',
+                                                                                    ...(linkedVehId && !prev.vehicleId ? {
+                                                                                        vehicleId: linkedVehId,
+                                                                                        customCarNumber: (vehicles || []).find(v => String(v._id) === String(linkedVehId))?.carNumber || prev.customCarNumber
+                                                                                    } : {})
+                                                                                }));
+                                                                            }
+                                                                        } else {
+                                                                            setInlineFormData(prev => ({
+                                                                                ...prev,
+                                                                                driverId: '',
+                                                                                customDriverName: prev.customDriverName || ''
+                                                                            }));
+                                                                        }
+                                                                    }}
+                                                                    style={{ width: '100%', padding: '4px 6px', background: '#0b1120', border: '1px solid #4ade80', borderRadius: '5px', color: '#4ade80', fontSize: '11px', fontWeight: '700', outline: 'none' }}
+                                                                >
+                                                                    <option value="">-- Outside / Custom Driver --</option>
+                                                                    {(drivers || []).map(d => (
+                                                                        <option key={d._id} value={d._id}>
+                                                                            {d.name} {d.mobile ? `(${d.mobile})` : ''}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                                {(!inlineFormData.driverId || !(drivers || []).some(d => String(d._id) === String(inlineFormData.driverId))) && (
+                                                                    <input 
+                                                                        value={inlineFormData.customDriverName}
+                                                                        onChange={e => setInlineFormData(prev => ({ ...prev, customDriverName: e.target.value, driverId: '' }))}
+                                                                        placeholder="Type outside driver name"
+                                                                        style={{ width: '100%', padding: '3px 6px', background: '#0b1120', border: '1px dashed #4ade80', borderRadius: '4px', color: '#4ade80', fontSize: '11px', fontWeight: '700' }}
+                                                                    />
+                                                                )}
+                                                            </div>
                                                         </td>
                                                         <td style={{ padding: '6px', textAlign: 'center' }}>
                                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
