@@ -18,7 +18,7 @@ import BankSelector from '../components/common/BankSelector';
 
 const CarUtility = () => {
     const { theme } = useTheme();
-    const { selectedCompany } = useCompany();
+    const { selectedCompany, refreshCompany } = useCompany();
     const location = useLocation();
     
     // Core state
@@ -196,6 +196,7 @@ const CarUtility = () => {
 
     const fetchAllData = async () => {
         setLoading(true);
+        if (refreshCompany) refreshCompany();
         try {
             const token = JSON.parse(localStorage.getItem('userInfo')).token;
             const headers = { Authorization: `Bearer ${token}` };
@@ -1074,7 +1075,10 @@ const SummaryStat = ({ label, val, col, icon: Icon, isDark, desc }) => (
 );
 
 const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setViewingImage, submitting, vehicle, getImageUrl, companyId, selectedMonth, selectedYear, hideForm = false, allVehicles = [], bankAccounts = [], bookings = [] }) => {
-    const { selectedCompany } = useCompany();
+    const { selectedCompany, refreshCompany } = useCompany();
+    useEffect(() => {
+        if (refreshCompany) refreshCompany();
+    }, []);
     const [form, setForm] = useState({
         amount: '',
         remarks: '',

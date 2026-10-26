@@ -187,7 +187,22 @@ const BankBook = ({ initialTab = 'bank' }) => {
 
     const [showEditCashModal, setShowEditCashModal] = useState(false);
     const [editingCashTx, setEditingCashTx] = useState(null);
-    const [editCashFormData, setEditCashFormData] = useState({ amount: '', date: '', description: '', category: '', reference: '' });
+    const [editCashFormData, setEditCashFormData] = useState({
+        type: 'OUT',
+        amount: '',
+        date: '',
+        category: 'General Cash',
+        reference: '',
+        description: '',
+        guestName: '',
+        driverName: '',
+        bookingRef: '',
+        clientId: '',
+        receiptPhoto: ''
+    });
+    const [editCashReceiptFile, setEditCashReceiptFile] = useState(null);
+    const [editGuestSearchQuery, setEditGuestSearchQuery] = useState('');
+    const [showEditGuestDropdown, setShowEditGuestDropdown] = useState(false);
     const [submittingEditCash, setSubmittingEditCash] = useState(false);
 
     // Sync tab when initialTab prop changes
@@ -810,12 +825,22 @@ const BankBook = ({ initialTab = 'bank' }) => {
 
     const openEditCashModal = (tx) => {
         setEditingCashTx(tx);
+        const gName = tx.guestName || (tx.client?.name) || (tx.bookingRef?.clientName) || '';
+        setEditGuestSearchQuery(gName ? `Mr. ${String(gName).replace(/^(Mr\.?\s*|Mrs\.?\s*|Ms\.?\s*)/i, '').trim()}` : '');
+        setShowEditGuestDropdown(false);
+        setEditCashReceiptFile(null);
         setEditCashFormData({
+            type: tx.type || 'OUT',
             amount: tx.amount || '',
             date: tx.date ? tx.date.substring(0, 10) : todayIST(),
-            description: tx.description || '',
             category: tx.category || 'General Cash',
-            reference: tx.reference || ''
+            reference: tx.reference || '',
+            description: tx.description || '',
+            guestName: gName,
+            driverName: tx.driverName || (tx.driverRef?.name) || '',
+            bookingRef: tx.bookingRef?._id || tx.bookingRef || '',
+            clientId: tx.client?._id || tx.client || '',
+            receiptPhoto: tx.receiptPhoto || ''
         });
         setShowEditCashModal(true);
     };
@@ -824,13 +849,26 @@ const BankBook = ({ initialTab = 'bank' }) => {
         e.preventDefault();
         setSubmittingEditCash(true);
         try {
-            await axios.put(`/api/cash/transactions/${editingCashTx._id}`, editCashFormData);
+            let finalReceiptPhoto = editCashFormData.receiptPhoto;
+            if (editCashReceiptFile && typeof editCashReceiptFile !== 'string') {
+                const uploadData = new FormData();
+                uploadData.append('file', editCashReceiptFile);
+                const uploadRes = await axios.post('/api/upload', uploadData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                finalReceiptPhoto = uploadRes.data?.url || uploadRes.data?.secure_url || '';
+            }
+
+            await axios.put(`/api/cash/transactions/${editingCashTx._id}`, {
+                ...editCashFormData,
+                receiptPhoto: finalReceiptPhoto
+            });
             setShowEditCashModal(false);
             setEditingCashTx(null);
             await fetchCashTransactions();
         } catch (err) {
             console.error('Error editing cash tx:', err);
-            alert('Failed to edit cash transaction');
+            alert(err.response?.data?.message || 'Failed to edit cash transaction');
         } finally {
             setSubmittingEditCash(false);
         }
@@ -2960,27 +2998,66 @@ const BankBook = ({ initialTab = 'bank' }) => {
             <AnimatePresence>
                 {showEditCashModal && editingCashTx && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100000 }}>
-                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '480px', background: '#0f172a', padding: '26px', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '520px', maxHeight: '92vh', overflowY: 'auto', background: '#0f172a', padding: '26px', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                                <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Edit Cash Transaction</h3>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ padding: '8px', background: 'rgba(16, 185, 129, 0.15)', borderRadius: '10px', color: '#10b981' }}>
+                                        <Banknote size={20} />
+                                    </div>
+                                    <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '800' }}>Edit Cash Transaction</h3>
+                                </div>
                                 <button type="button" onClick={() => setShowEditCashModal(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
                                     <X size={20} />
                                 </button>
                             </div>
                             <form onSubmit={submitEditCash} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                                <div>
-                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Amount (₹)</label>
-                                    <input
-                                        type="number"
-                                        value={editCashFormData.amount}
-                                        onChange={e => setEditCashFormData({ ...editCashFormData, amount: e.target.value })}
-                                        style={darkInputStyle}
-                                        required
-                                    />
-                                </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                                     <div>
-                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Date</label>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Cash Flow Type *</label>
+                                        <select
+                                            value={editCashFormData.type}
+                                            onChange={e => setEditCashFormData({ ...editCashFormData, type: e.target.value })}
+                                            style={{ ...darkInputStyle, fontWeight: '800' }}
+                                        >
+                                            <option value="IN" style={{ background: '#090f1d', color: '#10b981' }}>🟢 CASH IN (Receipt)</option>
+                                            <option value="OUT" style={{ background: '#090f1d', color: '#f87171' }}>🔴 CASH OUT (Payment)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Amount (₹) *</label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            placeholder="0"
+                                            value={editCashFormData.amount}
+                                            onChange={e => setEditCashFormData({ ...editCashFormData, amount: e.target.value })}
+                                            style={{ ...darkInputStyle, fontSize: '16px', fontWeight: '800', color: editCashFormData.type === 'IN' ? '#10b981' : '#f87171' }}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Category</label>
+                                        <select
+                                            value={editCashFormData.category}
+                                            onChange={e => setEditCashFormData({ ...editCashFormData, category: e.target.value })}
+                                            style={darkInputStyle}
+                                        >
+                                            <option value="General Cash" style={{ background: '#090f1d' }}>General Cash</option>
+                                            <option value="Guest Cash Collection" style={{ background: '#090f1d' }}>Guest Cash Collection</option>
+                                            <option value="Advance Payment" style={{ background: '#090f1d' }}>Advance Payment</option>
+                                            <option value="Driver Cash Settlement" style={{ background: '#090f1d' }}>Driver Cash Settlement</option>
+                                            <option value="Driver Advance" style={{ background: '#090f1d' }}>Driver Advance</option>
+                                            <option value="Fuel / Vehicle Utility" style={{ background: '#090f1d' }}>Fuel / Utility Expense</option>
+                                            <option value="Office Expense" style={{ background: '#090f1d' }}>Office Expense</option>
+                                            <option value="Staff Salary Cash" style={{ background: '#090f1d' }}>Staff Salary Cash</option>
+                                            <option value="Other Expense" style={{ background: '#090f1d' }}>Other Expense</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Date *</label>
                                         <input
                                             type="date"
                                             value={editCashFormData.date}
@@ -2991,37 +3068,171 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                             required
                                         />
                                     </div>
-                                    <div>
-                                        <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Category</label>
+                                </div>
+
+                                {/* Guest / Client Ledger Selector (Search by Guest Name) */}
+                                <div style={{ position: 'relative' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                        <label style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '700' }}>
+                                            👤 Guest / Client Ledger (Search by Guest Name)
+                                        </label>
+                                        {(editCashFormData.bookingRef || editCashFormData.clientId) && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setEditCashFormData({ ...editCashFormData, guestName: '', bookingRef: '', clientId: '' });
+                                                    setEditGuestSearchQuery('');
+                                                }}
+                                                style={{ background: 'transparent', border: 'none', color: '#f87171', fontSize: '11px', cursor: 'pointer', fontWeight: '700' }}
+                                            >
+                                                ✕ Clear Ledger Link
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div style={{ position: 'relative' }}>
+                                        <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#38bdf8' }} />
                                         <input
                                             type="text"
-                                            value={editCashFormData.category}
-                                            onChange={e => setEditCashFormData({ ...editCashFormData, category: e.target.value })}
-                                            style={darkInputStyle}
+                                            placeholder="Search guest name or mobile to link Client Ledger..."
+                                            value={editGuestSearchQuery}
+                                            onFocus={() => setShowEditGuestDropdown(true)}
+                                            onChange={e => {
+                                                setEditGuestSearchQuery(e.target.value);
+                                                setEditCashFormData({ ...editCashFormData, guestName: e.target.value, bookingRef: '', clientId: '' });
+                                                setShowEditGuestDropdown(true);
+                                            }}
+                                            style={{ ...darkInputStyle, paddingLeft: '34px', borderColor: (editCashFormData.bookingRef || editCashFormData.clientId) ? 'rgba(16, 185, 129, 0.6)' : 'rgba(56, 189, 248, 0.35)' }}
                                         />
                                     </div>
+                                    {(editCashFormData.bookingRef || editCashFormData.clientId) && (
+                                        <div style={{ marginTop: '4px', fontSize: '11px', color: '#4ade80', fontWeight: '700' }}>
+                                            ✓ Linked to Client Ledger: Mr. {String(editCashFormData.guestName || '').replace(/^(Mr\.?\s*|Mrs\.?\s*|Ms\.?\s*)/i, '').trim()} (Auto-syncs balance & payment ledger)
+                                        </div>
+                                    )}
+                                    {showEditGuestDropdown && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '100%',
+                                            left: 0,
+                                            right: 0,
+                                            marginTop: '4px',
+                                            maxHeight: '210px',
+                                            overflowY: 'auto',
+                                            background: '#090f1d',
+                                            border: '1px solid rgba(56, 189, 248, 0.4)',
+                                            borderRadius: '10px',
+                                            zIndex: 50,
+                                            boxShadow: '0 12px 30px rgba(0,0,0,0.7)'
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)', fontSize: '10px', color: '#94a3b8' }}>
+                                                <span>SELECT GUEST LEDGER ({guestOptions.length} available)</span>
+                                                <button type="button" onClick={() => setShowEditGuestDropdown(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '11px' }}>Close ✕</button>
+                                            </div>
+                                            {guestOptions
+                                                .filter(g => {
+                                                    const q = (editGuestSearchQuery || '').toLowerCase().trim();
+                                                    if (!q) return true;
+                                                    return (g.guestName || '').toLowerCase().includes(q) ||
+                                                        (g.mobile || '').toLowerCase().includes(q) ||
+                                                        (g.tripInfo || '').toLowerCase().includes(q);
+                                                })
+                                                .slice(0, 30)
+                                                .map(g => {
+                                                    const cleanName = String(g.guestName || '').replace(/^(Mr\.?\s*|Mrs\.?\s*|Ms\.?\s*)/i, '').trim();
+                                                    return (
+                                                        <div
+                                                            key={g.id}
+                                                            onClick={() => {
+                                                                setEditGuestSearchQuery(`Mr. ${cleanName}`);
+                                                                setEditCashFormData({
+                                                                    ...editCashFormData,
+                                                                    guestName: cleanName,
+                                                                    bookingRef: g.bookingId || '',
+                                                                    clientId: g.clientId || '',
+                                                                    description: editCashFormData.description || `Mr. ${cleanName}`
+                                                                });
+                                                                setShowEditGuestDropdown(false);
+                                                            }}
+                                                            style={{
+                                                                padding: '10px 12px',
+                                                                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                                                cursor: 'pointer',
+                                                                display: 'flex',
+                                                                justifyContent: 'space-between',
+                                                                alignItems: 'center'
+                                                            }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.12)'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                        >
+                                                            <div>
+                                                                <div style={{ fontSize: '13px', fontWeight: '800', color: '#fff' }}>
+                                                                    Mr. {cleanName}
+                                                                </div>
+                                                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+                                                                    {g.mobile ? `📞 ${g.mobile}` : ''} {g.tripInfo ? `• ${g.tripInfo}` : ''}
+                                                                </div>
+                                                            </div>
+                                                            <div style={{ textAlign: 'right' }}>
+                                                                {g.balanceDue > 0 ? (
+                                                                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#fbbf24', background: 'rgba(251, 191, 36, 0.12)', padding: '2px 7px', borderRadius: '6px' }}>
+                                                                        Due: ₹{Number(g.balanceDue).toLocaleString('en-IN')}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span style={{ fontSize: '10px', color: '#4ade80', fontWeight: '700' }}>Ledger Active</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                        </div>
+                                    )}
                                 </div>
+
                                 <div>
-                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Voucher / Slip Reference</label>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Driver Name (Optional)</label>
                                     <input
                                         type="text"
+                                        placeholder="e.g. Sanjay Kumar"
+                                        value={editCashFormData.driverName}
+                                        onChange={e => setEditCashFormData({ ...editCashFormData, driverName: e.target.value })}
+                                        style={darkInputStyle}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Voucher / Receipt No (Optional)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. VCH-00492"
                                         value={editCashFormData.reference}
                                         onChange={e => setEditCashFormData({ ...editCashFormData, reference: e.target.value })}
                                         style={darkInputStyle}
                                     />
                                 </div>
+
                                 <div>
-                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Description</label>
+                                    <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '4px', fontWeight: '600' }}>Description / Remarks</label>
                                     <textarea
                                         rows={2}
+                                        placeholder="Details of cash payment or collection..."
                                         value={editCashFormData.description}
                                         onChange={e => setEditCashFormData({ ...editCashFormData, description: e.target.value })}
                                         style={{ ...darkInputStyle, resize: 'none' }}
                                     />
                                 </div>
+
+                                <div>
+                                    <ImageUploader
+                                        file={editCashReceiptFile || editCashFormData.receiptPhoto}
+                                        onChange={setEditCashReceiptFile}
+                                        label="Cash Receipt / Voucher Bill Photo"
+                                        color="#10b981"
+                                    />
+                                </div>
+
                                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                                     <button type="button" onClick={() => setShowEditCashModal(false)} style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>Cancel</button>
-                                    <button type="submit" disabled={submittingEditCash} style={{ flex: 1, padding: '12px', background: '#10b981', color: '#000', border: 'none', borderRadius: '8px', cursor: submittingEditCash ? 'not-allowed' : 'pointer', fontWeight: '800' }}>
+                                    <button type="submit" disabled={submittingEditCash} style={{ flex: 1, padding: '12px', background: '#10b981', color: '#000', border: 'none', borderRadius: '8px', cursor: submittingEditCash ? 'not-allowed' : 'pointer', fontWeight: '900' }}>
                                         {submittingEditCash ? 'Saving...' : 'Save Changes'}
                                     </button>
                                 </div>

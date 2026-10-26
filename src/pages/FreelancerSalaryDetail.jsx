@@ -6,12 +6,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import SEO from '../components/SEO';
 import { useCompany } from '../context/CompanyContext';
 import { formatDateIST, toISTDateString, todayIST } from '../utils/istUtils';
+import BankSelector from '../components/common/BankSelector';
 
 const FreelancerSalaryDetail = () => {
     const { driverId } = useParams();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
-    const { selectedCompany } = useCompany();
+    const { selectedCompany, refreshCompany } = useCompany();
 
     const urlMonth = parseInt(searchParams.get('month')) || new Date().getMonth() + 1;
     const urlYear = parseInt(searchParams.get('year')) || new Date().getFullYear();
@@ -24,13 +25,39 @@ const FreelancerSalaryDetail = () => {
     const [toDate, setToDate] = useState(urlTo);
     const [details, setDetails] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [bankAccounts, setBankAccounts] = useState([]);
 
     // Advance form
     const [showAdvanceModal, setShowAdvanceModal] = useState(false);
     const [editingAdvance, setEditingAdvance] = useState(null);
-    const [advanceData, setAdvanceData] = useState({ amount: '', remark: '', date: todayIST() });
+    const [advanceData, setAdvanceData] = useState({
+        amount: '',
+        remark: '',
+        date: todayIST(),
+        paymentMode: 'Cash',
+        bankAccountId: ''
+    });
     const [submitting, setSubmitting] = useState(false);
     const [message, setMessage] = useState({ type: '', text: '' });
+
+    useEffect(() => {
+        if (!selectedCompany?._id) return;
+        const fetchBanks = async () => {
+            try {
+                const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+                const { data } = await axios.get(`/api/banks/company/${selectedCompany._id}`, {
+                    headers: { Authorization: `Bearer ${userInfo.token}` }
+                }).catch(() => axios.get(`/api/admin/bank-accounts/${selectedCompany._id}`, {
+                    headers: { Authorization: `Bearer ${userInfo.token}` }
+                }));
+                setBankAccounts(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error('Error fetching bank accounts:', err);
+            }
+        };
+        fetchBanks();
+        if (refreshCompany) refreshCompany();
+    }, [selectedCompany]);
 
     const fetchDetails = async () => {
         setLoading(true);
@@ -62,29 +89,39 @@ const FreelancerSalaryDetail = () => {
         setSubmitting(true);
         try {
             const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+            const isBank = advanceData.paymentMode === 'Bank' || advanceData.paymentMode === 'Bank Transfer';
+            const payload = {
+                ...advanceData,
+                paidBy: 'Company',
+                paymentMode: isBank ? 'Bank Transfer' : 'Cash',
+                bankAccountId: isBank ? advanceData.bankAccountId : null,
+                driverId,
+                companyId: selectedCompany?._id,
+                month,
+                year
+            };
             if (editingAdvance) {
                 // Update
-                await axios.put(`/api/admin/advances/${editingAdvance._id}`, {
-                    ...advanceData
-                }, { headers: { Authorization: `Bearer ${userInfo.token}` } });
-                setMessage({ type: 'success', text: 'Payment updated!' });
+                await axios.put(`/api/admin/advances/${editingAdvance._id}`, payload, {
+                    headers: { Authorization: `Bearer ${userInfo.token}` }
+                });
+                setMessage({ type: 'success', text: 'Payment updated & financial ledger synced!' });
             } else {
                 // Create
-                await axios.post('/api/admin/advances', {
-                    ...advanceData,
-                    driverId,
-                    companyId: selectedCompany?._id
-                }, { headers: { Authorization: `Bearer ${userInfo.token}` } });
-                setMessage({ type: 'success', text: 'Payment recorded!' });
+                await axios.post('/api/admin/advances', payload, {
+                    headers: { Authorization: `Bearer ${userInfo.token}` }
+                });
+                setMessage({ type: 'success', text: 'Payment recorded & financial ledger synced!' });
             }
+            if (refreshCompany) refreshCompany();
             
             setTimeout(() => {
                 setShowAdvanceModal(false);
                 setEditingAdvance(null);
-                setAdvanceData({ amount: '', remark: '', date: todayIST() });
+                setAdvanceData({ amount: '', remark: '', date: todayIST(), paymentMode: 'Cash', bankAccountId: '' });
                 setMessage({ type: '', text: '' });
                 fetchDetails();
-            }, 1200);
+            }, 1000);
         } catch (err) {
             setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to save payment' });
         } finally {
@@ -93,13 +130,14 @@ const FreelancerSalaryDetail = () => {
     };
 
     const handleDeleteAdvance = async (advId) => {
-        if (!window.confirm('Are you sure you want to delete this payment record?')) return;
+        if (!window.confirm('Are you sure you want to delete this payment record? It will revert deduction from Cash/Bank.')) return;
         
         try {
             const userInfo = JSON.parse(localStorage.getItem('userInfo'));
             await axios.delete(`/api/admin/advances/${advId}`, {
                 headers: { Authorization: `Bearer ${userInfo.token}` }
             });
+            if (refreshCompany) refreshCompany();
             fetchDetails();
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to delete payment');
@@ -108,11 +146,15 @@ const FreelancerSalaryDetail = () => {
 
     const openEditModal = (adv) => {
         setEditingAdvance(adv);
+        const isBank = adv.paymentMode === 'Bank' || adv.paymentMode === 'Bank Transfer' || !!adv.bankAccount;
         setAdvanceData({
             amount: adv.amount,
             remark: adv.remark,
-            date: toISTDateString(adv.date)
+            date: toISTDateString(adv.date),
+            paymentMode: isBank ? 'Bank' : 'Cash',
+            bankAccountId: adv.bankAccount?._id || adv.bankAccount || (bankAccounts[0]?._id || '')
         });
+        if (refreshCompany) refreshCompany();
         setShowAdvanceModal(true);
     };
 
@@ -294,6 +336,7 @@ const FreelancerSalaryDetail = () => {
                                 <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                     <th style={{ padding: '14px 18px', textAlign: 'left', color: 'rgba(255,255,255,0.35)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Date</th>
                                     <th style={{ padding: '14px 18px', textAlign: 'left', color: 'rgba(255,255,255,0.35)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Remark</th>
+                                    <th style={{ padding: '14px 18px', textAlign: 'left', color: 'rgba(255,255,255,0.35)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Payment Method</th>
                                     <th style={{ padding: '14px 18px', textAlign: 'right', color: 'rgba(255,255,255,0.35)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Amount</th>
                                     <th style={{ padding: '14px 18px', textAlign: 'center', color: 'rgba(255,255,255,0.35)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.8px', width: '100px' }}>Actions</th>
                                 </tr>
@@ -303,6 +346,17 @@ const FreelancerSalaryDetail = () => {
                                     <tr key={adv._id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                                         <td style={{ padding: '14px 18px', color: 'white' }}>{formatDateIST(adv.date)}</td>
                                         <td style={{ padding: '14px 18px', color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>{adv.remark || '—'}</td>
+                                        <td style={{ padding: '14px 18px' }}>
+                                            {adv.paymentMode === 'Bank' || adv.paymentMode === 'Bank Transfer' || adv.bankAccount ? (
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#38bdf8', fontSize: '11px', fontWeight: '800' }}>
+                                                    🏦 Bank {adv.bankAccount?.bankName ? `(${adv.bankAccount.bankName})` : ''}
+                                                </span>
+                                            ) : (
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#10b981', fontSize: '11px', fontWeight: '800' }}>
+                                                    💵 Cash in Hand
+                                                </span>
+                                            )}
+                                        </td>
                                         <td style={{ padding: '14px 18px', textAlign: 'right', color: '#f43f5e', fontWeight: '800' }}>₹{adv.amount?.toLocaleString()}</td>
                                         <td style={{ padding: '14px 18px', textAlign: 'center' }}>
                                             <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
@@ -313,7 +367,7 @@ const FreelancerSalaryDetail = () => {
                                     </tr>
                                 ))}
                                 {det?.advances?.length === 0 && (
-                                    <tr><td colSpan="4" style={{ padding: '30px', textAlign: 'center', color: 'rgba(255,255,255,0.3)' }}>No payments recorded this month.</td></tr>
+                                    <tr><td colSpan="5" style={{ padding: '30px', textAlign: 'center', color: 'rgba(255,255,255,0.3)' }}>No payments recorded this month.</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -326,12 +380,105 @@ const FreelancerSalaryDetail = () => {
                 {showAdvanceModal && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(16px)', zIndex: 1100, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
                         <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
-                            className="glass-card" style={{ width: '100%', maxWidth: '460px', padding: '40px', border: '1px solid rgba(255,255,255,0.1)', background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '28px' }}>
-                                <h2 style={{ color: 'white', fontSize: '22px', fontWeight: '900', margin: 0 }}>{editingAdvance ? 'Edit Payment' : 'Record Payment'}</h2>
-                                <button onClick={() => { setShowAdvanceModal(false); setEditingAdvance(null); setAdvanceData({ amount: '', remark: '', date: todayIST() }); setMessage({ type: '', text: '' }); }} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}><X size={24} /></button>
+                            className="glass-card" style={{ width: '100%', maxWidth: '480px', maxHeight: '92vh', overflowY: 'auto', padding: '32px', border: '1px solid rgba(255,255,255,0.1)', background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }}>
+                                <div>
+                                    <h2 style={{ color: 'white', fontSize: '20px', fontWeight: '900', margin: 0 }}>{editingAdvance ? 'Edit Payment' : 'Record Payment'}</h2>
+                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>Freelancer: {driverName}</div>
+                                </div>
+                                <button onClick={() => { setShowAdvanceModal(false); setEditingAdvance(null); setAdvanceData({ amount: '', remark: '', date: todayIST(), paymentMode: 'Cash', bankAccountId: '' }); setMessage({ type: '', text: '' }); }} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}><X size={22} /></button>
                             </div>
-                            <form onSubmit={handleSaveAdvance} style={{ display: 'grid', gap: '18px' }}>
+                            <form onSubmit={handleSaveAdvance} style={{ display: 'grid', gap: '16px' }}>
+                                {/* Payment Method Switcher (Cash in Hand vs Bank Account) */}
+                                <div>
+                                    <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '11px', fontWeight: '800', marginBottom: '8px', textTransform: 'uppercase' }}>Payment Method (Paid by Company)</label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAdvanceData({ ...advanceData, paymentMode: 'Cash', bankAccountId: '' })}
+                                            style={{
+                                                padding: '10px',
+                                                borderRadius: '10px',
+                                                border: advanceData.paymentMode === 'Cash' ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                background: advanceData.paymentMode === 'Cash' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: advanceData.paymentMode === 'Cash' ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '12px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '6px'
+                                            }}
+                                        >
+                                            💵 Cash in Hand
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const defaultBank = advanceData.bankAccountId || bankAccounts[0]?._id || '';
+                                                setAdvanceData({ ...advanceData, paymentMode: 'Bank', bankAccountId: defaultBank });
+                                            }}
+                                            style={{
+                                                padding: '10px',
+                                                borderRadius: '10px',
+                                                border: (advanceData.paymentMode === 'Bank' || advanceData.paymentMode === 'Bank Transfer') ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (advanceData.paymentMode === 'Bank' || advanceData.paymentMode === 'Bank Transfer') ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (advanceData.paymentMode === 'Bank' || advanceData.paymentMode === 'Bank Transfer') ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '12px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '6px'
+                                            }}
+                                        >
+                                            🏦 Bank Account
+                                        </button>
+                                    </div>
+
+                                    {/* If Cash: Live Cash in Hand Balance Impact */}
+                                    {advanceData.paymentMode === 'Cash' ? (
+                                        <div style={{
+                                            background: 'rgba(16, 185, 129, 0.08)',
+                                            border: '1px solid rgba(16, 185, 129, 0.25)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '8px'
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Current Cash in Hand:</span>
+                                                <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '900' }}>₹{(selectedCompany?.cashBalance || 0).toLocaleString('en-IN')}</span>
+                                            </div>
+                                            {Number(advanceData.amount) > 0 && (
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(16, 185, 129, 0.2)', paddingTop: '6px' }}>
+                                                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Cash Balance After:</span>
+                                                    <span style={{
+                                                        fontSize: '14px',
+                                                        fontWeight: '950',
+                                                        color: ((selectedCompany?.cashBalance || 0) - Number(advanceData.amount)) < 0 ? '#f43f5e' : '#10b981'
+                                                    }}>
+                                                        ₹{((selectedCompany?.cashBalance || 0) - Number(advanceData.amount)).toLocaleString('en-IN')}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <div style={{ fontSize: '11px', color: '#10b981', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                <span>💵</span> Deducts from Cash in Hand & logs in Cash Book
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <BankSelector
+                                            bankAccounts={bankAccounts}
+                                            value={advanceData.bankAccountId}
+                                            amount={advanceData.amount}
+                                            onChange={(bId) => setAdvanceData({ ...advanceData, bankAccountId: bId, paymentMode: 'Bank' })}
+                                        />
+                                    )}
+                                </div>
+
                                 <div>
                                     <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '11px', fontWeight: '800', marginBottom: '8px', textTransform: 'uppercase' }}>Amount (₹)</label>
                                     <input type="number" className="input-field" required value={advanceData.amount} onChange={(e) => setAdvanceData({ ...advanceData, amount: e.target.value })} style={{ width: '100%', height: '50px' }} placeholder="₹ 0" />

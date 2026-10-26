@@ -49,7 +49,8 @@ export const CompanyProvider = ({ children }) => {
                 String(prev._id) === String(nextCompany._id) &&
                 prev.name === nextCompany.name &&
                 prev.gstRate === nextCompany.gstRate &&
-                prev.gstNumber === nextCompany.gstNumber
+                prev.gstNumber === nextCompany.gstNumber &&
+                Number(prev.cashBalance) === Number(nextCompany.cashBalance)
             ) {
                 return prev;
             }
@@ -116,6 +117,7 @@ export const CompanyProvider = ({ children }) => {
             companies,
             selectedCompany,
             setSelectedCompany: changeCompany,
+            refreshCompany: fetchCompanies,
             selectedDate,
             setSelectedDate,
             loading
