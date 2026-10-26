@@ -595,6 +595,7 @@ const Reports = ({ isSubComponent = false }) => {
                             'Close KM/To': isOutside ? '--' : (r.punchOut?.km || '--'),
                             'Total KM/Model': isOutside ? r.model : (r.totalKM || '--'),
                             'Fuel (₹)': r.fuel?.amount || 0,
+                            'Fuel Odo KM': (r.fuel?.entries || []).map(e => e.km || e.odometer).filter(Boolean).join(', ') || r.fuel?.odometer || r.fuel?.km || '--',
                             'Parking (₹)': (isOutside ? 0 : r.punchOut?.tollParkingAmount) || 0,
                             'Salary/Duty (₹)': isOutside ? (r.dutyAmount || 0) : ((Number(r.dailyWage) || 0) + Math.max((Number(r.punchOut?.allowanceTA) || 0) + (Number(r.punchOut?.nightStayAmount) || 0), Number(r.outsideTrip?.bonusAmount) || 0)),
                         };
@@ -773,7 +774,20 @@ const Reports = ({ isSubComponent = false }) => {
                     </TD>
                     <TD>
                         {fuelAmt > 0
-                            ? <div><span style={{ color: 'var(--primary)', fontWeight: '900', fontSize: '13px' }}>₹{Math.round(fuelAmt)}</span><div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.25)' }}>{(r.fuel?.entries?.length || 1)} fill</div></div>
+                            ? (
+                                <div>
+                                    <span style={{ color: 'var(--primary)', fontWeight: '900', fontSize: '13px' }}>₹{Math.round(fuelAmt)}</span>
+                                    {(() => {
+                                        const entryKms = (r.fuel?.entries || []).map(e => e.km || e.odometer).filter(Boolean);
+                                        const displayKm = entryKms.length > 0 ? entryKms.join(', ') : (r.fuel?.odometer || r.fuel?.km || null);
+                                        return (
+                                            <div style={{ fontSize: '9px', color: displayKm ? '#38bdf8' : 'rgba(255,255,255,0.25)', fontWeight: displayKm ? '800' : 'normal', marginTop: '1px' }}>
+                                                {displayKm ? `${displayKm} KM` : `${(r.fuel?.entries?.length || 1)} fill`}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            )
                             : <span style={{ color: 'rgba(255,255,255,0.15)' }}>—</span>}
                     </TD>
 

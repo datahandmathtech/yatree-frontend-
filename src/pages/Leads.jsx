@@ -853,8 +853,8 @@ export default function Leads() {
             const eDate = toLocalDateString(lead.travelEndDate);
             const todayStr = toLocalDateString(new Date());
             const isConfirmedLead = (lead.status === 'Confirmed' || lead.status === 'Converted' || !!lead.bookingId || Number(lead.advancePayment) > 0) && lead.status !== 'Cancelled' && lead.status !== 'Lost' && lead.priority !== 'Lost';
-            const endOrStart = eDate || sDate;
-            const isAutoLost = lead.status === 'Lost' || lead.priority === 'Lost' || lead.status === 'Cancelled' || (!isConfirmedLead && endOrStart && endOrStart < todayStr);
+            const isDatePassed = (sDate && sDate < todayStr) || (eDate && eDate <= todayStr);
+            const isAutoLost = lead.status === 'Lost' || lead.priority === 'Lost' || lead.status === 'Cancelled' || (!isConfirmedLead && isDatePassed);
             const savedExcluded = Array.isArray(lead.excludedDates) ? lead.excludedDates : [];
             setFormData({
                 bookingReference: lead.bookingReference || 'Direct',
@@ -1501,8 +1501,10 @@ export default function Leads() {
         if (lead.priority === 'Lost' || lead.status === 'Lost' || lead.status === 'Cancelled') return true;
         if (isLeadConfirmed(lead)) return false;
         const todayStr = toLocalDateString(new Date());
-        const eDateStr = toLocalDateString(lead.travelEndDate || lead.travelStartDate);
-        if (eDateStr && eDateStr < todayStr) return true;
+        const sDateStr = toLocalDateString(lead.travelStartDate);
+        const eDateStr = toLocalDateString(lead.travelEndDate);
+        if (sDateStr && sDateStr < todayStr) return true;
+        if (eDateStr && eDateStr <= todayStr) return true;
         return false;
     };
 
@@ -2712,7 +2714,11 @@ export default function Leads() {
                     return (
                         <button
                             key={box.key}
-                            onClick={() => { setPriorityFilter(box.key); setCurrentPage(1); }}
+                            onClick={() => { 
+                                setPriorityFilter(box.key); 
+                                if (box.key === 'Lost' || box.key === 'Sold') setStatusFilter('All');
+                                setCurrentPage(1); 
+                            }}
                             style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',

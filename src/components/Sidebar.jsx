@@ -305,7 +305,6 @@ const Sidebar = ({ isOpen, onClose }) => {
                     <NavItem item={{ path: '/admin/leads', label: 'Open' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/bookings', label: 'Confirmed' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/completed-bookings', label: 'Completed' }} onClick={onClose} isSubItem />
-                    <NavItem item={{ path: '/admin/cancelled-bookings', label: 'Lost' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/client-ledgers?tab=agents', label: 'Travel Agents', labelKey: 'travel_agents' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/client-ledgers', label: 'Client Ledgers', labelKey: 'client_ledgers' }} onClick={onClose} isSubItem />
                     <NavItem item={{ path: '/admin/bank-book', label: 'Bank Book / Ledger', labelKey: 'bank_book' }} onClick={onClose} isSubItem />

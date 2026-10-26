@@ -48,19 +48,29 @@ const isOutsideDuty = (duty) => {
     if (!duty) return false;
     const tripType = String(duty.tripType || duty.bookingRef?.tripType || '').toLowerCase();
     if (tripType.includes('outstation')) return true;
-    if (tripType.includes('local') || tripType.includes('airport') || tripType.includes('city')) return false;
+    if (tripType.includes('local') || tripType.includes('airport') || tripType.includes('city') || tripType.includes('transfer') || tripType.includes('station')) return false;
 
     const text = `${duty.duty || ''} ${duty.itinerary || ''} ${duty.pickupPoint || ''} ${duty.hotel || ''}`.toLowerCase();
 
-    const outsidePatterns = [
-        /\bto\b/, /jaisalmer/, /jodhpur/, /jaipur/, /kumbhalgarh/, /ranakpur/,
+    // 1. Explicit outstation destinations always take precedence
+    const outsideDestinationPatterns = [
+        /jaisalmer/, /jodhpur/, /jaipur/, /kumbhalgarh/, /ranakpur/,
         /mount\s*abu/, /\babu\b/, /nathdwara/, /chittorgarh/, /chittor/, /ahmedabad/,
         /delhi/, /agra/, /pushkar/, /ajmer/, /bikaner/, /outstation/, /outside/,
         /jawai/, /ranthambore/, /barmer/, /falna/, /abu\s*road/, /station\s+drop\s+at/
     ];
 
-    for (const pattern of outsidePatterns) {
+    for (const pattern of outsideDestinationPatterns) {
         if (pattern.test(text)) return true;
+    }
+
+    // 2. Local transfer, railway station, airport pickup/drop, sightseeing are City Local
+    const localPatterns = [
+        /railway/, /station/, /\brs\b/, /airport/, /transfer/, /local/, /sightseeing/,
+        /city/, /pickup/, /drop/, /hotel/
+    ];
+    for (const pattern of localPatterns) {
+        if (pattern.test(text)) return false;
     }
 
     return false;
@@ -262,28 +272,59 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
             }
         });
 
-        // Column-by-column pass: detect continuous booking segments and assign DIFFERENT color themes
+        // Global color map to ensure the EXACT same color across all vehicles for any multi-day package / booking / guest
+        const globalPackageColors = new Map();
+        let globalPaletteIndex = 0;
+
+        const getPackageTheme = (key) => {
+            if (!key) return PACKAGE_PALETTE[0];
+            const cleanKey = String(key).trim().toLowerCase();
+            if (globalPackageColors.has(cleanKey)) {
+                return globalPackageColors.get(cleanKey);
+            }
+            const theme = PACKAGE_PALETTE[globalPaletteIndex % PACKAGE_PALETTE.length];
+            globalPaletteIndex++;
+            globalPackageColors.set(cleanKey, theme);
+            return theme;
+        };
+
+        // Pre-scan all duties across all rows to assign a stable, sequential color per package / booking / guest
+        rows.forEach(row => {
+            row.carSlots.forEach(slot => {
+                if (slot.isBooked && slot.duties.length > 0) {
+                    const primary = slot.duties[0];
+                    const bkgKey = primary.bookingId || primary.bookingRef?.clientCode || (typeof primary.bookingRef === 'string' ? primary.bookingRef : primary.bookingRef?._id) || primary.clientName || 'duty';
+                    getPackageTheme(bkgKey);
+                }
+            });
+        });
+
+        // Column-by-column pass: detect continuous booking segments and assign package colors
         fleetColumns.forEach((col, cIdx) => {
             let currentSegmentKey = null;
-            let currentPaletteIdx = -1;
             let segmentDays = [];
 
             const flushSegment = () => {
                 if (segmentDays.length === 0) return;
-                const chosenTheme = PACKAGE_PALETTE[currentPaletteIdx % PACKAGE_PALETTE.length];
 
-                // Detect if booking spans across month boundaries
-                const primaryBkgId = segmentDays[0]?.slot?.duties?.[0]?.bookingId;
+                // Detect if booking spans across month boundaries or vehicles
+                const primaryDuty = segmentDays[0]?.slot?.duties?.[0];
+                const primaryBkgId = primaryDuty?.bookingId;
+                const guestName = primaryDuty?.clientName;
+                const packageKey = primaryBkgId || primaryDuty?.bookingRef?.clientCode || (typeof primaryDuty?.bookingRef === 'string' ? primaryDuty?.bookingRef : primaryDuty?.bookingRef?._id) || guestName || currentSegmentKey;
+                const chosenTheme = getPackageTheme(packageKey);
+
                 const allMatchingDuties = primaryBkgId
                     ? duties.filter(d => d.bookingId === primaryBkgId)
-                    : [];
+                    : (guestName ? duties.filter(d => (d.clientName || '').toLowerCase() === guestName.toLowerCase()) : []);
                 const matchingBkg = primaryBkgId
                     ? bookings.find(b => b.bookingId === primaryBkgId)
-                    : null;
+                    : (guestName ? bookings.find(b => (b.clientName || '').toLowerCase() === guestName.toLowerCase()) : null);
 
                 const allDatesSet = new Set([
                     ...allMatchingDuties.map(d => d.date ? new Date(d.date).toISOString().split('T')[0] : '').filter(Boolean),
-                    ...(matchingBkg?.itinerary || []).map(it => it.date ? String(it.date).slice(0, 10) : '').filter(Boolean)
+                    ...(matchingBkg?.itinerary || []).map(it => it.date ? String(it.date).slice(0, 10) : '').filter(Boolean),
+                    ...segmentDays.map(item => rows[item.rowIdx]?.dateStr).filter(Boolean)
                 ]);
                 const sortedPackageDates = [...allDatesSet].sort();
 
@@ -314,13 +355,11 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                 if (slot.isBooked && slot.duties.length > 0) {
                     // Extract primary booking / client key
                     const primary = slot.duties[0];
-                    const bkgKey = primary.bookingId || primary.bookingRef?.clientCode || primary.bookingRef?._id || primary.clientName || 'duty';
+                    const bkgKey = primary.bookingId || primary.bookingRef?.clientCode || (typeof primary.bookingRef === 'string' ? primary.bookingRef : primary.bookingRef?._id) || primary.clientName || 'duty';
 
                     if (bkgKey !== currentSegmentKey) {
                         flushSegment();
                         currentSegmentKey = bkgKey;
-                        // Cycle to next distinct color from palette (no red, no yellow)
-                        currentPaletteIdx = (currentPaletteIdx + 1) % PACKAGE_PALETTE.length;
                     }
 
                     // Extract drivers & trip scope
@@ -473,13 +512,11 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
             }
         }
 
-        // 3. By clientName & car if package
-        if (selectedCellData.slot?.isPackage) {
+        // 3. By clientName if package (spans across multiple vehicles)
+        if (selectedCellData.slot?.isPackage && clientName) {
             const matches = duties.filter(d => {
-                const dCar = (d.vehicle?.carNumber || d.customCarNumber || '').replace(/[^0-9]/g, '');
-                const sameCar = carNumStr ? dCar.includes(carNumStr) : true;
                 const sameClient = (d.clientName || '').trim().toLowerCase() === clientName;
-                return sameCar && sameClient;
+                return sameClient;
             });
             if (matches.length > 1) {
                 return [...matches].sort((a, b) => new Date(a.date) - new Date(b.date));
