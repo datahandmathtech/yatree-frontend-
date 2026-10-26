@@ -1922,12 +1922,11 @@ export default function Bookings() {
                                     <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', display: 'block', marginBottom: '4px' }}>Payment Mode</label>
                                     <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} className="premium-compact-input" style={{ width: '100%', height: '40px' }}>
                                         <option value="Cash">💵 Cash to Company (Cash Book)</option>
-                                        <option value="Driver Cash">💵 Driver Cash in Hand (Cash Book)</option>
                                         <option value="UPI / QR Code">📱 UPI / QR Code (Bank Account)</option>
                                         <option value="Bank Transfer / NEFT">🏦 Bank Transfer / NEFT</option>
                                     </select>
                                 </div>
-                                {!(paymentMode === 'Cash' || paymentMode === 'Driver Cash') && (
+                                {paymentMode !== 'Cash' && (
                                     <BankSelector
                                         bankAccounts={bankAccounts}
                                         value={bankAccountId}

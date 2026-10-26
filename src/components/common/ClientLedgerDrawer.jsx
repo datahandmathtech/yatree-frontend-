@@ -626,7 +626,6 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                                                 <option value="Fuel (Guest)">⛽ Fuel Paid by Guest (Deducted from Balance)</option>
                                             )}
                                             <option value="Cash to Company">💵 Cash to Company (Cash Book)</option>
-                                            <option value="Driver Cash">💵 Driver Cash in Hand (Cash Book)</option>
                                             {bankAccounts.map(b => (
                                                 <option key={b._id} value={b.bankName}>
                                                     🏦 {b.bankName} - {b.accountNumber} ({b.accountHolderName})

@@ -6592,7 +6592,6 @@ export default function Leads() {
                                         <option value="UPI / QR Code">UPI / QR Code</option>
                                         <option value="Bank Transfer / NEFT">Bank Transfer / NEFT</option>
                                         <option value="Cash">Cash to Company</option>
-                                        <option value="Driver Cash">Driver Cash in Hand</option>
                                     </select>
                                 </div>
 

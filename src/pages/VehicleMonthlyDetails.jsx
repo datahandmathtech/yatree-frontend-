@@ -18,7 +18,12 @@ import {
     History,
     Zap,
     Layers,
-    CarFrontIcon
+    CarFrontIcon,
+    TrendingUp,
+    TrendingDown,
+    Wallet,
+    DollarSign,
+    Fuel
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCompany } from '../context/CompanyContext';
@@ -125,8 +130,7 @@ const VehicleMonthlyDetails = () => {
     const totalFuelAmount = filteredData.reduce((sum, v) => sum + (v.fuel?.totalAmount || 0), 0);
     const totalDriverSalary = filteredData.reduce((sum, v) => sum + (v.driverSalary || 0), 0);
     
-    // Process "Other" maintenance and Combined Services
-    // Process "Maintenance" (Mechanical) vs "Misc. Repairs" vs "Operational Services"
+    // Process "Other" maintenance and Combined Services + DRS Earnings / Net Profit
     const processedData = filteredData.map(v => {
         // Standardized Operational Service Regex
         const operationalRegex = /wash|washing|cleaning|tissue|water|mask|sanitizer|kapda|punc|puncture|puncher|parking/i;
@@ -161,7 +165,23 @@ const VehicleMonthlyDetails = () => {
                                     (v.parking?.totalAmount || 0) + 
                                     maintOpsAmount;
 
-        return { ...v, otherAmount, baseMaintAmount, combinedServiceAmount, otherRecords, mechanicalRecs };
+        const carEarnings = Number(v.totalEarnings || 0);
+        const carTotalExpense = (v.driverSalary || 0) + (v.fuel?.totalAmount || 0) + (baseMaintAmount || 0) + (otherAmount || 0) + (combinedServiceAmount || 0);
+        const carNetProfit = carEarnings - carTotalExpense;
+        const profitMargin = carEarnings > 0 ? Number(((carNetProfit / carEarnings) * 100).toFixed(1)) : 0;
+
+        return {
+            ...v,
+            otherAmount,
+            baseMaintAmount,
+            combinedServiceAmount,
+            otherRecords,
+            mechanicalRecs,
+            carEarnings,
+            carTotalExpense,
+            carNetProfit,
+            profitMargin
+        };
     });
 
     const totalServiceAmount = processedData.reduce((sum, v) => sum + v.combinedServiceAmount, 0);
@@ -169,16 +189,22 @@ const VehicleMonthlyDetails = () => {
     const totalMiscAmount = processedData.reduce((sum, v) => sum + v.otherAmount, 0);
     const totalFastagAmount = filteredData.reduce((sum, v) => sum + (v.fastag?.totalAmount || 0), 0);
     const totalBorderTaxAmount = filteredData.reduce((sum, v) => sum + (v.borderTax?.totalAmount || 0), 0);
-    
     const totalParking = filteredData.reduce((sum, v) => sum + (v.parking?.totalAmount || 0), 0);
-    // Calculate Grand Total directly from individual components of filtered data
-    const grandTotal = totalFuelAmount + totalDriverSalary + totalMaintAmount + totalMiscAmount + totalServiceAmount;
+
+    // Fleet Totals: Earnings, Expenses & Net Profit
+    const totalFleetEarnings = processedData.reduce((sum, v) => sum + (v.carEarnings || 0), 0);
+    const grandTotalExpense = totalFuelAmount + totalDriverSalary + totalMaintAmount + totalMiscAmount + totalServiceAmount;
+    const totalFleetNetProfit = totalFleetEarnings - grandTotalExpense;
+    const fleetNetMargin = totalFleetEarnings > 0 ? Number(((totalFleetNetProfit / totalFleetEarnings) * 100).toFixed(1)) : 0;
 
     const downloadExcel = () => {
         const exportData = processedData.map(v => ({
             'Vehicle Number': v.carNumber,
             'Model': v.model,
             'Drivers': v.drivers?.join(', ') || 'Unassigned',
+            'Trips Completed': v.dutyCount || 0,
+            'Days Booked': v.bookedDays || 0,
+            'Total Earnings / Sale (₹)': v.carEarnings || 0,
             'Total Distance (KM)': v.totalDistance || 0,
             'Fuel Volume (L)': (v.fuel?.totalQuantity || 0).toFixed(2),
             'Average KM/L': (v.fuel?.avgMileage || 0).toFixed(2),
@@ -187,38 +213,42 @@ const VehicleMonthlyDetails = () => {
             'Wash / Fastag / Tax / Parking (₹)': v.combinedServiceAmount,
             'Mechanical Maintenance (₹)': v.baseMaintAmount || 0,
             'Driver Salary (₹)': v.driverSalary || 0,
-            'Total Month Expense (₹)': (v.fuel?.totalAmount || 0) + (v.maintenance?.totalAmount || 0) + (v.services?.wash?.amount || 0) + (v.services?.puncture?.amount || 0) + (v.driverSalary || 0) + (v.parking?.totalAmount || 0) + (v.fastag?.totalAmount || 0) + (v.borderTax?.totalAmount || 0)
+            'Total Month Expense (₹)': v.carTotalExpense,
+            'Net Profit / Loss (₹)': v.carNetProfit,
+            'Profit Margin (%)': `${v.profitMargin}%`
         }));
 
         const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Car Logs');
-        XLSX.writeFile(wb, `Car_Logs_Report_${month}_${year}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, 'Car Logs & PnL');
+        XLSX.writeFile(wb, `Car_Logs_Profit_Loss_${month}_${year}.xlsx`);
     };
 
     const SummaryCard = ({ icon: Icon, label, value, color, subValue, displayOverride }) => (
         <div style={{
-            background: 'rgba(30, 41, 59, 0.4)',
-            border: '1px solid rgba(255,255,255,0.05)',
+            background: 'rgba(30, 41, 59, 0.45)',
+            border: '1px solid rgba(255,255,255,0.06)',
             borderRadius: '20px',
-            padding: '20px',
+            padding: '18px 20px',
             display: 'flex',
             alignItems: 'center',
-            gap: '15px',
-            flex: '1',
+            justifyContent: 'space-between',
+            gap: '12px',
             minWidth: '200px'
         }}>
-            <div style={{ width: '45px', height: '45px', borderRadius: '14px', background: `${color}15`, display: 'flex', justifyContent: 'center', alignItems: 'center', color: color, border: `1px solid ${color}20` }}>
-                <Icon size={22} />
-            </div>
             <div>
-                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>{label}</div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                    <div style={{ fontSize: '20px', color: 'white', fontWeight: '900' }}>
-                        {displayOverride ? displayOverride : `₹${(value || 0).toLocaleString()}`}
-                    </div>
-                    {subValue && <div style={{ fontSize: '12px', color: color, fontWeight: '800' }}>{subValue}</div>}
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>{label}</div>
+                <div style={{ fontSize: '22px', color: 'white', fontWeight: '950' }}>
+                    {displayOverride ? displayOverride : `₹${(value || 0).toLocaleString()}`}
                 </div>
+                {subValue ? (
+                    <div style={{ fontSize: '11px', color: color, fontWeight: '800', marginTop: '3px' }}>{subValue}</div>
+                ) : (
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', fontWeight: '700', marginTop: '3px' }}>Operational Expense</div>
+                )}
+            </div>
+            <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: `${color}18`, display: 'flex', justifyContent: 'center', alignItems: 'center', color: color, border: `1px solid ${color}30`, flexShrink: 0 }}>
+                <Icon size={20} />
             </div>
         </div>
     );
@@ -277,44 +307,112 @@ const VehicleMonthlyDetails = () => {
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '30px' }}>
+                {/* Primary PnL Executive Summary (Row 1: 3 cards) */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+                    {/* Total Fleet Revenue */}
+                    <div style={{
+                        background: 'rgba(16, 185, 129, 0.08)',
+                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                        borderRadius: '20px',
+                        padding: '22px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '15px'
+                    }}>
+                        <div>
+                            <div style={{ fontSize: '11px', color: '#34d399', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Total Fleet Revenue</div>
+                            <div style={{ fontSize: '26px', color: 'white', fontWeight: '950' }}>₹{totalFleetEarnings.toLocaleString()}</div>
+                            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', marginTop: '4px', fontWeight: '700' }}>
+                                {filteredData.reduce((sum, v) => sum + (v.dutyCount || 0), 0)} Completed Trips
+                            </div>
+                        </div>
+                        <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(16, 185, 129, 0.3)', flexShrink: 0 }}>
+                            <TrendingUp size={24} color="#10b981" />
+                        </div>
+                    </div>
+
+                    {/* Total Operating Expenses */}
+                    <div style={{
+                        background: 'rgba(239, 68, 68, 0.08)',
+                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                        borderRadius: '20px',
+                        padding: '22px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '15px'
+                    }}>
+                        <div>
+                            <div style={{ fontSize: '11px', color: '#f87171', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Total Fleet Expenses</div>
+                            <div style={{ fontSize: '26px', color: 'white', fontWeight: '950' }}>₹{grandTotalExpense.toLocaleString()}</div>
+                            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', marginTop: '4px', fontWeight: '700' }}>
+                                Fuel, Wages, Maintenance & Ops
+                            </div>
+                        </div>
+                        <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(239, 68, 68, 0.3)', flexShrink: 0 }}>
+                            <TrendingDown size={24} color="#ef4444" />
+                        </div>
+                    </div>
+
+                    {/* Fleet Net Profit / Loss */}
+                    <div style={{
+                        background: totalFleetNetProfit >= 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                        border: `1px solid ${totalFleetNetProfit >= 0 ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
+                        borderRadius: '20px',
+                        padding: '22px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '15px'
+                    }}>
+                        <div>
+                            <div style={{ fontSize: '11px', color: totalFleetNetProfit >= 0 ? '#34d399' : '#f87171', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>
+                                Fleet Net {totalFleetNetProfit >= 0 ? 'Profit' : 'Loss'}
+                            </div>
+                            <div style={{ fontSize: '26px', color: totalFleetNetProfit >= 0 ? '#34d399' : '#f87171', fontWeight: '950' }}>
+                                {totalFleetNetProfit >= 0 ? `+₹${totalFleetNetProfit.toLocaleString()}` : `-₹${Math.abs(totalFleetNetProfit).toLocaleString()}`}
+                            </div>
+                            <div style={{ fontSize: '12px', color: totalFleetNetProfit >= 0 ? '#34d399' : '#f87171', marginTop: '4px', fontWeight: '800' }}>
+                                {fleetNetMargin}% Net Margin
+                            </div>
+                        </div>
+                        <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: totalFleetNetProfit >= 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${totalFleetNetProfit >= 0 ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`, flexShrink: 0 }}>
+                            <Wallet size={24} color={totalFleetNetProfit >= 0 ? '#34d399' : '#f87171'} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Expense Breakdown Categories (Row 2: 4 cards) */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '16px', marginBottom: '25px' }}>
                     <SummaryCard
                         icon={User}
                         label="Driver Salaries"
                         value={totalDriverSalary}
                         color="#a855f7"
+                        subValue={`${[...new Set(processedData.flatMap(v => v.drivers || []))].length} Drivers`}
                     />
                     <SummaryCard
                         icon={Droplets}
                         label="Monthly Fuel"
                         value={totalFuelAmount}
-                        color="var(--primary)"
-                        subValue={`${filteredData.reduce((sum, v) => sum + (v.fuel?.totalQuantity || 0), 0).toFixed(1)}L`}
+                        color="#38bdf8"
+                        subValue={`${filteredData.reduce((sum, v) => sum + (v.fuel?.totalQuantity || 0), 0).toFixed(1)}L Consumed`}
                     />
-
-                    <SummaryCard icon={MapPin} label="Misc. Repairs" value={totalMiscAmount} color="#ec4899" />
-                    <SummaryCard icon={Wrench} label="Repairs & Maint." value={totalMaintAmount} color="var(--primary)" />
-
+                    <SummaryCard
+                        icon={Wrench}
+                        label="Repairs & Maint."
+                        value={totalMaintAmount + totalMiscAmount}
+                        color="#f59e0b"
+                        subValue="Mechanical & Repairs"
+                    />
                     <SummaryCard
                         icon={Layers}
-                        label="Wash / Tax / Fastag / Parking"
+                        label="Wash / Tax / Fastag"
                         value={totalServiceAmount}
-                        color="#12b886"
+                        color="#818cf8"
+                        subValue="Tolls, Taxes & Operations"
                     />
-
-                    <div style={{
-                        background: 'linear-gradient(135deg, var(--primary), var(--primary))',
-                        borderRadius: '20px',
-                        padding: '20px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'center',
-                        boxShadow: '0 15px 30px rgba(14, 165, 233, 0.2)',
-                        minWidth: '200px'
-                    }}>
-                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Grand Total Expense</div>
-                        <div style={{ fontSize: '24px', color: 'white', fontWeight: '950' }}>₹{grandTotal.toLocaleString()}</div>
-                    </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', marginBottom: '10px', alignItems: 'center' }}>
@@ -371,40 +469,93 @@ const VehicleMonthlyDetails = () => {
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0' }}>
                         <thead>
-                            <tr style={{ textAlign: 'left', background: 'rgba(0,0,0,0.1)' }}>
-                                <th style={{ padding: '20px 25px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Vehicle</th>
-                                <th style={{ padding: '20px 25px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Driver Salary</th>
-                                <th style={{ padding: '20px 25px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Fuel & Avg</th>
-                                <th style={{ padding: '20px 25px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Maintenance</th>
-                                <th style={{ padding: '20px 25px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Misc. Repairs</th>
-                                <th style={{ padding: '20px 25px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Wash / Tax / Fastag / Parking</th>
-                                <th style={{ padding: '20px 25px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', textAlign: 'right' }}>Total Amount</th>
+                            <tr style={{ textAlign: 'left', background: 'rgba(0,0,0,0.15)' }}>
+                                <th style={{ padding: '20px 20px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Vehicle</th>
+                                <th style={{ padding: '20px 20px', color: '#10b981', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Revenue</th>
+                                <th style={{ padding: '20px 20px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Driver Salary</th>
+                                <th style={{ padding: '20px 20px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Fuel & Avg</th>
+                                <th style={{ padding: '20px 20px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Maintenance</th>
+                                <th style={{ padding: '20px 20px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Misc. Repairs</th>
+                                <th style={{ padding: '20px 20px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Wash / Fastag / Tax</th>
+                                <th style={{ padding: '20px 20px', color: '#f87171', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Expenses</th>
+                                <th style={{ padding: '20px 20px', color: 'rgba(255,255,255,0.6)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Net Profit / Loss</th>
+                                <th style={{ padding: '20px 20px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', textAlign: 'center' }}>Audit</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loading ? (
-                                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '100px', color: 'white', fontWeight: '800' }}>Aggregating monthly reports...</td></tr>
+                                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '100px', color: 'white', fontWeight: '800' }}>Aggregating monthly reports...</td></tr>
                             ) : processedData.length === 0 ? (
-                                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '100px', color: 'rgba(255,255,255,0.2)', fontWeight: '800' }}>No records found for this period.</td></tr>
+                                <tr><td colSpan="10" style={{ textAlign: 'center', padding: '100px', color: 'rgba(255,255,255,0.2)', fontWeight: '800' }}>No records found for this period.</td></tr>
                             ) : (
                                 processedData.map((v, idx) => (
                                     <motion.tr
-                                        key={v.vehicleId}
+                                        key={v.vehicleId || idx}
                                         initial={{ opacity: 0, x: -10 }}
                                         animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: idx * 0.03 }}
+                                        transition={{ delay: idx * 0.02 }}
                                         style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}
                                         whileHover={{ background: 'rgba(255,255,255,0.02)' }}
                                     >
-                                        <td style={{ padding: '20px 25px' }}>
-                                            <div style={{ color: 'white', fontWeight: '900', fontSize: '16px', letterSpacing: '-0.5px' }}>{v.carNumber}</div>
-                                            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', fontWeight: '700' }}>{v.model}</div>
+                                        {/* Vehicle */}
+                                        <td style={{ padding: '18px 20px' }}>
+                                            <div style={{ color: 'white', fontWeight: '900', fontSize: '15px', letterSpacing: '-0.5px' }}>{v.carNumber}</div>
+                                            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px', fontWeight: '700' }}>{v.model || 'Commercial'}</div>
                                         </td>
-                                        <td style={{ padding: '20px 25px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <div style={{ color: '#a855f7', fontWeight: '900', fontSize: '15px' }}>₹{(v.driverSalary || 0).toLocaleString()}</div>
+
+                                        {/* Total Revenue */}
+                                        <td style={{ padding: '18px 20px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <TrendingUp size={16} color="#10b981" />
+                                                <div style={{ color: '#10b981', fontWeight: '950', fontSize: '16px' }}>
+                                                    ₹{(v.carEarnings || 0).toLocaleString()}
+                                                </div>
                                             </div>
-                                            <div style={{ marginTop: '10px' }}>
+                                            <div style={{ display: 'flex', gap: '5px', marginTop: '6px', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(16, 185, 129, 0.1)', color: '#34d399', borderRadius: '6px', fontWeight: '800' }}>
+                                                    {v.dutyCount || 0} Trips
+                                                </span>
+                                                <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(255, 255, 255, 0.05)', color: 'rgba(255,255,255,0.5)', borderRadius: '6px', fontWeight: '800' }}>
+                                                    {v.bookedDays || 0} Days
+                                                </span>
+                                            </div>
+                                            {v.duties && v.duties.length > 0 ? (
+                                                <div style={{ marginTop: '8px' }}>
+                                                    <select
+                                                        value=""
+                                                        onChange={() => { }}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        style={{
+                                                            width: '100%',
+                                                            maxWidth: '190px',
+                                                            padding: '5px 8px',
+                                                            background: 'rgba(16, 185, 129, 0.08)',
+                                                            border: '1px solid rgba(16, 185, 129, 0.25)',
+                                                            borderRadius: '8px',
+                                                            color: '#34d399',
+                                                            fontSize: '11px',
+                                                            fontWeight: '800',
+                                                            outline: 'none',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    >
+                                                        <option value="" hidden>{v.duties.length} Trips Details</option>
+                                                        {v.duties.map((d, i) => (
+                                                            <option key={i} value={i} style={{ background: '#0f172a', color: 'white' }}>
+                                                                {formatDateIST(d.date)} - {d.clientName || 'Trip'} - ₹{(d.revenue || 0).toLocaleString()}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            ) : (
+                                                <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '11px', fontWeight: '700', marginTop: '6px' }}>No Trips Logged</div>
+                                            )}
+                                        </td>
+
+                                        {/* Driver Salary */}
+                                        <td style={{ padding: '18px 20px' }}>
+                                            <div style={{ color: '#a855f7', fontWeight: '900', fontSize: '15px' }}>₹{(v.driverSalary || 0).toLocaleString()}</div>
+                                            <div style={{ marginTop: '8px' }}>
                                                 {v.drivers?.length > 0 ? (
                                                     <select
                                                         value=""
@@ -412,8 +563,8 @@ const VehicleMonthlyDetails = () => {
                                                         onClick={(e) => e.stopPropagation()}
                                                         style={{
                                                             width: '100%',
-                                                            maxWidth: '180px',
-                                                            padding: '6px 10px',
+                                                            maxWidth: '170px',
+                                                            padding: '5px 8px',
                                                             background: 'rgba(168, 85, 247, 0.08)',
                                                             border: '1px solid rgba(168, 85, 247, 0.2)',
                                                             borderRadius: '8px',
@@ -442,14 +593,16 @@ const VehicleMonthlyDetails = () => {
                                                 ) : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '11px', fontWeight: '700' }}>Unassigned</span>}
                                             </div>
                                         </td>
-                                        <td style={{ padding: '20px 25px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                                                <div style={{ color: 'white', fontWeight: '900', fontSize: '16px' }}>₹{(v.fuel?.totalAmount || 0).toLocaleString()}</div>
-                                                <div style={{ color: '#10b981', fontSize: '11px', fontWeight: '900', background: 'rgba(16,185,129,0.12)', padding: '2px 6px', borderRadius: '6px', border: '1px solid rgba(16,185,129,0.1)' }}>{(v.fuel?.totalQuantity || 0).toFixed(1)} L</div>
+
+                                        {/* Fuel & Avg */}
+                                        <td style={{ padding: '18px 20px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                                                <div style={{ color: 'white', fontWeight: '900', fontSize: '15px' }}>₹{(v.fuel?.totalAmount || 0).toLocaleString()}</div>
+                                                <div style={{ color: '#10b981', fontSize: '10px', fontWeight: '900', background: 'rgba(16,185,129,0.12)', padding: '2px 5px', borderRadius: '5px', border: '1px solid rgba(16,185,129,0.1)' }}>{(v.fuel?.totalQuantity || 0).toFixed(1)} L</div>
                                             </div>
-                                            <div style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: '800', marginBottom: '8px' }}>Avg: {(v.fuel?.avgMileage || 0).toFixed(2)} km/L</div>
+                                            <div style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: '800', marginBottom: '6px' }}>Avg: {(v.fuel?.avgMileage || 0).toFixed(2)} km/L</div>
                                             {v.fuel?.records?.length > 0 ? (
-                                                <select value="" onChange={() => { }} onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '140px', padding: '6px 10px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '8px', color: '#10b981', fontSize: '11px', fontWeight: '800', outline: 'none', cursor: 'pointer' }}>
+                                                <select value="" onChange={() => { }} onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '140px', padding: '5px 8px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '8px', color: '#10b981', fontSize: '11px', fontWeight: '800', outline: 'none', cursor: 'pointer' }}>
                                                     <option value="" hidden>{v.fuel.records.length} Fills</option>
                                                     {v.fuel.records.map((f, i) => (
                                                         <option key={i} value={i} style={{ background: '#0f172a', color: 'white' }}>
@@ -459,11 +612,13 @@ const VehicleMonthlyDetails = () => {
                                                 </select>
                                             ) : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '11px', fontWeight: '700' }}>No Records</span>}
                                         </td>
-                                        <td style={{ padding: '20px 25px' }}>
+
+                                        {/* Maintenance */}
+                                        <td style={{ padding: '18px 20px' }}>
                                             <div style={{ color: 'var(--primary)', fontWeight: '900', fontSize: '15px' }}>₹{(v.baseMaintAmount || 0).toLocaleString()}</div>
-                                            <div style={{ marginTop: '8px' }}>
+                                            <div style={{ marginTop: '6px' }}>
                                                 {v.mechanicalRecs?.filter(r => !(v.otherRecords || []).includes(r)).length > 0 ? (
-                                                    <select value="" onChange={() => { }} onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '180px', padding: '6px 10px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: '8px', color: '#fcd34d', fontSize: '11px', fontWeight: '800', outline: 'none', cursor: 'pointer' }}>
+                                                    <select value="" onChange={() => { }} onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '160px', padding: '5px 8px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: '8px', color: '#fcd34d', fontSize: '11px', fontWeight: '800', outline: 'none', cursor: 'pointer' }}>
                                                         <option value="" hidden>View Jobs</option>
                                                         {v.mechanicalRecs.filter(r => !(v.otherRecords || []).includes(r)).map((m, i) => (
                                                             <option key={i} value={i} style={{ background: '#0f172a', color: 'white' }}>{formatDateIST(m.date)} - {m.category || 'Repair'} - ₹{m.amount.toLocaleString()}</option>
@@ -472,12 +627,14 @@ const VehicleMonthlyDetails = () => {
                                                 ) : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '11px', fontWeight: '700' }}>No Logs</span>}
                                             </div>
                                         </td>
-                                        <td style={{ padding: '20px 25px' }}>
+
+                                        {/* Misc Repairs */}
+                                        <td style={{ padding: '18px 20px' }}>
                                             <div style={{ color: '#ec4899', fontWeight: '900', fontSize: '15px' }}>₹{(v.otherAmount || 0).toLocaleString()}</div>
-                                            <div style={{ marginTop: '8px' }}>
+                                            <div style={{ marginTop: '6px' }}>
                                                 {v.otherRecords?.length > 0 ? (
-                                                    <select value="" onChange={() => { }} onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '180px', padding: '6px 10px', background: 'rgba(236, 72, 153, 0.1)', border: '1px solid rgba(236, 72, 153, 0.25)', borderRadius: '8px', color: '#f9a8d4', fontSize: '11px', fontWeight: '800', outline: 'none', cursor: 'pointer' }}>
-                                                        <option value="" hidden>View {v.otherRecords.length} Logs</option>
+                                                    <select value="" onChange={() => { }} onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '160px', padding: '5px 8px', background: 'rgba(236, 72, 153, 0.1)', border: '1px solid rgba(236, 72, 153, 0.25)', borderRadius: '8px', color: '#f9a8d4', fontSize: '11px', fontWeight: '800', outline: 'none', cursor: 'pointer' }}>
+                                                        <option value="" hidden>{v.otherRecords.length} Logs</option>
                                                         {v.otherRecords.map((p, i) => (
                                                             <option key={i} value={i} style={{ background: '#0f172a', color: 'white' }}>
                                                                 {formatDateIST(p.date || p.billDate)} - {p.category || 'Misc'} - ₹{p.amount.toLocaleString()}
@@ -487,14 +644,16 @@ const VehicleMonthlyDetails = () => {
                                                 ) : <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '11px', fontWeight: '700' }}>No Logs</span>}
                                             </div>
                                         </td>
-                                        <td style={{ padding: '20px 25px' }}>
+
+                                        {/* Wash / Fastag / Tax */}
+                                        <td style={{ padding: '18px 20px' }}>
                                             <div style={{ color: '#818cf8', fontWeight: '900', fontSize: '15px' }}>₹{(v.combinedServiceAmount || 0).toLocaleString()}</div>
-                                            <div style={{ display: 'flex', gap: '4px', marginTop: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                                            <div style={{ display: 'flex', gap: '4px', marginTop: '6px', flexWrap: 'wrap', marginBottom: '6px' }}>
                                                 {((v.services?.wash?.amount || 0) > 0) && <span style={{ fontSize: '9px', padding: '2px 4px', background: 'rgba(129, 140, 248, 0.1)', color: '#818cf8', borderRadius: '4px', fontWeight: '800' }}>WASH</span>}
                                                 {(v.fastag?.totalAmount > 0) && <span style={{ fontSize: '9px', padding: '2px 4px', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', borderRadius: '4px', fontWeight: '800' }}>FASTAG</span>}
                                                 {(v.borderTax?.totalAmount > 0) && <span style={{ fontSize: '9px', padding: '2px 4px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', borderRadius: '4px', fontWeight: '800' }}>TAX</span>}
                                             </div>
-                                            <select value="" onChange={() => { }} onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '180px', padding: '6px 10px', background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '8px', color: '#818cf8', fontSize: '11px', fontWeight: '800', outline: 'none', cursor: 'pointer' }}>
+                                            <select value="" onChange={() => { }} onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '160px', padding: '5px 8px', background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.2)', borderRadius: '8px', color: '#818cf8', fontSize: '11px', fontWeight: '800', outline: 'none', cursor: 'pointer' }}>
                                                 <option value="" hidden>Breakdown</option>
                                                 <option value="wash" style={{ background: '#0f172a', color: 'white' }}>Wash/Ops: ₹{((v.services?.wash?.amount || 0) + (v.services?.puncture?.amount || 0) + (v.maintOpsAmount || 0)).toLocaleString()}</option>
                                                 <option value="fastag" style={{ background: '#0f172a', color: 'white' }}>Fastag: ₹{(v.fastag?.totalAmount || 0).toLocaleString()}</option>
@@ -502,11 +661,71 @@ const VehicleMonthlyDetails = () => {
                                                 <option value="parking" style={{ background: '#0f172a', color: 'white' }}>Parking: ₹{(v.parking?.totalAmount || 0).toLocaleString()}</option>
                                             </select>
                                         </td>
-                                        <td style={{ padding: '20px 25px', textAlign: 'right' }}>
-                                            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontWeight: '900', textTransform: 'uppercase', marginBottom: '4px' }}>Total Cost</div>
-                                            <div style={{ color: '#10b981', fontWeight: '950', fontSize: '18px', letterSpacing: '-0.5px' }}>
-                                                ₹{( (v.driverSalary || 0) + (v.fuel?.totalAmount || 0) + (v.baseMaintAmount || 0) + (v.otherAmount || 0) + (v.combinedServiceAmount || 0) ).toLocaleString()}
+
+                                        {/* Total Operating Expenses */}
+                                        <td style={{ padding: '18px 20px' }}>
+                                            <div style={{ color: '#f87171', fontWeight: '950', fontSize: '16px', letterSpacing: '-0.5px' }}>
+                                                ₹{(v.carTotalExpense || 0).toLocaleString()}
                                             </div>
+                                            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', fontWeight: '700', marginTop: '4px' }}>
+                                                All Ops & Wages
+                                            </div>
+                                        </td>
+
+                                        {/* Net Profit / Loss */}
+                                        <td style={{ padding: '18px 20px' }}>
+                                            <div style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                padding: '4px 10px',
+                                                borderRadius: '10px',
+                                                background: v.carNetProfit >= 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                                border: `1px solid ${v.carNetProfit >= 0 ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)'}`
+                                            }}>
+                                                {v.carNetProfit >= 0 ? (
+                                                    <TrendingUp size={14} color="#34d399" />
+                                                ) : (
+                                                    <TrendingDown size={14} color="#f87171" />
+                                                )}
+                                                <span style={{
+                                                    color: v.carNetProfit >= 0 ? '#34d399' : '#f87171',
+                                                    fontWeight: '950',
+                                                    fontSize: '15px'
+                                                }}>
+                                                    {v.carNetProfit >= 0 ? '+' : ''}₹{v.carNetProfit.toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <div style={{
+                                                fontSize: '11px',
+                                                color: v.carNetProfit >= 0 ? '#10b981' : '#f87171',
+                                                fontWeight: '800',
+                                                marginTop: '4px'
+                                            }}>
+                                                {v.profitMargin}% {v.carNetProfit >= 0 ? 'Margin' : 'Loss'}
+                                            </div>
+                                        </td>
+
+                                        {/* Audit Button */}
+                                        <td style={{ padding: '18px 20px', textAlign: 'center' }}>
+                                            <button
+                                                onClick={() => setSelectedVehicle(v)}
+                                                style={{
+                                                    background: 'rgba(14, 165, 233, 0.12)',
+                                                    color: 'var(--primary)',
+                                                    border: '1px solid rgba(14, 165, 233, 0.25)',
+                                                    padding: '8px 14px',
+                                                    borderRadius: '10px',
+                                                    cursor: 'pointer',
+                                                    fontSize: '11px',
+                                                    fontWeight: '900',
+                                                    transition: 'all 0.2s',
+                                                    letterSpacing: '0.5px'
+                                                }}
+                                                className="btn-hover-glow"
+                                            >
+                                                VIEW AUDIT
+                                            </button>
                                         </td>
                                     </motion.tr>
                                 ))
@@ -516,88 +735,162 @@ const VehicleMonthlyDetails = () => {
                 </div>
             </div>
 
-            {/* Repair Details Modal */}
+            {/* Repair & Earnings Details Audit Modal */}
             <AnimatePresence>
                 {selectedVehicle && (
-                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(15px)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
-                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-                            style={{ width: '100%', maxWidth: '750px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '32px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', overflowX: 'hidden' }}>
-                            <div style={{ padding: '30px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: 'rgba(255,255,255,0.02)', position: 'sticky', top: 0, zIndex: 10, backdropFilter: 'blur(20px)' }}>
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(15px)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                            style={{ width: '100%', maxWidth: '1050px', maxHeight: '92vh', overflowY: 'auto', borderRadius: '32px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', overflowX: 'hidden', boxShadow: '0 25px 60px rgba(0,0,0,0.5)' }}>
+                            <div style={{ padding: '25px 30px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', position: 'sticky', top: 0, zIndex: 10, backdropFilter: 'blur(20px)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                    <div style={{ width: '55px', height: '55px', background: 'rgba(14, 165, 233, 0.1)', color: 'var(--primary)', borderRadius: '18px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid rgba(14, 165, 233, 0.2)' }}><Info size={28} /></div>
+                                    <div style={{ width: '52px', height: '52px', background: 'rgba(14, 165, 233, 0.1)', color: 'var(--primary)', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', border: '1px solid rgba(14, 165, 233, 0.2)' }}><Car size={26} /></div>
                                     <div>
-                                        <h2 style={{ color: 'white', fontSize: '22px', fontWeight: '950', margin: 0, letterSpacing: '-1px' }}>Vehicle Monthly <span style={{ color: 'var(--primary)' }}>Audit</span></h2>
-                                        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', margin: 0, fontWeight: '700' }}>{selectedVehicle.carNumber} • {new Date(0, month - 1).toLocaleString('default', { month: 'long' })} {year}</p>
+                                        <h2 style={{ color: 'white', fontSize: '22px', fontWeight: '950', margin: 0, letterSpacing: '-0.5px' }}>
+                                            {selectedVehicle.carNumber} <span style={{ color: 'var(--primary)' }}>PnL & Logs Audit</span>
+                                        </h2>
+                                        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', margin: 0, fontWeight: '700' }}>
+                                            {selectedVehicle.model || 'Commercial'} • {new Date(0, month - 1).toLocaleString('default', { month: 'long' })} {year}
+                                        </p>
                                     </div>
                                 </div>
-                                <button onClick={() => setSelectedVehicle(null)} style={{ background: 'rgba(255,255,255,0.05)', color: 'white', padding: '10px 20px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: '900', fontSize: '12px' }}>CLOSE</button>
+                                <button onClick={() => setSelectedVehicle(null)} style={{ background: 'rgba(255,255,255,0.08)', color: 'white', padding: '10px 22px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', fontWeight: '900', fontSize: '12px' }}>CLOSE</button>
                             </div>
 
                             <div style={{ padding: '30px' }}>
-                                <div style={{ marginBottom: '40px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px' }}>
-                                    <div style={{ padding: '20px', background: 'rgba(168, 85, 247, 0.05)', borderRadius: '20px', border: '1px solid rgba(168, 85, 247, 0.1)' }}>
-                                        <div style={{ fontSize: '10px', color: '#a855f7', fontWeight: '900', textTransform: 'uppercase', marginBottom: '8px' }}>Total Driver Wages</div>
-                                        <div style={{ fontSize: '24px', color: 'white', fontWeight: '900' }}>₹{(selectedVehicle.driverSalary || 0).toLocaleString()}</div>
-                                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)', marginTop: '4px' }}>{selectedVehicle.drivers.length} drivers operated</div>
+                                {/* 4 PnL Overview Cards */}
+                                <div style={{ marginBottom: '35px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                                    {/* Revenue Card */}
+                                    <div style={{ padding: '20px', background: 'rgba(16, 185, 129, 0.06)', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                            <span style={{ fontSize: '11px', color: '#34d399', fontWeight: '900', textTransform: 'uppercase' }}>Total Revenue</span>
+                                            <TrendingUp size={18} color="#34d399" />
+                                        </div>
+                                        <div style={{ fontSize: '26px', color: '#10b981', fontWeight: '950' }}>₹{(selectedVehicle.carEarnings || 0).toLocaleString()}</div>
+                                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginTop: '4px', fontWeight: '700' }}>{selectedVehicle.dutyCount || 0} Trips • {selectedVehicle.bookedDays || 0} Days Booked</div>
                                     </div>
-                                    <div style={{ padding: '20px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '20px', border: '1px solid rgba(59, 130, 246, 0.1)' }}>
-                                        <div style={{ fontSize: '10px', color: '#60a5fa', fontWeight: '900', textTransform: 'uppercase', marginBottom: '8px' }}>Fuel & Mileage</div>
-                                        <div style={{ fontSize: '24px', color: 'white', fontWeight: '900' }}>₹{(selectedVehicle.fuel?.totalAmount || 0).toLocaleString()}</div>
-                                        <div style={{ fontSize: '12px', color: '#10b981', fontWeight: '800', marginTop: '4px' }}>{(selectedVehicle.fuel?.totalQuantity || 0).toFixed(1)}L • {(selectedVehicle.fuel?.avgMileage || 0).toFixed(2)} KM/L</div>
+
+                                    {/* Operating Expense Card */}
+                                    <div style={{ padding: '20px', background: 'rgba(239, 68, 68, 0.06)', borderRadius: '20px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                            <span style={{ fontSize: '11px', color: '#f87171', fontWeight: '900', textTransform: 'uppercase' }}>Total Operating Expenses</span>
+                                            <DollarSign size={18} color="#f87171" />
+                                        </div>
+                                        <div style={{ fontSize: '26px', color: '#f87171', fontWeight: '950' }}>₹{(selectedVehicle.carTotalExpense || 0).toLocaleString()}</div>
+                                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginTop: '4px', fontWeight: '700' }}>Driver, Fuel, Maint, Ops</div>
                                     </div>
-                                    <div style={{ padding: '20px', background: 'rgba(236, 72, 153, 0.05)', borderRadius: '20px', border: '1px solid rgba(236, 72, 153, 0.1)' }}>
-                                        <div style={{ fontSize: '10px', color: '#ec4899', fontWeight: '900', textTransform: 'uppercase', marginBottom: '8px' }}>Repair & Maint.</div>
-                                        <div style={{ fontSize: '24px', color: 'white', fontWeight: '900' }}>₹{selectedVehicle.maintenance.totalAmount.toLocaleString()}</div>
-                                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)', marginTop: '4px' }}>{selectedVehicle.maintenance.records.length} jobs logged</div>
+
+                                    {/* Net Profit Card */}
+                                    <div style={{
+                                        padding: '20px',
+                                        background: selectedVehicle.carNetProfit >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                        borderRadius: '20px',
+                                        border: `1px solid ${selectedVehicle.carNetProfit >= 0 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                            <span style={{ fontSize: '11px', color: selectedVehicle.carNetProfit >= 0 ? '#34d399' : '#f87171', fontWeight: '900', textTransform: 'uppercase' }}>Net Profit / Loss</span>
+                                            {selectedVehicle.carNetProfit >= 0 ? <TrendingUp size={18} color="#34d399" /> : <TrendingDown size={18} color="#f87171" />}
+                                        </div>
+                                        <div style={{ fontSize: '26px', color: selectedVehicle.carNetProfit >= 0 ? '#34d399' : '#f87171', fontWeight: '950' }}>
+                                            {selectedVehicle.carNetProfit >= 0 ? '+' : ''}₹{selectedVehicle.carNetProfit.toLocaleString()}
+                                        </div>
+                                        <div style={{ fontSize: '12px', color: selectedVehicle.carNetProfit >= 0 ? '#34d399' : '#f87171', marginTop: '4px', fontWeight: '800' }}>
+                                            {selectedVehicle.profitMargin}% Net Margin
+                                        </div>
                                     </div>
-                                    <div style={{ padding: '20px', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
-                                        <div style={{ fontSize: '10px', color: '#34d399', fontWeight: '900', textTransform: 'uppercase', marginBottom: '8px' }}>Other Services</div>
-                                        <div style={{ fontSize: '24px', color: 'white', fontWeight: '900' }}>₹{(selectedVehicle.services.wash.amount + selectedVehicle.services.puncture.amount).toLocaleString()}</div>
-                                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)', marginTop: '4px' }}>Washes / Punctures</div>
+
+                                    {/* Fuel & Mileage */}
+                                    <div style={{ padding: '20px', background: 'rgba(59, 130, 246, 0.06)', borderRadius: '20px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                            <span style={{ fontSize: '11px', color: '#60a5fa', fontWeight: '900', textTransform: 'uppercase' }}>Fuel & Mileage</span>
+                                            <Fuel size={18} color="#60a5fa" />
+                                        </div>
+                                        <div style={{ fontSize: '26px', color: 'white', fontWeight: '950' }}>₹{(selectedVehicle.fuel?.totalAmount || 0).toLocaleString()}</div>
+                                        <div style={{ fontSize: '12px', color: '#10b981', fontWeight: '800', marginTop: '4px' }}>
+                                            {(selectedVehicle.fuel?.totalQuantity || 0).toFixed(1)}L • {(selectedVehicle.fuel?.avgMileage || 0).toFixed(2)} KM/L
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' }}>
-                                    {/* Column 1: Driver Breakdown */}
+                                {/* Detailed Breakdowns Grid */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '30px' }}>
+                                    {/* Column 1: Completed Trips & Revenue */}
                                     <div>
-                                        <h3 style={{ fontSize: '14px', color: 'white', fontWeight: '900', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                            <div style={{ width: '4px', height: '14px', background: '#a855f7', borderRadius: '2px' }}></div>
-                                            Driver Contributions
+                                        <h3 style={{ fontSize: '13px', color: '#34d399', fontWeight: '900', textTransform: 'uppercase', marginBottom: '16px', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <div style={{ width: '4px', height: '14px', background: '#10b981', borderRadius: '2px' }}></div>
+                                            Completed Trips & Revenue ({selectedVehicle.duties?.length || 0})
                                         </h3>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                            {selectedVehicle.driverBreakdown && selectedVehicle.driverBreakdown.length > 0 ? (
-                                                selectedVehicle.driverBreakdown.map((db, i) => (
-                                                    <div key={i} style={{ padding: '15px 20px', background: 'rgba(255,255,255,0.02)', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                            <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: 'rgba(168, 85, 247, 0.1)', color: '#a855f7', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '12px', fontWeight: '900' }}>{db.name.charAt(0)}</div>
-                                                            <span style={{ color: 'white', fontWeight: '700', fontSize: '14px' }}>{db.name}</span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '350px', overflowY: 'auto', paddingRight: '5px' }}>
+                                            {selectedVehicle.duties && selectedVehicle.duties.length > 0 ? (
+                                                selectedVehicle.duties.map((d, i) => (
+                                                    <div key={i} style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <div>
+                                                            <div style={{ color: 'white', fontWeight: '800', fontSize: '13px' }}>{d.clientName || 'Direct Booking'}</div>
+                                                            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', marginTop: '3px' }}>
+                                                                {formatDateIST(d.date)} {d.duty ? `• ${d.duty}` : ''} {d.driverName ? `• Driver: ${d.driverName}` : ''}
+                                                            </div>
                                                         </div>
-                                                        <span style={{ color: '#a855f7', fontWeight: '900', fontSize: '15px' }}>₹{db.salary.toLocaleString()}</span>
+                                                        <div style={{ color: '#10b981', fontWeight: '950', fontSize: '15px' }}>
+                                                            +₹{(d.revenue || 0).toLocaleString()}
+                                                        </div>
                                                     </div>
                                                 ))
                                             ) : (
-                                                <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '13px', fontStyle: 'italic', padding: '20px' }}>No driver data recorded.</div>
+                                                <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '12px', fontStyle: 'italic', padding: '20px', textAlign: 'center' }}>No duties recorded for this car.</div>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* Column 2: Maintenance Entries */}
+                                    {/* Column 2: Driver Contributions & Operations */}
                                     <div>
-                                        <h3 style={{ fontSize: '14px', color: 'white', fontWeight: '900', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                            <div style={{ width: '4px', height: '14px', background: 'var(--primary)', borderRadius: '2px' }}></div>
-                                            Recent Maintenance
+                                        <h3 style={{ fontSize: '13px', color: '#a855f7', fontWeight: '900', textTransform: 'uppercase', marginBottom: '16px', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <div style={{ width: '4px', height: '14px', background: '#a855f7', borderRadius: '2px' }}></div>
+                                            Driver & Operations
                                         </h3>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                            {selectedVehicle.maintenance.records.length === 0 ? (
-                                                <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(255,255,255,0.2)', fontWeight: '800', fontSize: '13px' }}>No maintenance logs.</div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                            {selectedVehicle.driverBreakdown && selectedVehicle.driverBreakdown.length > 0 ? (
+                                                selectedVehicle.driverBreakdown.map((db, i) => (
+                                                    <div key={i} style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(168, 85, 247, 0.1)', color: '#a855f7', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '11px', fontWeight: '900' }}>{db.name.charAt(0)}</div>
+                                                            <span style={{ color: 'white', fontWeight: '700', fontSize: '13px' }}>{db.name}</span>
+                                                        </div>
+                                                        <span style={{ color: '#a855f7', fontWeight: '900', fontSize: '14px' }}>₹{db.salary.toLocaleString()}</span>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '12px', fontStyle: 'italic', padding: '10px' }}>No driver wages recorded.</div>
+                                            )}
+
+                                            {/* Ops Summary */}
+                                            <div style={{ padding: '14px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '14px', border: '1px solid rgba(99, 102, 241, 0.15)', marginTop: '10px' }}>
+                                                <div style={{ fontSize: '11px', color: '#818cf8', fontWeight: '900', textTransform: 'uppercase', marginBottom: '8px' }}>Other Operational Costs</div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px' }}>
+                                                    <div style={{ color: 'rgba(255,255,255,0.6)' }}>Wash & Puncture: <strong style={{ color: 'white' }}>₹{((selectedVehicle.services?.wash?.amount || 0) + (selectedVehicle.services?.puncture?.amount || 0)).toLocaleString()}</strong></div>
+                                                    <div style={{ color: 'rgba(255,255,255,0.6)' }}>Fastag: <strong style={{ color: 'white' }}>₹{(selectedVehicle.fastag?.totalAmount || 0).toLocaleString()}</strong></div>
+                                                    <div style={{ color: 'rgba(255,255,255,0.6)' }}>Border Tax: <strong style={{ color: 'white' }}>₹{(selectedVehicle.borderTax?.totalAmount || 0).toLocaleString()}</strong></div>
+                                                    <div style={{ color: 'rgba(255,255,255,0.6)' }}>Parking: <strong style={{ color: 'white' }}>₹{(selectedVehicle.parking?.totalAmount || 0).toLocaleString()}</strong></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Column 3: Maintenance & Repairs */}
+                                    <div>
+                                        <h3 style={{ fontSize: '13px', color: '#f59e0b', fontWeight: '900', textTransform: 'uppercase', marginBottom: '16px', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <div style={{ width: '4px', height: '14px', background: '#f59e0b', borderRadius: '2px' }}></div>
+                                            Maintenance & Repairs ({selectedVehicle.maintenance?.records?.length || 0})
+                                        </h3>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '350px', overflowY: 'auto', paddingRight: '5px' }}>
+                                            {!selectedVehicle.maintenance?.records || selectedVehicle.maintenance.records.length === 0 ? (
+                                                <div style={{ textAlign: 'center', padding: '30px', color: 'rgba(255,255,255,0.2)', fontWeight: '800', fontSize: '12px' }}>No maintenance logs.</div>
                                             ) : (
                                                 selectedVehicle.maintenance.records.map((r, i) => (
-                                                    <div key={i} style={{ padding: '15px', background: 'rgba(255,255,255,0.02)', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                                                            <span style={{ fontSize: '12px', color: 'white', fontWeight: '800' }}>{r.category || 'General'}</span>
-                                                            <span style={{ fontSize: '13px', color: 'var(--primary)', fontWeight: '900' }}>₹{r.amount.toLocaleString()}</span>
+                                                    <div key={i} style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                            <span style={{ fontSize: '12px', color: 'white', fontWeight: '800' }}>{r.category || 'General Repair'}</span>
+                                                            <span style={{ fontSize: '13px', color: '#f59e0b', fontWeight: '900' }}>₹{(r.amount || 0).toLocaleString()}</span>
                                                         </div>
-                                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', fontWeight: '700' }}>{formatDateIST(r.date)}</div>
+                                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', fontWeight: '700' }}>{formatDateIST(r.date)} {r.description ? `• ${r.description}` : ''}</div>
                                                     </div>
                                                 ))
                                             )}
