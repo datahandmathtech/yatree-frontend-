@@ -26,6 +26,18 @@ createRoot(document.getElementById('root')).render(
     </HelmetProvider>
 )
 
+// ⚡ Auto-reload when dynamic chunk fails due to a new deployment (Vite preload error)
+window.addEventListener('vite:preloadError', (event) => {
+    event.preventDefault();
+    const lastReload = sessionStorage.getItem('chunk_reload_retry');
+    const now = Date.now();
+    // Only reload once every 10 seconds to avoid reload loops
+    if (!lastReload || now - parseInt(lastReload, 10) > 10000) {
+        sessionStorage.setItem('chunk_reload_retry', String(now));
+        window.location.reload();
+    }
+});
+
 // ⚡ Register Service Worker for PWA (Installability)
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

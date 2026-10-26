@@ -1,12 +1,10 @@
-const CACHE_NAME = 'logkaro-v16';
+const CACHE_NAME = 'logkaro-v17';
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
             return cache.addAll([
-                '/',
-                '/index.html',
-                '/manifest.json?v=15',
+                '/manifest.json?v=17',
                 '/logos.png'
             ]).catch(() => {
                 // Silently fail if some assets are not available yet
@@ -38,20 +36,23 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    const url = new URL(event.request.url);
+
+    // ⚡ Never intercept /assets/ JS/CSS chunks with SW — allow Vite's preloadError to handle missing chunks
+    if (url.pathname.startsWith('/assets/')) {
+        return;
+    }
+
+    // ⚡ Never intercept API calls
+    if (url.pathname.startsWith('/api/')) {
+        return;
+    }
+
     event.respondWith(
         fetch(event.request).catch(() => {
             return caches.match(event.request).then((response) => {
                 if (response) {
                     return response;
-                }
-                
-                // If nothing in cache, return a generic offline response
-                // This prevents the "Failed to convert value to 'Response'" error
-                if (event.request.url.includes('/api/')) {
-                    return new Response(JSON.stringify({ success: false, message: 'You are offline or network error' }), {
-                        status: 503,
-                        headers: { 'Content-Type': 'application/json' }
-                    });
                 }
                 
                 return new Response('Offline - Network Error', {
