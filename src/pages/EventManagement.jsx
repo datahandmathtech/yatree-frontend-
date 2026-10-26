@@ -3,14 +3,14 @@ import { useLocation } from 'react-router-dom';
 import axios from '../api/axios';
 import {
     Calendar, Plus, Search, Trash2, Edit, ChevronLeft, ChevronRight, Car, PlusCircle,
-    User, MapPin, Target, Briefcase, X, Save, FileSpreadsheet, Users, Building2, TruckIcon, Wallet, Navigation, Download, FileText, IndianRupee, ArrowRight, Check
+    User, MapPin, Target, Briefcase, X, Save, FileSpreadsheet, Users, Building2, TruckIcon, Wallet, Navigation, Download, FileText, IndianRupee, ArrowRight, Check, Clock, Phone
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCompany } from '../context/CompanyContext';
 import SEO from '../components/SEO';
-import * as XLSX from 'xlsx-js-style';
+import * as XLSX from 'xlsx';
 import PremiumDateInput from '../components/common/PremiumDateInput';
 import {
     todayIST,
@@ -50,6 +50,109 @@ const isPDService = (serviceName) => {
            name.includes('bus stand');
 };
 
+// Smart Time Parser for Event DRS Chronological Sorting
+const parseTimeToMinutes = (timeStr) => {
+    if (!timeStr) return 99999;
+    const s = String(timeStr).trim().toUpperCase();
+    if (s === 'APG') return 99000;
+    if (s === 'TBA') return 99900;
+
+    const match24 = s.match(/^(\d{1,2}):(\d{2})$/);
+    if (match24) {
+        let hours = parseInt(match24[1], 10);
+        const minutes = parseInt(match24[2], 10);
+        return hours * 60 + minutes;
+    }
+
+    const match12 = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+    if (match12) {
+        let hours = parseInt(match12[1], 10);
+        const minutes = parseInt(match12[2] || '0', 10);
+        const meridiem = match12[3].toUpperCase();
+        if (meridiem === 'PM' && hours < 12) hours += 12;
+        if (meridiem === 'AM' && hours === 12) hours = 0;
+        return hours * 60 + minutes;
+    }
+
+    const matchHour = s.match(/^(\d{1,2})$/);
+    if (matchHour) {
+        let hours = parseInt(matchHour[1], 10);
+        if (hours >= 1 && hours <= 6) hours += 12;
+        return hours * 60;
+    }
+
+    return 80000;
+};
+
+// Formats ISO YYYY-MM-DD to DD-MM-YYYY
+const formatDateDDMMYYYY = (isoDateStr) => {
+    if (!isoDateStr) return '';
+    const parts = String(isoDateStr).split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    const d = new Date(isoDateStr);
+    if (isNaN(d.getTime())) return isoDateStr;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+};
+
+// Formats date into short key like "1-10", "2-10" using IST
+const getShortDateKey = (dateVal) => {
+    if (!dateVal) return 'TBA';
+    if (typeof dateVal === 'string' && /^\d{1,2}-\d{1,2}$/.test(dateVal.trim())) {
+        return dateVal.trim();
+    }
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    
+    const istString = d.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+    const istDate = new Date(istString);
+    const day = istDate.getDate();
+    const month = istDate.getMonth() + 1;
+    return `${day}-${month}`;
+};
+
+// Formats time consistently with AM / PM
+const formatConsistentTime = (timeVal) => {
+    if (!timeVal || !String(timeVal).trim()) return '11:00 AM';
+    const raw = String(timeVal).trim();
+    if (/^[a-zA-Z]+$/.test(raw)) return raw.toUpperCase();
+
+    const match = raw.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM|am|pm))?$/);
+    if (!match) return raw;
+
+    let hours = parseInt(match[1], 10);
+    const mins = match[2];
+    const periodArg = match[3] ? match[3].toUpperCase() : null;
+
+    if (periodArg) {
+        if (hours === 0) hours = 12;
+        if (hours > 12) hours = hours - 12;
+        return `${String(hours).padStart(2, '0')}:${mins} ${periodArg}`;
+    }
+
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const h12 = hours % 12 === 0 ? 12 : hours % 12;
+    return `${String(h12).padStart(2, '0')}:${mins} ${period}`;
+};
+
+const DRS_MONTH_NAMES = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+];
+const DRS_SHORT_MONTH_NAMES = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'
+];
+const DRS_MONTH_TABS = [
+    'Oct. 26', 'Nov. 26', 'Dec. 26', 'Jan. 27', 'Feb. 27', 'Sept. 26', 'August 26', 'All Duties'
+];
+
+const getToday = () => todayIST();
+
 const EventManagement = () => {
     const { selectedCompany } = useCompany();
     const location = useLocation();
@@ -70,8 +173,21 @@ const EventManagement = () => {
     const [statusTab, setStatusTab] = useState('Running');
     const [selectedEventDetails, setSelectedEventDetails] = useState(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
-    const [dutyFilter, setDutyFilter] = useState('All');
+        const [dutyFilter, setDutyFilter] = useState('All');
     const [dutyDateFilter, setDutyDateFilter] = useState('All');
+    
+    // Event Live DRS states (Excel View by Date)
+    const [drsFilterMode, setDrsFilterMode] = useState('month'); // 'month', 'single', 'range'
+    const [drsSelectedYear, setDrsSelectedYear] = useState(2026);
+    const [drsSelectedMonth, setDrsSelectedMonth] = useState(10);
+    const [drsSelectedMonthTab, setDrsSelectedMonthTab] = useState('Oct. 26');
+    const [drsSingleDate, setDrsSingleDate] = useState(getToday());
+    const [drsRangeFrom, setDrsRangeFrom] = useState('2026-10-01');
+    const [drsRangeTo, setDrsRangeTo] = useState('2026-10-31');
+    const [drsJumpDate, setDrsJumpDate] = useState('');
+    const [drsEventFilter, setDrsEventFilter] = useState('All');
+    const [drsSourceFilter, setDrsSourceFilter] = useState('All');
+    const [drsSearchTerm, setDrsSearchTerm] = useState('');
     
     // Rate Card State
     const [showRateCardModal, setShowRateCardModal] = useState(false);
@@ -178,7 +294,6 @@ const EventManagement = () => {
         setSelectedYear(newYear);
     };
 
-    const getToday = () => todayIST();
 
     const [monthlyTarget, setMonthlyTarget] = useState(0);
     const [showEventModal, setShowEventModal] = useState(false);
@@ -1037,6 +1152,259 @@ const EventManagement = () => {
     }, [filteredMasterByDate]);
 
     // OPTIMIZATION: Memoize statistics
+    // ── EVENT LIVE DRS MEMOIZED LOGIC (STRICTLY FOR ACTIVE LIVE NOW EVENTS) ──
+    const liveNowEvents = React.useMemo(() => {
+        return allMasterEvents.filter(e => e.visualStatus === 'Running');
+    }, [allMasterEvents]);
+
+    const liveNowEventIds = React.useMemo(() => {
+        return new Set(liveNowEvents.map(e => String(e._id)));
+    }, [liveNowEvents]);
+
+    const eventDrsDuties = React.useMemo(() => {
+        return (vehicles || []).filter(v => {
+            const evId = String(v.eventId?._id || v.eventId || '');
+            // Strictly exclude old/closed/completed events! Only include live running events!
+            return liveNowEventIds.has(evId);
+        }).map((v) => {
+            const carNumberClean = (v.carNumber || '').split('#')[0] || 'TBA';
+            const dutyDate = (v.carNumber || '').split('#')[1] || v.date || (v.createdAt ? v.createdAt.split('T')[0] : '');
+            const matchedEv = allMasterEvents.find(e => String(e._id) === String(v.eventId?._id || v.eventId));
+
+            return {
+                _id: v._id,
+                rawDuty: v,
+                carNumber: carNumberClean,
+                date: dutyDate,
+                model: v.model || 'Sedan',
+                driverName: v.driverName || 'TBA',
+                driverMobile: v.driverMobile || '',
+                guestName: v.guestName || '',
+                dutyType: v.dutyType || 'Event Transfer',
+                dutyTime: v.dutyTime || '11:00 AM',
+                dropLocation: v.dropLocation || '',
+                dutyAmount: Number(v.dutyAmount || v.dailyWage || 0),
+                buyAmount: Number(v.buyAmount || 0),
+                ownerName: v.ownerName || '',
+                vehicleSource: v.vehicleSource || (v.isAttendance ? 'Fleet' : 'External'),
+                isAttendance: !!v.isAttendance,
+                eventId: String(v.eventId?._id || v.eventId || ''),
+                eventName: matchedEv?.name || 'Live Event',
+                clientName: matchedEv?.client || '',
+                property: matchedEv?.property || matchedEv?.venue || '',
+                remarks: v.remarks || ''
+            };
+        });
+    }, [vehicles, liveNowEventIds, allMasterEvents]);
+
+    const filteredDrsDuties = React.useMemo(() => {
+        return eventDrsDuties.filter(duty => {
+            if (drsEventFilter !== 'All' && duty.eventId !== drsEventFilter) {
+                return false;
+            }
+            if (drsSourceFilter !== 'All' && duty.vehicleSource !== drsSourceFilter) {
+                return false;
+            }
+            if (drsSearchTerm) {
+                const q = drsSearchTerm.toLowerCase();
+                const matches =
+                    (duty.guestName || '').toLowerCase().includes(q) ||
+                    (duty.carNumber || '').toLowerCase().includes(q) ||
+                    (duty.driverName || '').toLowerCase().includes(q) ||
+                    (duty.model || '').toLowerCase().includes(q) ||
+                    (duty.dutyType || '').toLowerCase().includes(q) ||
+                    (duty.dropLocation || '').toLowerCase().includes(q) ||
+                    (duty.eventName || '').toLowerCase().includes(q) ||
+                    (duty.clientName || '').toLowerCase().includes(q) ||
+                    (duty.ownerName || '').toLowerCase().includes(q);
+                if (!matches) return false;
+            }
+
+            if (!duty.date) return true;
+            const d = new Date(duty.date);
+            if (isNaN(d.getTime())) return true;
+            const istDate = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+            const m = istDate.getMonth() + 1;
+            const y = istDate.getFullYear();
+            const yyyy = istDate.getFullYear();
+            const mm = String(istDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(istDate.getDate()).padStart(2, '0');
+            const dutyDateStr = `${yyyy}-${mm}-${dd}`;
+
+            if (drsFilterMode === 'month') {
+                if (drsSelectedMonth !== 'all') {
+                    if (m !== Number(drsSelectedMonth) || y !== Number(drsSelectedYear)) {
+                        return false;
+                    }
+                }
+            } else if (drsFilterMode === 'single') {
+                if (dutyDateStr !== drsSingleDate) {
+                    return false;
+                }
+            } else if (drsFilterMode === 'range') {
+                if (drsRangeFrom && dutyDateStr < drsRangeFrom) return false;
+                if (drsRangeTo && dutyDateStr > drsRangeTo) return false;
+            }
+
+            return true;
+        }).sort((a, b) => {
+            if (a.date !== b.date) return (a.date || '').localeCompare(b.date || '');
+            return parseTimeToMinutes(a.dutyTime) - parseTimeToMinutes(b.dutyTime);
+        });
+    }, [eventDrsDuties, drsEventFilter, drsSourceFilter, drsSearchTerm, drsFilterMode, drsSelectedMonth, drsSelectedYear, drsSingleDate, drsRangeFrom, drsRangeTo]);
+
+    // Group duties by Date
+    const groupedByDate = React.useMemo(() => {
+        const groups = {};
+
+        filteredDrsDuties.forEach(duty => {
+            const dateKey = getShortDateKey(duty.date);
+            const fullDateStr = duty.date ? new Date(duty.date).toISOString().split('T')[0] : '';
+
+            if (!groups[dateKey]) {
+                groups[dateKey] = {
+                    dateKey,
+                    fullDate: fullDateStr,
+                    rawDate: duty.date,
+                    totalFare: 0,
+                    duties: []
+                };
+            }
+
+            const fare = Number(duty.dutyAmount) || 0;
+            groups[dateKey].totalFare += fare;
+            groups[dateKey].duties.push(duty);
+        });
+
+        // Sort duties chronologically within each day
+        Object.values(groups).forEach(g => {
+            g.duties.sort((a, b) => {
+                return parseTimeToMinutes(a.dutyTime) - parseTimeToMinutes(b.dutyTime);
+            });
+        });
+
+        // Sort date groups chronologically
+        return Object.values(groups).sort((a, b) => {
+            const dA = a.rawDate ? new Date(a.rawDate).getTime() : 0;
+            const dB = b.rawDate ? new Date(b.rawDate).getTime() : 0;
+            return dA - dB;
+        });
+    }, [filteredDrsDuties]);
+
+    const drsTotalRevenue = React.useMemo(() => {
+        return filteredDrsDuties.reduce((sum, d) => sum + (Number(d.dutyAmount) || 0), 0);
+    }, [filteredDrsDuties]);
+
+    const drsTotalPayout = React.useMemo(() => {
+        return filteredDrsDuties.reduce((sum, d) => sum + (Number(d.buyAmount) || 0), 0);
+    }, [filteredDrsDuties]);
+
+    const drsNetProfit = drsTotalRevenue - drsTotalPayout;
+
+    const handleSelectDrsMonthTab = (tab) => {
+        setDrsSelectedMonthTab(tab);
+        if (tab === 'Oct. 26') { setDrsSelectedMonth(10); setDrsSelectedYear(2026); }
+        else if (tab === 'Nov. 26') { setDrsSelectedMonth(11); setDrsSelectedYear(2026); }
+        else if (tab === 'Dec. 26') { setDrsSelectedMonth(12); setDrsSelectedYear(2026); }
+        else if (tab === 'Jan. 27') { setDrsSelectedMonth(1); setDrsSelectedYear(2027); }
+        else if (tab === 'Feb. 27') { setDrsSelectedMonth(2); setDrsSelectedYear(2027); }
+        else if (tab === 'Sept. 26') { setDrsSelectedMonth(9); setDrsSelectedYear(2026); }
+        else if (tab === 'August 26') { setDrsSelectedMonth(8); setDrsSelectedYear(2026); }
+        else if (tab === 'All Duties') { setDrsSelectedMonth('all'); }
+    };
+
+    const handlePrevDrsMonth = () => {
+        setDrsFilterMode('month');
+        let newM = drsSelectedMonth === 'all' ? 10 : drsSelectedMonth;
+        let newY = drsSelectedYear;
+        if (newM === 1) {
+            newM = 12;
+            newY = Number(drsSelectedYear) - 1;
+        } else {
+            newM = newM - 1;
+        }
+        setDrsSelectedMonth(newM);
+        setDrsSelectedYear(newY);
+        setDrsSelectedMonthTab(`${DRS_SHORT_MONTH_NAMES[newM - 1]}. ${String(newY).slice(-2)}`);
+    };
+
+    const handleNextDrsMonth = () => {
+        setDrsFilterMode('month');
+        let newM = drsSelectedMonth === 'all' ? 10 : drsSelectedMonth;
+        let newY = drsSelectedYear;
+        if (newM === 12) {
+            newM = 1;
+            newY = Number(drsSelectedYear) + 1;
+        } else {
+            newM = newM + 1;
+        }
+        setDrsSelectedMonth(newM);
+        setDrsSelectedYear(newY);
+        setDrsSelectedMonthTab(`${DRS_SHORT_MONTH_NAMES[newM - 1]}. ${String(newY).slice(-2)}`);
+    };
+
+    const handleJumpToDrsDate = (targetDateStr) => {
+        if (!targetDateStr) return;
+        setDrsJumpDate(targetDateStr);
+        const d = new Date(targetDateStr);
+        if (isNaN(d.getTime())) return;
+
+        const istString = d.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+        const istDate = new Date(istString);
+        const m = istDate.getMonth() + 1;
+        const y = istDate.getFullYear();
+        const day = istDate.getDate();
+        const dateKey = `${day}-${m}`;
+
+        if (drsFilterMode === 'month') {
+            if (m !== drsSelectedMonth || y !== drsSelectedYear) {
+                setDrsSelectedMonth(m);
+                setDrsSelectedYear(y);
+                setDrsSelectedMonthTab(`${DRS_SHORT_MONTH_NAMES[m - 1]}. ${String(y).slice(-2)}`);
+            }
+        }
+
+        setTimeout(() => {
+            const el = document.getElementById(`drs-date-block-${dateKey}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.style.backgroundColor = 'rgba(251, 191, 36, 0.25)';
+                setTimeout(() => {
+                    el.style.backgroundColor = '#0f172a';
+                }, 2000);
+            }
+        }, 300);
+    };
+
+    const exportDrsToExcel = () => {
+        if (!filteredDrsDuties.length) {
+            alert('No duties to export');
+            return;
+        }
+        const exportData = filteredDrsDuties.map((d, index) => ({
+            'Sl No': index + 1,
+            'Date': d.date || '',
+            'Event / Source': d.eventName || '',
+            'Client': d.clientName || '',
+            'Guest': d.guestName || '',
+            'Guest Mob': d.driverMobile || '',
+            'Time': d.dutyTime || '',
+            'Duty': d.dutyType || '',
+            'Amount (₹)': d.dutyAmount || 0,
+            'KM': d.dropLocation || '',
+            'Car Type': d.model || '',
+            'Car Number': d.carNumber || '',
+            'Driver Name': d.driverName || '',
+            'Vehicle Source': d.vehicleSource || '',
+            'Remarks': d.remarks || ''
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Live_DRS');
+        XLSX.writeFile(wb, `Live_DRS_${selectedCompany?.name || 'Event'}.xlsx`);
+    };
+
     const stats = React.useMemo(() => {
         const uniqueEvents = [...new Set(filtered.map(v => v.eventId).filter(Boolean))].length;
         const fleetAmount = filtered.filter(v => (v.vehicleSource || 'External') === 'Fleet').reduce((sum, v) => sum + (Number(v.dutyAmount || v.dailyWage) || 0), 0);
@@ -1482,6 +1850,7 @@ const EventManagement = () => {
                 {[
                     { id: 'Start', label: 'Upcoming', color: '#10b981', icon: <Navigation size={20} />, count: filteredMasterByDate.filter(e => e.visualStatus === 'Upcoming').length },
                     { id: 'Running', label: 'Live Now', color: 'var(--primary)', icon: <Target size={20} />, count: filteredMasterByDate.filter(e => e.visualStatus === 'Running').length },
+                    { id: 'LiveDRS', label: 'Live DRS', color: '#38bdf8', icon: <Clock size={20} />, count: eventDrsDuties.length },
                     { id: 'Close', label: 'Completed', color: '#f87171', icon: <FileSpreadsheet size={20} />, count: filteredMasterByDate.filter(e => e.visualStatus === 'Closed').length }
                 ].map((t) => (
                     <button
@@ -1519,10 +1888,10 @@ const EventManagement = () => {
                             position: 'relative',
                             flexShrink: 0
                         }}>
-                            {t.id === 'Running' && statusTab === 'Running' && (
+                            {((t.id === 'Running' && statusTab === 'Running') || (t.id === 'LiveDRS' && statusTab === 'LiveDRS')) && (
                                 <div style={{
                                     position: 'absolute', top: '-2px', right: '-2px', width: '8px', height: '8px',
-                                    background: 'var(--primary)', borderRadius: '50%', border: '2px solid #0a0f1d',
+                                    background: t.id === 'LiveDRS' ? '#38bdf8' : 'var(--primary)', borderRadius: '50%', border: '2px solid #0a0f1d',
                                     animation: 'pulse 1.5s infinite'
                                 }} />
                             )}
@@ -1531,7 +1900,7 @@ const EventManagement = () => {
                         <div style={{ textAlign: 'left' }}>
                             <div style={{ fontSize: 'clamp(13px, 3vw, 15px)', fontWeight: '950', letterSpacing: '-0.2px' }}>{t.label}</div>
                             <div style={{ fontSize: 'clamp(8px, 2vw, 10px)', color: 'rgba(255,255,255,0.25)', fontWeight: '800', marginTop: '2px', textTransform: 'uppercase' }}>
-                                {t.count} {t.count === 1 ? 'Event' : 'Events'}
+                                {t.id === 'LiveDRS' ? `${t.count} ${t.count === 1 ? 'Duty' : 'Duties'}` : `${t.count} ${t.count === 1 ? 'Event' : 'Events'}`}
                             </div>
                         </div>
                         {statusTab === t.id && (
@@ -1541,6 +1910,9 @@ const EventManagement = () => {
                 ))}
             </div>
 
+                        {/* ═══ CONDITIONAL: MISSIONS VS LIVE DRS ═══ */}
+            {statusTab !== 'LiveDRS' ? (
+                <>
             {/* ═══ COMMAND BAR ═══ */}
             <div className="command-bar" style={{
                 display: 'flex',
@@ -1703,70 +2075,745 @@ const EventManagement = () => {
                                     <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>PROFORMA</div>
                                     <div style={{ color: '#10b981', fontSize: '16px', fontWeight: '950' }}>{ev.proformaAmount ? `₹${ev.proformaAmount.toLocaleString()}` : '-'}</div>
                                 </div>
-                            ) : (
-                                <>
-                                    <div style={{ textAlign: 'center' }}>
-                                        <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>FLEET</div>
-                                        <div style={{ color: '#38bdf8', fontSize: '16px', fontWeight: '950' }}>{ev.fleetCount || 0}</div>
+                                        ) : (
+                                            <>
+                                                <div style={{ textAlign: 'center' }}>
+                                                    <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>FLEET</div>
+                                                    <div style={{ color: '#38bdf8', fontSize: '16px', fontWeight: '950' }}>{ev.fleetCount || 0}</div>
+                                                </div>
+                                                <div style={{ textAlign: 'center' }}>
+                                                    <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>EXTERNAL</div>
+                                                    <div style={{ color: '#a855f7', fontSize: '16px', fontWeight: '950' }}>{ev.externalCount || 0}</div>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
-                                    <div style={{ textAlign: 'center' }}>
-                                        <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>EXTERNAL</div>
-                                        <div style={{ color: '#a855f7', fontSize: '16px', fontWeight: '950' }}>{ev.externalCount || 0}</div>
+
+                                    {/* 4. Settlement Summary */}
+                                    {statusTab !== 'Start' && (
+                                        <div className="settlement-summary" style={{
+                                            background: 'rgba(16,185,129,0.05)', padding: '10px 16px', borderRadius: '14px',
+                                            border: '1px solid rgba(16,185,129,0.1)', minWidth: '120px', textAlign: 'right'
+                                        }}>
+                                            <div style={{ fontSize: '8px', color: 'rgba(16,185,129,0.5)', fontWeight: '900', marginBottom: '2px', textTransform: 'uppercase' }}>Duty Value</div>
+                                            <div style={{ color: '#10b981', fontSize: '16px', fontWeight: '950' }}>₹{Number(ev.totalRevenue || 0).toLocaleString()}</div>
+                                        </div>
+                                    )}
+
+                                    {/* 5. Actions */}
+                                    <div className="actions-block" style={{ display: 'flex', gap: '8px' }}>
+                                        <button onClick={(e) => { e.stopPropagation(); setSelectedEventForRates(ev); setShowRateCardModal(true); }}
+                                            style={{
+                                                width: '38px', height: '38px', borderRadius: '12px', background: 'rgba(56, 189, 248, 0.1)',
+                                                border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s'
+                                            }}
+                                            className="action-btn-list"
+                                            title="Manage Tariffs / Rate Card"
+                                        >
+                                            <IndianRupee size={16} />
+                                        </button>
+                                        <button onClick={(e) => { e.stopPropagation(); handleEditEvent(ev); }}
+                                            style={{
+                                                width: '38px', height: '38px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)',
+                                                border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)', cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s'
+                                            }}
+                                            className="action-btn-list"
+                                        >
+                                            <Edit size={16} />
+                                        </button>
+                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteEvent(ev._id); }}
+                                            style={{
+                                                width: '38px', height: '38px', borderRadius: '12px', background: 'rgba(244,63,94,0.08)',
+                                                border: '1px solid rgba(244,63,94,0.15)', color: '#f43f5e', cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s'
+                                            }}
+                                            className="action-btn-list"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
                                     </div>
-                                </>
+                                </motion.div>
+                            ))}
+                        </div>
+                    </>
+                ) : (
+                /* ═══ EVENT LIVE DRS VIEW (EXACT LIVE FEED EXCEL VIEW BY DATE) ═══ */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '40px' }}>
+                    {/* Control Bar matching Live Feed screenshot */}
+                    <div style={{
+                        background: '#0d1527',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '16px',
+                        padding: '14px 18px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px'
+                    }}>
+                        {/* Row 1: Mode Pills (Full Month, Single Date, Date Range) + Month Navigator + Month Pills */}
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '12px'
+                        }}>
+                            {/* Left Group: Mode Selectors & Dates */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                {/* Mode Pills */}
+                                <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', padding: '3px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                    <button
+                                        onClick={() => setDrsFilterMode('month')}
+                                        style={{
+                                            padding: '6px 14px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            background: drsFilterMode === 'month' ? '#10b981' : 'transparent',
+                                            color: drsFilterMode === 'month' ? '#000' : 'rgba(255,255,255,0.7)',
+                                            fontWeight: drsFilterMode === 'month' ? '900' : '600',
+                                            fontSize: '12px',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '5px'
+                                        }}
+                                    >
+                                        <FileSpreadsheet size={13} /> Full Month
+                                    </button>
+                                    <button
+                                        onClick={() => setDrsFilterMode('single')}
+                                        style={{
+                                            padding: '6px 14px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            background: drsFilterMode === 'single' ? '#10b981' : 'transparent',
+                                            color: drsFilterMode === 'single' ? '#000' : 'rgba(255,255,255,0.7)',
+                                            fontWeight: drsFilterMode === 'single' ? '900' : '600',
+                                            fontSize: '12px',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '5px'
+                                        }}
+                                    >
+                                        <Calendar size={13} /> Single Date
+                                    </button>
+                                    <button
+                                        onClick={() => setDrsFilterMode('range')}
+                                        style={{
+                                            padding: '6px 14px',
+                                            borderRadius: '8px',
+                                            border: 'none',
+                                            background: drsFilterMode === 'range' ? '#10b981' : 'transparent',
+                                            color: drsFilterMode === 'range' ? '#000' : 'rgba(255,255,255,0.7)',
+                                            fontWeight: drsFilterMode === 'range' ? '900' : '600',
+                                            fontSize: '12px',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '5px'
+                                        }}
+                                    >
+                                        <Clock size={13} /> Date Range
+                                    </button>
+                                </div>
+
+                                {/* Month Navigator (shown in month mode) */}
+                                {drsFilterMode === 'month' && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <button
+                                            onClick={handlePrevDrsMonth}
+                                            title="Previous Month"
+                                            style={{ padding: '6px 8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                        >
+                                            <ChevronLeft size={14} />
+                                        </button>
+                                        <div style={{
+                                            padding: '6px 14px',
+                                            background: 'rgba(255,255,255,0.04)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            borderRadius: '8px',
+                                            color: '#10b981',
+                                            fontWeight: '800',
+                                            fontSize: '12.5px',
+                                            minWidth: '130px',
+                                            textAlign: 'center'
+                                        }}>
+                                            {drsSelectedMonth === 'all' ? 'All Months' : `${DRS_MONTH_NAMES[Number(drsSelectedMonth) - 1]} ${drsSelectedYear}`}
+                                        </div>
+                                        <button
+                                            onClick={handleNextDrsMonth}
+                                            title="Next Month"
+                                            style={{ padding: '6px 8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                        >
+                                            <ChevronRight size={14} />
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Single Date Picker */}
+                                {drsFilterMode === 'single' && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{ width: '150px' }}>
+                                            <PremiumDateInput
+                                                value={drsSingleDate}
+                                                onChange={(val) => setDrsSingleDate(val)}
+                                                placeholder="Select Date"
+                                            />
+                                        </div>
+                                        <button
+                                            onClick={() => setDrsSingleDate(getToday())}
+                                            style={{ padding: '6px 12px', background: 'rgba(56, 189, 248, 0.2)', border: '1px solid rgba(56, 189, 248, 0.4)', borderRadius: '8px', color: '#38bdf8', fontWeight: '800', fontSize: '11.5px', cursor: 'pointer' }}
+                                        >
+                                            ⚡ Today
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Date Range Pickers */}
+                                {drsFilterMode === 'range' && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(192, 132, 252, 0.08)', padding: '4px 10px', borderRadius: '11px', border: '1px solid rgba(192, 132, 252, 0.25)' }}>
+                                        <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>From:</span>
+                                        <div style={{ width: '135px' }}>
+                                            <PremiumDateInput
+                                                value={drsRangeFrom}
+                                                onChange={(val) => setDrsRangeFrom(val)}
+                                                placeholder="Start Date"
+                                            />
+                                        </div>
+                                        <span style={{ color: '#c084fc', fontWeight: '900', fontSize: '13px' }}>➔</span>
+                                        <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>To:</span>
+                                        <div style={{ width: '135px' }}>
+                                            <PremiumDateInput
+                                                value={drsRangeTo}
+                                                onChange={(val) => setDrsRangeTo(val)}
+                                                placeholder="End Date"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Right Group: Month Quick Pills */}
+                            {drsFilterMode === 'month' && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.03)', padding: '3px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.07)', overflowX: 'auto' }}>
+                                    {DRS_MONTH_TABS.map(tab => (
+                                        <button
+                                            key={tab}
+                                            onClick={() => handleSelectDrsMonthTab(tab)}
+                                            style={{
+                                                padding: '5px 10px',
+                                                borderRadius: '7px',
+                                                border: 'none',
+                                                background: drsSelectedMonthTab === tab ? '#10b981' : 'transparent',
+                                                color: drsSelectedMonthTab === tab ? '#000' : 'rgba(255,255,255,0.7)',
+                                                fontWeight: drsSelectedMonthTab === tab ? '900' : '600',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.15s',
+                                                whiteSpace: 'nowrap'
+                                            }}
+                                        >
+                                            {tab}
+                                        </button>
+                                    ))}
+                                </div>
                             )}
                         </div>
 
-                        {/* 4. Settlement Summary */}
-                        {statusTab !== 'Start' && (
-                            <div className="settlement-summary" style={{
-                                background: 'rgba(16,185,129,0.05)', padding: '10px 16px', borderRadius: '14px',
-                                border: '1px solid rgba(16,185,129,0.1)', minWidth: '120px', textAlign: 'right'
-                            }}>
-                                <div style={{ fontSize: '8px', color: 'rgba(16,185,129,0.5)', fontWeight: '900', marginBottom: '2px', textTransform: 'uppercase' }}>Duty Value</div>
-                                <div style={{ color: '#10b981', fontSize: '16px', fontWeight: '950' }}>₹{Number(ev.totalRevenue || 0).toLocaleString()}</div>
+                        {/* Row 2: Search + Jump to Date + Event Selector + Excel Export + Stats Pill */}
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '12px',
+                            borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                            paddingTop: '10px'
+                        }}>
+                            {/* Left: Search + Jump + Event Selector */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flex: 1 }}>
+                                <div style={{ position: 'relative', width: 'clamp(220px, 25vw, 320px)' }}>
+                                    <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
+                                    <input
+                                        type="text"
+                                        value={drsSearchTerm}
+                                        onChange={(e) => setDrsSearchTerm(e.target.value)}
+                                        placeholder="Search guest, hotel, route, car, driver..."
+                                        style={{
+                                            width: '100%',
+                                            padding: '8px 12px 8px 34px',
+                                            background: 'rgba(255,255,255,0.04)',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            borderRadius: '10px',
+                                            color: 'white',
+                                            fontSize: '12.5px',
+                                            outline: 'none'
+                                        }}
+                                    />
+                                </div>
+
+                                {drsFilterMode === 'month' && (
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        background: 'rgba(255,255,255,0.03)',
+                                        border: '1px solid rgba(255,255,255,0.08)',
+                                        padding: '3px 8px 3px 10px',
+                                        borderRadius: '10px'
+                                    }}>
+                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', fontWeight: '800', whiteSpace: 'nowrap' }}>🎯 Jump to Date:</span>
+                                        <div style={{ width: '132px' }}>
+                                            <PremiumDateInput
+                                                value={drsJumpDate}
+                                                onChange={handleJumpToDrsDate}
+                                                placeholder="Select Date"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Live Events Selector */}
+                                <select
+                                    value={drsEventFilter}
+                                    onChange={(e) => setDrsEventFilter(e.target.value)}
+                                    style={{
+                                        height: '36px',
+                                        borderRadius: '10px',
+                                        background: '#0d1527',
+                                        border: '1px solid rgba(251, 191, 36, 0.3)',
+                                        padding: '0 12px',
+                                        color: '#fbbf24',
+                                        fontSize: '12px',
+                                        fontWeight: '800',
+                                        outline: 'none',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <option value="All">All Live Events ({liveNowEvents.length})</option>
+                                    {liveNowEvents.map(e => (
+                                        <option key={e._id} value={e._id}>{e.name} • {e.client}</option>
+                                    ))}
+                                </select>
+
+                                {/* Excel Export Button */}
+                                <button
+                                    onClick={exportDrsToExcel}
+                                    title="Export to Excel"
+                                    style={{
+                                        height: '36px',
+                                        padding: '0 14px',
+                                        borderRadius: '10px',
+                                        background: 'rgba(16, 185, 129, 0.1)',
+                                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                                        color: '#10b981',
+                                        fontSize: '12px',
+                                        fontWeight: '800',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <FileSpreadsheet size={15} /> EXCEL
+                                </button>
                             </div>
-                        )}
 
-                        {/* 5. Actions */}
-                        <div className="actions-block" style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={(e) => { e.stopPropagation(); setSelectedEventForRates(ev); setShowRateCardModal(true); }}
-                                style={{
-                                    width: '38px', height: '38px', borderRadius: '12px', background: 'rgba(56, 189, 248, 0.1)',
-                                    border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', cursor: 'pointer',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s'
-                                }}
-                                className="action-btn-list"
-                                title="Manage Tariffs / Rate Card"
-                            >
-                                <IndianRupee size={16} />
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); handleEditEvent(ev); }}
-                                style={{
-                                    width: '38px', height: '38px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)',
-                                    border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)', cursor: 'pointer',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s'
-                                }}
-                                className="action-btn-list"
-                            >
-                                <Edit size={16} />
-                            </button>
-                            <button onClick={(e) => { e.stopPropagation(); handleDeleteEvent(ev._id); }}
-                                style={{
-                                    width: '38px', height: '38px', borderRadius: '12px', background: 'rgba(244,63,94,0.08)',
-                                    border: '1px solid rgba(244,63,94,0.15)', color: '#f43f5e', cursor: 'pointer',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s'
-                                }}
-                                className="action-btn-list"
-                            >
-                                <Trash2 size={16} />
-                            </button>
+                            {/* Right: Clean Month Stats Pill matching screenshot */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px',
+                                    background: 'rgba(16, 185, 129, 0.08)',
+                                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                                    padding: '7px 16px',
+                                    borderRadius: '10px'
+                                }}>
+                                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>
+                                        {filteredDrsDuties.length} Duties • Total Fare:
+                                    </span>
+                                    <span style={{ fontSize: '15px', color: '#34d399', fontWeight: '900' }}>
+                                        ₹{drsTotalRevenue.toLocaleString('en-IN')}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
-                    </motion.div>
-                ))}
-            </div>
+                    </div>
 
-            {/* ═══ MASTER GRID FOCUS ═══ */}
+                    {/* Excel Grid Container with Continuous Scroll by Date */}
+                    <div style={{
+                        background: '#0b1120',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        borderRadius: '14px',
+                        overflowX: 'auto',
+                        boxShadow: '0 12px 40px rgba(0,0,0,0.6)'
+                    }}>
+                        <table style={{
+                            width: '100%',
+                            minWidth: '1350px',
+                            borderCollapse: 'collapse',
+                            fontSize: '12px',
+                            textAlign: 'left',
+                            fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
+                        }}>
+                            <tbody>
+                                {groupedByDate.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="12" style={{ padding: '60px 20px', textAlign: 'center', color: 'rgba(255,255,255,0.45)' }}>
+                                            <div style={{ fontSize: '32px', marginBottom: '8px' }}>📊</div>
+                                            <div style={{ fontSize: '15px', fontWeight: '700', color: 'white' }}>No DRS Duties Found for this Filter</div>
+                                            <p style={{ fontSize: '12px', margin: '4px 0 0', color: 'rgba(255,255,255,0.3)' }}>Entries added from "Live Now" missions will appear here automatically grouped by date.</p>
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    groupedByDate.map((group, groupIdx) => {
+                                        const isSearchActive = Boolean(drsSearchTerm.trim());
+                                        return (
+                                            <React.Fragment key={group.dateKey}>
+                                                {/* Blank Separator Row if not first group */}
+                                                {groupIdx > 0 && !isSearchActive && (
+                                                    <tr style={{ height: '14px', background: '#070b14' }}>
+                                                        <td colSpan="12" style={{ padding: 0, border: 'none' }}></td>
+                                                    </tr>
+                                                )}
+
+                                                {/* Day Header Row: rendered per date block */}
+                                                {(!isSearchActive || groupIdx === 0) && (
+                                                    <tr id={`drs-date-block-${group.dateKey}`} style={{
+                                                        background: '#0f172a',
+                                                        borderTop: '2px solid rgba(255, 255, 255, 0.2)',
+                                                        borderBottom: '1.5px solid rgba(255, 255, 255, 0.15)',
+                                                        transition: 'all 0.4s'
+                                                    }}>
+                                                        <th style={{
+                                                            padding: '10px 12px',
+                                                            width: '80px',
+                                                            background: '#fef08a',
+                                                            color: '#000000',
+                                                            fontWeight: '900',
+                                                            fontSize: '13px',
+                                                            textAlign: 'center',
+                                                            borderRight: '1px solid rgba(0,0,0,0.15)'
+                                                        }}>
+                                                            {isSearchActive ? 'Date' : group.dateKey}
+                                                        </th>
+                                                        <th style={{ padding: '10px 8px', width: '55px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                            So. No.
+                                                        </th>
+                                                        <th style={{ padding: '10px 10px', width: '150px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                            Hotel
+                                                        </th>
+                                                        <th style={{ padding: '10px 12px', width: '160px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                            Guest
+                                                        </th>
+                                                        <th style={{ padding: '10px 10px', width: '120px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                            Guest Mob
+                                                        </th>
+                                                        <th style={{ padding: '10px 10px', width: '90px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                            Time
+                                                        </th>
+                                                        <th style={{ padding: '10px 14px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                            Duty
+                                                        </th>
+                                                        <th style={{
+                                                            padding: '10px 12px',
+                                                            width: '100px',
+                                                            textAlign: 'right',
+                                                            background: '#fef08a',
+                                                            color: '#000000',
+                                                            fontWeight: '900',
+                                                            fontSize: '13px',
+                                                            borderRight: '1px solid rgba(0,0,0,0.15)'
+                                                        }}>
+                                                            ₹{(isSearchActive ? drsTotalRevenue : group.totalFare).toLocaleString('en-IN')}
+                                                        </th>
+                                                        <th style={{ padding: '10px 10px', width: '80px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                            C/Out
+                                                        </th>
+                                                        <th style={{ padding: '10px 10px', width: '135px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                            Car
+                                                        </th>
+                                                        <th style={{ padding: '10px 10px', width: '145px', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                                                            Driver
+                                                        </th>
+                                                        <th style={{ padding: '10px 12px', width: '90px', textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontWeight: '800', fontSize: '11px' }}>
+                                                            Actions
+                                                        </th>
+                                                    </tr>
+                                                )}
+
+                                                {/* Duty Rows for this Date */}
+                                                {group.duties.map((duty, idx) => {
+                                                    const fare = Number(duty.dutyAmount) || 0;
+                                                    const isHighFare = fare >= 3500;
+                                                    const rowSerial = isSearchActive
+                                                        ? groupedByDate.slice(0, groupIdx).reduce((acc, g) => acc + g.duties.length, 0) + idx + 1
+                                                        : idx + 1;
+
+                                                    return (
+                                                        <tr
+                                                            key={duty._id || idx}
+                                                            style={{
+                                                                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                                                background: isHighFare ? 'rgba(254, 240, 138, 0.04)' : 'transparent',
+                                                                transition: 'background 0.15s'
+                                                            }}
+                                                            className="drs-excel-row"
+                                                        >
+                                                            {/* Date column (first row of group displays date tag, or every row when searching) */}
+                                                            <td style={{
+                                                                padding: '10px 12px',
+                                                                textAlign: 'center',
+                                                                fontWeight: '800',
+                                                                color: (isSearchActive || idx === 0) ? '#fef08a' : 'transparent',
+                                                                borderRight: '1px solid rgba(255,255,255,0.06)'
+                                                            }}>
+                                                                {(isSearchActive || idx === 0) ? group.dateKey : ''}
+                                                            </td>
+
+                                                            {/* So. No. */}
+                                                            <td style={{
+                                                                padding: '10px 8px',
+                                                                textAlign: 'center',
+                                                                fontWeight: '700',
+                                                                color: 'rgba(255,255,255,0.85)',
+                                                                borderRight: '1px solid rgba(255,255,255,0.06)'
+                                                            }}>
+                                                                {rowSerial}
+                                                            </td>
+
+                                                            {/* Hotel / Source */}
+                                                            <td style={{
+                                                                padding: '10px 10px',
+                                                                color: 'rgba(255,255,255,0.9)',
+                                                                fontWeight: '600',
+                                                                borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                                whiteSpace: 'nowrap'
+                                                            }}>
+                                                                <div style={{ color: 'white', fontWeight: '700' }}>{duty.eventName || 'Live Event'}</div>
+                                                                {duty.clientName && (
+                                                                    <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.45)', marginTop: '2px' }}>
+                                                                        {duty.clientName}
+                                                                    </div>
+                                                                )}
+                                                            </td>
+
+                                                            {/* Guest Name */}
+                                                            <td style={{
+                                                                padding: '10px 12px',
+                                                                color: 'white',
+                                                                fontWeight: '800',
+                                                                borderRight: '1px solid rgba(255,255,255,0.06)'
+                                                            }}>
+                                                                {duty.guestName || '—'}
+                                                            </td>
+
+                                                            {/* Guest Mobile */}
+                                                            <td style={{
+                                                                padding: '10px 10px',
+                                                                borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                                whiteSpace: 'nowrap'
+                                                            }}>
+                                                                {duty.driverMobile ? (
+                                                                    <a
+                                                                        href={`tel:${duty.driverMobile}`}
+                                                                        style={{ color: '#38bdf8', textDecoration: 'none', fontWeight: '700' }}
+                                                                    >
+                                                                        {duty.driverMobile}
+                                                                    </a>
+                                                                ) : (
+                                                                    <span style={{ color: 'rgba(255,255,255,0.3)' }}>NA</span>
+                                                                )}
+                                                            </td>
+
+                                                            {/* Time (styled badge like Google Sheet Column F, always with AM / PM) */}
+                                                            <td style={{
+                                                                padding: '10px 10px',
+                                                                textAlign: 'center',
+                                                                borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                                whiteSpace: 'nowrap'
+                                                            }}>
+                                                                <span style={{
+                                                                    padding: '2px 8px',
+                                                                    borderRadius: '6px',
+                                                                    background: 'rgba(16, 185, 129, 0.15)',
+                                                                    color: '#34d399',
+                                                                    fontWeight: '800',
+                                                                    fontSize: '11.5px'
+                                                                }}>
+                                                                    {formatConsistentTime(duty.dutyTime || '11:00 AM')}
+                                                                </span>
+                                                            </td>
+
+                                                            {/* Duty / Route */}
+                                                            <td style={{
+                                                                padding: '10px 14px',
+                                                                color: 'white',
+                                                                fontWeight: '600',
+                                                                borderRight: '1px solid rgba(255,255,255,0.06)'
+                                                            }}>
+                                                                {duty.dutyType || 'Event Transfer'}
+                                                            </td>
+
+                                                            {/* Rate (₹) - Always consistent yellow styling */}
+                                                            <td style={{
+                                                                padding: '10px 12px',
+                                                                textAlign: 'right',
+                                                                fontWeight: '900',
+                                                                borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                                background: 'rgba(254, 240, 138, 0.18)',
+                                                                color: '#fef08a',
+                                                                whiteSpace: 'nowrap'
+                                                            }}>
+                                                                ₹{fare.toLocaleString('en-IN')}
+                                                            </td>
+
+                                                            {/* C/Out or Drop Location */}
+                                                            <td style={{
+                                                                padding: '10px 10px',
+                                                                textAlign: 'center',
+                                                                color: 'rgba(255,255,255,0.75)',
+                                                                fontWeight: '700',
+                                                                borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                                whiteSpace: 'nowrap'
+                                                            }}>
+                                                                {duty.dropLocation || group.dateKey}
+                                                            </td>
+
+                                                            {/* Car Badge */}
+                                                            <td style={{
+                                                                padding: '8px 10px',
+                                                                borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                                whiteSpace: 'nowrap'
+                                                            }}>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                    {duty.carNumber && duty.carNumber !== 'TBA' ? (
+                                                                        <>
+                                                                            <span style={{
+                                                                                padding: '2px 7px',
+                                                                                borderRadius: '6px',
+                                                                                background: 'rgba(56, 189, 248, 0.14)',
+                                                                                border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                                                color: '#38bdf8',
+                                                                                fontWeight: '800',
+                                                                                fontSize: '11.5px',
+                                                                                width: 'fit-content'
+                                                                            }}>
+                                                                                🚗 {duty.carNumber}
+                                                                            </span>
+                                                                            {duty.model && (
+                                                                                <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
+                                                                                    {duty.model}
+                                                                                </span>
+                                                                            )}
+                                                                        </>
+                                                                    ) : (
+                                                                        <span style={{
+                                                                            padding: '3px 8px',
+                                                                            borderRadius: '6px',
+                                                                            background: 'rgba(255,255,255,0.05)',
+                                                                            border: '1px dashed rgba(56, 189, 248, 0.4)',
+                                                                            color: '#38bdf8',
+                                                                            fontWeight: '700',
+                                                                            fontSize: '11px',
+                                                                            width: 'fit-content'
+                                                                        }}>
+                                                                            🚗 {duty.model || 'Sedan'}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+
+                                                            {/* Driver Badge */}
+                                                            <td style={{
+                                                                padding: '8px 10px',
+                                                                borderRight: '1px solid rgba(255,255,255,0.06)',
+                                                                whiteSpace: 'nowrap'
+                                                            }}>
+                                                                {duty.driverName && duty.driverName !== 'TBA' ? (
+                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                        <span style={{
+                                                                            padding: '2px 8px',
+                                                                            borderRadius: '6px',
+                                                                            background: 'rgba(34, 197, 94, 0.15)',
+                                                                            border: '1px solid rgba(34, 197, 94, 0.35)',
+                                                                            color: '#4ade80',
+                                                                            fontWeight: '800',
+                                                                            fontSize: '11.5px',
+                                                                            width: 'fit-content'
+                                                                        }}>
+                                                                            👤 {duty.driverName}
+                                                                        </span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px' }}>TBA</span>
+                                                                )}
+                                                            </td>
+
+                                                            {/* Actions */}
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                                                    <button
+                                                                        onClick={() => handleEditDuty(duty.rawDuty || duty)}
+                                                                        title="Edit Duty"
+                                                                        style={{
+                                                                            width: '28px',
+                                                                            height: '28px',
+                                                                            borderRadius: '6px',
+                                                                            background: 'rgba(56, 189, 248, 0.15)',
+                                                                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                                                                            color: '#38bdf8',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            cursor: 'pointer',
+                                                                            transition: 'all 0.2s'
+                                                                        }}
+                                                                    >
+                                                                        <Edit size={14} />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleDeleteDuty(duty._id, duty.isAttendance)}
+                                                                        title="Delete Duty"
+                                                                        style={{
+                                                                            width: '28px',
+                                                                            height: '28px',
+                                                                            borderRadius: '6px',
+                                                                            background: 'rgba(239, 68, 68, 0.15)',
+                                                                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                                            color: '#ef4444',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            cursor: 'pointer',
+                                                                            transition: 'all 0.2s'
+                                                                        }}
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </React.Fragment>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            
+{/* ═══ MASTER GRID FOCUS ═══ */}
             {/* Removed global duty logs as requested by user to simplify and focus UI on Master Events */}
 
             {/* ═══ DUTY LOG MODAL ═══ */}
