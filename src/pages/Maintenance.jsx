@@ -328,11 +328,15 @@ const Maintenance = () => {
 
     const openSettleModal = (target) => {
         setSettleTarget(target);
+        const defaultAmount = target.type === 'vendor' 
+            ? (target.vendor.dueAmount || 0) 
+            : ((target.bill.dueAmount !== undefined ? target.bill.dueAmount : target.bill.amount) || 0);
         setSettleForm({
             paymentMode: 'Cash',
             bankAccountId: bankAccounts[0]?._id || '',
             paidBy: 'Company',
             paymentDate: todayIST(),
+            amount: defaultAmount,
             note: ''
         });
         setShowSettleModal(true);
@@ -341,6 +345,13 @@ const Maintenance = () => {
     const handleSettlePayment = async (e) => {
         e.preventDefault();
         if (!settleTarget) return;
+
+        const enteredAmount = Number(settleForm.amount);
+        if (!enteredAmount || enteredAmount <= 0) {
+            alert('Please enter a valid payment amount greater than 0.');
+            return;
+        }
+
         setSettling(true);
         try {
             const userInfoStr = localStorage.getItem('userInfo');
@@ -352,31 +363,23 @@ const Maintenance = () => {
 
             if (settleTarget.type === 'bill') {
                 const bill = settleTarget.bill;
-                const fd = new FormData();
-                fd.append('paymentStatus', 'Paid');
-                fd.append('paymentMode', settleForm.paymentMode);
-                fd.append('paidBy', effectivePaidBy);
-                fd.append('paymentSource', effectivePaidBy === 'Others' ? 'Others' : 'Paid');
-                if (settleForm.bankAccountId && !isOthers && settleForm.paymentMode !== 'Cash') {
-                    fd.append('bankAccountId', settleForm.bankAccountId);
-                } else {
-                    fd.append('bankAccountId', '');
-                }
-                if (settleForm.paymentDate) {
-                    fd.append('billDate', settleForm.paymentDate);
-                }
-
-                await axios.put(`/api/admin/maintenance/${bill._id}`, fd, {
-                    headers: {
-                        'Content-Type': 'multipart/form-data',
-                        Authorization: `Bearer ${userInfo.token}`
-                    }
+                await axios.post('/api/admin/maintenance/settle-vendor', {
+                    companyId: selectedCompany._id,
+                    billIds: [bill._id],
+                    amount: enteredAmount,
+                    paymentMode: settleForm.paymentMode,
+                    bankAccountId: (!isOthers && settleForm.paymentMode !== 'Cash') ? settleForm.bankAccountId : null,
+                    paidBy: effectivePaidBy,
+                    paymentDate: settleForm.paymentDate
+                }, {
+                    headers: { Authorization: `Bearer ${userInfo.token}` }
                 });
             } else if (settleTarget.type === 'vendor') {
                 const vendor = settleTarget.vendor;
                 await axios.post('/api/admin/maintenance/settle-vendor', {
                     companyId: selectedCompany._id,
                     vendorName: vendor.vendorName,
+                    amount: enteredAmount,
                     paymentMode: settleForm.paymentMode,
                     bankAccountId: (!isOthers && settleForm.paymentMode !== 'Cash') ? settleForm.bankAccountId : null,
                     paidBy: effectivePaidBy,
@@ -3476,211 +3479,294 @@ const Maintenance = () => {
                                 </button>
                             </div>
 
-                            {/* Settlement Amount Banner */}
-                            <div style={{
-                                padding: '16px 20px',
-                                borderRadius: '16px',
-                                background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.15) 0%, rgba(225, 29, 72, 0.05) 100%)',
-                                border: '1px solid rgba(244, 63, 94, 0.3)',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginBottom: '22px'
-                            }}>
-                                <div>
-                                    <div style={{ fontSize: '10px', color: '#f43f5e', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                        Total Amount to Settle
-                                    </div>
-                                    <div style={{ color: 'white', fontSize: '26px', fontWeight: '1000', marginTop: '2px', letterSpacing: '-0.5px' }}>
-                                        ₹{(settleTarget.type === 'vendor' ? settleTarget.vendor.dueAmount : settleTarget.bill.amount || 0).toLocaleString()}
-                                    </div>
-                                </div>
-                                <span style={{
-                                    background: '#f43f5e',
-                                    color: 'white',
-                                    fontSize: '11px',
-                                    fontWeight: '900',
-                                    padding: '4px 10px',
-                                    borderRadius: '8px'
-                                }}>
-                                    NET DUE
-                                </span>
-                            </div>
+                            {/* Settlement Summary Banner */}
+                            {(() => {
+                                const totalDue = (settleTarget.type === 'vendor' ? settleTarget.vendor.dueAmount : (settleTarget.bill.dueAmount !== undefined ? settleTarget.bill.dueAmount : settleTarget.bill.amount)) || 0;
+                                const payingAmount = Number(settleForm.amount) || 0;
+                                const remainingDue = Math.max(0, totalDue - payingAmount);
 
-                            <form onSubmit={handleSettlePayment} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                {/* Payment Mode (3 Options) */}
-                                <div>
-                                    <label style={{ display: 'block', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>
-                                        Payment Method
-                                    </label>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-                                        <button
-                                            type="button"
-                                            onClick={() => setSettleForm({ ...settleForm, paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' })}
-                                            style={{
-                                                padding: '10px 8px',
-                                                borderRadius: '12px',
-                                                border: (settleForm.paymentMode === 'Cash') ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
-                                                background: (settleForm.paymentMode === 'Cash') ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
-                                                color: (settleForm.paymentMode === 'Cash') ? '#10b981' : 'rgba(255,255,255,0.6)',
-                                                fontWeight: '800',
-                                                fontSize: '11px',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: '5px'
-                                            }}
-                                        >
-                                            💵 Cash
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setSettleForm({ ...settleForm, paymentMode: 'Bank Transfer', bankAccountId: settleForm.bankAccountId || (bankAccounts[0]?._id || ''), paidBy: 'Company' })}
-                                            style={{
-                                                padding: '10px 8px',
-                                                borderRadius: '12px',
-                                                border: (settleForm.paymentMode !== 'Cash' && settleForm.paymentMode !== 'Others') ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
-                                                background: (settleForm.paymentMode !== 'Cash' && settleForm.paymentMode !== 'Others') ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
-                                                color: (settleForm.paymentMode !== 'Cash' && settleForm.paymentMode !== 'Others') ? '#38bdf8' : 'rgba(255,255,255,0.6)',
-                                                fontWeight: '800',
-                                                fontSize: '11px',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: '5px'
-                                            }}
-                                        >
-                                            🏦 Bank / UPI
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setSettleForm({ ...settleForm, paymentMode: 'Others', bankAccountId: '', paidBy: 'Others' })}
-                                            style={{
-                                                padding: '10px 8px',
-                                                borderRadius: '12px',
-                                                border: (settleForm.paymentMode === 'Others') ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
-                                                background: (settleForm.paymentMode === 'Others') ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
-                                                color: (settleForm.paymentMode === 'Others') ? '#c084fc' : 'rgba(255,255,255,0.6)',
-                                                fontWeight: '800',
-                                                fontSize: '11px',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                gap: '5px'
-                                            }}
-                                        >
-                                            💼 Others
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Dynamic Payment Mode Explanations / Selectors */}
-                                {settleForm.paymentMode === 'Others' ? (
-                                    <div style={{
-                                        background: 'rgba(168, 85, 247, 0.08)',
-                                        border: '1px solid rgba(168, 85, 247, 0.25)',
-                                        borderRadius: '12px',
-                                        padding: '12px 14px',
-                                        fontSize: '12px',
-                                        color: '#c084fc',
-                                        fontWeight: '700'
-                                    }}>
-                                        💼 Paid via Others / Personal Account (Does NOT deduct company cash or bank balance)
-                                    </div>
-                                ) : settleForm.paymentMode === 'Cash' ? (
-                                    <div style={{
-                                        background: 'rgba(16, 185, 129, 0.08)',
-                                        border: '1px solid rgba(16, 185, 129, 0.25)',
-                                        borderRadius: '12px',
-                                        padding: '12px 14px',
-                                        fontSize: '12px',
-                                        color: '#10b981',
-                                        fontWeight: '800',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between'
-                                    }}>
-                                        <span>💵 Deducted from Office Cash in Hand (Cash Book)</span>
-                                        <span style={{ color: '#f87171', fontWeight: '900' }}>
-                                            -₹{(settleTarget.type === 'vendor' ? settleTarget.vendor.dueAmount : settleTarget.bill.amount || 0).toLocaleString()}
-                                        </span>
-                                    </div>
-                                ) : (
-                                    <BankSelector
-                                        bankAccounts={bankAccounts}
-                                        value={settleForm.bankAccountId}
-                                        amount={settleTarget.type === 'vendor' ? settleTarget.vendor.dueAmount : settleTarget.bill.amount}
-                                        onChange={(bId) => setSettleForm({ ...settleForm, bankAccountId: bId, paymentMode: 'Bank Transfer' })}
-                                    />
-                                )}
-
-                                {/* Payment Date */}
-                                <div>
-                                    <label style={{ display: 'block', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '6px' }}>
-                                        Payment Date
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={settleForm.paymentDate}
-                                        onChange={(e) => setSettleForm({ ...settleForm, paymentDate: e.target.value })}
-                                        required
-                                        style={{
-                                            width: '100%',
-                                            padding: '10px 14px',
-                                            borderRadius: '10px',
-                                            background: '#0f172a',
-                                            border: '1px solid rgba(255,255,255,0.12)',
-                                            color: 'white',
-                                            fontSize: '13px',
-                                            fontWeight: '700',
-                                            outline: 'none'
-                                        }}
-                                    />
-                                </div>
-
-                                {/* Form Actions */}
-                                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setShowSettleModal(false); setSettleTarget(null); }}
-                                        style={{ flex: 1, padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={settling}
-                                        style={{
-                                            flex: 2,
-                                            padding: '12px',
-                                            borderRadius: '12px',
-                                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                                            border: 'none',
-                                            color: 'white',
-                                            fontSize: '13px',
-                                            fontWeight: '900',
-                                            cursor: settling ? 'not-allowed' : 'pointer',
+                                return (
+                                    <>
+                                        <div style={{
+                                            padding: '16px 20px',
+                                            borderRadius: '16px',
+                                            background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.15) 0%, rgba(225, 29, 72, 0.05) 100%)',
+                                            border: '1px solid rgba(244, 63, 94, 0.3)',
                                             display: 'flex',
-                                            justifyContent: 'center',
+                                            justifyContent: 'space-between',
                                             alignItems: 'center',
-                                            gap: '8px',
-                                            boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)',
-                                            opacity: settling ? 0.7 : 1
-                                        }}
-                                    >
-                                        {settling ? (
-                                            <>Processing...</>
-                                        ) : (
-                                            <>
-                                                <Check size={16} /> Confirm Payment & Settle
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
-                            </form>
+                                            marginBottom: '18px'
+                                        }}>
+                                            <div>
+                                                <div style={{ fontSize: '10px', color: '#f43f5e', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                    Total Outstanding Due
+                                                </div>
+                                                <div style={{ color: 'white', fontSize: '26px', fontWeight: '1000', marginTop: '2px', letterSpacing: '-0.5px' }}>
+                                                    ₹{totalDue.toLocaleString('en-IN')}
+                                                </div>
+                                            </div>
+                                            <div style={{ textAlign: 'right' }}>
+                                                <span style={{
+                                                    background: '#f43f5e',
+                                                    color: 'white',
+                                                    fontSize: '11px',
+                                                    fontWeight: '900',
+                                                    padding: '4px 10px',
+                                                    borderRadius: '8px',
+                                                    display: 'inline-block'
+                                                }}>
+                                                    NET DUE
+                                                </span>
+                                                {remainingDue > 0 && payingAmount > 0 && (
+                                                    <div style={{ fontSize: '11px', color: '#fbbf24', fontWeight: '800', marginTop: '4px' }}>
+                                                        Remaining: ₹{remainingDue.toLocaleString('en-IN')}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <form onSubmit={handleSettlePayment} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                            {/* Editable Amount to Pay */}
+                                            <div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                    <label style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                                        Amount to Pay (₹) *
+                                                    </label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSettleForm({ ...settleForm, amount: totalDue })}
+                                                        style={{
+                                                            background: 'rgba(16, 185, 129, 0.15)',
+                                                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                                                            color: '#34d399',
+                                                            padding: '3px 8px',
+                                                            borderRadius: '6px',
+                                                            fontSize: '11px',
+                                                            fontWeight: '800',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    >
+                                                        Pay Full (₹{totalDue.toLocaleString('en-IN')})
+                                                    </button>
+                                                </div>
+                                                <div style={{ position: 'relative' }}>
+                                                    <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#10b981', fontWeight: '900', fontSize: '18px' }}>₹</span>
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        max={totalDue}
+                                                        step="any"
+                                                        required
+                                                        value={settleForm.amount}
+                                                        onChange={(e) => setSettleForm({ ...settleForm, amount: e.target.value })}
+                                                        placeholder="Enter payment amount"
+                                                        style={{
+                                                            width: '100%',
+                                                            padding: '12px 14px 12px 34px',
+                                                            borderRadius: '12px',
+                                                            background: '#070c18',
+                                                            border: '1px solid rgba(16, 185, 129, 0.4)',
+                                                            color: '#10b981',
+                                                            fontSize: '18px',
+                                                            fontWeight: '950',
+                                                            outline: 'none',
+                                                            boxSizing: 'border-box'
+                                                        }}
+                                                    />
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', fontSize: '11px' }}>
+                                                    <span style={{ color: 'rgba(255,255,255,0.45)' }}>
+                                                        Enter full amount or any partial amount.
+                                                    </span>
+                                                    {remainingDue > 0 && payingAmount > 0 && (
+                                                        <span style={{ color: '#fbbf24', fontWeight: '800' }}>
+                                                            Remaining Due: ₹{remainingDue.toLocaleString('en-IN')}
+                                                        </span>
+                                                    )}
+                                                    {payingAmount >= totalDue && totalDue > 0 && (
+                                                        <span style={{ color: '#34d399', fontWeight: '800' }}>
+                                                            ✓ Settling 100% of bill
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Payment Mode (3 Options) */}
+                                            <div>
+                                                <label style={{ display: 'block', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>
+                                                    Payment Method
+                                                </label>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSettleForm({ ...settleForm, paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' })}
+                                                        style={{
+                                                            padding: '10px 8px',
+                                                            borderRadius: '12px',
+                                                            border: (settleForm.paymentMode === 'Cash') ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                            background: (settleForm.paymentMode === 'Cash') ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                            color: (settleForm.paymentMode === 'Cash') ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                                            fontWeight: '800',
+                                                            fontSize: '11px',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            gap: '5px'
+                                                        }}
+                                                    >
+                                                        💵 Cash
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSettleForm({ ...settleForm, paymentMode: 'Bank Transfer', bankAccountId: settleForm.bankAccountId || (bankAccounts[0]?._id || ''), paidBy: 'Company' })}
+                                                        style={{
+                                                            padding: '10px 8px',
+                                                            borderRadius: '12px',
+                                                            border: (settleForm.paymentMode !== 'Cash' && settleForm.paymentMode !== 'Others') ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                            background: (settleForm.paymentMode !== 'Cash' && settleForm.paymentMode !== 'Others') ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                            color: (settleForm.paymentMode !== 'Cash' && settleForm.paymentMode !== 'Others') ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                            fontWeight: '800',
+                                                            fontSize: '11px',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            gap: '5px'
+                                                        }}
+                                                    >
+                                                        🏦 Bank / UPI
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSettleForm({ ...settleForm, paymentMode: 'Others', bankAccountId: '', paidBy: 'Others' })}
+                                                        style={{
+                                                            padding: '10px 8px',
+                                                            borderRadius: '12px',
+                                                            border: (settleForm.paymentMode === 'Others') ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
+                                                            background: (settleForm.paymentMode === 'Others') ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                            color: (settleForm.paymentMode === 'Others') ? '#c084fc' : 'rgba(255,255,255,0.6)',
+                                                            fontWeight: '800',
+                                                            fontSize: '11px',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            gap: '5px'
+                                                        }}
+                                                    >
+                                                        💼 Others
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Dynamic Payment Mode Explanations / Selectors */}
+                                            {settleForm.paymentMode === 'Others' ? (
+                                                <div style={{
+                                                    background: 'rgba(168, 85, 247, 0.08)',
+                                                    border: '1px solid rgba(168, 85, 247, 0.25)',
+                                                    borderRadius: '12px',
+                                                    padding: '12px 14px',
+                                                    fontSize: '12px',
+                                                    color: '#c084fc',
+                                                    fontWeight: '700'
+                                                }}>
+                                                    💼 Paid via Others / Personal Account (Does NOT deduct company cash or bank balance)
+                                                </div>
+                                            ) : settleForm.paymentMode === 'Cash' ? (
+                                                <div style={{
+                                                    background: 'rgba(16, 185, 129, 0.08)',
+                                                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                                                    borderRadius: '12px',
+                                                    padding: '12px 14px',
+                                                    fontSize: '12px',
+                                                    color: '#10b981',
+                                                    fontWeight: '800',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between'
+                                                }}>
+                                                    <span>💵 Deducted from Office Cash in Hand (Cash Book)</span>
+                                                    <span style={{ color: '#f87171', fontWeight: '900' }}>
+                                                        -₹{(Number(settleForm.amount) || 0).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <BankSelector
+                                                    bankAccounts={bankAccounts}
+                                                    value={settleForm.bankAccountId}
+                                                    amount={Number(settleForm.amount) || 0}
+                                                    onChange={(bId) => setSettleForm({ ...settleForm, bankAccountId: bId, paymentMode: 'Bank Transfer' })}
+                                                />
+                                            )}
+
+                                            {/* Payment Date */}
+                                            <div>
+                                                <label style={{ display: 'block', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '6px' }}>
+                                                    Payment Date
+                                                </label>
+                                                <input
+                                                    type="date"
+                                                    value={settleForm.paymentDate}
+                                                    onChange={(e) => setSettleForm({ ...settleForm, paymentDate: e.target.value })}
+                                                    required
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: '10px 14px',
+                                                        borderRadius: '10px',
+                                                        background: '#0f172a',
+                                                        border: '1px solid rgba(255,255,255,0.12)',
+                                                        color: 'white',
+                                                        fontSize: '13px',
+                                                        fontWeight: '700',
+                                                        outline: 'none'
+                                                    }}
+                                                />
+                                            </div>
+
+                                            {/* Form Actions */}
+                                            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setShowSettleModal(false); setSettleTarget(null); }}
+                                                    style={{ flex: 1, padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    type="submit"
+                                                    disabled={settling}
+                                                    style={{
+                                                        flex: 2,
+                                                        padding: '12px',
+                                                        borderRadius: '12px',
+                                                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                                        border: 'none',
+                                                        color: 'white',
+                                                        fontSize: '13px',
+                                                        fontWeight: '900',
+                                                        cursor: settling ? 'not-allowed' : 'pointer',
+                                                        display: 'flex',
+                                                        justifyContent: 'center',
+                                                        alignItems: 'center',
+                                                        gap: '8px',
+                                                        boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)',
+                                                        opacity: settling ? 0.7 : 1
+                                                    }}
+                                                >
+                                                    {settling ? (
+                                                        <>Processing...</>
+                                                    ) : (
+                                                        <>
+                                                            <Check size={16} /> Confirm Payment & Settle
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </>
+                                );
+                            })()}
                         </motion.div>
                     </div>
                 )}

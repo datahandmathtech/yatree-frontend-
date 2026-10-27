@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from '../api/axios';
-import { Plus, Search, Trash2, Car, X, Save, ChevronLeft, ChevronRight, Calendar, Edit, MapPin, Briefcase, Layers, ShoppingCart, TrendingUp, FileText, Store, IndianRupee, Eye, CheckCircle2 } from 'lucide-react';
+import { Plus, Search, Trash2, Car, X, Save, ChevronLeft, ChevronRight, Calendar, Edit, MapPin, Briefcase, Layers, ShoppingCart, TrendingUp, FileText, Store, IndianRupee, Eye, CheckCircle2, Download, Filter, Scale, ArrowUpRight, ArrowDownRight, BookOpen, CreditCard, Receipt } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -9,6 +9,7 @@ import { useCompany } from '../context/CompanyContext';
 import { useTheme } from '../context/ThemeContext';
 import SEO from '../components/SEO';
 import PremiumDateInput from '../components/common/PremiumDateInput';
+import BankSelector from '../components/common/BankSelector';
 import { todayIST, toISTDateString, firstDayOfMonthIST, formatDateIST, nowIST } from '../utils/istUtils';
 
 const normalizePlate = (str) => String(str || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -34,6 +35,28 @@ const OutsideCars = () => {
     const [selectedVendorForLedger, setSelectedVendorForLedger] = useState(null);
     const [vendorLedgerMonth, setVendorLedgerMonth] = useState('All');
     const [vendorSearchTerm, setVendorSearchTerm] = useState('');
+    const [ledgerDutySearch, setLedgerDutySearch] = useState('');
+    const [ledgerVehicleFilter, setLedgerVehicleFilter] = useState('All');
+    const [ledgerTxTypeFilter, setLedgerTxTypeFilter] = useState('All'); // 'All' | 'Buy' | 'Sell' | 'Payment' | 'Receipt'
+
+    // Vendor Payments State
+    const [vendorPayments, setVendorPayments] = useState([]);
+    const [bankAccounts, setBankAccounts] = useState([]);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [paymentEditMode, setPaymentEditMode] = useState(false);
+    const [paymentSelectedId, setPaymentSelectedId] = useState(null);
+    const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+    const [paymentFormData, setPaymentFormData] = useState({
+        vendorName: '',
+        paymentType: 'Paid',
+        amount: '',
+        date: new Date().toISOString().split('T')[0],
+        paymentMode: 'Cash',
+        bankAccountId: '',
+        paidBy: 'Company',
+        referenceNumber: '',
+        notes: ''
+    });
     const location = useLocation();
 
     // ── AI AGENT SEARCH INTEGRATION ──
@@ -120,8 +143,19 @@ const OutsideCars = () => {
     useEffect(() => {
         if (selectedCompany) {
             fetchOutsideVehicles();
+            fetchBankAccounts();
         }
     }, [selectedCompany]);
+
+    const fetchBankAccounts = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            const banksRes = await axios.get(`/api/banks/company/${selectedCompany._id}`).catch(() => axios.get(`/api/admin/bank-accounts/${selectedCompany._id}`)).catch(() => ({ data: [] }));
+            setBankAccounts(Array.isArray(banksRes.data) ? banksRes.data : (banksRes.data?.bankAccounts || []));
+        } catch (err) {
+            console.error('Error fetching bank accounts:', err);
+        }
+    };
 
     const fetchOutsideVehicles = async () => {
         if (!selectedCompany?._id) return;
@@ -130,10 +164,14 @@ const OutsideCars = () => {
             const userInfo = JSON.parse(localStorage.getItem('userInfo'));
             const headers = { Authorization: `Bearer ${userInfo?.token}` };
 
-            // Fetch company vehicles and outside vehicles concurrently in parallel
-            const [compRes, outRes] = await Promise.all([
+            // Fetch company vehicles, outside vehicles, and vendor payments concurrently in parallel
+            const [compRes, outRes, payRes] = await Promise.all([
                 axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false`, { headers }),
-                axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false&type=outside&includeBlocked=true`, { headers })
+                axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false&type=outside&includeBlocked=true`, { headers }),
+                axios.get(`/api/admin/vendor-payments/${selectedCompany._id}`, { headers }).catch(err => {
+                    console.error('Error fetching vendor payments:', err);
+                    return { data: { payments: [] } };
+                })
             ]);
 
             const compVehs = compRes.data?.vehicles?.filter(v => !v.isOutsideCar && !v.eventId) || [];
@@ -146,6 +184,7 @@ const OutsideCars = () => {
                 return !fleetPlates.has(plate);
             });
             setVehicles(outVehs);
+            setVendorPayments(payRes.data?.payments || []);
         } catch (err) {
             console.error('Error fetching outside vehicles:', err);
         } finally {
@@ -469,6 +508,119 @@ const OutsideCars = () => {
         setShowModal(true);
     };
 
+    // ── VENDOR PAYMENT HANDLERS ──
+    const handlePaymentSubmit = async (e) => {
+        e.preventDefault();
+        if (!selectedCompany?._id) return;
+        if (!paymentFormData.vendorName?.trim() || !paymentFormData.amount) {
+            alert('Please provide vendor name and a valid amount.');
+            return;
+        }
+        setPaymentSubmitting(true);
+        try {
+            const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+            const headers = { Authorization: `Bearer ${userInfo?.token}` };
+            const payload = {
+                companyId: selectedCompany._id,
+                vendorName: paymentFormData.vendorName.trim(),
+                paymentType: paymentFormData.paymentType,
+                amount: Number(paymentFormData.amount),
+                date: paymentFormData.date,
+                paymentMode: paymentFormData.paymentMode,
+                bankAccountId: (paymentFormData.paymentMode !== 'Cash' && paymentFormData.paymentMode !== 'Others') ? (paymentFormData.bankAccountId || null) : null,
+                paidBy: paymentFormData.paymentMode === 'Others' ? 'Others' : 'Company',
+                referenceNumber: paymentFormData.referenceNumber?.trim() || '',
+                notes: paymentFormData.notes?.trim() || ''
+            };
+
+            if (paymentEditMode && paymentSelectedId) {
+                await axios.put(`/api/admin/vendor-payments/${paymentSelectedId}`, payload, { headers });
+            } else {
+                await axios.post('/api/admin/vendor-payments', payload, { headers });
+            }
+
+            setShowPaymentModal(false);
+            setPaymentEditMode(false);
+            setPaymentSelectedId(null);
+            setPaymentFormData({
+                vendorName: '',
+                paymentType: 'Paid',
+                amount: '',
+                date: new Date().toISOString().split('T')[0],
+                paymentMode: 'Cash',
+                bankAccountId: '',
+                paidBy: 'Company',
+                referenceNumber: '',
+                notes: ''
+            });
+            await fetchOutsideVehicles();
+        } catch (err) {
+            alert(err.response?.data?.message || 'Error processing payment');
+        } finally {
+            setPaymentSubmitting(false);
+        }
+    };
+
+    const handleEditPayment = (payment) => {
+        const raw = payment.rawPayment || payment;
+        setPaymentFormData({
+            vendorName: raw.vendorName || selectedVendorForLedger?.vendorName || '',
+            paymentType: raw.paymentType || 'Paid',
+            amount: raw.amount || raw.effectiveAmount || '',
+            date: toISTDateString(raw.date || raw.effectiveDate),
+            paymentMode: raw.paymentMode || 'Cash',
+            bankAccountId: raw.bankAccount?._id || raw.bankAccount || '',
+            paidBy: raw.paidBy || (raw.paymentMode === 'Others' ? 'Others' : 'Company'),
+            referenceNumber: raw.referenceNumber || '',
+            notes: raw.notes || ''
+        });
+        setPaymentSelectedId(raw._id);
+        setPaymentEditMode(true);
+        setShowPaymentModal(true);
+    };
+
+    const openNewPaymentModal = (vendorName = '', defaultType = 'Paid') => {
+        setPaymentFormData({
+            vendorName: vendorName || '',
+            paymentType: defaultType,
+            amount: '',
+            date: new Date().toISOString().split('T')[0],
+            paymentMode: 'Cash',
+            bankAccountId: bankAccounts[0]?._id || '',
+            paidBy: 'Company',
+            referenceNumber: '',
+            notes: ''
+        });
+        setPaymentEditMode(false);
+        setPaymentSelectedId(null);
+        setShowPaymentModal(true);
+    };
+
+    const handleDeletePayment = async (id) => {
+        if (!window.confirm('Are you sure you want to delete this payment record? This will adjust the ledger balance.')) {
+            return;
+        }
+        try {
+            const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+            const headers = { Authorization: `Bearer ${userInfo?.token}` };
+            await axios.delete(`/api/admin/vendor-payments/${id}`, { headers });
+            await fetchOutsideVehicles();
+        } catch (err) {
+            alert(err.response?.data?.message || 'Error deleting payment');
+        }
+    };
+
+    const uniqueVendorsList = useMemo(() => {
+        const set = new Set();
+        vehicles.forEach(v => {
+            if (v.ownerName?.trim()) set.add(v.ownerName.trim());
+        });
+        vendorPayments.forEach(p => {
+            if (p.vendorName?.trim()) set.add(p.vendorName.trim());
+        });
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }, [vehicles, vendorPayments]);
+
     const fleetPlateSet = useMemo(() => {
         return new Set((companyVehicles || []).map(v => normalizePlate(v.carNumber)).filter(Boolean));
     }, [companyVehicles]);
@@ -511,59 +663,164 @@ const OutsideCars = () => {
     const totalPayable = filtered.reduce((sum, v) => sum + (v ? (Number((v.transactionType === 'Buy' && v.buyAmount) ? v.buyAmount : v.dutyAmount) || 0) : 0), 0);
     const totalDutiesCount = filtered.reduce((sum, v) => sum + (v?.dutyType ? v.dutyType.split(' + ').filter(Boolean).length : 0), 0);
 
-    // ── VENDOR AGGREGATES FOR OUTSIDE VENDOR LEDGER ──
+    // ── VENDOR AGGREGATES FOR OUTSIDE VENDOR LEDGER (DUTIES + PAYMENTS) ──
     const vendorAggregates = useMemo(() => {
         const vMap = {};
-        validOutsideVehicles.forEach(v => {
-            const rawOwner = (v.ownerName || 'Unknown Vendor').trim();
-            const ownerKey = rawOwner.toLowerCase();
+
+        const getOrCreateVendor = (rawOwner) => {
+            const trimmed = (rawOwner || 'Unknown Vendor').trim();
+            const ownerKey = trimmed.toLowerCase();
             if (!vMap[ownerKey]) {
                 vMap[ownerKey] = {
-                    vendorName: rawOwner,
+                    vendorName: trimmed,
                     totalDuties: 0,
                     totalAmount: 0,
+                    totalDena: 0, // Buy duties (Total Payable incurred)
+                    totalLena: 0, // Sell duties (Total Receivable incurred)
+                    totalPaid: 0, // Paid to vendor (reduces payable debt)
+                    totalReceived: 0, // Received from vendor (reduces receivable debt)
                     vehicles: new Set(),
                     latestDate: null,
                     duties: []
                 };
             }
-            const amt = Number((v.transactionType === 'Buy' && v.buyAmount) ? v.buyAmount : v.dutyAmount) || 0;
-            vMap[ownerKey].totalDuties += 1;
-            vMap[ownerKey].totalAmount += amt;
+            return vMap[ownerKey];
+        };
+
+        // 1. Process Duties
+        validOutsideVehicles.forEach(v => {
+            const vnd = getOrCreateVendor(v.ownerName);
+            const isBuy = (v.transactionType || 'Buy') === 'Buy';
+            const amt = Number((isBuy && v.buyAmount) ? v.buyAmount : v.dutyAmount) || 0;
+            const denaAmt = isBuy ? amt : 0;
+            const lenaAmt = !isBuy ? amt : 0;
+
+            vnd.totalDuties += 1;
+            vnd.totalAmount += amt;
+            vnd.totalDena += denaAmt;
+            vnd.totalLena += lenaAmt;
+
             const rawPlate = v.carNumber?.split('#')[0];
             if (rawPlate && !fleetPlateSet.has(normalizePlate(rawPlate))) {
-                vMap[ownerKey].vehicles.add(rawPlate);
+                vnd.vehicles.add(rawPlate);
             }
 
             const dutyDate = v.carNumber?.split('#')[1] || toISTDateString(v.createdAt);
-            if (!vMap[ownerKey].latestDate || dutyDate > vMap[ownerKey].latestDate) {
-                vMap[ownerKey].latestDate = dutyDate;
+            if (!vnd.latestDate || dutyDate > vnd.latestDate) {
+                vnd.latestDate = dutyDate;
             }
-            vMap[ownerKey].duties.push({
+            vnd.duties.push({
                 ...v,
+                isPayment: false,
                 effectiveDate: dutyDate,
-                effectiveAmount: amt
+                effectiveAmount: amt,
+                isBuy,
+                denaAmount: denaAmt,
+                lenaAmount: lenaAmt
+            });
+        });
+
+        // 2. Process Vendor Payments
+        vendorPayments.forEach(p => {
+            const vnd = getOrCreateVendor(p.vendorName);
+            const amt = Number(p.amount) || 0;
+            const isPaid = p.paymentType === 'Paid';
+            if (isPaid) {
+                vnd.totalPaid += amt;
+            } else {
+                vnd.totalReceived += amt;
+            }
+
+            const payDate = toISTDateString(p.date || p.createdAt);
+            if (!vnd.latestDate || payDate > vnd.latestDate) {
+                vnd.latestDate = payDate;
+            }
+
+            vnd.duties.push({
+                _id: p._id,
+                isPayment: true,
+                paymentType: p.paymentType,
+                effectiveDate: payDate,
+                effectiveAmount: amt,
+                paymentMode: p.paymentMode,
+                referenceNumber: p.referenceNumber,
+                notes: p.notes,
+                rawPayment: p
             });
         });
 
         return Object.values(vMap).map(vnd => {
             const mBreakdown = {};
-            vnd.duties.forEach(d => {
-                const mKey = (d.effectiveDate || '').substring(0, 7) || 'Unknown';
+            // Sort chronologically (oldest to newest) to calculate cumulative running balance
+            const chronologicalEntries = [...vnd.duties].sort((a, b) => (a.effectiveDate || '').localeCompare(b.effectiveDate || ''));
+            let runningBal = 0;
+            const entriesWithBalance = chronologicalEntries.map(e => {
+                if (e.isPayment) {
+                    if (e.paymentType === 'Paid') {
+                        // Payment out to vendor reduces what we owe
+                        runningBal -= e.effectiveAmount;
+                    } else {
+                        // Payment in from vendor reduces what they owe
+                        runningBal += e.effectiveAmount;
+                    }
+                } else {
+                    if (e.isBuy) {
+                        runningBal += e.effectiveAmount; // We owe vendor
+                    } else {
+                        runningBal -= e.effectiveAmount; // Vendor owes us
+                    }
+                }
+                return {
+                    ...e,
+                    runningBalance: runningBal
+                };
+            });
+
+            entriesWithBalance.forEach(e => {
+                const mKey = (e.effectiveDate || '').substring(0, 7) || 'Unknown';
                 if (!mBreakdown[mKey]) {
-                    mBreakdown[mKey] = { month: mKey, count: 0, amount: 0 };
+                    mBreakdown[mKey] = { month: mKey, count: 0, amount: 0, denaAmount: 0, lenaAmount: 0, paidAmount: 0, receivedAmount: 0 };
                 }
                 mBreakdown[mKey].count += 1;
-                mBreakdown[mKey].amount += d.effectiveAmount;
+                mBreakdown[mKey].amount += e.effectiveAmount;
+                if (e.isPayment) {
+                    if (e.paymentType === 'Paid') {
+                        mBreakdown[mKey].paidAmount += e.effectiveAmount;
+                    } else {
+                        mBreakdown[mKey].receivedAmount += e.effectiveAmount;
+                    }
+                } else {
+                    mBreakdown[mKey].denaAmount += e.denaAmount;
+                    mBreakdown[mKey].lenaAmount += e.lenaAmount;
+                }
             });
+
+            const duePayable = vnd.totalDena - vnd.totalPaid;
+            const dueReceivable = vnd.totalLena - vnd.totalReceived;
+            const netBalance = duePayable - dueReceivable;
+
             return {
                 ...vnd,
+                duePayable,
+                dueReceivable,
+                netBalance, // > 0: Payable (we owe), < 0: Receivable (they owe), === 0: Settled
                 vehicles: Array.from(vnd.vehicles),
-                duties: vnd.duties.sort((a, b) => (b.effectiveDate || '').localeCompare(a.effectiveDate || '')),
+                // Return newest first for display in ledger
+                duties: [...entriesWithBalance].reverse(),
                 monthlyBreakdown: Object.values(mBreakdown).sort((a, b) => b.month.localeCompare(a.month))
             };
-        }).sort((a, b) => b.totalAmount - a.totalAmount);
-    }, [validOutsideVehicles]);
+        }).sort((a, b) => Math.abs(b.netBalance) - Math.abs(a.netBalance) || b.totalAmount - a.totalAmount);
+    }, [validOutsideVehicles, vendorPayments, fleetPlateSet]);
+
+    // Keep selectedVendorForLedger updated when vendorAggregates changes
+    useEffect(() => {
+        if (selectedVendorForLedger) {
+            const updated = vendorAggregates.find(v => v.vendorName?.toLowerCase() === selectedVendorForLedger.vendorName?.toLowerCase());
+            if (updated) {
+                setSelectedVendorForLedger(updated);
+            }
+        }
+    }, [vendorAggregates]);
 
     const filteredVendorAggregates = useMemo(() => {
         if (!vendorSearchTerm) return vendorAggregates;
@@ -574,15 +831,145 @@ const OutsideCars = () => {
         );
     }, [vendorAggregates, vendorSearchTerm]);
 
+    const overallMarketKhataSummary = useMemo(() => {
+        let totalDena = 0;
+        let totalPaid = 0;
+        let totalLena = 0;
+        let totalReceived = 0;
+        let totalDuties = 0;
+        filteredVendorAggregates.forEach(v => {
+            totalDena += v.totalDena || 0;
+            totalPaid += v.totalPaid || 0;
+            totalLena += v.totalLena || 0;
+            totalReceived += v.totalReceived || 0;
+            totalDuties += v.totalDuties || 0;
+        });
+        const duePayable = totalDena - totalPaid;
+        const dueReceivable = totalLena - totalReceived;
+        const netDifference = duePayable - dueReceivable;
+        return {
+            totalDena,
+            totalPaid,
+            duePayable,
+            totalLena,
+            totalReceived,
+            dueReceivable,
+            netDifference,
+            totalDuties,
+            totalVendors: filteredVendorAggregates.length
+        };
+    }, [filteredVendorAggregates]);
+
     const filteredVendorDuties = useMemo(() => {
         if (!selectedVendorForLedger) return [];
-        if (vendorLedgerMonth === 'All') return selectedVendorForLedger.duties;
-        return selectedVendorForLedger.duties.filter(d => (d.effectiveDate || '').startsWith(vendorLedgerMonth));
-    }, [selectedVendorForLedger, vendorLedgerMonth]);
+        let list = selectedVendorForLedger.duties || [];
+        if (vendorLedgerMonth !== 'All') {
+            list = list.filter(d => (d.effectiveDate || '').startsWith(vendorLedgerMonth));
+        }
+        if (ledgerTxTypeFilter === 'Buy') {
+            list = list.filter(d => !d.isPayment && d.isBuy);
+        } else if (ledgerTxTypeFilter === 'Sell') {
+            list = list.filter(d => !d.isPayment && !d.isBuy);
+        } else if (ledgerTxTypeFilter === 'Payment') {
+            list = list.filter(d => d.isPayment && d.paymentType === 'Paid');
+        } else if (ledgerTxTypeFilter === 'Receipt') {
+            list = list.filter(d => d.isPayment && d.paymentType === 'Received');
+        }
+        if (ledgerVehicleFilter && ledgerVehicleFilter !== 'All') {
+            const cleanTarget = ledgerVehicleFilter.toUpperCase().trim();
+            list = list.filter(d => !d.isPayment && (d.carNumber || '').toUpperCase().includes(cleanTarget));
+        }
+        if (ledgerDutySearch && ledgerDutySearch.trim()) {
+            const q = ledgerDutySearch.toLowerCase().trim();
+            list = list.filter(d => {
+                if (d.isPayment) {
+                    return (
+                        (d.paymentMode || '').toLowerCase().includes(q) ||
+                        (d.referenceNumber || '').toLowerCase().includes(q) ||
+                        (d.notes || '').toLowerCase().includes(q) ||
+                        String(d.effectiveAmount || '').includes(q)
+                    );
+                }
+                return (
+                    (d.carNumber || '').toLowerCase().includes(q) ||
+                    (d.guestName || '').toLowerCase().includes(q) ||
+                    (d.property || '').toLowerCase().includes(q) ||
+                    (d.dutyType || '').toLowerCase().includes(q) ||
+                    (d.dropLocation || '').toLowerCase().includes(q) ||
+                    (d.model || '').toLowerCase().includes(q) ||
+                    String(d.effectiveAmount || '').includes(q)
+                );
+            });
+        }
+        return list;
+    }, [selectedVendorForLedger, vendorLedgerMonth, ledgerTxTypeFilter, ledgerVehicleFilter, ledgerDutySearch]);
+
+    const activeMonthDenaTotal = useMemo(() => {
+        return filteredVendorDuties.filter(d => !d.isPayment && d.isBuy).reduce((s, d) => s + (d.denaAmount || 0), 0);
+    }, [filteredVendorDuties]);
+
+    const activeMonthPaidTotal = useMemo(() => {
+        return filteredVendorDuties.filter(d => d.isPayment && d.paymentType === 'Paid').reduce((s, d) => s + (d.effectiveAmount || 0), 0);
+    }, [filteredVendorDuties]);
+
+    const activeMonthLenaTotal = useMemo(() => {
+        return filteredVendorDuties.filter(d => !d.isPayment && !d.isBuy).reduce((s, d) => s + (d.lenaAmount || 0), 0);
+    }, [filteredVendorDuties]);
+
+    const activeMonthReceivedTotal = useMemo(() => {
+        return filteredVendorDuties.filter(d => d.isPayment && d.paymentType === 'Received').reduce((s, d) => s + (d.effectiveAmount || 0), 0);
+    }, [filteredVendorDuties]);
+
+    const activeMonthNetBalance = (activeMonthDenaTotal - activeMonthPaidTotal) - (activeMonthLenaTotal - activeMonthReceivedTotal);
 
     const activeMonthTotal = useMemo(() => {
         return filteredVendorDuties.reduce((s, d) => s + (d.effectiveAmount || 0), 0);
     }, [filteredVendorDuties]);
+
+    const exportVendorLedgerCSV = () => {
+        if (!selectedVendorForLedger || filteredVendorDuties.length === 0) return;
+        const headers = ["Entry Date", "Entry Type", "Particulars / Vehicle", "Model / Payment Mode", "Details / Reference", "Duty Type", "Drop Point", "Payable Incurred (Buy INR)", "Paid Out (INR)", "Receivable Incurred (Sell INR)", "Received In (INR)", "Running Balance (INR)"];
+        const rows = filteredVendorDuties.map(d => {
+            if (d.isPayment) {
+                return [
+                    d.effectiveDate ? formatDateIST(d.effectiveDate) : '',
+                    d.paymentType === 'Paid' ? 'Payment (Paid Out)' : 'Receipt (Received In)',
+                    `"Payment - ${d.paymentMode || 'Bank'}"`,
+                    `"${(d.paymentMode || '').replace(/"/g, '""')}"`,
+                    `"${(d.referenceNumber || d.notes || '').replace(/"/g, '""')}"`,
+                    'Settlement',
+                    '',
+                    0,
+                    d.paymentType === 'Paid' ? d.effectiveAmount : 0,
+                    0,
+                    d.paymentType === 'Received' ? d.effectiveAmount : 0,
+                    d.runningBalance || 0
+                ];
+            }
+            return [
+                d.effectiveDate ? formatDateIST(d.effectiveDate) : '',
+                d.isBuy ? 'Duty (Buy)' : 'Duty (Sell)',
+                `"${(d.carNumber?.split('#')[0] || '').replace(/"/g, '""')}"`,
+                `"${(d.model || '').replace(/"/g, '""')}"`,
+                `"${(d.guestName || d.property || '').replace(/"/g, '""')}"`,
+                `"${(d.dutyType || '').replace(/"/g, '""')}"`,
+                `"${(d.dropLocation || '').replace(/"/g, '""')}"`,
+                d.isBuy ? (d.denaAmount || 0) : 0,
+                0,
+                !d.isBuy ? (d.lenaAmount || 0) : 0,
+                0,
+                d.runningBalance || 0
+            ];
+        });
+        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `${selectedVendorForLedger.vendorName}_Ledger_${vendorLedgerMonth === 'All' ? 'All_Time' : vendorLedgerMonth}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     const formatMonthYear = (ymStr) => {
         if (!ymStr || ymStr === 'All') return 'All Months';
@@ -840,7 +1227,7 @@ const OutsideCars = () => {
                             boxShadow: mainView === 'vendorLedger' ? '0 4px 15px rgba(251, 191, 36, 0.3)' : 'none'
                         }}
                     >
-                        <Store size={16} /> Vendor Ledger & Khata ({vendorAggregates.length})
+                        <Store size={16} /> Vendor Ledger ({vendorAggregates.length})
                     </button>
                 </div>
 
@@ -1054,34 +1441,144 @@ const OutsideCars = () => {
                             </>
             )}
 
-            {/* ─ ─ ─  VIEW 2: VENDOR LEDGER & KHATA (HORIZONTAL ROWS) ─ ─ ─  */}
+            {/* ─ ─ ─  VIEW 2: VENDOR LEDGER (HORIZONTAL ROWS) ─ ─ ─  */}
             {mainView === 'vendorLedger' && (
                 <div>
                     {/* Vendor Search Bar & Summary Stats */}
-                    <div className="glass-card" style={{ padding: 'clamp(12px, 2vw, 16px)', marginBottom: 'clamp(20px, 3vw, 24px)', background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '24px' }}>
-                        <div className="flex-resp" style={{ gap: '16px', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div style={{ position: 'relative', flex: '1', minWidth: '260px' }}>
-                                <Search size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#fbbf24', opacity: 0.6, zIndex: 1 }} />
-                                <input 
-                                    type="text" 
-                                    placeholder="Search vendor name or car plate number..." 
-                                    className="premium-compact-input" 
-                                    value={vendorSearchTerm} 
-                                    onChange={e => setVendorSearchTerm(e.target.value)} 
-                                    style={{ paddingLeft: '48px', height: '50px', width: '100%', fontSize: '13px' }} 
-                                />
+                    <div className="glass-card" style={{ padding: 'clamp(14px, 2vw, 20px)', marginBottom: 'clamp(20px, 3vw, 24px)', background: 'rgba(15, 23, 42, 0.45)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '24px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div style={{ display: 'flex', gap: '16px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                                <div style={{ position: 'relative', flex: '1', minWidth: '280px' }}>
+                                    <Search size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#fbbf24', opacity: 0.6, zIndex: 1 }} />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search vendor name or car plate number..." 
+                                        className="premium-compact-input" 
+                                        value={vendorSearchTerm} 
+                                        onChange={e => setVendorSearchTerm(e.target.value)} 
+                                        style={{ paddingLeft: '48px', height: '48px', width: '100%', fontSize: '13px' }} 
+                                    />
+                                    {vendorSearchTerm && (
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setVendorSearchTerm('')}
+                                            style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    )}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => openNewPaymentModal()}
+                                    style={{
+                                        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                        border: 'none',
+                                        color: 'white',
+                                        padding: '0 20px',
+                                        height: '48px',
+                                        borderRadius: '14px',
+                                        fontSize: '13px',
+                                        fontWeight: '900',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                >
+                                    <Plus size={16} />
+                                    <span>Record Payment</span>
+                                </button>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '8px 16px', display: 'flex', flexDirection: 'column' }}>
-                                    <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800' }}>Outside Vendors</span>
-                                    <span style={{ fontSize: '16px', fontWeight: '1000', color: 'white' }}>{filteredVendorAggregates.length}</span>
+                            {/* Overall Market Summary Cards: Payable, Receivable, Net Balance */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                                {/* Card 1: Vendors Count */}
+                                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                    <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'rgba(251, 191, 36, 0.12)', border: '1px solid rgba(251, 191, 36, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <Store size={20} color="#fbbf24" />
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.6px' }}>Outside Vendors</div>
+                                        <div style={{ fontSize: '20px', fontWeight: '1000', color: 'white' }}>{overallMarketKhataSummary.totalVendors}</div>
+                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>{overallMarketKhataSummary.totalDuties} Total Duties</div>
+                                    </div>
                                 </div>
-                                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '14px', padding: '8px 16px', display: 'flex', flexDirection: 'column' }}>
-                                    <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800' }}>Total Payout</span>
-                                    <span style={{ fontSize: '16px', fontWeight: '1000', color: '#10b981' }}>
-                                        ₹{filteredVendorAggregates.reduce((sum, v) => sum + v.totalAmount, 0).toLocaleString('en-IN')}
-                                    </span>
+
+                                {/* Card 2: Total Payable (Buy) */}
+                                <div style={{ background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(185, 28, 28, 0.03) 100%)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '16px', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                    <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <ArrowUpRight size={22} color="#f87171" />
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '10px', color: '#fca5a5', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.6px' }}>Total Payable (Buy)</div>
+                                        <div style={{ fontSize: '20px', fontWeight: '1000', color: '#f87171' }}>₹{overallMarketKhataSummary.duePayable.toLocaleString('en-IN')}</div>
+                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
+                                            Duties: ₹{overallMarketKhataSummary.totalDena.toLocaleString('en-IN')}{overallMarketKhataSummary.totalPaid > 0 ? ` • Paid: ₹${overallMarketKhataSummary.totalPaid.toLocaleString('en-IN')}` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Card 3: Total Receivable (Sell) */}
+                                <div style={{ background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(21, 128, 61, 0.03) 100%)', border: '1px solid rgba(34, 197, 94, 0.25)', borderRadius: '16px', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                    <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <ArrowDownRight size={22} color="#4ade80" />
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '10px', color: '#86efac', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.6px' }}>Total Receivable (Sell)</div>
+                                        <div style={{ fontSize: '20px', fontWeight: '1000', color: '#4ade80' }}>₹{overallMarketKhataSummary.dueReceivable.toLocaleString('en-IN')}</div>
+                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
+                                            Duties: ₹{overallMarketKhataSummary.totalLena.toLocaleString('en-IN')}{overallMarketKhataSummary.totalReceived > 0 ? ` • Rec: ₹${overallMarketKhataSummary.totalReceived.toLocaleString('en-IN')}` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Card 4: Net Market Balance */}
+                                <div style={{ 
+                                    background: overallMarketKhataSummary.netDifference > 0 
+                                        ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(185, 28, 28, 0.04) 100%)' 
+                                        : overallMarketKhataSummary.netDifference < 0 
+                                            ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(21, 128, 61, 0.04) 100%)' 
+                                            : 'rgba(255,255,255,0.03)',
+                                    border: overallMarketKhataSummary.netDifference > 0 
+                                        ? '1px solid rgba(239, 68, 68, 0.35)' 
+                                        : overallMarketKhataSummary.netDifference < 0 
+                                            ? '1px solid rgba(34, 197, 94, 0.35)' 
+                                            : '1px solid rgba(255,255,255,0.08)',
+                                    borderRadius: '16px', 
+                                    padding: '12px 18px', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '14px' 
+                                }}>
+                                    <div style={{ 
+                                        width: '42px', 
+                                        height: '42px', 
+                                        borderRadius: '12px', 
+                                        background: overallMarketKhataSummary.netDifference > 0 ? 'rgba(239, 68, 68, 0.2)' : overallMarketKhataSummary.netDifference < 0 ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255,255,255,0.08)', 
+                                        border: overallMarketKhataSummary.netDifference > 0 ? '1px solid rgba(239, 68, 68, 0.4)' : overallMarketKhataSummary.netDifference < 0 ? '1px solid rgba(34, 197, 94, 0.4)' : '1px solid rgba(255,255,255,0.1)', 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center' 
+                                    }}>
+                                        <Scale size={22} color={overallMarketKhataSummary.netDifference > 0 ? '#f87171' : overallMarketKhataSummary.netDifference < 0 ? '#4ade80' : '#94a3b8'} />
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.6px' }}>Net Market Balance</div>
+                                        <div style={{ fontSize: '20px', fontWeight: '1000', color: overallMarketKhataSummary.netDifference > 0 ? '#f87171' : overallMarketKhataSummary.netDifference < 0 ? '#4ade80' : '#ffffff' }}>
+                                            ₹{Math.abs(overallMarketKhataSummary.netDifference).toLocaleString('en-IN')}
+                                        </div>
+                                        <div style={{ 
+                                            fontSize: '10px', 
+                                            fontWeight: '800', 
+                                            color: overallMarketKhataSummary.netDifference > 0 ? '#fca5a5' : overallMarketKhataSummary.netDifference < 0 ? '#86efac' : '#94a3b8' 
+                                        }}>
+                                            {overallMarketKhataSummary.netDifference > 0 ? '● NET PAYABLE (We Owe)' : overallMarketKhataSummary.netDifference < 0 ? '● NET RECEIVABLE (They Owe)' : '● BALANCED'}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1092,19 +1589,18 @@ const OutsideCars = () => {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                                    <th style={{ padding: '18px 24px', textAlign: 'left', fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px' }}>Vendor / Provider</th>
-                                    <th style={{ padding: '18px 24px', textAlign: 'left', fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cars / Plates Provided</th>
-                                    <th style={{ padding: '18px 24px', textAlign: 'center', fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px' }}>Duties</th>
-                                    <th style={{ padding: '18px 24px', textAlign: 'left', fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px' }}>Latest Activity</th>
-                                    <th style={{ padding: '18px 24px', textAlign: 'right', fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Amount</th>
-                                    <th style={{ padding: '18px 24px', textAlign: 'right', fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px' }}>Action</th>
+                                    <th style={{ padding: '18px 24px', textAlign: 'left', fontSize: '11px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: '800' }}>Vendor / Provider</th>
+                                    <th style={{ padding: '18px 24px', textAlign: 'right', fontSize: '11px', color: '#fca5a5', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: '800' }}>🔴 Payable (Buy)</th>
+                                    <th style={{ padding: '18px 24px', textAlign: 'right', fontSize: '11px', color: '#86efac', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: '800' }}>🟢 Receivable (Sell)</th>
+                                    <th style={{ padding: '18px 24px', textAlign: 'right', fontSize: '11px', color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: '800' }}>⚖️ Net Balance</th>
+                                    <th style={{ padding: '18px 24px', textAlign: 'right', fontSize: '11px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: '800' }}>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {filteredVendorAggregates.length === 0 ? (
                                     <tr>
-                                        <td colSpan="6" style={{ padding: '80px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '13px', fontWeight: '800' }}>
-                                            No vendor khata found.
+                                        <td colSpan="5" style={{ padding: '80px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '13px', fontWeight: '800' }}>
+                                            No vendor ledgers found matching your criteria.
                                         </td>
                                     </tr>
                                 ) : (
@@ -1118,70 +1614,115 @@ const OutsideCars = () => {
                                             onClick={() => { setSelectedVendorForLedger(vnd); setVendorLedgerMonth('All'); }}
                                             style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', cursor: 'pointer' }}
                                         >
+                                            {/* Vendor Name + Duties & Activity Subtext */}
                                             <td style={{ padding: '18px 24px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                                                     <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.12) 0%, rgba(217, 119, 6, 0.2) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(251, 191, 36, 0.25)', flexShrink: 0 }}>
                                                         <Store size={20} color="#fbbf24" />
                                                     </div>
                                                     <div>
-                                                        <div style={{ fontSize: '15px', fontWeight: '900', color: 'white' }}>{vnd.vendorName}</div>
-                                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: '700' }}>
-                                                            {vnd.monthlyBreakdown?.length || 1} active month(s)
+                                                        <div style={{ fontSize: '16px', fontWeight: '950', color: 'white' }}>{vnd.vendorName}</div>
+                                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', fontWeight: '700', marginTop: '3px' }}>
+                                                            <span style={{ color: '#38bdf8', fontWeight: '800' }}>{vnd.totalDuties} duties</span>
+                                                            <span style={{ margin: '0 6px', color: 'rgba(255,255,255,0.2)' }}>•</span>
+                                                            <span>{vnd.vehicles.length} vehicle(s)</span>
+                                                            <span style={{ margin: '0 6px', color: 'rgba(255,255,255,0.2)' }}>•</span>
+                                                            <span>{vnd.monthlyBreakdown?.length || 1} active month(s)</span>
+                                                            {vnd.latestDate && (
+                                                                <>
+                                                                    <span style={{ margin: '0 6px', color: 'rgba(255,255,255,0.2)' }}>•</span>
+                                                                    <span>Last: {formatDateIST(vnd.latestDate)}</span>
+                                                                </>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
                                             </td>
 
-                                            <td style={{ padding: '18px 24px' }}>
-                                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxWidth: '320px' }}>
-                                                    {vnd.vehicles.slice(0, 4).map(p => (
-                                                        <span key={p} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.85)', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800' }}>
-                                                            {p}
-                                                        </span>
-                                                    ))}
-                                                    {vnd.vehicles.length > 4 && (
-                                                        <span style={{ background: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '900' }}>
-                                                            +{vnd.vehicles.length - 4} more
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>
-
-                                            <td style={{ padding: '18px 24px', textAlign: 'center' }}>
-                                                <span style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: '900' }}>
-                                                    {vnd.totalDuties} duties
-                                                </span>
-                                            </td>
-
-                                            <td style={{ padding: '18px 24px' }}>
-                                                <div style={{ fontSize: '13px', fontWeight: '800', color: 'white' }}>
-                                                    {vnd.latestDate ? formatDateIST(vnd.latestDate) : '—'}
-                                                </div>
-                                            </td>
-
+                                            {/* Payable (Buy) */}
                                             <td style={{ padding: '18px 24px', textAlign: 'right' }}>
-                                                <div style={{ fontSize: '16px', fontWeight: '1000', color: '#10b981' }}>
-                                                    ₹{vnd.totalAmount.toLocaleString('en-IN')}
+                                                <div style={{ fontSize: '16px', fontWeight: '950', color: vnd.duePayable > 0 ? '#f87171' : 'rgba(255,255,255,0.2)' }}>
+                                                    {vnd.duePayable > 0 ? `₹${vnd.duePayable.toLocaleString('en-IN')}` : (vnd.totalDena > 0 ? '₹0' : '—')}
+                                                </div>
+                                                <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', fontWeight: '700', marginTop: '2px' }}>
+                                                    Duties: ₹{vnd.totalDena.toLocaleString('en-IN')}
+                                                    {vnd.totalPaid > 0 && <span style={{ color: '#38bdf8', marginLeft: '4px' }}>• Paid: ₹{vnd.totalPaid.toLocaleString('en-IN')}</span>}
                                                 </div>
                                             </td>
 
+                                            {/* Receivable (Sell) */}
                                             <td style={{ padding: '18px 24px', textAlign: 'right' }}>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setSelectedVendorForLedger(vnd);
-                                                        setVendorLedgerMonth('All');
-                                                    }}
-                                                    style={{
-                                                        padding: '8px 18px', borderRadius: '12px', border: '1px solid rgba(251, 191, 36, 0.3)',
-                                                        background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(217, 119, 6, 0.25) 100%)',
-                                                        color: '#fbbf24', fontWeight: '900', fontSize: '12px', cursor: 'pointer',
-                                                        display: 'inline-flex', alignItems: 'center', gap: '6px',
-                                                        boxShadow: '0 4px 12px rgba(251, 191, 36, 0.15)'
-                                                    }}
-                                                >
-                                                    <Eye size={14} /> Open Ledger
-                                                </button>
+                                                <div style={{ fontSize: '16px', fontWeight: '950', color: vnd.dueReceivable > 0 ? '#4ade80' : 'rgba(255,255,255,0.2)' }}>
+                                                    {vnd.dueReceivable > 0 ? `₹${vnd.dueReceivable.toLocaleString('en-IN')}` : (vnd.totalLena > 0 ? '₹0' : '—')}
+                                                </div>
+                                                <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', fontWeight: '700', marginTop: '2px' }}>
+                                                    Duties: ₹{vnd.totalLena.toLocaleString('en-IN')}
+                                                    {vnd.totalReceived > 0 && <span style={{ color: '#34d399', marginLeft: '4px' }}>• Rec: ₹{vnd.totalReceived.toLocaleString('en-IN')}</span>}
+                                                </div>
+                                            </td>
+
+                                            {/* Net Balance */}
+                                            <td style={{ padding: '18px 24px', textAlign: 'right' }}>
+                                                <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                                                    <span style={{ 
+                                                        fontSize: '17px', 
+                                                        fontWeight: '1000', 
+                                                        color: vnd.netBalance > 0 ? '#f87171' : vnd.netBalance < 0 ? '#4ade80' : '#ffffff' 
+                                                    }}>
+                                                        ₹{Math.abs(vnd.netBalance).toLocaleString('en-IN')}
+                                                    </span>
+                                                    <span style={{ 
+                                                        fontSize: '9.5px', 
+                                                        fontWeight: '800', 
+                                                        padding: '2.5px 8px', 
+                                                        borderRadius: '6px', 
+                                                        background: vnd.netBalance > 0 ? 'rgba(239, 68, 68, 0.15)' : vnd.netBalance < 0 ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255,255,255,0.06)',
+                                                        color: vnd.netBalance > 0 ? '#fca5a5' : vnd.netBalance < 0 ? '#86efac' : '#94a3b8',
+                                                        border: vnd.netBalance > 0 ? '1px solid rgba(239, 68, 68, 0.3)' : vnd.netBalance < 0 ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(255,255,255,0.1)'
+                                                    }}>
+                                                        {vnd.netBalance > 0 ? '● PAYABLE' : vnd.netBalance < 0 ? '● RECEIVABLE' : '✓ BALANCED'}
+                                                    </span>
+                                                </div>
+                                            </td>
+
+                                            {/* Action Button */}
+                                            <td style={{ padding: '18px 24px', textAlign: 'right' }}>
+                                                <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            openNewPaymentModal(vnd.vendorName, vnd.netBalance > 0 ? 'Paid' : 'Received');
+                                                        }}
+                                                        style={{
+                                                            padding: '8px 14px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.35)',
+                                                            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.25) 100%)',
+                                                            color: '#34d399', fontWeight: '900', fontSize: '12px', cursor: 'pointer',
+                                                            display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)'
+                                                        }}
+                                                        title={`Record payment for ${vnd.vendorName}`}
+                                                    >
+                                                        <Plus size={13} /> Pay / Settle
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedVendorForLedger(vnd);
+                                                            setVendorLedgerMonth('All');
+                                                        }}
+                                                        style={{
+                                                            padding: '8px 16px', borderRadius: '12px', border: '1px solid rgba(251, 191, 36, 0.3)',
+                                                            background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(217, 119, 6, 0.25) 100%)',
+                                                            color: '#fbbf24', fontWeight: '900', fontSize: '12px', cursor: 'pointer',
+                                                            display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                                            boxShadow: '0 4px 12px rgba(251, 191, 36, 0.15)'
+                                                        }}
+                                                    >
+                                                        <BookOpen size={14} /> View Ledger
+                                                    </button>
+                                                </div>
                                             </td>
                                         </motion.tr>
                                     ))
@@ -1212,20 +1753,51 @@ const OutsideCars = () => {
                                         </div>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
-                                        <div style={{ fontSize: '16px', fontWeight: '1000', color: '#10b981' }}>₹{vnd.totalAmount.toLocaleString('en-IN')}</div>
+                                        <div style={{ fontSize: '15px', fontWeight: '1000', color: vnd.netBalance > 0 ? '#f87171' : vnd.netBalance < 0 ? '#4ade80' : 'white' }}>
+                                            ₹{Math.abs(vnd.netBalance).toLocaleString('en-IN')}
+                                        </div>
+                                        <span style={{ fontSize: '9px', fontWeight: '800', color: vnd.netBalance > 0 ? '#fca5a5' : vnd.netBalance < 0 ? '#86efac' : '#94a3b8' }}>
+                                            {vnd.netBalance > 0 ? 'PAYABLE' : vnd.netBalance < 0 ? 'RECEIVABLE' : 'BALANCED'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '12px', marginBottom: '12px' }}>
+                                    <div>
+                                        <span style={{ fontSize: '10px', color: '#fca5a5', fontWeight: '700', display: 'block' }}>🔴 Due Payable</span>
+                                        <span style={{ fontSize: '13px', fontWeight: '900', color: '#f87171' }}>₹{(vnd.duePayable || 0).toLocaleString('en-IN')}</span>
+                                        <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', display: 'block', marginTop: '2px' }}>Duties: ₹{vnd.totalDena.toLocaleString('en-IN')} • Paid: ₹{(vnd.totalPaid || 0).toLocaleString('en-IN')}</span>
+                                    </div>
+                                    <div>
+                                        <span style={{ fontSize: '10px', color: '#86efac', fontWeight: '700', display: 'block' }}>🟢 Due Receivable</span>
+                                        <span style={{ fontSize: '13px', fontWeight: '900', color: '#4ade80' }}>₹{(vnd.dueReceivable || 0).toLocaleString('en-IN')}</span>
+                                        <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', display: 'block', marginTop: '2px' }}>Duties: ₹{vnd.totalLena.toLocaleString('en-IN')} • Rec: ₹{(vnd.totalReceived || 0).toLocaleString('en-IN')}</span>
                                     </div>
                                 </div>
 
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
                                     <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>
-                                        Latest: {vnd.latestDate ? formatDateIST(vnd.latestDate) : '—'}
+                                        Last: {vnd.latestDate ? formatDateIST(vnd.latestDate) : '—'}
                                     </span>
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); setSelectedVendorForLedger(vnd); setVendorLedgerMonth('All'); }}
-                                        style={{ padding: '6px 14px', borderRadius: '8px', background: '#fbbf24', color: '#0f172a', border: 'none', fontWeight: '900', fontSize: '11px', cursor: 'pointer' }}
-                                    >
-                                        Open Khata
-                                    </button>
+                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                openNewPaymentModal(vnd.vendorName, vnd.netBalance > 0 ? 'Paid' : 'Received');
+                                            }}
+                                            style={{ padding: '6px 12px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.4)', fontWeight: '900', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                        >
+                                            <Plus size={12} /> Pay
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); setSelectedVendorForLedger(vnd); setVendorLedgerMonth('All'); }}
+                                            style={{ padding: '6px 14px', borderRadius: '8px', background: '#fbbf24', color: '#0f172a', border: 'none', fontWeight: '900', fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                                        >
+                                            <BookOpen size={12} /> View Ledger
+                                        </button>
+                                    </div>
                                 </div>
                             </motion.div>
                         ))}
@@ -1233,145 +1805,865 @@ const OutsideCars = () => {
                 </div>
             )}
 
-            {/* ─ ─ ─  VENDOR LEDGER & KHATA MONTH-WISE MODAL ─ ─ ─  */}
+            {/* ─ ─ ─  PREMIUM VENDOR LEDGER MODAL ─ ─ ─  */}
             <AnimatePresence>
                 {selectedVendorForLedger && (
                     <div className="modal-overlay" style={{ zIndex: 2100 }}>
                         <motion.div 
-                            initial={{ scale: 0.95, opacity: 0 }} 
-                            animate={{ scale: 1, opacity: 1 }} 
-                            exit={{ scale: 0.95, opacity: 0 }} 
-                            className="modal-content-wrapper" 
-                            style={{ maxWidth: '980px', width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}
+                            initial={{ scale: 0.95, opacity: 0, y: 15 }} 
+                            animate={{ scale: 1, opacity: 1, y: 0 }} 
+                            exit={{ scale: 0.95, opacity: 0, y: 15 }} 
+                            transition={{ duration: 0.2 }}
+                            style={{ 
+                                maxWidth: '1240px', 
+                                width: '96%', 
+                                maxHeight: '90vh', 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                padding: 0, 
+                                overflow: 'hidden',
+                                background: 'linear-gradient(180deg, #0d1527 0%, #070b14 100%)',
+                                borderRadius: '22px',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                boxShadow: '0 30px 90px -15px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.05)'
+                            }}
                         >
                             {/* Modal Header */}
-                            <div style={{ padding: '24px 30px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(15, 23, 42, 0.7)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                                    <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.15) 0%, rgba(217, 119, 6, 0.25) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(251, 191, 36, 0.3)' }}>
+                            <div style={{ 
+                                padding: '18px 28px', 
+                                borderBottom: '1px solid rgba(255,255,255,0.08)', 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center', 
+                                background: 'rgba(15, 23, 42, 0.85)',
+                                backdropFilter: 'blur(12px)',
+                                gap: '16px',
+                                flexShrink: 0,
+                                flexWrap: 'wrap'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0 }}>
+                                    <div style={{ 
+                                        width: '48px', 
+                                        height: '48px', 
+                                        borderRadius: '14px', 
+                                        background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(180, 83, 9, 0.15) 100%)', 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center', 
+                                        border: '1px solid rgba(245, 158, 11, 0.35)',
+                                        boxShadow: '0 8px 20px rgba(245, 158, 11, 0.15)',
+                                        flexShrink: 0
+                                    }}>
                                         <Store size={24} color="#fbbf24" />
                                     </div>
-                                    <div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <h2 style={{ color: 'white', fontSize: '20px', fontWeight: '950', margin: 0 }}>{selectedVendorForLedger.vendorName}</h2>
-                                            <span style={{ fontSize: '10px', background: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24', border: '1px solid rgba(251, 191, 36, 0.2)', padding: '2px 8px', borderRadius: '6px', fontWeight: '800' }}>Outside Vendor</span>
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
-                                            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700' }}>
-                                                {selectedVendorForLedger.totalDuties} Duties • {selectedVendorForLedger.vehicles.length} Vehicle(s):
+                                    <div style={{ minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                            <h2 style={{ color: '#ffffff', fontSize: '20px', fontWeight: '950', margin: 0, letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>
+                                                {selectedVendorForLedger.vendorName}
+                                            </h2>
+                                            <span style={{ 
+                                                fontSize: '10px', 
+                                                background: 'rgba(245, 158, 11, 0.15)', 
+                                                color: '#fbbf24', 
+                                                border: '1px solid rgba(245, 158, 11, 0.3)', 
+                                                padding: '2px 8px', 
+                                                borderRadius: '20px', 
+                                                fontWeight: '800',
+                                                letterSpacing: '0.4px',
+                                                whiteSpace: 'nowrap'
+                                            }}>
+                                                OUTSIDE VENDOR LEDGER
                                             </span>
-                                            {selectedVendorForLedger.vehicles.slice(0, 5).map(p => (
-                                                <span key={p} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.85)', padding: '2px 7px', borderRadius: '6px', fontSize: '10px', fontWeight: '800' }}>
-                                                    {p}
-                                                </span>
-                                            ))}
-                                            {selectedVendorForLedger.vehicles.length > 5 && (
-                                                <span style={{ background: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24', padding: '2px 7px', borderRadius: '6px', fontSize: '10px', fontWeight: '900' }}>
-                                                    +{selectedVendorForLedger.vehicles.length - 5} more
-                                                </span>
-                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                                            <span style={{ 
+                                                fontSize: '11px', 
+                                                color: 'rgba(255,255,255,0.7)', 
+                                                fontWeight: '700',
+                                                background: 'rgba(255,255,255,0.06)',
+                                                border: '1px solid rgba(255,255,255,0.1)',
+                                                padding: '2px 8px',
+                                                borderRadius: '6px'
+                                            }}>
+                                                {selectedVendorForLedger.totalDuties} Total Duties
+                                            </span>
+                                            <span style={{ 
+                                                fontSize: '11px', 
+                                                color: '#38bdf8', 
+                                                fontWeight: '700',
+                                                background: 'rgba(56, 189, 248, 0.1)',
+                                                border: '1px solid rgba(56, 189, 248, 0.25)',
+                                                padding: '2px 8px',
+                                                borderRadius: '6px'
+                                            }}>
+                                                {selectedVendorForLedger.vehicles.length} Vehicle(s)
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                                    <div style={{ textAlign: 'right' }}>
-                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800' }}>Total Payout</div>
-                                        <div style={{ fontSize: '20px', fontWeight: '1000', color: '#10b981' }}>₹{selectedVendorForLedger.totalAmount.toLocaleString('en-IN')}</div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flexShrink: 0 }}>
+                                    {/* Due Payable Card */}
+                                    <div style={{ 
+                                        textAlign: 'right',
+                                        background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(185, 28, 28, 0.04) 100%)',
+                                        border: '1px solid rgba(239, 68, 68, 0.28)',
+                                        borderRadius: '12px',
+                                        padding: '6px 12px',
+                                        boxShadow: '0 4px 14px rgba(239, 68, 68, 0.1)'
+                                    }}>
+                                        <div style={{ fontSize: '9px', color: '#fca5a5', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.5px' }}>
+                                            🔴 Due Payable (We Owe)
+                                        </div>
+                                        <div style={{ fontSize: '16px', fontWeight: '1000', color: '#f87171', lineHeight: '1.2' }}>
+                                            ₹{(selectedVendorForLedger.duePayable ?? selectedVendorForLedger.totalDena ?? 0).toLocaleString('en-IN')}
+                                        </div>
+                                        <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
+                                            Duties: ₹{(selectedVendorForLedger.totalDena || 0).toLocaleString('en-IN')} • Paid: ₹{(selectedVendorForLedger.totalPaid || 0).toLocaleString('en-IN')}
+                                        </div>
                                     </div>
-                                    <button onClick={() => setSelectedVendorForLedger(null)} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', borderRadius: '10px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
+
+                                    {/* Due Receivable Card */}
+                                    <div style={{ 
+                                        textAlign: 'right',
+                                        background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(21, 128, 61, 0.04) 100%)',
+                                        border: '1px solid rgba(34, 197, 94, 0.28)',
+                                        borderRadius: '12px',
+                                        padding: '6px 12px',
+                                        boxShadow: '0 4px 14px rgba(34, 197, 94, 0.1)'
+                                    }}>
+                                        <div style={{ fontSize: '9px', color: '#86efac', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.5px' }}>
+                                            🟢 Due Receivable (They Owe)
+                                        </div>
+                                        <div style={{ fontSize: '16px', fontWeight: '1000', color: '#4ade80', lineHeight: '1.2' }}>
+                                            ₹{(selectedVendorForLedger.dueReceivable ?? selectedVendorForLedger.totalLena ?? 0).toLocaleString('en-IN')}
+                                        </div>
+                                        <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
+                                            Duties: ₹{(selectedVendorForLedger.totalLena || 0).toLocaleString('en-IN')} • Rec: ₹{(selectedVendorForLedger.totalReceived || 0).toLocaleString('en-IN')}
+                                        </div>
+                                    </div>
+
+                                    {/* Net Balance Card */}
+                                    <div style={{ 
+                                        textAlign: 'right',
+                                        background: selectedVendorForLedger.netBalance > 0 
+                                            ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.16) 0%, rgba(185, 28, 28, 0.06) 100%)' 
+                                            : selectedVendorForLedger.netBalance < 0 
+                                                ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.16) 0%, rgba(21, 128, 61, 0.06) 100%)' 
+                                                : 'rgba(255,255,255,0.05)',
+                                        border: selectedVendorForLedger.netBalance > 0 
+                                            ? '1px solid rgba(239, 68, 68, 0.38)' 
+                                            : selectedVendorForLedger.netBalance < 0 
+                                                ? '1px solid rgba(34, 197, 94, 0.38)' 
+                                                : '1px solid rgba(255,255,255,0.1)',
+                                        borderRadius: '12px',
+                                        padding: '6px 12px',
+                                        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.2)'
+                                    }}>
+                                        <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.5px' }}>
+                                            ⚖️ Net ({selectedVendorForLedger.netBalance > 0 ? 'PAYABLE' : selectedVendorForLedger.netBalance < 0 ? 'RECEIVABLE' : 'SETTLED'})
+                                        </div>
+                                        <div style={{ fontSize: '16px', fontWeight: '1000', color: selectedVendorForLedger.netBalance > 0 ? '#f87171' : selectedVendorForLedger.netBalance < 0 ? '#4ade80' : '#ffffff', lineHeight: '1.2' }}>
+                                            ₹{Math.abs(selectedVendorForLedger.netBalance || 0).toLocaleString('en-IN')}
+                                        </div>
+                                    </div>
+
+                                    {/* Record Payment Button */}
+                                    <button 
+                                        type="button"
+                                        onClick={() => openNewPaymentModal(selectedVendorForLedger.vendorName, selectedVendorForLedger.netBalance > 0 ? 'Paid' : 'Received')}
+                                        style={{ 
+                                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
+                                            border: '1px solid rgba(16, 185, 129, 0.45)', 
+                                            color: '#ffffff', 
+                                            padding: '8px 14px', 
+                                            borderRadius: '10px', 
+                                            fontSize: '12px', 
+                                            fontWeight: '900', 
+                                            cursor: 'pointer', 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            gap: '6px',
+                                            boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                                            height: '38px',
+                                            flexShrink: 0
+                                        }}
+                                        title={`Record payment or settlement for ${selectedVendorForLedger.vendorName}`}
+                                    >
+                                        <Plus size={15} />
+                                        <span>Record Payment</span>
+                                    </button>
+
+                                    {/* Export CSV Button */}
+                                    <button 
+                                        type="button"
+                                        onClick={exportVendorLedgerCSV}
+                                        style={{ 
+                                            background: 'rgba(255,255,255,0.07)', 
+                                            border: '1px solid rgba(255,255,255,0.15)', 
+                                            color: 'white', 
+                                            padding: '8px 12px', 
+                                            borderRadius: '10px', 
+                                            fontSize: '12px', 
+                                            fontWeight: '800', 
+                                            cursor: 'pointer', 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            gap: '6px',
+                                            transition: '0.2s',
+                                            height: '38px',
+                                            flexShrink: 0
+                                        }}
+                                        title="Export Ledger to Excel / CSV"
+                                    >
+                                        <Download size={14} color="#38bdf8" />
+                                        <span>Export CSV</span>
+                                    </button>
+
+                                    {/* Close Button */}
+                                    <button 
+                                        type="button"
+                                        onClick={() => setSelectedVendorForLedger(null)} 
+                                        style={{ 
+                                            background: 'rgba(255,255,255,0.06)', 
+                                            border: '1px solid rgba(255,255,255,0.1)', 
+                                            color: 'rgba(255,255,255,0.7)', 
+                                            cursor: 'pointer', 
+                                            borderRadius: '10px', 
+                                            width: '38px', 
+                                            height: '38px', 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'center',
+                                            transition: '0.2s',
+                                            flexShrink: 0
+                                        }}
+                                        title="Close"
+                                    >
+                                        <X size={18} />
+                                    </button>
                                 </div>
                             </div>
 
-                            {/* Month-Wise Filter Pills */}
-                            <div style={{ padding: '16px 30px', background: 'rgba(0,0,0,0.25)', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', gap: '10px', overflowX: 'auto' }}>
+                            {/* Month-Wise Tabs Slider */}
+                            <div style={{ 
+                                padding: '10px 28px', 
+                                background: 'rgba(0, 0, 0, 0.35)', 
+                                borderBottom: '1px solid rgba(255,255,255,0.06)', 
+                                display: 'flex', 
+                                alignItems: 'center',
+                                gap: '8px', 
+                                overflowX: 'auto',
+                                flexShrink: 0,
+                                minHeight: '56px',
+                                boxSizing: 'border-box'
+                            }}>
                                 <button
+                                    type="button"
                                     onClick={() => setVendorLedgerMonth('All')}
                                     style={{
-                                        padding: '8px 16px', borderRadius: '12px', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-                                        background: vendorLedgerMonth === 'All' ? '#fbbf24' : 'rgba(255,255,255,0.05)',
-                                        color: vendorLedgerMonth === 'All' ? '#0f172a' : 'white',
-                                        fontWeight: '900', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px'
+                                        padding: '0 16px', 
+                                        height: '38px',
+                                        borderRadius: '10px', 
+                                        border: vendorLedgerMonth === 'All' ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.08)', 
+                                        cursor: 'pointer', 
+                                        whiteSpace: 'nowrap',
+                                        background: vendorLedgerMonth === 'All' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'rgba(255,255,255,0.04)',
+                                        color: vendorLedgerMonth === 'All' ? '#0f172a' : 'rgba(255,255,255,0.85)',
+                                        fontWeight: '900', 
+                                        fontSize: '12px', 
+                                        display: 'inline-flex', 
+                                        alignItems: 'center', 
+                                        gap: '8px',
+                                        flexShrink: 0,
+                                        boxShadow: vendorLedgerMonth === 'All' ? '0 4px 14px rgba(245, 158, 11, 0.3)' : 'none',
+                                        transition: '0.2s'
                                     }}
                                 >
                                     <span>All Months</span>
-                                    <span style={{ opacity: 0.8, fontSize: '10px' }}>(₹{selectedVendorForLedger.totalAmount.toLocaleString()})</span>
+                                    <span style={{ 
+                                        background: vendorLedgerMonth === 'All' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.06)', 
+                                        padding: '2px 8px', 
+                                        borderRadius: '5px', 
+                                        fontSize: '10.5px', 
+                                        fontWeight: '800',
+                                        color: vendorLedgerMonth === 'All' ? '#0f172a' : '#10b981'
+                                    }}>
+                                        ₹{selectedVendorForLedger.totalAmount.toLocaleString('en-IN')}
+                                    </span>
                                 </button>
-                                {selectedVendorForLedger.monthlyBreakdown?.map(mb => (
-                                    <button
-                                        key={mb.month}
-                                        onClick={() => setVendorLedgerMonth(mb.month)}
+
+                                {selectedVendorForLedger.monthlyBreakdown?.map(mb => {
+                                    const isActive = vendorLedgerMonth === mb.month;
+                                    return (
+                                        <button
+                                            key={mb.month}
+                                            type="button"
+                                            onClick={() => setVendorLedgerMonth(mb.month)}
+                                            style={{
+                                                padding: '0 16px', 
+                                                height: '38px',
+                                                borderRadius: '10px', 
+                                                border: isActive ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.08)', 
+                                                cursor: 'pointer', 
+                                                whiteSpace: 'nowrap',
+                                                background: isActive ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'rgba(255,255,255,0.04)',
+                                                color: isActive ? '#0f172a' : 'rgba(255,255,255,0.85)',
+                                                fontWeight: '900', 
+                                                fontSize: '12px', 
+                                                display: 'inline-flex', 
+                                                alignItems: 'center', 
+                                                gap: '8px',
+                                                flexShrink: 0,
+                                                boxShadow: isActive ? '0 4px 14px rgba(245, 158, 11, 0.3)' : 'none',
+                                                transition: '0.2s'
+                                            }}
+                                        >
+                                            <span>{formatMonthYear(mb.month)}</span>
+                                            <span style={{ 
+                                                background: isActive ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.06)', 
+                                                padding: '2px 8px', 
+                                                borderRadius: '5px', 
+                                                fontSize: '10.5px', 
+                                                fontWeight: '800',
+                                                color: isActive ? '#0f172a' : '#10b981'
+                                            }}>
+                                                ₹{mb.amount.toLocaleString('en-IN')}
+                                            </span>
+                                            <span style={{ opacity: 0.75, fontSize: '10.5px' }}>({mb.count})</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Secondary Filter & Search Strip */}
+                            <div style={{ 
+                                padding: '12px 28px', 
+                                background: 'rgba(255,255,255,0.02)', 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center', 
+                                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                                flexWrap: 'wrap',
+                                gap: '12px',
+                                flexShrink: 0
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '280px', flexWrap: 'wrap' }}>
+                                    <div style={{ position: 'relative', width: '100%', maxWidth: '260px' }}>
+                                        <Search size={14} color="rgba(255,255,255,0.4)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                                        <input
+                                            type="text"
+                                            value={ledgerDutySearch}
+                                            onChange={(e) => setLedgerDutySearch(e.target.value)}
+                                            placeholder="Search plate, guest, duty or route..."
+                                            style={{
+                                                width: '100%',
+                                                height: '36px',
+                                                padding: '6px 12px 6px 34px',
+                                                background: '#070c18',
+                                                border: '1px solid rgba(255,255,255,0.12)',
+                                                borderRadius: '8px',
+                                                color: 'white',
+                                                fontSize: '12px',
+                                                outline: 'none',
+                                                boxSizing: 'border-box'
+                                            }}
+                                        />
+                                        {ledgerDutySearch && (
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setLedgerDutySearch('')}
+                                                style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '2px' }}
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Vehicle Filter Dropdown */}
+                                    <select
+                                        value={ledgerVehicleFilter}
+                                        onChange={(e) => setLedgerVehicleFilter(e.target.value)}
                                         style={{
-                                            padding: '8px 16px', borderRadius: '12px', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-                                            background: vendorLedgerMonth === mb.month ? '#fbbf24' : 'rgba(255,255,255,0.05)',
-                                            color: vendorLedgerMonth === mb.month ? '#0f172a' : 'white',
-                                            fontWeight: '900', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px'
+                                            height: '36px',
+                                            padding: '4px 10px',
+                                            background: '#070c18',
+                                            border: '1px solid rgba(255,255,255,0.12)',
+                                            borderRadius: '8px',
+                                            color: '#38bdf8',
+                                            fontSize: '12px',
+                                            fontWeight: '700',
+                                            outline: 'none',
+                                            cursor: 'pointer'
                                         }}
                                     >
-                                        <span>{formatMonthYear(mb.month)}</span>
-                                        <span style={{ opacity: 0.8, fontSize: '10px' }}>({mb.count} duties • ₹{mb.amount.toLocaleString()})</span>
-                                    </button>
-                                ))}
+                                        <option value="All">All Linked Vehicles ({selectedVendorForLedger.vehicles.length})</option>
+                                        {selectedVendorForLedger.vehicles.map(p => (
+                                            <option key={p} value={p}>{p}</option>
+                                        ))}
+                                    </select>
+
+                                    {/* Transaction Type Filter Pills: All / Payable Duties / Receivable Duties / Payments / Receipts */}
+                                    <div style={{ display: 'flex', gap: '4px', background: 'rgba(0,0,0,0.4)', padding: '3px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setLedgerTxTypeFilter('All')}
+                                            style={{
+                                                padding: '5px 10px',
+                                                borderRadius: '7px',
+                                                border: 'none',
+                                                fontSize: '11px',
+                                                fontWeight: '800',
+                                                cursor: 'pointer',
+                                                background: ledgerTxTypeFilter === 'All' ? 'rgba(255,255,255,0.16)' : 'transparent',
+                                                color: ledgerTxTypeFilter === 'All' ? '#ffffff' : 'rgba(255,255,255,0.6)',
+                                                transition: '0.15s'
+                                            }}
+                                        >
+                                            All ({selectedVendorForLedger.duties.length})
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setLedgerTxTypeFilter('Buy')}
+                                            style={{
+                                                padding: '5px 10px',
+                                                borderRadius: '7px',
+                                                border: 'none',
+                                                fontSize: '11px',
+                                                fontWeight: '800',
+                                                cursor: 'pointer',
+                                                background: ledgerTxTypeFilter === 'Buy' ? 'rgba(239, 68, 68, 0.25)' : 'transparent',
+                                                color: ledgerTxTypeFilter === 'Buy' ? '#f87171' : 'rgba(255,255,255,0.6)',
+                                                transition: '0.15s'
+                                            }}
+                                        >
+                                            🔴 Payable Duties ({selectedVendorForLedger.duties.filter(d => !d.isPayment && d.isBuy).length})
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setLedgerTxTypeFilter('Sell')}
+                                            style={{
+                                                padding: '5px 10px',
+                                                borderRadius: '7px',
+                                                border: 'none',
+                                                fontSize: '11px',
+                                                fontWeight: '800',
+                                                cursor: 'pointer',
+                                                background: ledgerTxTypeFilter === 'Sell' ? 'rgba(34, 197, 94, 0.25)' : 'transparent',
+                                                color: ledgerTxTypeFilter === 'Sell' ? '#4ade80' : 'rgba(255,255,255,0.6)',
+                                                transition: '0.15s'
+                                            }}
+                                        >
+                                            🟢 Receivable Duties ({selectedVendorForLedger.duties.filter(d => !d.isPayment && !d.isBuy).length})
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setLedgerTxTypeFilter('Payment')}
+                                            style={{
+                                                padding: '5px 10px',
+                                                borderRadius: '7px',
+                                                border: 'none',
+                                                fontSize: '11px',
+                                                fontWeight: '800',
+                                                cursor: 'pointer',
+                                                background: ledgerTxTypeFilter === 'Payment' ? 'rgba(16, 185, 129, 0.25)' : 'transparent',
+                                                color: ledgerTxTypeFilter === 'Payment' ? '#34d399' : 'rgba(255,255,255,0.6)',
+                                                transition: '0.15s'
+                                            }}
+                                        >
+                                            💸 Paid ({selectedVendorForLedger.duties.filter(d => d.isPayment && d.paymentType === 'Paid').length})
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setLedgerTxTypeFilter('Receipt')}
+                                            style={{
+                                                padding: '5px 10px',
+                                                borderRadius: '7px',
+                                                border: 'none',
+                                                fontSize: '11px',
+                                                fontWeight: '800',
+                                                cursor: 'pointer',
+                                                background: ledgerTxTypeFilter === 'Receipt' ? 'rgba(56, 189, 248, 0.25)' : 'transparent',
+                                                color: ledgerTxTypeFilter === 'Receipt' ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                transition: '0.15s'
+                                            }}
+                                        >
+                                            💰 Received ({selectedVendorForLedger.duties.filter(d => d.isPayment && d.paymentType === 'Received').length})
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>
+                                        Showing <strong style={{ color: 'white' }}>{filteredVendorDuties.length}</strong> / {selectedVendorForLedger.duties.length} entries
+                                    </div>
+                                    <div style={{ 
+                                        fontSize: '11.5px', 
+                                        fontWeight: '800', 
+                                        color: '#f87171',
+                                        background: 'rgba(239, 68, 68, 0.1)',
+                                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                                        padding: '4px 10px',
+                                        borderRadius: '8px'
+                                    }}>
+                                        Payable: <span style={{ fontWeight: '900' }}>₹{activeMonthDenaTotal.toLocaleString('en-IN')}</span>
+                                    </div>
+                                    <div style={{ 
+                                        fontSize: '11.5px', 
+                                        fontWeight: '800', 
+                                        color: '#4ade80',
+                                        background: 'rgba(34, 197, 94, 0.1)',
+                                        border: '1px solid rgba(34, 197, 94, 0.25)',
+                                        padding: '4px 10px',
+                                        borderRadius: '8px'
+                                    }}>
+                                        Receivable: <span style={{ fontWeight: '900' }}>₹{activeMonthLenaTotal.toLocaleString('en-IN')}</span>
+                                    </div>
+                                    <div style={{ 
+                                        fontSize: '11.5px', 
+                                        fontWeight: '800', 
+                                        color: activeMonthNetBalance > 0 ? '#fca5a5' : activeMonthNetBalance < 0 ? '#86efac' : '#ffffff',
+                                        background: 'rgba(255, 255, 255, 0.05)',
+                                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                                        padding: '4px 10px',
+                                        borderRadius: '8px'
+                                    }}>
+                                        Net: <span style={{ fontWeight: '900' }}>₹{Math.abs(activeMonthNetBalance).toLocaleString('en-IN')} {activeMonthNetBalance > 0 ? '(Payable)' : activeMonthNetBalance < 0 ? '(Receivable)' : ''}</span>
+                                    </div>
+                                </div>
                             </div>
 
-                            {/* Active View Summary */}
-                            <div style={{ padding: '12px 30px', background: 'rgba(255,255,255,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', fontWeight: '700' }}>
-                                    Showing <strong style={{ color: 'white' }}>{filteredVendorDuties.length} duties</strong> for {vendorLedgerMonth === 'All' ? 'All Time' : formatMonthYear(vendorLedgerMonth)}
-                                </div>
-                                <div style={{ fontSize: '13px', fontWeight: '900', color: 'white' }}>
-                                    Filtered Payout Total: <span style={{ color: '#10b981' }}>₹{activeMonthTotal.toLocaleString('en-IN')}</span>
-                                </div>
-                            </div>
-
-                            {/* Duties Table for this Vendor */}
-                            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 30px' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                    <thead>
-                                        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                                            <th style={{ padding: '12px 14px', textAlign: 'left', fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Duty Date</th>
-                                            <th style={{ padding: '12px 14px', textAlign: 'left', fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Vehicle & Model</th>
-                                            <th style={{ padding: '12px 14px', textAlign: 'left', fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Property / Guest</th>
-                                            <th style={{ padding: '12px 14px', textAlign: 'left', fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Duty Type</th>
-                                            <th style={{ padding: '12px 14px', textAlign: 'right', fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Payout (₹)</th>
-                                            <th style={{ padding: '12px 14px', textAlign: 'right', fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Actions</th>
+                            {/* Duties Table with Sticky Header */}
+                            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 28px 24px' }}>
+                                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 6px' }}>
+                                    <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#0a101d' }}>
+                                        <tr>
+                                            <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '11px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Duty Date</th>
+                                            <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '11px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Vehicle & Model</th>
+                                            <th style={{ padding: '14px 16px', textAlign: 'left', fontSize: '11px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Guest & Route</th>
+                                            <th style={{ padding: '14px 16px', textAlign: 'center', fontSize: '11px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Tx Type</th>
+                                            <th style={{ padding: '14px 16px', textAlign: 'right', fontSize: '11px', color: '#fca5a5', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>🔴 Payable (₹)</th>
+                                            <th style={{ padding: '14px 16px', textAlign: 'right', fontSize: '11px', color: '#86efac', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>🟢 Receivable (₹)</th>
+                                            <th style={{ padding: '14px 16px', textAlign: 'right', fontSize: '11px', color: '#fbbf24', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>⚖️ Running Balance (₹)</th>
+                                            <th style={{ padding: '14px 16px', textAlign: 'right', fontSize: '11px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {filteredVendorDuties.length === 0 ? (
-                                            <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>No duties for this month.</td></tr>
+                                            <tr>
+                                                <td colSpan="8" style={{ padding: '60px 20px', textAlign: 'center' }}>
+                                                    <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '14px', fontWeight: '700' }}>
+                                                        No duties found matching the selected filters.
+                                                    </div>
+                                                    <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '12px', marginTop: '4px' }}>
+                                                        Try selecting "All Months", "All" transaction type, or clearing the search box.
+                                                    </div>
+                                                </td>
+                                            </tr>
                                         ) : (
                                             filteredVendorDuties.map((d, dIdx) => (
-                                                <tr key={d._id || dIdx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                    <td style={{ padding: '12px 14px', fontSize: '13px', fontWeight: '800', color: 'white' }}>
-                                                        {formatDateIST(d.effectiveDate)}
+                                                <tr 
+                                                    key={d._id || dIdx} 
+                                                    style={{ 
+                                                        background: d.isPayment 
+                                                            ? (d.paymentType === 'Paid' ? 'rgba(16, 185, 129, 0.05)' : 'rgba(56, 189, 248, 0.05)') 
+                                                            : 'rgba(15, 23, 42, 0.45)',
+                                                        borderRadius: '10px',
+                                                        transition: '0.15s'
+                                                    }}
+                                                >
+                                                    {/* Duty / Payment Date */}
+                                                    <td style={{ padding: '12px 16px', borderTopLeftRadius: '10px', borderBottomLeftRadius: '10px', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)', borderLeft: d.isPayment ? (d.paymentType === 'Paid' ? '3px solid #10b981' : '3px solid #38bdf8') : '1px solid rgba(255,255,255,0.04)' }}>
+                                                        <div style={{ fontSize: '13px', fontWeight: '800', color: '#ffffff' }}>
+                                                            {formatDateIST(d.effectiveDate)}
+                                                        </div>
+                                                        <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
+                                                            {d.effectiveDate?.substring(0, 10)}
+                                                        </div>
                                                     </td>
-                                                    <td style={{ padding: '12px 14px' }}>
-                                                        <div style={{ fontSize: '13px', fontWeight: '900', color: 'white' }}>{d.carNumber?.split('#')[0]}</div>
-                                                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>{d.model || 'Standard'}</div>
+
+                                                    {/* Vehicle & Model OR Payment Mode */}
+                                                    <td style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                                        {d.isPayment ? (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <span style={{ 
+                                                                    fontSize: '12px', 
+                                                                    fontWeight: '800', 
+                                                                    color: d.paymentType === 'Paid' ? '#34d399' : '#38bdf8',
+                                                                    background: d.paymentType === 'Paid' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                                                                    border: d.paymentType === 'Paid' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)',
+                                                                    padding: '3px 8px',
+                                                                    borderRadius: '6px',
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '5px'
+                                                                }}>
+                                                                    <CreditCard size={12} />
+                                                                    {d.paymentMode || 'Payment'}
+                                                                </span>
+                                                                {d.referenceNumber && (
+                                                                    <span style={{ fontSize: '11px', color: '#94a3b8', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>
+                                                                        Ref: {d.referenceNumber}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <span style={{ 
+                                                                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                                                                    fontSize: '12.5px', 
+                                                                    fontWeight: '800', 
+                                                                    color: '#ffffff',
+                                                                    background: '#070c18',
+                                                                    border: '1px solid rgba(255,255,255,0.18)',
+                                                                    padding: '3px 8px',
+                                                                    borderRadius: '6px',
+                                                                    letterSpacing: '0.8px',
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '5px'
+                                                                }}>
+                                                                    <Car size={12} color="#38bdf8" />
+                                                                    {d.carNumber?.split('#')[0]}
+                                                                </span>
+                                                                <span style={{ 
+                                                                    fontSize: '11px', 
+                                                                    color: '#94a3b8',
+                                                                    background: 'rgba(148, 163, 184, 0.1)',
+                                                                    border: '1px solid rgba(148, 163, 184, 0.2)',
+                                                                    padding: '2px 7px',
+                                                                    borderRadius: '5px',
+                                                                    fontWeight: '700'
+                                                                }}>
+                                                                    {d.model || 'Standard'}
+                                                                </span>
+                                                            </div>
+                                                        )}
                                                     </td>
-                                                    <td style={{ padding: '12px 14px' }}>
-                                                        <div style={{ fontSize: '13px', fontWeight: '800', color: 'white' }}>{d.guestName || d.property || 'Direct'}</div>
+
+                                                    {/* Guest & Route OR Notes */}
+                                                    <td style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                                        {d.isPayment ? (
+                                                            <div>
+                                                                <div style={{ fontSize: '13px', fontWeight: '800', color: '#ffffff' }}>
+                                                                    {d.notes || (d.paymentType === 'Paid' ? 'Vendor Settlement Payment' : 'Vendor Payment Receipt')}
+                                                                </div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                                                    <span style={{ fontSize: '10.5px', color: d.paymentType === 'Paid' ? '#34d399' : '#38bdf8', fontWeight: '700' }}>
+                                                                        {d.paymentType === 'Paid' ? '💸 Direct Outflow to Vendor' : '💰 Direct Inflow from Vendor'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div>
+                                                                <div style={{ fontSize: '13px', fontWeight: '800', color: '#ffffff' }}>
+                                                                    {d.guestName || d.property || 'Direct Guest'}
+                                                                </div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+                                                                    {d.property && d.guestName && (
+                                                                        <span style={{ fontSize: '11px', color: '#c084fc', fontWeight: '600' }}>
+                                                                            {d.property}
+                                                                        </span>
+                                                                    )}
+                                                                    {d.dutyType && (
+                                                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>
+                                                                            • {d.dutyType}
+                                                                        </span>
+                                                                    )}
+                                                                    {d.dropLocation && (
+                                                                        <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '600' }}>
+                                                                            → {d.dropLocation}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </td>
-                                                    <td style={{ padding: '12px 14px' }}>
-                                                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>{d.dutyType || 'Standard'}</div>
-                                                        {d.dropLocation && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>→ {d.dropLocation}</div>}
+
+                                                    {/* Tx Type */}
+                                                    <td style={{ padding: '12px 16px', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                                        {d.isPayment ? (
+                                                            <span style={{
+                                                                fontSize: '11px',
+                                                                fontWeight: '800',
+                                                                padding: '3px 8px',
+                                                                borderRadius: '6px',
+                                                                background: d.paymentType === 'Paid' ? 'rgba(16, 185, 129, 0.18)' : 'rgba(56, 189, 248, 0.18)',
+                                                                color: d.paymentType === 'Paid' ? '#34d399' : '#38bdf8',
+                                                                border: d.paymentType === 'Paid' ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(56, 189, 248, 0.35)',
+                                                                whiteSpace: 'nowrap'
+                                                            }}>
+                                                                {d.paymentType === 'Paid' ? '💸 Paid (Out)' : '💰 Received (In)'}
+                                                            </span>
+                                                        ) : (
+                                                            <span style={{
+                                                                fontSize: '11px',
+                                                                fontWeight: '800',
+                                                                padding: '3px 8px',
+                                                                borderRadius: '6px',
+                                                                background: d.isBuy ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                                                                color: d.isBuy ? '#fca5a5' : '#86efac',
+                                                                border: d.isBuy ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(34, 197, 94, 0.3)',
+                                                                whiteSpace: 'nowrap'
+                                                            }}>
+                                                                {d.isBuy ? '🔴 Buy (Payable)' : '🟢 Sell (Receivable)'}
+                                                            </span>
+                                                        )}
                                                     </td>
-                                                    <td style={{ padding: '12px 14px', textAlign: 'right', fontSize: '15px', fontWeight: '1000', color: '#10b981' }}>
-                                                        ₹{d.effectiveAmount.toLocaleString('en-IN')}
+
+                                                    {/* 🔴 Payable (₹) */}
+                                                    <td style={{ padding: '12px 16px', textAlign: 'right', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                                        {d.isPayment ? (
+                                                            d.paymentType === 'Paid' ? (
+                                                                <div>
+                                                                    <div style={{ fontSize: '15px', fontWeight: '950', color: '#34d399' }}>
+                                                                        -₹{d.effectiveAmount.toLocaleString('en-IN')}
+                                                                    </div>
+                                                                    <div style={{ fontSize: '9.5px', color: '#34d399', fontWeight: '700' }}>Paid Out</div>
+                                                                </div>
+                                                            ) : (
+                                                                <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>
+                                                            )
+                                                        ) : (
+                                                            <div style={{ fontSize: '15px', fontWeight: '950', color: d.isBuy ? '#f87171' : 'rgba(255,255,255,0.2)' }}>
+                                                                {d.isBuy ? `₹${(d.denaAmount || d.effectiveAmount).toLocaleString('en-IN')}` : '—'}
+                                                            </div>
+                                                        )}
                                                     </td>
-                                                    <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+
+                                                    {/* 🟢 Receivable (₹) */}
+                                                    <td style={{ padding: '12px 16px', textAlign: 'right', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                                        {d.isPayment ? (
+                                                            d.paymentType === 'Received' ? (
+                                                                <div>
+                                                                    <div style={{ fontSize: '15px', fontWeight: '950', color: '#38bdf8' }}>
+                                                                        -₹{d.effectiveAmount.toLocaleString('en-IN')}
+                                                                    </div>
+                                                                    <div style={{ fontSize: '9.5px', color: '#38bdf8', fontWeight: '700' }}>Received In</div>
+                                                                </div>
+                                                            ) : (
+                                                                <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>
+                                                            )
+                                                        ) : (
+                                                            <div style={{ fontSize: '15px', fontWeight: '950', color: !d.isBuy ? '#4ade80' : 'rgba(255,255,255,0.2)' }}>
+                                                                {!d.isBuy ? `₹${(d.lenaAmount || d.effectiveAmount).toLocaleString('en-IN')}` : '—'}
+                                                            </div>
+                                                        )}
+                                                    </td>
+
+                                                    {/* ⚖️ Running Balance (₹) */}
+                                                    <td style={{ padding: '12px 16px', textAlign: 'right', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                                        <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                                                            <span style={{ 
+                                                                fontSize: '15px', 
+                                                                fontWeight: '1000', 
+                                                                color: d.runningBalance > 0 ? '#f87171' : d.runningBalance < 0 ? '#4ade80' : '#94a3b8' 
+                                                            }}>
+                                                                ₹{Math.abs(d.runningBalance || 0).toLocaleString('en-IN')}
+                                                            </span>
+                                                            <span style={{ 
+                                                                fontSize: '9px', 
+                                                                fontWeight: '800', 
+                                                                padding: '1px 6px',
+                                                                borderRadius: '4px',
+                                                                background: d.runningBalance > 0 ? 'rgba(239, 68, 68, 0.15)' : d.runningBalance < 0 ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255,255,255,0.06)',
+                                                                color: d.runningBalance > 0 ? '#fca5a5' : d.runningBalance < 0 ? '#86efac' : '#94a3b8' 
+                                                            }}>
+                                                                {d.runningBalance > 0 ? 'Payable' : d.runningBalance < 0 ? 'Receivable' : 'Settled'}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Actions */}
+                                                    <td style={{ padding: '12px 16px', textAlign: 'right', borderTopRightRadius: '10px', borderBottomRightRadius: '10px', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)', borderRight: '1px solid rgba(255,255,255,0.04)' }}>
                                                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                                                            <button 
-                                                                onClick={() => { setSelectedVendorForLedger(null); handleEdit(d); }} 
-                                                                style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                                            >
-                                                                <Edit size={13} />
-                                                            </button>
-                                                            <button 
-                                                                onClick={() => { handleDelete(d._id); setSelectedVendorForLedger(null); }} 
-                                                                style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.2)', color: '#f43f5e', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                                            >
-                                                                <Trash2 size={13} />
-                                                            </button>
+                                                            {d.isPayment ? (
+                                                                <>
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => handleEditPayment(d)} 
+                                                                        style={{ 
+                                                                            width: '32px', 
+                                                                            height: '32px', 
+                                                                            borderRadius: '8px', 
+                                                                            background: 'rgba(16, 185, 129, 0.12)', 
+                                                                            border: '1px solid rgba(16, 185, 129, 0.3)', 
+                                                                            color: '#34d399', 
+                                                                            cursor: 'pointer', 
+                                                                            display: 'flex', 
+                                                                            alignItems: 'center', 
+                                                                            justifyContent: 'center',
+                                                                            transition: '0.15s'
+                                                                        }}
+                                                                        title="Edit Payment"
+                                                                    >
+                                                                        <Edit size={13} />
+                                                                    </button>
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => handleDeletePayment(d._id)} 
+                                                                        style={{ 
+                                                                            width: '32px', 
+                                                                            height: '32px', 
+                                                                            borderRadius: '8px', 
+                                                                            background: 'rgba(244, 63, 94, 0.12)', 
+                                                                            border: '1px solid rgba(244, 63, 94, 0.25)', 
+                                                                            color: '#f43f5e', 
+                                                                            cursor: 'pointer', 
+                                                                            display: 'flex', 
+                                                                            alignItems: 'center', 
+                                                                            justifyContent: 'center',
+                                                                            transition: '0.15s'
+                                                                        }}
+                                                                        title="Delete Payment"
+                                                                    >
+                                                                        <Trash2 size={13} />
+                                                                    </button>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => { setSelectedVendorForLedger(null); handleEdit(d); }} 
+                                                                        style={{ 
+                                                                            width: '32px', 
+                                                                            height: '32px', 
+                                                                            borderRadius: '8px', 
+                                                                            background: 'rgba(255,255,255,0.06)', 
+                                                                            border: '1px solid rgba(255,255,255,0.12)', 
+                                                                            color: 'white', 
+                                                                            cursor: 'pointer', 
+                                                                            display: 'flex', 
+                                                                            alignItems: 'center', 
+                                                                            justifyContent: 'center',
+                                                                            transition: '0.15s'
+                                                                        }}
+                                                                        title="Edit Duty Entry"
+                                                                    >
+                                                                        <Edit size={13} />
+                                                                    </button>
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => { handleDelete(d._id); setSelectedVendorForLedger(null); }} 
+                                                                        style={{ 
+                                                                            width: '32px', 
+                                                                            height: '32px', 
+                                                                            borderRadius: '8px', 
+                                                                            background: 'rgba(244, 63, 94, 0.12)', 
+                                                                            border: '1px solid rgba(244, 63, 94, 0.25)', 
+                                                                            color: '#f43f5e', 
+                                                                            cursor: 'pointer', 
+                                                                            display: 'flex', 
+                                                                            alignItems: 'center', 
+                                                                            justifyContent: 'center',
+                                                                            transition: '0.15s'
+                                                                        }}
+                                                                        title="Delete Duty Entry"
+                                                                    >
+                                                                        <Trash2 size={13} />
+                                                                    </button>
+                                                                </>
+                                                            )}
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -1494,6 +2786,370 @@ const OutsideCars = () => {
                                 <div style={{ display: 'flex', gap: '12px' }}>
                                     <button type="button" onClick={() => setShowModal(false)} style={{ flex: 1, height: '56px', borderRadius: '16px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontWeight: '800', cursor: 'pointer' }}>Cancel</button>
                                     <button type="submit" style={{ flex: 2, height: '56px', borderRadius: '16px', background: theme.primary, border: 'none', color: 'black', fontWeight: '1000', fontSize: '16px', cursor: 'pointer', boxShadow: `0 10px 20px ${theme.primary}30` }}>{editMode ? 'Update' : 'Submit'}</button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* ─ ─ ─  RECORD VENDOR PAYMENT MODAL ─ ─ ─  */}
+            <AnimatePresence>
+                {showPaymentModal && (
+                    <div className="modal-overlay" style={{ zIndex: 2200 }}>
+                        <motion.div 
+                            initial={{ scale: 0.92, opacity: 0, y: 20 }} 
+                            animate={{ scale: 1, opacity: 1, y: 0 }} 
+                            exit={{ scale: 0.92, opacity: 0, y: 20 }} 
+                            transition={{ duration: 0.2 }}
+                            className="modal-content-wrapper" 
+                            style={{ 
+                                maxWidth: '640px', 
+                                width: '95%', 
+                                padding: 0, 
+                                background: 'linear-gradient(180deg, #0e172a 0%, #080d1a 100%)', 
+                                border: '1px solid rgba(255,255,255,0.12)', 
+                                borderRadius: '22px', 
+                                overflow: 'hidden',
+                                boxShadow: '0 25px 80px rgba(0,0,0,0.85)'
+                            }}
+                        >
+                            {/* Modal Header */}
+                            <div style={{ 
+                                padding: '22px 28px', 
+                                borderBottom: '1px solid rgba(255,255,255,0.08)', 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center',
+                                background: 'rgba(255,255,255,0.02)'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <div style={{ 
+                                        width: '42px', 
+                                        height: '42px', 
+                                        borderRadius: '12px', 
+                                        background: paymentFormData.paymentType === 'Paid' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)', 
+                                        border: paymentFormData.paymentType === 'Paid' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)',
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center',
+                                        color: paymentFormData.paymentType === 'Paid' ? '#34d399' : '#38bdf8'
+                                    }}>
+                                        <CreditCard size={20} />
+                                    </div>
+                                    <div>
+                                        <h2 style={{ color: 'white', fontSize: '18px', fontWeight: '950', margin: 0 }}>
+                                            {paymentEditMode ? 'Edit Payment Record' : 'Record Vendor Payment'}
+                                        </h2>
+                                        <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '11px', fontWeight: '700', margin: '3px 0 0' }}>
+                                            {paymentFormData.paymentType === 'Paid' 
+                                                ? 'Record payment made to vendor (reduces what you owe them)'
+                                                : 'Record payment received from vendor (reduces what they owe you)'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button 
+                                    type="button"
+                                    onClick={() => setShowPaymentModal(false)} 
+                                    style={{ 
+                                        background: 'rgba(255,255,255,0.06)', 
+                                        border: '1px solid rgba(255,255,255,0.1)', 
+                                        borderRadius: '10px',
+                                        color: 'rgba(255,255,255,0.5)', 
+                                        cursor: 'pointer',
+                                        width: '36px',
+                                        height: '36px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            {/* Payment Form */}
+                            <form onSubmit={handlePaymentSubmit} style={{ padding: '24px 28px' }}>
+                                {/* Payment Direction Toggle */}
+                                <div style={{ marginBottom: '20px' }}>
+                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '8px' }}>
+                                        Payment Direction *
+                                    </label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPaymentFormData({ ...paymentFormData, paymentType: 'Paid' })}
+                                            style={{
+                                                padding: '12px 14px',
+                                                borderRadius: '12px',
+                                                border: paymentFormData.paymentType === 'Paid' ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.08)',
+                                                background: paymentFormData.paymentType === 'Paid' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: paymentFormData.paymentType === 'Paid' ? '#34d399' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '900',
+                                                fontSize: '13px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '8px',
+                                                transition: '0.2s'
+                                            }}
+                                        >
+                                            <span>💸 Paid to Vendor</span>
+                                            <span style={{ fontSize: '10px', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: '4px', opacity: 0.85 }}>Outflow</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPaymentFormData({ ...paymentFormData, paymentType: 'Received' })}
+                                            style={{
+                                                padding: '12px 14px',
+                                                borderRadius: '12px',
+                                                border: paymentFormData.paymentType === 'Received' ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.08)',
+                                                background: paymentFormData.paymentType === 'Received' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: paymentFormData.paymentType === 'Received' ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '900',
+                                                fontSize: '13px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '8px',
+                                                transition: '0.2s'
+                                            }}
+                                        >
+                                            <span>💰 Received from Vendor</span>
+                                            <span style={{ fontSize: '10px', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: '4px', opacity: 0.85 }}>Inflow</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Vendor Name & Date */}
+                                <div className="form-grid-2" style={{ gap: '16px', marginBottom: '16px' }}>
+                                    <div className="premium-input-group">
+                                        <label className="premium-label">Vendor Name *</label>
+                                        <input
+                                            type="text"
+                                            className="premium-compact-input"
+                                            list="vendorDataList"
+                                            required
+                                            value={paymentFormData.vendorName}
+                                            onChange={e => setPaymentFormData({ ...paymentFormData, vendorName: e.target.value })}
+                                            placeholder="Select or enter vendor name"
+                                            style={{ height: '48px', fontSize: '13px' }}
+                                        />
+                                        <datalist id="vendorDataList">
+                                            {uniqueVendorsList.map(v => <option key={v} value={v} />)}
+                                        </datalist>
+                                    </div>
+                                    <div className="premium-input-group">
+                                        <label className="premium-label">Payment Date *</label>
+                                        <input
+                                            type="date"
+                                            className="premium-compact-input"
+                                            required
+                                            value={paymentFormData.date}
+                                            onChange={e => setPaymentFormData({ ...paymentFormData, date: e.target.value })}
+                                            style={{ height: '48px', colorScheme: 'dark', fontSize: '13px' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Amount & Reference */}
+                                <div className="form-grid-2" style={{ gap: '16px', marginBottom: '16px' }}>
+                                    <div className="premium-input-group">
+                                        <label className="premium-label">Amount (₹) *</label>
+                                        <input
+                                            type="number"
+                                            min="0.01"
+                                            step="any"
+                                            className="premium-compact-input"
+                                            required
+                                            value={paymentFormData.amount}
+                                            onChange={e => setPaymentFormData({ ...paymentFormData, amount: e.target.value })}
+                                            placeholder="0.00"
+                                            style={{ 
+                                                height: '48px', 
+                                                fontSize: '18px', 
+                                                fontWeight: '950', 
+                                                color: paymentFormData.paymentType === 'Paid' ? '#34d399' : '#38bdf8' 
+                                            }}
+                                        />
+                                    </div>
+                                    <div className="premium-input-group">
+                                        <label className="premium-label">Reference / UTR / Cheque No.</label>
+                                        <input
+                                            type="text"
+                                            className="premium-compact-input"
+                                            value={paymentFormData.referenceNumber}
+                                            onChange={e => setPaymentFormData({ ...paymentFormData, referenceNumber: e.target.value })}
+                                            placeholder="e.g. UTR294829482 / Cheque #102934"
+                                            style={{ height: '48px', fontSize: '13px' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Payment Method (Cash, Bank / UPI, Others) */}
+                                <div style={{ marginBottom: '16px' }}>
+                                    <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '8px' }}>
+                                        Payment Method *
+                                    </label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPaymentFormData({ ...paymentFormData, paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' })}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '12px',
+                                                border: (paymentFormData.paymentMode === 'Cash') ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (paymentFormData.paymentMode === 'Cash') ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (paymentFormData.paymentMode === 'Cash') ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            💵 Cash
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPaymentFormData({ ...paymentFormData, paymentMode: 'Bank Transfer', bankAccountId: paymentFormData.bankAccountId || (bankAccounts[0]?._id || ''), paidBy: 'Company' })}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '12px',
+                                                border: (paymentFormData.paymentMode !== 'Cash' && paymentFormData.paymentMode !== 'Others') ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (paymentFormData.paymentMode !== 'Cash' && paymentFormData.paymentMode !== 'Others') ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (paymentFormData.paymentMode !== 'Cash' && paymentFormData.paymentMode !== 'Others') ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            🏦 Bank / UPI
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPaymentFormData({ ...paymentFormData, paymentMode: 'Others', bankAccountId: '', paidBy: 'Others' })}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '12px',
+                                                border: (paymentFormData.paymentMode === 'Others') ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (paymentFormData.paymentMode === 'Others') ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (paymentFormData.paymentMode === 'Others') ? '#c084fc' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            💼 Others
+                                        </button>
+                                    </div>
+
+                                    {/* Dynamic Payment Mode Info / BankSelector */}
+                                    {paymentFormData.paymentMode === 'Others' ? (
+                                        <div style={{
+                                            background: 'rgba(168, 85, 247, 0.08)',
+                                            border: '1px solid rgba(168, 85, 247, 0.25)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            fontSize: '12px',
+                                            color: '#c084fc',
+                                            fontWeight: '700'
+                                        }}>
+                                            💼 Paid / Received via Personal or Third-Party Account (Does NOT affect company Cash or Bank balance)
+                                        </div>
+                                    ) : paymentFormData.paymentMode === 'Cash' ? (
+                                        <div style={{
+                                            background: 'rgba(16, 185, 129, 0.08)',
+                                            border: '1px solid rgba(16, 185, 129, 0.25)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            fontSize: '12px',
+                                            color: '#10b981',
+                                            fontWeight: '800',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between'
+                                        }}>
+                                            <span>💵 {paymentFormData.paymentType === 'Paid' ? 'Deducted from' : 'Added to'} Office Cash in Hand (Cash Book)</span>
+                                            <span style={{ color: paymentFormData.paymentType === 'Paid' ? '#f87171' : '#34d399', fontWeight: '900' }}>
+                                                {paymentFormData.paymentType === 'Paid' ? '-' : '+'}₹{(Number(paymentFormData.amount) || 0).toLocaleString()}
+                                            </span>
+                                        </div>
+                                    ) : (
+                                        <BankSelector
+                                            bankAccounts={bankAccounts}
+                                            value={paymentFormData.bankAccountId}
+                                            amount={Number(paymentFormData.amount) || 0}
+                                            onChange={(bId) => setPaymentFormData({ ...paymentFormData, bankAccountId: bId, paymentMode: 'Bank Transfer' })}
+                                        />
+                                    )}
+                                </div>
+
+                                {/* Notes / Remarks */}
+                                <div style={{ marginBottom: '24px' }}>
+                                    <label className="premium-label">Notes / Remarks</label>
+                                    <input
+                                        type="text"
+                                        className="premium-compact-input"
+                                        value={paymentFormData.notes}
+                                        onChange={e => setPaymentFormData({ ...paymentFormData, notes: e.target.value })}
+                                        placeholder="e.g. Cleared bill for October duties"
+                                        style={{ height: '48px', fontSize: '13px', width: '100%' }}
+                                    />
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div style={{ display: 'flex', gap: '12px' }}>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setShowPaymentModal(false)} 
+                                        style={{ 
+                                            flex: 1, 
+                                            height: '50px', 
+                                            borderRadius: '14px', 
+                                            background: 'rgba(255,255,255,0.05)', 
+                                            border: '1px solid rgba(255,255,255,0.1)', 
+                                            color: 'white', 
+                                            fontWeight: '800', 
+                                            fontSize: '13px',
+                                            cursor: 'pointer' 
+                                        }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        type="submit" 
+                                        disabled={paymentSubmitting}
+                                        style={{ 
+                                            flex: 2, 
+                                            height: '50px', 
+                                            borderRadius: '14px', 
+                                            background: paymentFormData.paymentType === 'Paid' 
+                                                ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' 
+                                                : 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)', 
+                                            border: 'none', 
+                                            color: 'white', 
+                                            fontWeight: '1000', 
+                                            fontSize: '14px', 
+                                            cursor: paymentSubmitting ? 'not-allowed' : 'pointer', 
+                                            boxShadow: paymentFormData.paymentType === 'Paid' ? '0 8px 24px rgba(16, 185, 129, 0.35)' : '0 8px 24px rgba(2, 132, 199, 0.35)',
+                                            opacity: paymentSubmitting ? 0.7 : 1
+                                        }}
+                                    >
+                                        {paymentSubmitting ? 'Saving...' : (paymentEditMode ? 'Update Payment' : 'Save Payment Record')}
+                                    </button>
                                 </div>
                             </form>
                         </motion.div>
