@@ -780,6 +780,30 @@ const BankBook = ({ initialTab = 'bank' }) => {
         }
     };
 
+    const formatTourDate = (tx) => {
+        const bkg = tx?.bookingRef || tx?.leadRef;
+        if (!bkg) return '';
+        const start = bkg.travelStartDate || (Array.isArray(bkg.itinerary) && bkg.itinerary[0]?.date);
+        const end = bkg.travelEndDate || (Array.isArray(bkg.itinerary) && bkg.itinerary.length > 1 ? bkg.itinerary[bkg.itinerary.length - 1]?.date : null);
+        if (!start) return '';
+
+        try {
+            const dStart = new Date(start);
+            if (isNaN(dStart.getTime())) return '';
+            const sStr = dStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+            if (end && String(end).slice(0, 10) !== String(start).slice(0, 10)) {
+                const dEnd = new Date(end);
+                if (!isNaN(dEnd.getTime())) {
+                    const eStr = dEnd.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                    return `${sStr} - ${eStr}`;
+                }
+            }
+            return dStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        } catch {
+            return '';
+        }
+    };
+
     const formatParticulars = (tx) => {
         const rawDesc = String(tx?.description || '').trim();
         const cat = String(tx?.category || '').trim();
@@ -1394,8 +1418,25 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                                     </div>
                                                 </td>
                                                 <td style={{ padding: '16px 20px', fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>
-                                                    <div>{tx.category || 'General'}</div>
-                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>{tx.paymentMode}</div>
+                                                    <div style={{ fontWeight: '600', color: '#e2e8f0' }}>{tx.category || 'General'}</div>
+                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>{tx.paymentMode}</div>
+                                                    {formatTourDate(tx) && (
+                                                        <div style={{
+                                                            marginTop: '4px',
+                                                            fontSize: '11px',
+                                                            fontWeight: '800',
+                                                            color: '#38bdf8',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                            background: 'rgba(56, 189, 248, 0.12)',
+                                                            border: '1px solid rgba(56, 189, 248, 0.25)',
+                                                            padding: '2px 6px',
+                                                            borderRadius: '5px'
+                                                        }}>
+                                                            <span>📅 Tour: {formatTourDate(tx)}</span>
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td style={{ padding: '16px 20px', fontSize: '12px', color: 'rgba(255,255,255,0.6)', fontFamily: 'monospace' }}>
                                                     {tx.reference || '-'}
@@ -2026,6 +2067,23 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                                     }}>
                                                         {tx.category || 'General Cash'}
                                                     </span>
+                                                    {formatTourDate(tx) && (
+                                                        <div style={{
+                                                            marginTop: '6px',
+                                                            fontSize: '11px',
+                                                            fontWeight: '800',
+                                                            color: '#38bdf8',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px',
+                                                            background: 'rgba(56, 189, 248, 0.12)',
+                                                            border: '1px solid rgba(56, 189, 248, 0.25)',
+                                                            padding: '2px 6px',
+                                                            borderRadius: '5px'
+                                                        }}>
+                                                            <span>📅 Tour: {formatTourDate(tx)}</span>
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td style={{ padding: '16px 20px', fontSize: '13px' }}>
                                                     <div style={{ fontWeight: '800', color: '#fff', fontSize: '14px' }}>

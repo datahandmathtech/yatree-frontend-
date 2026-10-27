@@ -230,7 +230,9 @@ export default function CompletedBookings() {
                     const displayCode = b.clientCode || b.bookingCode || b.bookingId || 'BKG';
                     const pkgAmt = Number(b.totalAmount || b.packagePrice) || 0;
                     const advAmt = Number(b.advancePaid) || 0;
-                    const balAmt = b.balanceDue !== undefined ? Math.max(0, Number(b.balanceDue)) : Math.max(0, pkgAmt - advAmt);
+                    const isFullPaid = b.paymentStatus === 'Full Received' || b.paymentStatus === 'Paid' || b.paymentStatus === 'Settled';
+                    const rawBal = b.balanceDue !== undefined ? Math.max(0, Number(b.balanceDue)) : Math.max(0, pkgAmt - advAmt);
+                    const balAmt = isFullPaid ? 0 : rawBal;
 
                     return {
                         ...b,
@@ -391,10 +393,15 @@ export default function CompletedBookings() {
         const totalRides = processedBookings.length;
         const packageValue = processedBookings.reduce((sum, b) => sum + (Number(b.packagePrice || b.totalAmount) || 0), 0);
         const receivedAmount = processedBookings.reduce((sum, b) => {
+            const pkg = Number(b.packagePrice || b.totalAmount) || 0;
+            const isFullPaid = b.paymentStatus === 'Full Received' || b.paymentStatus === 'Paid' || b.paymentStatus === 'Settled';
+            if (isFullPaid) return sum + pkg;
             const fuel = b.guestFuelFilled ? (Number(b.guestFuelAmount) || 0) : 0;
             return sum + (Number(b.advancePaid) || 0) + fuel;
         }, 0);
         const balanceDue = processedBookings.reduce((sum, b) => {
+            const isFullPaid = b.paymentStatus === 'Full Received' || b.paymentStatus === 'Paid' || b.paymentStatus === 'Settled';
+            if (isFullPaid) return sum;
             const pkg = Number(b.packagePrice || b.totalAmount) || 0;
             const fuel = b.guestFuelFilled ? (Number(b.guestFuelAmount) || 0) : 0;
             const adv = (Number(b.advancePaid) || 0) + fuel;
@@ -976,9 +983,11 @@ export default function CompletedBookings() {
                                 paginatedBookings.map((bkg, idx) => {
                                     const serialNo = (currentPage - 1) * itemsPerPage + idx + 1;
                                     const pkgPrice = Number(bkg.packagePrice || bkg.totalAmount) || 0;
+                                    const isFullPaid = bkg.paymentStatus === 'Full Received' || bkg.paymentStatus === 'Paid' || bkg.paymentStatus === 'Settled';
                                     const fuelAmt = bkg.guestFuelFilled ? (Number(bkg.guestFuelAmount) || 0) : 0;
-                                    const recAmt = (Number(bkg.advancePaid) || 0) + fuelAmt;
-                                    const bal = bkg.balanceDue !== undefined ? Math.max(0, Number(bkg.balanceDue)) : Math.max(0, pkgPrice - recAmt);
+                                    const rawBal = bkg.balanceDue !== undefined ? Math.max(0, Number(bkg.balanceDue)) : Math.max(0, pkgPrice - (Number(bkg.advancePaid) || 0) - fuelAmt);
+                                    const bal = isFullPaid ? 0 : rawBal;
+                                    const recAmt = isFullPaid ? Math.max(pkgPrice, (Number(bkg.advancePaid) || 0) + fuelAmt) : ((Number(bkg.advancePaid) || 0) + fuelAmt);
                                     const daysCount = Array.isArray(bkg.itinerary) && bkg.itinerary.length > 0 
                                         ? bkg.itinerary.length 
                                         : 1;

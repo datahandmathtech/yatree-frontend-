@@ -89,12 +89,13 @@ const FreelancerSalaryDetail = () => {
         setSubmitting(true);
         try {
             const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+            const isOthers = advanceData.paymentMode === 'Others' || advanceData.paymentMode === 'Other' || advanceData.paidBy === 'Others';
             const isBank = advanceData.paymentMode === 'Bank' || advanceData.paymentMode === 'Bank Transfer';
             const payload = {
                 ...advanceData,
-                paidBy: 'Company',
-                paymentMode: isBank ? 'Bank Transfer' : 'Cash',
-                bankAccountId: isBank ? advanceData.bankAccountId : null,
+                paidBy: isOthers ? 'Others' : 'Company',
+                paymentMode: isOthers ? 'Others' : (isBank ? 'Bank Transfer' : 'Cash'),
+                bankAccountId: (isBank && !isOthers) ? advanceData.bankAccountId : null,
                 driverId,
                 companyId: selectedCompany?._id,
                 month,
@@ -146,13 +147,14 @@ const FreelancerSalaryDetail = () => {
 
     const openEditModal = (adv) => {
         setEditingAdvance(adv);
-        const isBank = adv.paymentMode === 'Bank' || adv.paymentMode === 'Bank Transfer' || !!adv.bankAccount;
+        const isOthers = adv.paidBy === 'Others' || adv.paymentMode === 'Others' || adv.paymentMode === 'Other';
+        const isBank = !isOthers && (adv.paymentMode === 'Bank' || adv.paymentMode === 'Bank Transfer' || !!adv.bankAccount);
         setAdvanceData({
             amount: adv.amount,
             remark: adv.remark,
             date: toISTDateString(adv.date),
-            paymentMode: isBank ? 'Bank' : 'Cash',
-            bankAccountId: adv.bankAccount?._id || adv.bankAccount || (bankAccounts[0]?._id || '')
+            paymentMode: isOthers ? 'Others' : (isBank ? 'Bank' : 'Cash'),
+            bankAccountId: isOthers ? '' : (adv.bankAccount?._id || adv.bankAccount || (bankAccounts[0]?._id || ''))
         });
         if (refreshCompany) refreshCompany();
         setShowAdvanceModal(true);
@@ -347,7 +349,11 @@ const FreelancerSalaryDetail = () => {
                                         <td style={{ padding: '14px 18px', color: 'white' }}>{formatDateIST(adv.date)}</td>
                                         <td style={{ padding: '14px 18px', color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>{adv.remark || '—'}</td>
                                         <td style={{ padding: '14px 18px' }}>
-                                            {adv.paymentMode === 'Bank' || adv.paymentMode === 'Bank Transfer' || adv.bankAccount ? (
+                                            {(adv.paidBy === 'Others' || adv.paymentMode === 'Others' || adv.paymentMode === 'Other') ? (
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#c084fc', fontSize: '11px', fontWeight: '800' }}>
+                                                    💼 Others / Personal
+                                                </span>
+                                            ) : adv.paymentMode === 'Bank' || adv.paymentMode === 'Bank Transfer' || adv.bankAccount ? (
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#38bdf8', fontSize: '11px', fontWeight: '800' }}>
                                                     🏦 Bank {adv.bankAccount?.bankName ? `(${adv.bankAccount.bankName})` : ''}
                                                 </span>
@@ -389,26 +395,26 @@ const FreelancerSalaryDetail = () => {
                                 <button onClick={() => { setShowAdvanceModal(false); setEditingAdvance(null); setAdvanceData({ amount: '', remark: '', date: todayIST(), paymentMode: 'Cash', bankAccountId: '' }); setMessage({ type: '', text: '' }); }} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}><X size={22} /></button>
                             </div>
                             <form onSubmit={handleSaveAdvance} style={{ display: 'grid', gap: '16px' }}>
-                                {/* Payment Method Switcher (Cash in Hand vs Bank Account) */}
+                                {/* Payment Method Switcher (Cash vs Bank vs Others) */}
                                 <div>
                                     <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '11px', fontWeight: '800', marginBottom: '8px', textTransform: 'uppercase' }}>Payment Method (Paid by Company)</label>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', marginBottom: '10px' }}>
                                         <button
                                             type="button"
                                             onClick={() => setAdvanceData({ ...advanceData, paymentMode: 'Cash', bankAccountId: '' })}
                                             style={{
-                                                padding: '10px',
+                                                padding: '10px 8px',
                                                 borderRadius: '10px',
                                                 border: advanceData.paymentMode === 'Cash' ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
                                                 background: advanceData.paymentMode === 'Cash' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
                                                 color: advanceData.paymentMode === 'Cash' ? '#10b981' : 'rgba(255,255,255,0.6)',
                                                 fontWeight: '800',
-                                                fontSize: '12px',
+                                                fontSize: '11px',
                                                 cursor: 'pointer',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'center',
-                                                gap: '6px'
+                                                gap: '5px'
                                             }}
                                         >
                                             💵 Cash in Hand
@@ -420,26 +426,61 @@ const FreelancerSalaryDetail = () => {
                                                 setAdvanceData({ ...advanceData, paymentMode: 'Bank', bankAccountId: defaultBank });
                                             }}
                                             style={{
-                                                padding: '10px',
+                                                padding: '10px 8px',
                                                 borderRadius: '10px',
                                                 border: (advanceData.paymentMode === 'Bank' || advanceData.paymentMode === 'Bank Transfer') ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
                                                 background: (advanceData.paymentMode === 'Bank' || advanceData.paymentMode === 'Bank Transfer') ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
                                                 color: (advanceData.paymentMode === 'Bank' || advanceData.paymentMode === 'Bank Transfer') ? '#38bdf8' : 'rgba(255,255,255,0.6)',
                                                 fontWeight: '800',
-                                                fontSize: '12px',
+                                                fontSize: '11px',
                                                 cursor: 'pointer',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'center',
-                                                gap: '6px'
+                                                gap: '5px'
                                             }}
                                         >
                                             🏦 Bank Account
                                         </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAdvanceData({ ...advanceData, paymentMode: 'Others', bankAccountId: '' })}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '10px',
+                                                border: (advanceData.paymentMode === 'Others' || advanceData.paymentMode === 'Other') ? '1px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (advanceData.paymentMode === 'Others' || advanceData.paymentMode === 'Other') ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (advanceData.paymentMode === 'Others' || advanceData.paymentMode === 'Other') ? '#c084fc' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            💼 Others / Personal
+                                        </button>
                                     </div>
 
-                                    {/* If Cash: Live Cash in Hand Balance Impact */}
-                                    {advanceData.paymentMode === 'Cash' ? (
+                                    {/* Conditional indicator: Others vs Cash vs Bank */}
+                                    {(advanceData.paymentMode === 'Others' || advanceData.paymentMode === 'Other') ? (
+                                        <div style={{
+                                            background: 'rgba(168, 85, 247, 0.08)',
+                                            border: '1px solid rgba(168, 85, 247, 0.25)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            fontSize: '12px',
+                                            color: '#c084fc',
+                                            fontWeight: '700'
+                                        }}>
+                                            <span>💼</span> Paid via Others / Personal Account (Does NOT deduct company cash or bank balance)
+                                        </div>
+                                    ) : advanceData.paymentMode === 'Cash' ? (
                                         <div style={{
                                             background: 'rgba(16, 185, 129, 0.08)',
                                             border: '1px solid rgba(16, 185, 129, 0.25)',

@@ -702,7 +702,13 @@ const CarUtility = () => {
                                                         {(!log.remarks && !log.borderName && !log.category) ? '-' : ''}
                                                     </td>
                                                     <td style={{ padding: '18px 25px', fontSize: '13px', color: 'rgba(255,255,255,0.8)', fontWeight: '700' }}>
-                                                        {log.paymentMode || 'Cash'}
+                                                        {(log.paymentMode === 'Others' || log.method === 'Others' || log.paidBy === 'Others') ? (
+                                                            <span style={{ color: '#c084fc', background: 'rgba(168, 85, 247, 0.12)', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800', border: '1px solid rgba(168, 85, 247, 0.25)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                                💼 Others
+                                                            </span>
+                                                        ) : (
+                                                            log.paymentMode || 'Cash'
+                                                        )}
                                                     </td>
                                                     <td style={{ padding: '18px 25px', textAlign: 'right', fontSize: '15px', fontWeight: '900', color: '#10b981' }}>
                                                         ₹{Number(log.amount).toLocaleString()}
@@ -1145,10 +1151,10 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 billDate: toISTDateString(editingItem.billDate || editingItem.date || ''),
                 validTill: toISTDateString(editingItem.validTill || ''),
                 driverId: editingItem.driver?._id || editingItem.driver || '',
-                paymentMode: editingItem.method || editingItem.paymentMode || 'Cash',
+                paymentMode: (editingItem.method === 'Others' || editingItem.method === 'Other' || editingItem.paymentMode === 'Others' || editingItem.paidBy === 'Others') ? 'Others' : (editingItem.method || editingItem.paymentMode || 'Cash'),
                 vehicleId: vehicle?._id || editingItem.vehicle?._id || editingItem.vehicle || editingItem.vehicleId || '',
-                paymentSource: 'Office',
-                paidBy: 'Company',
+                paymentSource: (editingItem.method === 'Others' || editingItem.paymentMode === 'Others' || editingItem.paidBy === 'Others') ? 'Others' : 'Office',
+                paidBy: (editingItem.method === 'Others' || editingItem.paymentMode === 'Others' || editingItem.paidBy === 'Others') ? 'Others' : 'Company',
                 bankAccountId: editingItem.bankAccount?._id || editingItem.bankAccount || editingItem.bankAccountId || '',
                 bookingId: '',
                 bookingRef: '',
@@ -1197,9 +1203,9 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 formData.append('method', form.paymentMode || 'Cash');
                 formData.append('remarks', form.remarks || '');
                 formData.append('date', finalDate);
-                formData.append('paidBy', 'Company');
-                formData.append('paymentSource', 'Office');
-                if (form.bankAccountId) formData.append('bankAccountId', form.bankAccountId);
+                formData.append('paidBy', form.paidBy || (form.paymentMode === 'Others' ? 'Others' : 'Company'));
+                formData.append('paymentSource', form.paidBy === 'Others' || form.paymentMode === 'Others' ? 'Others' : (form.paymentSource || 'Office'));
+                if (form.bankAccountId && form.paymentMode !== 'Others') formData.append('bankAccountId', form.bankAccountId);
                 if (file) formData.append('receiptPhoto', file);
                 if (companyId) formData.append('companyId', companyId);
 
@@ -1219,8 +1225,9 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 fd.set('billDate', finalDate);
                 if (companyId) fd.set('companyId', companyId);
                 fd.set('vehicleId', targetVehicleId);
-                fd.set('paidBy', 'Company');
-                fd.set('paymentSource', 'Office');
+                fd.set('paidBy', form.paidBy || (form.paymentMode === 'Others' ? 'Others' : 'Company'));
+                fd.set('paymentSource', form.paidBy === 'Others' || form.paymentMode === 'Others' ? 'Others' : (form.paymentSource || 'Office'));
+                if (form.paymentMode === 'Others') fd.delete('bankAccountId');
 
                 if (file) fd.set('receiptPhoto', file);
 
@@ -1245,8 +1252,9 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 fd.set('remarks', form.remarks || '');
                 if (companyId) fd.set('companyId', companyId);
                 fd.set('vehicleId', targetVehicleId);
-                fd.set('paidBy', 'Company');
-                fd.set('paymentSource', 'Office');
+                fd.set('paidBy', form.paidBy || (form.paymentMode === 'Others' ? 'Others' : 'Company'));
+                fd.set('paymentSource', form.paidBy === 'Others' || form.paymentMode === 'Others' ? 'Others' : (form.paymentSource || 'Office'));
+                if (form.paymentMode === 'Others') fd.delete('bankAccountId');
                 if (form.driverId) fd.set('driverId', form.driverId);
 
                 if (file) {
@@ -1365,51 +1373,86 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                 <CreditCard size={12} /> Payment Method (Paid by Company)
                             </label>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
                                 <button
                                     type="button"
                                     onClick={() => setForm({ ...form, paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company', paymentSource: 'Office' })}
                                     style={{
-                                        padding: '10px 12px',
+                                        padding: '10px 8px',
                                         borderRadius: '10px',
-                                        border: (form.paymentMode === 'Cash' || (!form.bankAccountId && form.paymentMode !== 'UPI' && form.paymentMode !== 'Bank Transfer')) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
-                                        background: (form.paymentMode === 'Cash' || (!form.bankAccountId && form.paymentMode !== 'UPI' && form.paymentMode !== 'Bank Transfer')) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
-                                        color: (form.paymentMode === 'Cash' || (!form.bankAccountId && form.paymentMode !== 'UPI' && form.paymentMode !== 'Bank Transfer')) ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                        border: (form.paymentMode === 'Cash' || (!form.bankAccountId && form.paymentMode !== 'UPI' && form.paymentMode !== 'Bank Transfer' && form.paymentMode !== 'Others')) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                        background: (form.paymentMode === 'Cash' || (!form.bankAccountId && form.paymentMode !== 'UPI' && form.paymentMode !== 'Bank Transfer' && form.paymentMode !== 'Others')) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                        color: (form.paymentMode === 'Cash' || (!form.bankAccountId && form.paymentMode !== 'UPI' && form.paymentMode !== 'Bank Transfer' && form.paymentMode !== 'Others')) ? '#10b981' : 'rgba(255,255,255,0.6)',
                                         fontWeight: '800',
-                                        fontSize: '12px',
+                                        fontSize: '11px',
                                         cursor: 'pointer',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        gap: '6px'
+                                        gap: '5px'
                                     }}
                                 >
-                                    💵 Cash in Hand
+                                    💵 Cash
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => setForm({ ...form, paymentMode: form.paymentMode === 'Cash' ? 'UPI' : (form.paymentMode || 'UPI'), bankAccountId: form.bankAccountId || (bankAccounts[0]?._id || ''), paidBy: 'Company', paymentSource: 'Office' })}
+                                    onClick={() => setForm({ ...form, paymentMode: (form.paymentMode === 'Cash' || form.paymentMode === 'Others') ? 'UPI' : (form.paymentMode || 'UPI'), bankAccountId: form.bankAccountId || (bankAccounts[0]?._id || ''), paidBy: 'Company', paymentSource: 'Office' })}
                                     style={{
-                                        padding: '10px 12px',
+                                        padding: '10px 8px',
                                         borderRadius: '10px',
-                                        border: (form.paymentMode !== 'Cash' && (form.bankAccountId || form.paymentMode === 'UPI' || form.paymentMode === 'Bank Transfer')) ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
-                                        background: (form.paymentMode !== 'Cash' && (form.bankAccountId || form.paymentMode === 'UPI' || form.paymentMode === 'Bank Transfer')) ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
-                                        color: (form.paymentMode !== 'Cash' && (form.bankAccountId || form.paymentMode === 'UPI' || form.paymentMode === 'Bank Transfer')) ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                        border: (form.paymentMode !== 'Cash' && form.paymentMode !== 'Others' && (form.bankAccountId || form.paymentMode === 'UPI' || form.paymentMode === 'Bank Transfer')) ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                        background: (form.paymentMode !== 'Cash' && form.paymentMode !== 'Others' && (form.bankAccountId || form.paymentMode === 'UPI' || form.paymentMode === 'Bank Transfer')) ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                        color: (form.paymentMode !== 'Cash' && form.paymentMode !== 'Others' && (form.bankAccountId || form.paymentMode === 'UPI' || form.paymentMode === 'Bank Transfer')) ? '#38bdf8' : 'rgba(255,255,255,0.6)',
                                         fontWeight: '800',
-                                        fontSize: '12px',
+                                        fontSize: '11px',
                                         cursor: 'pointer',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        gap: '6px'
+                                        gap: '5px'
                                     }}
                                 >
                                     🏦 Bank Account
                                 </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setForm({ ...form, paymentMode: 'Others', bankAccountId: '', paidBy: 'Others', paymentSource: 'Others' })}
+                                    style={{
+                                        padding: '10px 8px',
+                                        borderRadius: '10px',
+                                        border: (form.paymentMode === 'Others' || form.paidBy === 'Others') ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
+                                        background: (form.paymentMode === 'Others' || form.paidBy === 'Others') ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                                        color: (form.paymentMode === 'Others' || form.paidBy === 'Others') ? '#c084fc' : 'rgba(255,255,255,0.6)',
+                                        fontWeight: '800',
+                                        fontSize: '11px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '5px'
+                                    }}
+                                >
+                                    💼 Others / Personal
+                                </button>
                             </div>
 
-                            {/* If Cash is chosen: Live Cash in Hand Balance Impact */}
-                            {form.paymentMode === 'Cash' ? (
+                            {/* Conditional indicator: Others vs Cash vs Bank */}
+                            {(form.paymentMode === 'Others' || form.paidBy === 'Others') ? (
+                                <div style={{
+                                    background: 'rgba(168, 85, 247, 0.08)',
+                                    border: '1px solid rgba(168, 85, 247, 0.25)',
+                                    borderRadius: '12px',
+                                    padding: '12px 14px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    fontSize: '12px',
+                                    color: '#c084fc',
+                                    fontWeight: '700'
+                                }}>
+                                    <span>💼</span> Paid via Others / Personal Account (Does NOT deduct company cash or bank balance)
+                                </div>
+                            ) : form.paymentMode === 'Cash' ? (
                                 <div style={{
                                     background: 'rgba(16, 185, 129, 0.08)',
                                     border: '1px solid rgba(16, 185, 129, 0.25)',

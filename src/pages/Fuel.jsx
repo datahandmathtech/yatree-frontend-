@@ -1795,51 +1795,86 @@ const FuelPage = () => {
                                             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                                 Office Payment Account / Method
                                             </label>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setFormData({ ...formData, paymentMode: 'Cash', bankAccountId: '' })}
+                                                    onClick={() => setFormData({ ...formData, paymentMode: 'Cash', bankAccountId: '', paymentSource: 'Office' })}
                                                     style={{
-                                                        padding: '10px 12px',
+                                                        padding: '10px 8px',
                                                         borderRadius: '10px',
-                                                        border: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
-                                                        background: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
-                                                        color: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                                        border: (!formData.bankAccountId && formData.paymentMode === 'Cash') ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                        background: (!formData.bankAccountId && formData.paymentMode === 'Cash') ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                        color: (!formData.bankAccountId && formData.paymentMode === 'Cash') ? '#10b981' : 'rgba(255,255,255,0.6)',
                                                         fontWeight: '800',
-                                                        fontSize: '12px',
+                                                        fontSize: '11px',
                                                         cursor: 'pointer',
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         justifyContent: 'center',
-                                                        gap: '6px'
+                                                        gap: '5px'
                                                     }}
                                                 >
                                                     💵 Cash in Hand
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setFormData({ ...formData, paymentMode: 'Bank Transfer', bankAccountId: formData.bankAccountId || (bankAccounts[0]?._id || '') })}
+                                                    onClick={() => setFormData({ ...formData, paymentMode: 'Bank Transfer', bankAccountId: formData.bankAccountId || (bankAccounts[0]?._id || ''), paymentSource: 'Office' })}
                                                     style={{
-                                                        padding: '10px 12px',
+                                                        padding: '10px 8px',
                                                         borderRadius: '10px',
-                                                        border: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
-                                                        background: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
-                                                        color: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                        border: (formData.bankAccountId || (formData.paymentMode !== 'Cash' && formData.paymentMode !== 'Others' && formData.paymentMode !== 'Other')) ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                        background: (formData.bankAccountId || (formData.paymentMode !== 'Cash' && formData.paymentMode !== 'Others' && formData.paymentMode !== 'Other')) ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                        color: (formData.bankAccountId || (formData.paymentMode !== 'Cash' && formData.paymentMode !== 'Others' && formData.paymentMode !== 'Other')) ? '#38bdf8' : 'rgba(255,255,255,0.6)',
                                                         fontWeight: '800',
-                                                        fontSize: '12px',
+                                                        fontSize: '11px',
                                                         cursor: 'pointer',
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         justifyContent: 'center',
-                                                        gap: '6px'
+                                                        gap: '5px'
                                                     }}
                                                 >
                                                     🏦 Bank Account / UPI
                                                 </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, paymentMode: 'Others', bankAccountId: '', paymentSource: 'Others', paymentBy: 'Others' })}
+                                                    style={{
+                                                        padding: '10px 8px',
+                                                        borderRadius: '10px',
+                                                        border: (formData.paymentMode === 'Others' || formData.paymentMode === 'Other' || formData.paymentSource === 'Others') ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
+                                                        background: (formData.paymentMode === 'Others' || formData.paymentMode === 'Other' || formData.paymentSource === 'Others') ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                        color: (formData.paymentMode === 'Others' || formData.paymentMode === 'Other' || formData.paymentSource === 'Others') ? '#c084fc' : 'rgba(255,255,255,0.6)',
+                                                        fontWeight: '800',
+                                                        fontSize: '11px',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        gap: '5px'
+                                                    }}
+                                                >
+                                                    💼 Others / Personal
+                                                </button>
                                             </div>
 
-                                            {/* If Cash is chosen: 1-Day Cash Book Indicator */}
-                                            {(!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? (
+                                            {/* Conditional indicator: Others vs Cash vs Bank */}
+                                            {(formData.paymentMode === 'Others' || formData.paymentMode === 'Other' || formData.paymentSource === 'Others') ? (
+                                                <div style={{
+                                                    background: 'rgba(168, 85, 247, 0.08)',
+                                                    border: '1px solid rgba(168, 85, 247, 0.25)',
+                                                    borderRadius: '12px',
+                                                    padding: '12px 14px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '8px',
+                                                    fontSize: '12px',
+                                                    color: '#c084fc',
+                                                    fontWeight: '700'
+                                                }}>
+                                                    <span>💼</span> Paid via Others / Personal Account (Does NOT deduct company cash or bank balance)
+                                                </div>
+                                            ) : (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? (
                                                 <div style={{
                                                     background: 'rgba(16, 185, 129, 0.08)',
                                                     border: '1px solid rgba(16, 185, 129, 0.25)',
@@ -2338,51 +2373,86 @@ const FuelPage = () => {
                                         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                             Office Payment Account / Method
                                         </label>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
                                             <button
                                                 type="button"
-                                                onClick={() => setFormData({ ...formData, paymentMode: 'Cash', bankAccountId: '' })}
+                                                onClick={() => setFormData({ ...formData, paymentMode: 'Cash', bankAccountId: '', paymentSource: 'Office' })}
                                                 style={{
-                                                    padding: '10px 12px',
+                                                    padding: '10px 8px',
                                                     borderRadius: '10px',
-                                                    border: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
-                                                    background: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
-                                                    color: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                                    border: (!formData.bankAccountId && formData.paymentMode === 'Cash') ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                    background: (!formData.bankAccountId && formData.paymentMode === 'Cash') ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                    color: (!formData.bankAccountId && formData.paymentMode === 'Cash') ? '#10b981' : 'rgba(255,255,255,0.6)',
                                                     fontWeight: '800',
-                                                    fontSize: '12px',
+                                                    fontSize: '11px',
                                                     cursor: 'pointer',
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     justifyContent: 'center',
-                                                    gap: '6px'
+                                                    gap: '5px'
                                                 }}
                                             >
                                                 💵 Cash in Hand
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={() => setFormData({ ...formData, paymentMode: 'Bank Transfer', bankAccountId: formData.bankAccountId || (bankAccounts[0]?._id || '') })}
+                                                onClick={() => setFormData({ ...formData, paymentMode: 'Bank Transfer', bankAccountId: formData.bankAccountId || (bankAccounts[0]?._id || ''), paymentSource: 'Office' })}
                                                 style={{
-                                                    padding: '10px 12px',
+                                                    padding: '10px 8px',
                                                     borderRadius: '10px',
-                                                    border: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
-                                                    background: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
-                                                    color: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                    border: (formData.bankAccountId || (formData.paymentMode !== 'Cash' && formData.paymentMode !== 'Others' && formData.paymentMode !== 'Other')) ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                    background: (formData.bankAccountId || (formData.paymentMode !== 'Cash' && formData.paymentMode !== 'Others' && formData.paymentMode !== 'Other')) ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                    color: (formData.bankAccountId || (formData.paymentMode !== 'Cash' && formData.paymentMode !== 'Others' && formData.paymentMode !== 'Other')) ? '#38bdf8' : 'rgba(255,255,255,0.6)',
                                                     fontWeight: '800',
-                                                    fontSize: '12px',
+                                                    fontSize: '11px',
                                                     cursor: 'pointer',
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     justifyContent: 'center',
-                                                    gap: '6px'
+                                                    gap: '5px'
                                                 }}
                                             >
                                                 🏦 Bank Account / UPI
                                             </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, paymentMode: 'Others', bankAccountId: '', paymentSource: 'Others', paymentBy: 'Others' })}
+                                                style={{
+                                                    padding: '10px 8px',
+                                                    borderRadius: '10px',
+                                                    border: (formData.paymentMode === 'Others' || formData.paymentMode === 'Other' || formData.paymentSource === 'Others') ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
+                                                    background: (formData.paymentMode === 'Others' || formData.paymentMode === 'Other' || formData.paymentSource === 'Others') ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                    color: (formData.paymentMode === 'Others' || formData.paymentMode === 'Other' || formData.paymentSource === 'Others') ? '#c084fc' : 'rgba(255,255,255,0.6)',
+                                                    fontWeight: '800',
+                                                    fontSize: '11px',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '5px'
+                                                }}
+                                            >
+                                                💼 Others / Personal
+                                            </button>
                                         </div>
 
-                                        {/* If Cash is chosen: 1-Day Cash Book Indicator */}
-                                        {(!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? (
+                                        {/* Conditional indicator: Others vs Cash vs Bank */}
+                                        {(formData.paymentMode === 'Others' || formData.paymentMode === 'Other' || formData.paymentSource === 'Others') ? (
+                                            <div style={{
+                                                background: 'rgba(168, 85, 247, 0.08)',
+                                                border: '1px solid rgba(168, 85, 247, 0.25)',
+                                                borderRadius: '12px',
+                                                padding: '12px 14px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                                fontSize: '12px',
+                                                color: '#c084fc',
+                                                fontWeight: '700'
+                                            }}>
+                                                <span>💼</span> Paid via Others / Personal Account (Does NOT deduct company cash or bank balance)
+                                            </div>
+                                        ) : (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? (
                                             <div style={{
                                                 background: 'rgba(16, 185, 129, 0.08)',
                                                 border: '1px solid rgba(16, 185, 129, 0.25)',

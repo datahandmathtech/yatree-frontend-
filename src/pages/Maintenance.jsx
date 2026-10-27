@@ -32,7 +32,13 @@ import {
     ChevronRight,
     Upload,
     Car,
-    X
+    X,
+    Store,
+    CheckCircle,
+    IndianRupee,
+    Eye,
+    ShieldAlert,
+    Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCompany } from '../context/CompanyContext';
@@ -99,6 +105,20 @@ const Maintenance = () => {
     const [expandedVehicle, setExpandedVehicle] = useState(null); // Added for Master Data Accordion
     const [showGarageSuggestions, setShowGarageSuggestions] = useState(false);
     const [allGarages, setAllGarages] = useState([]);
+
+    // ── VENDOR DUES & KHATA STATE ──
+    const [vendorSummary, setVendorSummary] = useState({ totalAmount: 0, paidAmount: 0, dueAmount: 0, totalVendors: 0, dueVendorsCount: 0, paidVendorsCount: 0 });
+    const [vendors, setVendors] = useState([]);
+    const [vendorLoading, setVendorLoading] = useState(false);
+    const [vendorFilterStatus, setVendorFilterStatus] = useState('due'); // 'due' | 'all' | 'paid'
+    const [vendorSearch, setVendorSearch] = useState('');
+    const [vendorTimeMode, setVendorTimeMode] = useState('allTime'); // 'allTime' | 'period'
+    const [selectedVendorForDetails, setSelectedVendorForDetails] = useState(null);
+    const [showSettleModal, setShowSettleModal] = useState(false);
+    const [settleTarget, setSettleTarget] = useState(null); // { type: 'bill', bill } or { type: 'vendor', vendor }
+    const [settleForm, setSettleForm] = useState({ paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company', paymentDate: todayIST(), note: '' });
+    const [settling, setSettling] = useState(false);
+    const [filterPaymentStatus, setFilterPaymentStatus] = useState('All'); // 'All' | 'Paid' | 'Due'
 
     const shiftMonth = (amount) => {
         let newMonth = selectedMonth + amount;
@@ -229,17 +249,157 @@ const Maintenance = () => {
         'RTO / Compliance': ['Challan / Fine', 'Permit Renewal', 'Fitness Certificate (Passing)', 'Tax Payment', 'Insurance Premium', 'PUC / Pollution', 'RTO Agent Fee', 'Toll / Fastag', 'Other RTO Fees']
     };
 
+    // Fetch common references once when selected company changes
     useEffect(() => {
         if (selectedCompany) {
-            fetchRecords();
             fetchPending();
             fetchVehicles();
             fetchDrivers();
             fetchAllGarages();
             fetchBankAccounts();
-            if (viewMode === 'super') fetchAggregatedData();
+            fetchVendorSummary(); // Load vendor summary to show due badge in header
         }
-    }, [selectedCompany, selectedMonth, selectedYear, viewMode]);
+    }, [selectedCompany]);
+
+    // Fast mode-specific fetching on viewMode or filter change
+    useEffect(() => {
+        if (!selectedCompany) return;
+        if (viewMode === 'super') {
+            fetchAggregatedData();
+        } else if (viewMode === 'vendor') {
+            fetchVendorSummary();
+        } else {
+            fetchRecords();
+        }
+    }, [selectedCompany, selectedMonth, selectedYear, viewMode, vendorTimeMode]);
+
+    const fetchVendorSummary = async () => {
+        if (!selectedCompany?._id) return;
+        setVendorLoading(true);
+        try {
+            const userInfoStr = localStorage.getItem('userInfo');
+            const userInfo = userInfoStr ? JSON.parse(userInfoStr) : null;
+            if (!userInfo?.token) return;
+
+            let url = `/api/admin/maintenance/vendor-summary/${selectedCompany._id}`;
+            if (vendorTimeMode === 'allTime') {
+                url += '?allTime=true';
+            } else if (selectedMonth === 'All') {
+                const fromDate = `${selectedYear}-04-01`;
+                const toDate = `${selectedYear + 1}-03-31`;
+                url += `?startDate=${fromDate}&endDate=${toDate}`;
+            } else {
+                const calendarYear = (selectedMonth >= 1 && selectedMonth <= 3) ? selectedYear + 1 : selectedYear;
+                url += `?month=${selectedMonth}&year=${calendarYear}`;
+            }
+
+            const { data } = await axios.get(url, {
+                headers: { Authorization: `Bearer ${userInfo.token}` }
+            });
+
+            setVendorSummary(data.summary || { totalAmount: 0, paidAmount: 0, dueAmount: 0, totalVendors: 0, dueVendorsCount: 0, paidVendorsCount: 0 });
+            setVendors(data.vendors || []);
+        } catch (err) {
+            console.error('Error fetching vendor summary:', err);
+        } finally {
+            setVendorLoading(false);
+        }
+    };
+
+    const downloadVendorExcel = () => {
+        const dataToExport = filteredVendors.map(v => ({
+            'Vendor / Garage Name': v.vendorName,
+            'Total Billed Amount (₹)': v.totalAmount || 0,
+            'Total Paid Amount (₹)': v.paidAmount || 0,
+            'Net Balance Due (₹)': v.dueAmount || 0,
+            'Status': v.dueAmount > 0 ? `DUE (₹${v.dueAmount.toLocaleString()})` : 'FULLY PAID',
+            'Total Bills Count': v.totalBills || 0,
+            'Due Bills Count': v.dueBillsCount || 0,
+            'Vehicles Serviced': (v.vehicles || []).join(', '),
+            'Last Bill Date': v.latestDate ? formatDateIST(v.latestDate) : 'N/A'
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(dataToExport);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Vendor Due Summary');
+        XLSX.writeFile(wb, `Vendor_Due_Report_${selectedCompany?.name || 'Company'}_${todayIST()}.xlsx`);
+    };
+
+    const openSettleModal = (target) => {
+        setSettleTarget(target);
+        setSettleForm({
+            paymentMode: 'Cash',
+            bankAccountId: bankAccounts[0]?._id || '',
+            paidBy: 'Company',
+            paymentDate: todayIST(),
+            note: ''
+        });
+        setShowSettleModal(true);
+    };
+
+    const handleSettlePayment = async (e) => {
+        e.preventDefault();
+        if (!settleTarget) return;
+        setSettling(true);
+        try {
+            const userInfoStr = localStorage.getItem('userInfo');
+            const userInfo = userInfoStr ? JSON.parse(userInfoStr) : null;
+            if (!userInfo?.token) return;
+
+            const isOthers = settleForm.paymentMode === 'Others' || settleForm.paymentMode === 'Other';
+            const effectivePaidBy = isOthers ? 'Others' : 'Company';
+
+            if (settleTarget.type === 'bill') {
+                const bill = settleTarget.bill;
+                const fd = new FormData();
+                fd.append('paymentStatus', 'Paid');
+                fd.append('paymentMode', settleForm.paymentMode);
+                fd.append('paidBy', effectivePaidBy);
+                fd.append('paymentSource', effectivePaidBy === 'Others' ? 'Others' : 'Paid');
+                if (settleForm.bankAccountId && !isOthers && settleForm.paymentMode !== 'Cash') {
+                    fd.append('bankAccountId', settleForm.bankAccountId);
+                } else {
+                    fd.append('bankAccountId', '');
+                }
+                if (settleForm.paymentDate) {
+                    fd.append('billDate', settleForm.paymentDate);
+                }
+
+                await axios.put(`/api/admin/maintenance/${bill._id}`, fd, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                        Authorization: `Bearer ${userInfo.token}`
+                    }
+                });
+            } else if (settleTarget.type === 'vendor') {
+                const vendor = settleTarget.vendor;
+                await axios.post('/api/admin/maintenance/settle-vendor', {
+                    companyId: selectedCompany._id,
+                    vendorName: vendor.vendorName,
+                    paymentMode: settleForm.paymentMode,
+                    bankAccountId: (!isOthers && settleForm.paymentMode !== 'Cash') ? settleForm.bankAccountId : null,
+                    paidBy: effectivePaidBy,
+                    paymentDate: settleForm.paymentDate
+                }, {
+                    headers: { Authorization: `Bearer ${userInfo.token}` }
+                });
+            }
+
+            setShowSettleModal(false);
+            setSettleTarget(null);
+            fetchRecords();
+            fetchVendorSummary();
+            if (selectedVendorForDetails) {
+                setSelectedVendorForDetails(null);
+            }
+            alert('Payment successfully settled and recorded!');
+        } catch (err) {
+            console.error('Error settling payment:', err);
+            alert(err.response?.data?.message || 'Error settling payment');
+        } finally {
+            setSettling(false);
+        }
+    };
 
     const fetchAllGarages = async () => {
         if (!selectedCompany?._id) return;
@@ -263,13 +423,15 @@ const Maintenance = () => {
             const userInfo = userInfoStr ? JSON.parse(userInfoStr) : null;
             if (!userInfo?.token) return;
 
-            // Maintenance Master Data uses full-year context but start-year is anchor
-            const { data: res } = await axios.get(`/api/admin/vehicle-monthly-details/${selectedCompany._id}?month=All&year=${selectedYear}`, {
+            // Dedicated ultra-fast maintenance master fleet endpoint (<50ms)
+            const { data: res } = await axios.get(`/api/admin/maintenance/master-fleet/${selectedCompany._id}?year=${selectedYear}`, {
                 headers: { Authorization: `Bearer ${userInfo.token}` }
-            });
+            }).catch(() => axios.get(`/api/admin/vehicle-monthly-details/${selectedCompany._id}?month=All&year=${selectedYear}`, {
+                headers: { Authorization: `Bearer ${userInfo.token}` }
+            }));
             setAggData(res.vehicles || []);
             setAggSummary(res.summary || null);
-        } catch (err) { console.error(err); }
+        } catch (err) { console.error('Error fetching master fleet data:', err); }
         finally { setAggLoading(false); }
     };
 
@@ -322,8 +484,13 @@ const Maintenance = () => {
             const userInfo = userInfoStr ? JSON.parse(userInfoStr) : null;
             if (!userInfo?.token) return;
 
-            // In maintenance, we might want to default to the selected month instead of just current date
-            const defaultDate = new Date(selectedYear, selectedMonth, 0).toISOString().split('T')[0];
+            let defaultDate = todayIST();
+            if (selectedMonth && selectedMonth !== 'All' && !isNaN(Number(selectedMonth))) {
+                const d = new Date(selectedYear, Number(selectedMonth), 0);
+                if (!isNaN(d.getTime())) {
+                    defaultDate = d.toISOString().split('T')[0];
+                }
+            }
             const targetDate = overrideDate || defaultDate;
 
             const { data } = await axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false&type=fleet&toDate=${targetDate}`, {
@@ -340,7 +507,13 @@ const Maintenance = () => {
             const userInfo = userInfoStr ? JSON.parse(userInfoStr) : null;
             if (!userInfo?.token) return;
 
-            const defaultDate = new Date(selectedYear, selectedMonth, 0).toISOString().split('T')[0];
+            let defaultDate = todayIST();
+            if (selectedMonth && selectedMonth !== 'All' && !isNaN(Number(selectedMonth))) {
+                const d = new Date(selectedYear, Number(selectedMonth), 0);
+                if (!isNaN(d.getTime())) {
+                    defaultDate = d.toISOString().split('T')[0];
+                }
+            }
             const targetDate = overrideDate || defaultDate;
 
             const { data } = await axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&driverType=All&toDate=${targetDate}`, {
@@ -371,6 +544,11 @@ const Maintenance = () => {
                     fd.append(key, formData[key]);
                 }
             });
+            if (formData.paymentMode === 'Others') {
+                fd.set('paidBy', 'Others');
+                fd.set('paymentSource', 'Others');
+                fd.delete('bankAccountId');
+            }
             fd.append('companyId', selectedCompany._id);
             if (billPhoto) fd.append('billPhoto', billPhoto);
 
@@ -401,6 +579,7 @@ const Maintenance = () => {
             resetForm();
             fetchRecords();
             fetchPending();
+            fetchVendorSummary();
         } catch (err) {
             console.error(err);
             alert(err.response?.data?.message || 'Error saving record');
@@ -420,6 +599,7 @@ const Maintenance = () => {
                 headers: { Authorization: `Bearer ${userInfo.token}` }
             });
             fetchRecords();
+            fetchVendorSummary();
         } catch (err) { console.error(err); }
     };
 
@@ -466,10 +646,10 @@ const Maintenance = () => {
             billNumber: record.billNumber || '',
             billDate: record.billDate ? nowIST(record.billDate).toISOString().split('T')[0] : '',
             amount: record.amount,
-            paymentMode: record.paymentMode || 'Cash',
+            paymentMode: (record.paymentMode === 'Others' || record.paymentMode === 'Other' || record.paymentSource === 'Others') ? 'Others' : (record.paymentMode || 'Cash'),
             bankAccountId: record.bankAccount?._id || record.bankAccount || '',
             paymentStatus: record.paymentStatus || 'Paid',
-            paymentSource: record.paymentSource || 'Paid',
+            paymentSource: (record.paymentMode === 'Others' || record.paymentMode === 'Other' || record.paymentSource === 'Others') ? 'Others' : (record.paymentSource || 'Paid'),
             currentKm: record.currentKm || '',
             nextServiceKm: record.nextServiceKm || '',
             status: record.status || 'Completed'
@@ -728,6 +908,7 @@ const Maintenance = () => {
         const matchesType = filterType === 'All' || (r.maintenanceType && r.maintenanceType.split(', ').includes(filterType));
         const matchesGarage = filterGarage === 'All' || (r.garageName || r.vendorName) === filterGarage;
         const matchesVehicle = filterVehicle === 'All' || r.vehicle?.carNumber === filterVehicle;
+        const matchesPaymentStatus = filterPaymentStatus === 'All' || (filterPaymentStatus === 'Due' ? r.paymentStatus === 'Due' : r.paymentStatus !== 'Due');
 
         // Exclude strictly non-maintenance driver services (Wash, Water, etc.)
         // Standardized Operational Service Regex: Wash, Puncture, Consumables
@@ -736,7 +917,7 @@ const Maintenance = () => {
             driverServiceRegex.test(r.description || '') ||
             driverServiceRegex.test(r.maintenanceType || '');
 
-        return matchesSearch && matchesType && matchesGarage && matchesVehicle && !isService;
+        return matchesSearch && matchesType && matchesGarage && matchesVehicle && matchesPaymentStatus && !isService;
     });
 
     const filteredRecords = baseFilteredRecords.filter(r => {
@@ -827,6 +1008,24 @@ const Maintenance = () => {
     const frequencyInSelectedPeriod = filteredRecords.length;
 
     const totalMaintenanceCost = filteredRecords.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const totalPaidCost = filteredRecords.filter(r => r.paymentStatus !== 'Due').reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const totalDueCost = filteredRecords.filter(r => r.paymentStatus === 'Due').reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const dueRecordsCount = filteredRecords.filter(r => r.paymentStatus === 'Due').length;
+
+    const filteredVendors = (vendors || []).filter(v => {
+        const matchesSearch = !vendorSearch ||
+            (v.vendorName || '').toLowerCase().includes(vendorSearch.toLowerCase()) ||
+            (v.vehicles || []).some(plate => (plate || '').toLowerCase().includes(vendorSearch.toLowerCase()));
+
+        if (!matchesSearch) return false;
+
+        if (vendorFilterStatus === 'due') {
+            return (v.dueAmount || 0) > 0;
+        } else if (vendorFilterStatus === 'paid') {
+            return (v.dueAmount || 0) === 0;
+        }
+        return true;
+    });
 
     const filteredAggData = (aggData || [])
         .filter(v => {
@@ -1001,6 +1200,30 @@ const Maintenance = () => {
                             <History size={14} /> History
                         </button>
                         <button
+                            onClick={() => setViewMode('vendor')}
+                            style={{
+                                padding: '0 16px', borderRadius: '10px', border: 'none',
+                                background: viewMode === 'vendor' ? theme.primary : 'transparent',
+                                color: viewMode === 'vendor' ? 'black' : 'rgba(255,255,255,0.4)',
+                                fontSize: '12px', fontWeight: '900', cursor: 'pointer', transition: '0.3s', display: 'flex', alignItems: 'center', gap: '6px'
+                            }}
+                        >
+                            <Store size={14} /> Vendor Khata
+                            {(vendorSummary?.dueAmount || 0) > 0 && (
+                                <span style={{
+                                    background: viewMode === 'vendor' ? '#0f172a' : '#f43f5e',
+                                    color: viewMode === 'vendor' ? '#f43f5e' : 'white',
+                                    fontSize: '10px',
+                                    padding: '2px 7px',
+                                    borderRadius: '8px',
+                                    fontWeight: '900',
+                                    marginLeft: '4px'
+                                }}>
+                                    ₹{Math.round(vendorSummary.dueAmount / 1000)}k Due
+                                </span>
+                            )}
+                        </button>
+                        <button
                             onClick={() => { setViewMode('super'); setSelectedMonth('All'); }}
                             style={{
                                 padding: '0 16px', borderRadius: '10px', border: 'none',
@@ -1102,59 +1325,58 @@ const Maintenance = () => {
                 </div>
             )}
 
-            {/* Summary Row */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '30px' }}>
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(14, 165, 233, 0.1)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'var(--primary)' }}>
-                        <CreditCard size={20} />
-                    </div>
-                    <div>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px' }}>Total Spend (Filtered)</p>
-                        <h2 style={{ color: 'white', fontSize: '22px', fontWeight: '900', margin: 0 }}>
-                            ₹{(viewMode === 'super'
-                                ? (filteredAggData?.reduce((s, v) => s + (v.recalculatedTotal || 0), 0) || 0)
-                                : totalMaintenanceCost).toLocaleString()}
-                        </h2>
-                    </div>
-                </motion.div>
 
 
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(139, 92, 246, 0.1)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#8b5cf6' }}>
-                        <MapPin size={20} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px' }}>Garage Filter</p>
-                        <select
-                            value={filterGarage}
-                            onChange={(e) => setFilterGarage(e.target.value)}
-                            style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: '700', fontSize: '14px', width: '100%', outline: 'none', cursor: 'pointer', textOverflow: 'ellipsis' }}
-                        >
-                            <option value="All" style={{ background: '#1e293b', color: 'white' }}>All Garages</option>
-                            {uniqueGarages.map(g => <option key={g} value={g} style={{ background: '#1e293b', color: 'white' }}>{g} ({garageStats[g] || 0})</option>)}
-                        </select>
-                    </div>
-                </motion.div>
+            {/* 4 Summary & Filter Boxes (History view as requested) */}
+            {viewMode === 'history' && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(14, 165, 233, 0.1)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'var(--primary)' }}>
+                            <CreditCard size={20} />
+                        </div>
+                        <div>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px' }}>Total Spend (Filtered)</p>
+                            <h2 style={{ color: 'white', fontSize: '22px', fontWeight: '900', margin: 0 }}>
+                                ₹{totalMaintenanceCost.toLocaleString()}
+                            </h2>
+                        </div>
+                    </motion.div>
 
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: `${theme.primary}20`, display: 'flex', justifyContent: 'center', alignItems: 'center', color: theme.primary }}>
-                        <Car size={20} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px' }}>Car Filter</p>
-                        <select
-                            value={filterVehicle}
-                            onChange={(e) => setFilterVehicle(e.target.value)}
-                            style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: '700', fontSize: '14px', width: '100%', outline: 'none', cursor: 'pointer', textOverflow: 'ellipsis' }}
-                        >
-                            <option value="All" style={{ background: '#1e293b', color: 'white' }}>All Cars</option>
-                            {uniqueVehicles.filter(v => (vehicleStats[v] || 0) > 0).map(v => <option key={v} value={v} style={{ background: '#1e293b', color: 'white' }}>{v} ({vehicleStats[v]})</option>)}
-                        </select>
-                    </div>
-                </motion.div>
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(139, 92, 246, 0.1)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#8b5cf6' }}>
+                            <MapPin size={20} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px' }}>Garage Filter</p>
+                            <select
+                                value={filterGarage}
+                                onChange={(e) => setFilterGarage(e.target.value)}
+                                style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: '700', fontSize: '14px', width: '100%', outline: 'none', cursor: 'pointer', textOverflow: 'ellipsis' }}
+                            >
+                                <option value="All" style={{ background: '#1e293b', color: 'white' }}>All Garages</option>
+                                {uniqueGarages.map(g => <option key={g} value={g} style={{ background: '#1e293b', color: 'white' }}>{g} ({garageStats[g] || 0})</option>)}
+                            </select>
+                        </div>
+                    </motion.div>
 
-                {viewMode === 'history' && (
-                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: `${theme.primary}20`, display: 'flex', justifyContent: 'center', alignItems: 'center', color: theme.primary }}>
+                            <Car size={20} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px' }}>Car Filter</p>
+                            <select
+                                value={filterVehicle}
+                                onChange={(e) => setFilterVehicle(e.target.value)}
+                                style={{ background: 'transparent', border: 'none', color: 'white', fontWeight: '700', fontSize: '14px', width: '100%', outline: 'none', cursor: 'pointer', textOverflow: 'ellipsis' }}
+                            >
+                                <option value="All" style={{ background: '#1e293b', color: 'white' }}>All Cars</option>
+                                {uniqueVehicles.filter(v => (vehicleStats[v] || 0) > 0).map(v => <option key={v} value={v} style={{ background: '#1e293b', color: 'white' }}>{v} ({vehicleStats[v]})</option>)}
+                            </select>
+                        </div>
+                    </motion.div>
+
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
                         <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(56, 189, 248, 0.1)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#38bdf8' }}>
                             <Settings size={20} />
                         </div>
@@ -1172,8 +1394,167 @@ const Maintenance = () => {
                             </select>
                         </div>
                     </motion.div>
-                )}
-            </div>
+                </div>
+            )}
+
+            {/* Filter Toolbar (Visible in History view) */}
+            {viewMode === 'history' && (
+                <div className="glass-card" style={{
+                    padding: '14px 20px',
+                    borderRadius: '16px',
+                    marginBottom: '25px',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    background: 'rgba(15, 23, 42, 0.5)',
+                    border: '1px solid rgba(255,255,255,0.06)'
+                }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', flex: 1 }}>
+                        {/* Search Input */}
+                        <div style={{ position: 'relative', minWidth: '180px', flex: '1 1 200px' }}>
+                            <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
+                            <input
+                                type="text"
+                                placeholder="Search vehicle, garage, repair..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '8px 12px 8px 34px',
+                                    borderRadius: '10px',
+                                    background: 'rgba(255,255,255,0.04)',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    color: 'white',
+                                    fontSize: '12px',
+                                    outline: 'none'
+                                }}
+                            />
+                        </div>
+
+                        {/* Garage Filter */}
+                        <div style={{ minWidth: '150px' }}>
+                            <select
+                                value={filterGarage}
+                                onChange={(e) => setFilterGarage(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    borderRadius: '10px',
+                                    background: 'rgba(255,255,255,0.04)',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    color: 'white',
+                                    fontSize: '12px',
+                                    fontWeight: '700',
+                                    outline: 'none',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <option value="All" style={{ background: '#1e293b' }}>All Garages ({uniqueGarages.length})</option>
+                                {uniqueGarages.map(g => <option key={g} value={g} style={{ background: '#1e293b' }}>{g} ({garageStats[g] || 0})</option>)}
+                            </select>
+                        </div>
+
+                        {/* Car Filter */}
+                        <div style={{ minWidth: '140px' }}>
+                            <select
+                                value={filterVehicle}
+                                onChange={(e) => setFilterVehicle(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    borderRadius: '10px',
+                                    background: 'rgba(255,255,255,0.04)',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    color: 'white',
+                                    fontSize: '12px',
+                                    fontWeight: '700',
+                                    outline: 'none',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <option value="All" style={{ background: '#1e293b' }}>All Cars ({uniqueVehicles.length})</option>
+                                {uniqueVehicles.filter(v => (vehicleStats[v] || 0) > 0).map(v => <option key={v} value={v} style={{ background: '#1e293b' }}>{v} ({vehicleStats[v]})</option>)}
+                            </select>
+                        </div>
+
+                        {/* Category Filter */}
+                        <div style={{ minWidth: '140px' }}>
+                            <select
+                                value={activeCategory}
+                                onChange={(e) => setActiveCategory(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    borderRadius: '10px',
+                                    background: 'rgba(255,255,255,0.04)',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    color: 'white',
+                                    fontSize: '12px',
+                                    fontWeight: '700',
+                                    outline: 'none',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <option value="All" style={{ background: '#1e293b' }}>All Types</option>
+                                {maintenanceTypes.filter(t => categoryStats[t] > 0).map(t => (
+                                    <option key={t} value={t} style={{ background: '#1e293b' }}>{t} ({categoryStats[t]})</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Payment Status Filter (Paid vs Due) */}
+                        <div style={{ minWidth: '140px' }}>
+                            <select
+                                value={filterPaymentStatus}
+                                onChange={(e) => setFilterPaymentStatus(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    borderRadius: '10px',
+                                    background: filterPaymentStatus === 'Due' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(255,255,255,0.04)',
+                                    border: filterPaymentStatus === 'Due' ? '1px solid #f43f5e' : '1px solid rgba(255,255,255,0.08)',
+                                    color: filterPaymentStatus === 'Due' ? '#f43f5e' : 'white',
+                                    fontSize: '12px',
+                                    fontWeight: '800',
+                                    outline: 'none',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                <option value="All" style={{ background: '#1e293b', color: 'white' }}>All Payment Status</option>
+                                <option value="Due" style={{ background: '#1e293b', color: '#f43f5e' }}>🚨 Due Only (Pending)</option>
+                                <option value="Paid" style={{ background: '#1e293b', color: '#10b981' }}>✓ Paid Only</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {(searchTerm || filterGarage !== 'All' || filterVehicle !== 'All' || activeCategory !== 'All' || filterPaymentStatus !== 'All') && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setSearchTerm('');
+                                setFilterGarage('All');
+                                setFilterVehicle('All');
+                                setActiveCategory('All');
+                                setFilterPaymentStatus('All');
+                            }}
+                            style={{
+                                padding: '6px 12px',
+                                borderRadius: '8px',
+                                background: 'rgba(255,255,255,0.06)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                color: 'rgba(255,255,255,0.6)',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            Reset Filters
+                        </button>
+                    )}
+                </div>
+            )}
 
 
 
@@ -1304,6 +1685,521 @@ const Maintenance = () => {
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </>
+            ) : viewMode === 'vendor' ? (
+                <>
+                    {/* VENDOR KHATA & DUES VIEW */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        {/* Vendor Khata Top KPI Cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px' }}>
+                            {/* 1. Total Incurred / Billed */}
+                            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '15px', borderRadius: '18px' }}>
+                                <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(14, 165, 233, 0.12)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#38bdf8' }}>
+                                    <CreditCard size={22} />
+                                </div>
+                                <div>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.5px' }}>Total Invoiced / Billed</p>
+                                    <h2 style={{ color: 'white', fontSize: '22px', fontWeight: '950', margin: 0 }}>
+                                        ₹{(vendorSummary.totalAmount || 0).toLocaleString()}
+                                    </h2>
+                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px', fontWeight: '700' }}>
+                                        {vendorSummary.totalVendors || vendors.length} Garages Tracked
+                                    </div>
+                                </div>
+                            </motion.div>
+
+                            {/* 2. Total Paid (Payment De Diya Hai) */}
+                            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '15px', borderRadius: '18px' }}>
+                                <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(16, 185, 129, 0.12)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#10b981' }}>
+                                    <CheckCircle2 size={22} />
+                                </div>
+                                <div>
+                                    <p style={{ color: '#10b981', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.5px' }}>Payment De Diya (Paid)</p>
+                                    <h2 style={{ color: '#10b981', fontSize: '22px', fontWeight: '950', margin: 0 }}>
+                                        ₹{(vendorSummary.paidAmount || 0).toLocaleString()}
+                                    </h2>
+                                    <div style={{ fontSize: '11px', color: 'rgba(16, 185, 129, 0.7)', marginTop: '2px', fontWeight: '700' }}>
+                                        ✓ {vendorSummary.paidVendorsCount || vendors.filter(v => (v.dueAmount || 0) === 0).length} Garages Settled
+                                    </div>
+                                </div>
+                            </motion.div>
+
+                            {/* 3. Total Net Due (Dena Baki Hai) */}
+                            <motion.div
+                                initial={{ opacity: 0, y: 15 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.1 }}
+                                className="glass-card"
+                                onClick={() => setVendorFilterStatus('due')}
+                                style={{
+                                    padding: '20px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '15px',
+                                    borderRadius: '18px',
+                                    cursor: 'pointer',
+                                    border: (vendorSummary.dueAmount || 0) > 0 ? '1px solid rgba(244, 63, 94, 0.35)' : '1px solid rgba(255,255,255,0.06)',
+                                    background: (vendorSummary.dueAmount || 0) > 0 ? 'linear-gradient(135deg, rgba(244, 63, 94, 0.1) 0%, rgba(15, 23, 42, 0.6) 100%)' : undefined
+                                }}
+                                title="Click to filter Pending Dues"
+                            >
+                                <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(244, 63, 94, 0.15)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#f43f5e' }}>
+                                    <AlertCircle size={22} />
+                                </div>
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <p style={{ color: '#f43f5e', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', margin: 0, letterSpacing: '0.5px' }}>Net Due (Dena Baki)</p>
+                                        {(vendorSummary.dueVendorsCount || 0) > 0 && (
+                                            <span style={{ background: '#f43f5e', color: 'white', fontSize: '9px', fontWeight: '950', padding: '1px 5px', borderRadius: '6px' }}>
+                                                {vendorSummary.dueVendorsCount} DUE
+                                            </span>
+                                        )}
+                                    </div>
+                                    <h2 style={{ color: (vendorSummary.dueAmount || 0) > 0 ? '#f43f5e' : 'white', fontSize: '22px', fontWeight: '950', margin: '3px 0 0 0' }}>
+                                        ₹{(vendorSummary.dueAmount || 0).toLocaleString()}
+                                    </h2>
+                                    <div style={{ fontSize: '11px', color: (vendorSummary.dueAmount || 0) > 0 ? '#f43f5e' : 'rgba(255,255,255,0.4)', marginTop: '2px', fontWeight: '700' }}>
+                                        {(vendorSummary.dueVendorsCount || 0) > 0 ? '⚠️ Pending to Pay' : '✓ Zero Pending Due'}
+                                    </div>
+                                </div>
+                            </motion.div>
+
+                            {/* 4. Total Vendors / Garages */}
+                            <motion.div
+                                initial={{ opacity: 0, y: 15 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.15 }}
+                                className="glass-card"
+                                onClick={() => setVendorFilterStatus('all')}
+                                style={{
+                                    padding: '20px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '15px',
+                                    borderRadius: '18px',
+                                    cursor: 'pointer'
+                                }}
+                                title="Click to view all vendors"
+                            >
+                                <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(168, 85, 247, 0.12)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#c084fc' }}>
+                                    <Store size={22} />
+                                </div>
+                                <div>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.5px' }}>Garages Tracked</p>
+                                    <h2 style={{ color: 'white', fontSize: '22px', fontWeight: '950', margin: 0 }}>
+                                        {vendorSummary.totalVendors || vendors.length} Garages
+                                    </h2>
+                                    <div style={{ fontSize: '11px', color: (vendorSummary.dueVendorsCount || 0) > 0 ? '#f43f5e' : '#10b981', marginTop: '2px', fontWeight: '700' }}>
+                                        {(vendorSummary.dueVendorsCount || 0) > 0 ? `🚨 ${vendorSummary.dueVendorsCount} Vendors have Due` : '✓ All Vendors Settled'}
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </div>
+
+                        {/* Sub-header / Filter bar for Vendor Khata */}
+                        <div className="glass-card" style={{
+                            padding: '16px 22px',
+                            borderRadius: '20px',
+                            background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.45), rgba(15, 23, 42, 0.6))',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '15px'
+                        }}>
+                            {/* Left: Time Mode Selector & Status Filter Pills */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
+                                {/* Scope: All-Time vs Selected Period */}
+                                <div style={{
+                                    display: 'flex',
+                                    background: 'rgba(0,0,0,0.3)',
+                                    padding: '3px',
+                                    borderRadius: '12px',
+                                    border: '1px solid rgba(255,255,255,0.06)'
+                                }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setVendorTimeMode('allTime');
+                                            fetchVendorSummary(true);
+                                        }}
+                                        style={{
+                                            padding: '7px 14px',
+                                            borderRadius: '9px',
+                                            border: 'none',
+                                            background: vendorTimeMode === 'allTime' ? theme.primary : 'transparent',
+                                            color: vendorTimeMode === 'allTime' ? 'black' : 'rgba(255,255,255,0.6)',
+                                            fontSize: '11px',
+                                            fontWeight: '800',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px'
+                                        }}
+                                    >
+                                        🌐 All-Time Dues
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setVendorTimeMode('period');
+                                            fetchVendorSummary(false);
+                                        }}
+                                        style={{
+                                            padding: '7px 14px',
+                                            borderRadius: '9px',
+                                            border: 'none',
+                                            background: vendorTimeMode === 'period' ? theme.primary : 'transparent',
+                                            color: vendorTimeMode === 'period' ? 'black' : 'rgba(255,255,255,0.6)',
+                                            fontSize: '11px',
+                                            fontWeight: '800',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px'
+                                        }}
+                                    >
+                                        📅 Selected Period
+                                    </button>
+                                </div>
+
+                                {/* Status Pills */}
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setVendorFilterStatus('due')}
+                                        style={{
+                                            padding: '7px 14px',
+                                            borderRadius: '10px',
+                                            border: vendorFilterStatus === 'due' ? '1px solid #f43f5e' : '1px solid rgba(255,255,255,0.08)',
+                                            background: vendorFilterStatus === 'due' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(255,255,255,0.03)',
+                                            color: vendorFilterStatus === 'due' ? '#f43f5e' : 'rgba(255,255,255,0.6)',
+                                            fontSize: '11px',
+                                            fontWeight: '800',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px'
+                                        }}
+                                    >
+                                        🚨 Pending Due ({vendors.filter(v => (v.dueAmount || 0) > 0).length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setVendorFilterStatus('all')}
+                                        style={{
+                                            padding: '7px 14px',
+                                            borderRadius: '10px',
+                                            border: vendorFilterStatus === 'all' ? `1px solid ${theme.primary}` : '1px solid rgba(255,255,255,0.08)',
+                                            background: vendorFilterStatus === 'all' ? `${theme.primary}20` : 'rgba(255,255,255,0.03)',
+                                            color: vendorFilterStatus === 'all' ? theme.primary : 'rgba(255,255,255,0.6)',
+                                            fontSize: '11px',
+                                            fontWeight: '800',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px'
+                                        }}
+                                    >
+                                        📋 All Vendors ({vendors.length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setVendorFilterStatus('paid')}
+                                        style={{
+                                            padding: '7px 14px',
+                                            borderRadius: '10px',
+                                            border: vendorFilterStatus === 'paid' ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.08)',
+                                            background: vendorFilterStatus === 'paid' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                            color: vendorFilterStatus === 'paid' ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                            fontSize: '11px',
+                                            fontWeight: '800',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px'
+                                        }}
+                                    >
+                                        ✓ Fully Settled ({vendors.filter(v => (v.dueAmount || 0) === 0).length})
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Right: Search & Excel Export */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 250px', justifyContent: 'flex-end' }}>
+                                <div style={{ position: 'relative', minWidth: '180px', maxWidth: '300px', width: '100%' }}>
+                                    <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)' }} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search vendor / car #..."
+                                        value={vendorSearch}
+                                        onChange={(e) => setVendorSearch(e.target.value)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '8px 12px 8px 34px',
+                                            borderRadius: '10px',
+                                            background: 'rgba(255,255,255,0.04)',
+                                            border: '1px solid rgba(255,255,255,0.08)',
+                                            color: 'white',
+                                            fontSize: '12px',
+                                            outline: 'none'
+                                        }}
+                                    />
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={downloadVendorExcel}
+                                    className="glass-card-hover-effect"
+                                    style={{
+                                        padding: '8px 14px',
+                                        borderRadius: '10px',
+                                        background: 'rgba(16, 185, 129, 0.12)',
+                                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                                        color: '#10b981',
+                                        fontSize: '12px',
+                                        fontWeight: '800',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                >
+                                    <FileSpreadsheet size={15} /> Export Dues
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Vendor Cards Grid */}
+                        {vendorLoading ? (
+                            <div style={{ padding: '80px', textAlign: 'center' }}>
+                                <div className="spinner" style={{ margin: '0 auto' }}></div>
+                                <p style={{ color: 'var(--text-muted)', marginTop: '16px' }}>Calculating vendor balances...</p>
+                            </div>
+                        ) : filteredVendors.length === 0 ? (
+                            <div style={{ padding: '80px 20px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                <Store size={48} style={{ color: 'rgba(255,255,255,0.1)', marginBottom: '16px' }} />
+                                <h3 style={{ color: 'white' }}>No vendors match your filter</h3>
+                                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>Try switching filters or clearing your search query.</p>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
+                                {filteredVendors.map((vendor, idx) => {
+                                    const hasDue = (vendor.dueAmount || 0) > 0;
+                                    const paidPct = vendor.totalAmount > 0 ? Math.round((vendor.paidAmount / vendor.totalAmount) * 100) : 100;
+                                    return (
+                                        <motion.div
+                                            key={vendor.vendorName || idx}
+                                            initial={{ opacity: 0, y: 15 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: idx * 0.03 }}
+                                            className="glass-card"
+                                            style={{
+                                                padding: '22px',
+                                                borderRadius: '20px',
+                                                background: hasDue
+                                                    ? 'linear-gradient(145deg, rgba(244, 63, 94, 0.05) 0%, rgba(30, 41, 59, 0.5) 100%)'
+                                                    : 'rgba(30, 41, 59, 0.4)',
+                                                border: hasDue
+                                                    ? '1px solid rgba(244, 63, 94, 0.3)'
+                                                    : '1px solid rgba(255, 255, 255, 0.08)',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                justifyContent: 'space-between',
+                                                gap: '16px',
+                                                position: 'relative',
+                                                overflow: 'hidden'
+                                            }}
+                                        >
+                                            {/* Top Accent for Due */}
+                                            {hasDue && (
+                                                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, #f43f5e, #fb7185)' }} />
+                                            )}
+
+                                            <div>
+                                                {/* Header: Name + Badge */}
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '14px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                        <div style={{
+                                                            width: '42px',
+                                                            height: '42px',
+                                                            borderRadius: '12px',
+                                                            background: hasDue ? 'rgba(244, 63, 94, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                                            display: 'flex',
+                                                            justifyContent: 'center',
+                                                            alignItems: 'center',
+                                                            color: hasDue ? '#f43f5e' : '#10b981',
+                                                            fontWeight: '900',
+                                                            border: hasDue ? '1px solid rgba(244,63,94,0.3)' : '1px solid rgba(16,185,129,0.3)'
+                                                        }}>
+                                                            <Store size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 style={{ color: 'white', fontSize: '16px', fontWeight: '900', margin: 0, letterSpacing: '-0.3px' }}>
+                                                                {vendor.vendorName}
+                                                            </h3>
+                                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px', fontWeight: '600' }}>
+                                                                {vendor.totalBills} Bills • {vendor.vehicles?.length || 0} Vehicles
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {hasDue ? (
+                                                        <div style={{
+                                                            padding: '5px 10px',
+                                                            borderRadius: '8px',
+                                                            background: 'rgba(244, 63, 94, 0.15)',
+                                                            color: '#f43f5e',
+                                                            border: '1px solid rgba(244, 63, 94, 0.3)',
+                                                            fontSize: '11px',
+                                                            fontWeight: '900',
+                                                            textAlign: 'right',
+                                                            whiteSpace: 'nowrap'
+                                                        }}>
+                                                            ₹{vendor.dueAmount.toLocaleString()} DUE
+                                                        </div>
+                                                    ) : (
+                                                        <div style={{
+                                                            padding: '5px 10px',
+                                                            borderRadius: '8px',
+                                                            background: 'rgba(16, 185, 129, 0.15)',
+                                                            color: '#10b981',
+                                                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                                                            fontSize: '10px',
+                                                            fontWeight: '900',
+                                                            textTransform: 'uppercase'
+                                                        }}>
+                                                            ✓ ALL PAID
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* 3-Column Stats Matrix */}
+                                                <div style={{
+                                                    display: 'grid',
+                                                    gridTemplateColumns: 'repeat(3, 1fr)',
+                                                    gap: '8px',
+                                                    background: 'rgba(0,0,0,0.25)',
+                                                    padding: '12px',
+                                                    borderRadius: '12px',
+                                                    border: '1px solid rgba(255,255,255,0.04)',
+                                                    marginBottom: '14px'
+                                                }}>
+                                                    <div>
+                                                        <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', fontWeight: '800', textTransform: 'uppercase' }}>Total Billed</div>
+                                                        <div style={{ color: 'white', fontWeight: '900', fontSize: '14px', marginTop: '3px' }}>
+                                                            ₹{(vendor.totalAmount || 0).toLocaleString()}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontSize: '9px', color: '#10b981', fontWeight: '800', textTransform: 'uppercase' }}>De Diya (Paid)</div>
+                                                        <div style={{ color: '#10b981', fontWeight: '900', fontSize: '14px', marginTop: '3px' }}>
+                                                            ₹{(vendor.paidAmount || 0).toLocaleString()}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontSize: '9px', color: hasDue ? '#f43f5e' : 'rgba(255,255,255,0.4)', fontWeight: '800', textTransform: 'uppercase' }}>Net Due</div>
+                                                        <div style={{ color: hasDue ? '#f43f5e' : 'rgba(255,255,255,0.5)', fontWeight: '900', fontSize: '14px', marginTop: '3px' }}>
+                                                            ₹{(vendor.dueAmount || 0).toLocaleString()}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Progress Bar (Paid vs Due) */}
+                                                <div style={{ marginBottom: '14px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', fontWeight: '700', marginBottom: '4px', color: 'rgba(255,255,255,0.5)' }}>
+                                                        <span>Paid Progress</span>
+                                                        <span style={{ color: hasDue ? '#f43f5e' : '#10b981' }}>{paidPct}% Settled</span>
+                                                    </div>
+                                                    <div style={{ height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.06)', overflow: 'hidden', display: 'flex' }}>
+                                                        <div style={{ width: `${paidPct}%`, background: '#10b981' }} />
+                                                        {hasDue && <div style={{ width: `${100 - paidPct}%`, background: '#f43f5e' }} />}
+                                                    </div>
+                                                </div>
+
+                                                {/* Serviced Vehicles Badges */}
+                                                {vendor.vehicles && vendor.vehicles.length > 0 && (
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '12px' }}>
+                                                        {vendor.vehicles.slice(0, 4).map((carNum, i) => (
+                                                            <span key={i} style={{
+                                                                fontSize: '10px',
+                                                                fontWeight: '700',
+                                                                padding: '2px 7px',
+                                                                borderRadius: '6px',
+                                                                background: 'rgba(255,255,255,0.05)',
+                                                                color: 'rgba(255,255,255,0.7)',
+                                                                border: '1px solid rgba(255,255,255,0.08)'
+                                                            }}>
+                                                                🚗 {carNum}
+                                                            </span>
+                                                        ))}
+                                                        {vendor.vehicles.length > 4 && (
+                                                            <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 6px', color: 'rgba(255,255,255,0.4)' }}>
+                                                                +{vendor.vehicles.length - 4} more
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Action Buttons */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: hasDue ? '1fr 1fr' : '1fr', gap: '8px' }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSelectedVendorForDetails(vendor)}
+                                                    className="glass-card-hover-effect"
+                                                    style={{
+                                                        padding: '10px',
+                                                        borderRadius: '10px',
+                                                        background: 'rgba(255,255,255,0.06)',
+                                                        border: '1px solid rgba(255,255,255,0.12)',
+                                                        color: 'white',
+                                                        fontSize: '11px',
+                                                        fontWeight: '800',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        justifyContent: 'center',
+                                                        alignItems: 'center',
+                                                        gap: '6px'
+                                                    }}
+                                                >
+                                                    <Eye size={13} /> View Bills ({vendor.totalBills})
+                                                </button>
+                                                {hasDue && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openSettleModal({ type: 'vendor', vendor })}
+                                                        className="glass-card-hover-effect"
+                                                        style={{
+                                                            padding: '10px',
+                                                            borderRadius: '10px',
+                                                            background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
+                                                            border: 'none',
+                                                            color: 'white',
+                                                            fontSize: '11px',
+                                                            fontWeight: '900',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            justifyContent: 'center',
+                                                            alignItems: 'center',
+                                                            gap: '6px',
+                                                            boxShadow: '0 4px 12px rgba(244, 63, 94, 0.35)'
+                                                        }}
+                                                    >
+                                                        <IndianRupee size={13} /> Settle Due
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </motion.div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 </>
             ) : (
@@ -1483,7 +2379,30 @@ const Maintenance = () => {
                                                             </button>
                                                         </div>
                                                     ) : null}
-                                                    <div style={{ display: 'flex', gap: '8px', marginLeft: '8px' }}>
+                                                    <div style={{ display: 'flex', gap: '8px', marginLeft: '8px', alignItems: 'center' }}>
+                                                        {record.paymentStatus === 'Due' && (
+                                                            <button
+                                                                onClick={() => openSettleModal({ type: 'bill', bill: record })}
+                                                                className="glass-card-hover-effect"
+                                                                style={{
+                                                                    padding: '6px 12px',
+                                                                    borderRadius: '10px',
+                                                                    background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
+                                                                    color: 'white',
+                                                                    border: 'none',
+                                                                    cursor: 'pointer',
+                                                                    fontSize: '11px',
+                                                                    fontWeight: '900',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '4px',
+                                                                    boxShadow: '0 4px 10px rgba(244, 63, 94, 0.3)'
+                                                                }}
+                                                                title="Settle this due bill now"
+                                                            >
+                                                                <IndianRupee size={12} /> Pay Due
+                                                            </button>
+                                                        )}
                                                         {record.billPhoto && (
                                                             <button
                                                                 onClick={() => setSelectedBillPhoto(record.billPhoto)}
@@ -1617,7 +2536,15 @@ const Maintenance = () => {
                                                 </div>
                                             </div>
 
-                                            <div style={{ display: 'flex', gap: '10px' }}>
+                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                {record.paymentStatus === 'Due' && (
+                                                    <button
+                                                        onClick={() => openSettleModal({ type: 'bill', bill: record })}
+                                                        style={{ flex: '1 1 100%', padding: '10px', borderRadius: '8px', background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)', color: 'white', border: 'none', fontSize: '12px', fontWeight: '900', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', marginBottom: '4px', boxShadow: '0 4px 10px rgba(244, 63, 94, 0.3)' }}
+                                                    >
+                                                        <IndianRupee size={13} /> Pay Due (₹{Number(record.amount || 0).toLocaleString()})
+                                                    </button>
+                                                )}
                                                 {record.billPhoto && (
                                                     <button
                                                         onClick={() => setSelectedBillPhoto(record.billPhoto)}
@@ -1947,51 +2874,86 @@ const Maintenance = () => {
                                                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                                         Office Payment Method / Account
                                                     </label>
-                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
                                                         <button
                                                             type="button"
-                                                            onClick={() => setFormData({ ...formData, paymentMode: 'Cash', bankAccountId: '' })}
+                                                            onClick={() => setFormData({ ...formData, paymentMode: 'Cash', bankAccountId: '', paymentSource: 'Office' })}
                                                             style={{
-                                                                padding: '10px 12px',
+                                                                padding: '10px 8px',
                                                                 borderRadius: '10px',
-                                                                border: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
-                                                                background: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
-                                                                color: (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                                                border: (!formData.bankAccountId && formData.paymentMode === 'Cash') ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                                background: (!formData.bankAccountId && formData.paymentMode === 'Cash') ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                                color: (!formData.bankAccountId && formData.paymentMode === 'Cash') ? '#10b981' : 'rgba(255,255,255,0.6)',
                                                                 fontWeight: '800',
-                                                                fontSize: '12px',
+                                                                fontSize: '11px',
                                                                 cursor: 'pointer',
                                                                 display: 'flex',
                                                                 alignItems: 'center',
                                                                 justifyContent: 'center',
-                                                                gap: '6px'
+                                                                gap: '5px'
                                                             }}
                                                         >
                                                             💵 Cash in Hand
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            onClick={() => setFormData({ ...formData, paymentMode: 'Bank Transfer', bankAccountId: formData.bankAccountId || (bankAccounts[0]?._id || '') })}
+                                                            onClick={() => setFormData({ ...formData, paymentMode: 'Bank Transfer', bankAccountId: formData.bankAccountId || (bankAccounts[0]?._id || ''), paymentSource: 'Office' })}
                                                             style={{
-                                                                padding: '10px 12px',
+                                                                padding: '10px 8px',
                                                                 borderRadius: '10px',
-                                                                border: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
-                                                                background: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
-                                                                color: (formData.bankAccountId || formData.paymentMode === 'Bank Transfer' || formData.paymentMode === 'UPI') ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                                border: (formData.bankAccountId || (formData.paymentMode !== 'Cash' && formData.paymentMode !== 'Others' && formData.paymentMode !== 'Other')) ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                                background: (formData.bankAccountId || (formData.paymentMode !== 'Cash' && formData.paymentMode !== 'Others' && formData.paymentMode !== 'Other')) ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                                color: (formData.bankAccountId || (formData.paymentMode !== 'Cash' && formData.paymentMode !== 'Others' && formData.paymentMode !== 'Other')) ? '#38bdf8' : 'rgba(255,255,255,0.6)',
                                                                 fontWeight: '800',
-                                                                fontSize: '12px',
+                                                                fontSize: '11px',
                                                                 cursor: 'pointer',
                                                                 display: 'flex',
                                                                 alignItems: 'center',
                                                                 justifyContent: 'center',
-                                                                gap: '6px'
+                                                                gap: '5px'
                                                             }}
                                                         >
                                                             🏦 Bank Account / UPI
                                                         </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setFormData({ ...formData, paymentMode: 'Others', bankAccountId: '', paymentSource: 'Others' })}
+                                                            style={{
+                                                                padding: '10px 8px',
+                                                                borderRadius: '10px',
+                                                                border: (formData.paymentMode === 'Others' || formData.paymentMode === 'Other' || formData.paymentSource === 'Others') ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
+                                                                background: (formData.paymentMode === 'Others' || formData.paymentMode === 'Other' || formData.paymentSource === 'Others') ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                                color: (formData.paymentMode === 'Others' || formData.paymentMode === 'Other' || formData.paymentSource === 'Others') ? '#c084fc' : 'rgba(255,255,255,0.6)',
+                                                                fontWeight: '800',
+                                                                fontSize: '11px',
+                                                                cursor: 'pointer',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                gap: '5px'
+                                                            }}
+                                                        >
+                                                            💼 Others / Personal
+                                                        </button>
                                                     </div>
 
-                                                    {/* If Cash is chosen: Cash Book Indicator */}
-                                                    {(!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? (
+                                                    {/* Conditional indicator: Others vs Cash vs Bank */}
+                                                    {(formData.paymentMode === 'Others' || formData.paymentMode === 'Other' || formData.paymentSource === 'Others') ? (
+                                                        <div style={{
+                                                            background: 'rgba(168, 85, 247, 0.08)',
+                                                            border: '1px solid rgba(168, 85, 247, 0.25)',
+                                                            borderRadius: '12px',
+                                                            padding: '12px 14px',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '8px',
+                                                            fontSize: '12px',
+                                                            color: '#c084fc',
+                                                            fontWeight: '700'
+                                                        }}>
+                                                            <span>💼</span> Paid via Others / Personal Account (Does NOT deduct company cash or bank balance)
+                                                        </div>
+                                                    ) : (!formData.bankAccountId && (formData.paymentMode === 'Cash' || !formData.paymentMode)) ? (
                                                         <div style={{
                                                             background: 'rgba(16, 185, 129, 0.08)',
                                                             border: '1px solid rgba(16, 185, 129, 0.25)',
@@ -2210,6 +3172,471 @@ const Maintenance = () => {
                                     </tbody>
                                 </table>
                             </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+            {/* Vendor Ledger & Bills Drill-Down Modal */}
+            <AnimatePresence>
+                {selectedVendorForDetails && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+                        <motion.div
+                            initial={{ scale: 0.92, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.92, opacity: 0 }}
+                            className="glass-card"
+                            style={{
+                                width: '100%',
+                                maxWidth: '900px',
+                                maxHeight: '85vh',
+                                padding: 'clamp(20px, 4vw, 35px)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                overflow: 'hidden',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '20px',
+                                background: '#0f172a'
+                            }}
+                        >
+                            {/* Modal Header */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '16px 22px', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.08)', flexWrap: 'wrap', gap: '15px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                    <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: `${theme.primary}15`, display: 'flex', justifyContent: 'center', alignItems: 'center', border: `1px solid ${theme.primary}30`, color: theme.primary }}>
+                                        <Store size={22} />
+                                    </div>
+                                    <div>
+                                        <h2 style={{ color: 'white', fontSize: '20px', fontWeight: '950', margin: 0, letterSpacing: '-0.5px' }}>
+                                            {selectedVendorForDetails.vendorName}
+                                        </h2>
+                                        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', fontWeight: '700', marginTop: '3px', margin: 0 }}>
+                                            Vendor Khata & Bills History ({selectedVendorForDetails.totalBills} bills total)
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <div style={{ padding: '6px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', textAlign: 'right' }}>
+                                        <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', fontWeight: '800', textTransform: 'uppercase' }}>Billed</div>
+                                        <div style={{ color: 'white', fontWeight: '900', fontSize: '14px' }}>₹{(selectedVendorForDetails.totalAmount || 0).toLocaleString()}</div>
+                                    </div>
+                                    <div style={{ padding: '6px 14px', borderRadius: '10px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', textAlign: 'right' }}>
+                                        <div style={{ fontSize: '9px', color: '#10b981', fontWeight: '800', textTransform: 'uppercase' }}>De Diya</div>
+                                        <div style={{ color: '#10b981', fontWeight: '900', fontSize: '14px' }}>₹{(selectedVendorForDetails.paidAmount || 0).toLocaleString()}</div>
+                                    </div>
+                                    <div style={{ padding: '6px 14px', borderRadius: '10px', background: (selectedVendorForDetails.dueAmount || 0) > 0 ? 'rgba(244,63,94,0.15)' : 'rgba(255,255,255,0.04)', border: (selectedVendorForDetails.dueAmount || 0) > 0 ? '1px solid rgba(244,63,94,0.3)' : '1px solid rgba(255,255,255,0.08)', textAlign: 'right' }}>
+                                        <div style={{ fontSize: '9px', color: (selectedVendorForDetails.dueAmount || 0) > 0 ? '#f43f5e' : 'rgba(255,255,255,0.4)', fontWeight: '800', textTransform: 'uppercase' }}>Net Due</div>
+                                        <div style={{ color: (selectedVendorForDetails.dueAmount || 0) > 0 ? '#f43f5e' : 'rgba(255,255,255,0.6)', fontWeight: '900', fontSize: '14px' }}>₹{(selectedVendorForDetails.dueAmount || 0).toLocaleString()}</div>
+                                    </div>
+                                    <button
+                                        onClick={() => setSelectedVendorForDetails(null)}
+                                        className="glass-card-hover-effect"
+                                        style={{ background: 'rgba(255,255,255,0.08)', border: 'none', color: 'white', width: '38px', height: '38px', borderRadius: '12px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Bills Table */}
+                            <div style={{ flex: 1, overflowY: 'auto', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.25)' }} className="custom-scrollbar">
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead style={{ position: 'sticky', top: 0, zIndex: 5, background: '#1e293b' }}>
+                                        <tr>
+                                            <th style={{ padding: '12px 16px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase' }}>Date</th>
+                                            <th style={{ padding: '12px 16px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase' }}>Vehicle</th>
+                                            <th style={{ padding: '12px 16px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase' }}>Repair / Details</th>
+                                            <th style={{ padding: '12px 16px', textAlign: 'left', color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase' }}>Bill #</th>
+                                            <th style={{ padding: '12px 16px', textAlign: 'right', color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase' }}>Amount</th>
+                                            <th style={{ padding: '12px 16px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase' }}>Status</th>
+                                            <th style={{ padding: '12px 16px', textAlign: 'right', color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase' }}>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(!selectedVendorForDetails.bills || selectedVendorForDetails.bills.length === 0) ? (
+                                            <tr>
+                                                <td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>
+                                                    No bills recorded for this vendor.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            selectedVendorForDetails.bills.map((bill, i) => (
+                                                <tr key={bill._id || i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                                                    <td style={{ padding: '14px 16px', color: 'rgba(255,255,255,0.8)', fontWeight: '700', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                                                        {bill.billDate ? formatDateIST(bill.billDate) : 'N/A'}
+                                                    </td>
+                                                    <td style={{ padding: '14px 16px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            <Car size={13} style={{ color: theme.primary }} />
+                                                            <span style={{ color: 'white', fontWeight: '800', fontSize: '12px' }}>
+                                                                {bill.vehicle?.carNumber || 'N/A'}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td style={{ padding: '14px 16px' }}>
+                                                        <div style={{ color: 'white', fontWeight: '700', fontSize: '12px' }}>{bill.maintenanceType || 'Service'}</div>
+                                                        {bill.category && (
+                                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>{bill.category}</div>
+                                                        )}
+                                                    </td>
+                                                    <td style={{ padding: '14px 16px', color: 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: '600' }}>
+                                                        {bill.billNumber || '-'}
+                                                    </td>
+                                                    <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                                                        <div style={{ color: bill.paymentStatus === 'Due' ? '#f43f5e' : '#10b981', fontWeight: '950', fontSize: '14px' }}>
+                                                            ₹{Number(bill.amount || 0).toLocaleString()}
+                                                        </div>
+                                                    </td>
+                                                    <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                                                        <span style={{
+                                                            fontSize: '9px',
+                                                            padding: '2px 8px',
+                                                            borderRadius: '6px',
+                                                            fontWeight: '900',
+                                                            textTransform: 'uppercase',
+                                                            background: bill.paymentStatus === 'Due' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                                            color: bill.paymentStatus === 'Due' ? '#f43f5e' : '#10b981',
+                                                            border: `1px solid ${bill.paymentStatus === 'Due' ? 'rgba(244, 63, 94, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`
+                                                        }}>
+                                                            {bill.paymentStatus || 'Paid'}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                                                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                                            {bill.billPhoto && (
+                                                                <button
+                                                                    onClick={() => setSelectedBillPhoto(bill.billPhoto)}
+                                                                    className="glass-card-hover-effect"
+                                                                    style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'rgba(14, 165, 233, 0.1)', color: 'var(--primary)', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+                                                                    title="View Bill Photo"
+                                                                >
+                                                                    <FileText size={13} />
+                                                                </button>
+                                                            )}
+                                                            {bill.paymentStatus === 'Due' ? (
+                                                                <button
+                                                                    onClick={() => openSettleModal({ type: 'bill', bill: { ...bill, garageName: selectedVendorForDetails.vendorName } })}
+                                                                    className="glass-card-hover-effect"
+                                                                    style={{
+                                                                        padding: '5px 10px',
+                                                                        borderRadius: '8px',
+                                                                        background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
+                                                                        color: 'white',
+                                                                        border: 'none',
+                                                                        cursor: 'pointer',
+                                                                        fontSize: '11px',
+                                                                        fontWeight: '900',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '4px',
+                                                                        whiteSpace: 'nowrap'
+                                                                    }}
+                                                                >
+                                                                    <IndianRupee size={11} /> Pay Due
+                                                                </button>
+                                                            ) : (
+                                                                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: '700' }}>✓ Settled</span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>
+                                    Vehicles Serviced: <span style={{ color: 'white', fontWeight: '700' }}>{(selectedVendorForDetails.vehicles || []).join(', ') || 'N/A'}</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <button
+                                        onClick={() => setSelectedVendorForDetails(null)}
+                                        style={{ padding: '10px 18px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+                                    >
+                                        Close
+                                    </button>
+                                    {(selectedVendorForDetails.dueAmount || 0) > 0 && (
+                                        <button
+                                            onClick={() => openSettleModal({ type: 'vendor', vendor: selectedVendorForDetails })}
+                                            style={{
+                                                padding: '10px 20px',
+                                                borderRadius: '10px',
+                                                background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)',
+                                                border: 'none',
+                                                color: 'white',
+                                                fontSize: '12px',
+                                                fontWeight: '900',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                boxShadow: '0 4px 15px rgba(244, 63, 94, 0.4)'
+                                            }}
+                                        >
+                                            <IndianRupee size={14} /> Settle All Dues (₹{selectedVendorForDetails.dueAmount.toLocaleString()})
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Quick Settle / Pay Due Modal */}
+            <AnimatePresence>
+                {showSettleModal && settleTarget && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', zIndex: 2100, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="glass-card"
+                            style={{
+                                width: '100%',
+                                maxWidth: '520px',
+                                padding: 'clamp(24px, 4vw, 32px)',
+                                border: '1px solid rgba(244, 63, 94, 0.3)',
+                                borderRadius: '24px',
+                                background: '#0b1120',
+                                boxShadow: '0 25px 60px -15px rgba(0,0,0,0.7), 0 0 30px rgba(244, 63, 94, 0.15)'
+                            }}
+                        >
+                            {/* Modal Header */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f43f5e', marginBottom: '4px' }}>
+                                        <IndianRupee size={18} />
+                                        <span style={{ fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                            {settleTarget.type === 'vendor' ? 'Settle Vendor Outstanding' : 'Pay Pending Bill'}
+                                        </span>
+                                    </div>
+                                    <h2 style={{ color: 'white', fontSize: '20px', fontWeight: '950', margin: 0 }}>
+                                        {settleTarget.type === 'vendor'
+                                            ? settleTarget.vendor.vendorName
+                                            : (settleTarget.bill.garageName || settleTarget.bill.vendorName || 'Vendor Bill')}
+                                    </h2>
+                                    <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', fontWeight: '600', marginTop: '4px', margin: 0 }}>
+                                        {settleTarget.type === 'vendor'
+                                            ? `Settling ${settleTarget.vendor.dueBillsCount || 0} unpaid bill(s) for this garage`
+                                            : `Bill #${settleTarget.bill.billNumber || 'N/A'} • ${settleTarget.bill.vehicle?.carNumber || 'Vehicle'}`}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => { setShowSettleModal(false); setSettleTarget(null); }}
+                                    style={{ background: 'rgba(255,255,255,0.08)', border: 'none', color: 'white', width: '34px', height: '34px', borderRadius: '10px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+
+                            {/* Settlement Amount Banner */}
+                            <div style={{
+                                padding: '16px 20px',
+                                borderRadius: '16px',
+                                background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.15) 0%, rgba(225, 29, 72, 0.05) 100%)',
+                                border: '1px solid rgba(244, 63, 94, 0.3)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: '22px'
+                            }}>
+                                <div>
+                                    <div style={{ fontSize: '10px', color: '#f43f5e', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                        Total Amount to Settle
+                                    </div>
+                                    <div style={{ color: 'white', fontSize: '26px', fontWeight: '1000', marginTop: '2px', letterSpacing: '-0.5px' }}>
+                                        ₹{(settleTarget.type === 'vendor' ? settleTarget.vendor.dueAmount : settleTarget.bill.amount || 0).toLocaleString()}
+                                    </div>
+                                </div>
+                                <span style={{
+                                    background: '#f43f5e',
+                                    color: 'white',
+                                    fontSize: '11px',
+                                    fontWeight: '900',
+                                    padding: '4px 10px',
+                                    borderRadius: '8px'
+                                }}>
+                                    NET DUE
+                                </span>
+                            </div>
+
+                            <form onSubmit={handleSettlePayment} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                {/* Payment Mode (3 Options) */}
+                                <div>
+                                    <label style={{ display: 'block', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>
+                                        Payment Method
+                                    </label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSettleForm({ ...settleForm, paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' })}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '12px',
+                                                border: (settleForm.paymentMode === 'Cash') ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (settleForm.paymentMode === 'Cash') ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (settleForm.paymentMode === 'Cash') ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            💵 Cash
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSettleForm({ ...settleForm, paymentMode: 'Bank Transfer', bankAccountId: settleForm.bankAccountId || (bankAccounts[0]?._id || ''), paidBy: 'Company' })}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '12px',
+                                                border: (settleForm.paymentMode !== 'Cash' && settleForm.paymentMode !== 'Others') ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (settleForm.paymentMode !== 'Cash' && settleForm.paymentMode !== 'Others') ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (settleForm.paymentMode !== 'Cash' && settleForm.paymentMode !== 'Others') ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            🏦 Bank / UPI
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSettleForm({ ...settleForm, paymentMode: 'Others', bankAccountId: '', paidBy: 'Others' })}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '12px',
+                                                border: (settleForm.paymentMode === 'Others') ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (settleForm.paymentMode === 'Others') ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (settleForm.paymentMode === 'Others') ? '#c084fc' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            💼 Others
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Dynamic Payment Mode Explanations / Selectors */}
+                                {settleForm.paymentMode === 'Others' ? (
+                                    <div style={{
+                                        background: 'rgba(168, 85, 247, 0.08)',
+                                        border: '1px solid rgba(168, 85, 247, 0.25)',
+                                        borderRadius: '12px',
+                                        padding: '12px 14px',
+                                        fontSize: '12px',
+                                        color: '#c084fc',
+                                        fontWeight: '700'
+                                    }}>
+                                        💼 Paid via Others / Personal Account (Does NOT deduct company cash or bank balance)
+                                    </div>
+                                ) : settleForm.paymentMode === 'Cash' ? (
+                                    <div style={{
+                                        background: 'rgba(16, 185, 129, 0.08)',
+                                        border: '1px solid rgba(16, 185, 129, 0.25)',
+                                        borderRadius: '12px',
+                                        padding: '12px 14px',
+                                        fontSize: '12px',
+                                        color: '#10b981',
+                                        fontWeight: '800',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between'
+                                    }}>
+                                        <span>💵 Deducted from Office Cash in Hand (Cash Book)</span>
+                                        <span style={{ color: '#f87171', fontWeight: '900' }}>
+                                            -₹{(settleTarget.type === 'vendor' ? settleTarget.vendor.dueAmount : settleTarget.bill.amount || 0).toLocaleString()}
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <BankSelector
+                                        bankAccounts={bankAccounts}
+                                        value={settleForm.bankAccountId}
+                                        amount={settleTarget.type === 'vendor' ? settleTarget.vendor.dueAmount : settleTarget.bill.amount}
+                                        onChange={(bId) => setSettleForm({ ...settleForm, bankAccountId: bId, paymentMode: 'Bank Transfer' })}
+                                    />
+                                )}
+
+                                {/* Payment Date */}
+                                <div>
+                                    <label style={{ display: 'block', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', marginBottom: '6px' }}>
+                                        Payment Date
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={settleForm.paymentDate}
+                                        onChange={(e) => setSettleForm({ ...settleForm, paymentDate: e.target.value })}
+                                        required
+                                        style={{
+                                            width: '100%',
+                                            padding: '10px 14px',
+                                            borderRadius: '10px',
+                                            background: '#0f172a',
+                                            border: '1px solid rgba(255,255,255,0.12)',
+                                            color: 'white',
+                                            fontSize: '13px',
+                                            fontWeight: '700',
+                                            outline: 'none'
+                                        }}
+                                    />
+                                </div>
+
+                                {/* Form Actions */}
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowSettleModal(false); setSettleTarget(null); }}
+                                        style={{ flex: 1, padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={settling}
+                                        style={{
+                                            flex: 2,
+                                            padding: '12px',
+                                            borderRadius: '12px',
+                                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                            border: 'none',
+                                            color: 'white',
+                                            fontSize: '13px',
+                                            fontWeight: '900',
+                                            cursor: settling ? 'not-allowed' : 'pointer',
+                                            display: 'flex',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)',
+                                            opacity: settling ? 0.7 : 1
+                                        }}
+                                    >
+                                        {settling ? (
+                                            <>Processing...</>
+                                        ) : (
+                                            <>
+                                                <Check size={16} /> Confirm Payment & Settle
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
                         </motion.div>
                     </div>
                 )}

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { todayIST } from '../../utils/istUtils';
+import AssignDriverModal from './AssignDriverModal';
 
 const MASTER_FLEET_ORDER = [
     { model: 'Ciaz', number: '0160', displayName: 'Ciaz 0160', fullReg: 'RJ-27-TB-0160' },
@@ -105,6 +106,49 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
     const [bookings, setBookings] = useState([]);
     const [vehicles, setVehicles] = useState([]);
     const [selectedCellData, setSelectedCellData] = useState(null);
+    const [assigningBooking, setAssigningBooking] = useState(null);
+    const [showAssignDriverModal, setShowAssignDriverModal] = useState(false);
+
+    const handleOpenAssignment = async () => {
+        let bkg = null;
+        const primaryDuty = selectedCellData?.slot?.duties?.[0];
+        const bkgId = packageBookingId || primaryDuty?.bookingId;
+        const bkgRef = primaryDuty?.bookingRef?._id || primaryDuty?.bookingRef;
+        const clientName = primaryDuty?.clientName;
+
+        if (bkgId) {
+            bkg = bookings.find(b => b.bookingId === bkgId || b.clientCode === bkgId);
+        }
+        if (!bkg && bkgRef) {
+            bkg = bookings.find(b => String(b._id) === String(bkgRef));
+        }
+        if (!bkg && clientName) {
+            bkg = bookings.find(b => (b.clientName || '').trim().toLowerCase() === clientName.trim().toLowerCase());
+        }
+
+        // Fallback: fetch from API if not loaded in monthly view
+        if (!bkg && selectedCompany?._id) {
+            try {
+                const res = await axios.get(`/api/bookings/${selectedCompany._id}`);
+                const allB = Array.isArray(res.data) ? res.data : (res.data?.bookings || []);
+                bkg = allB.find(b => 
+                    (bkgId && (b.bookingId === bkgId || b.clientCode === bkgId)) ||
+                    (bkgRef && String(b._id) === String(bkgRef)) ||
+                    (clientName && (b.clientName || '').trim().toLowerCase() === clientName.trim().toLowerCase())
+                );
+            } catch (e) {
+                console.error('Failed to fetch full bookings for assignment modal', e);
+            }
+        }
+
+        if (bkg) {
+            setAssigningBooking(bkg);
+            setShowAssignDriverModal(true);
+            setSelectedCellData(null);
+        } else {
+            alert('Booking information could not be found for this assignment.');
+        }
+    };
 
     // Fetch vehicles, DRS duties and bookings for selected month
     const fetchMonthData = async () => {
@@ -1957,6 +2001,32 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                 >
                                     Close
                                 </button>
+
+                                {/* Assignment Button - edit vehicle and driver directly */}
+                                {(packageBookingId || selectedCellData?.slot?.duties?.some(d => d.bookingId || d.bookingRef)) && (
+                                    <button
+                                        type="button"
+                                        onClick={handleOpenAssignment}
+                                        style={{
+                                            padding: '8px 18px',
+                                            borderRadius: '10px',
+                                            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                            border: 'none',
+                                            color: '#000000',
+                                            fontWeight: '900',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)'
+                                        }}
+                                        title="Assign Driver & Vehicle directly"
+                                    >
+                                        <Car size={15} />
+                                        <span>Assignment</span>
+                                    </button>
+                                )}
+
                                 {onNavigateToDRS && (
                                     <button
                                         onClick={() => {
@@ -1984,6 +2054,27 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                             </div>
                         </motion.div>
                     </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* ASSIGN DRIVER & VEHICLE MODAL (DIRECT FROM FLEET MASTER DETAILS) */}
+            <AnimatePresence>
+                {showAssignDriverModal && assigningBooking && (
+                    <AssignDriverModal
+                        key={`assign-modal-master-${assigningBooking._id || assigningBooking.bookingId}`}
+                        isOpen={showAssignDriverModal}
+                        booking={assigningBooking}
+                        companyId={selectedCompany?._id}
+                        onClose={() => {
+                            setShowAssignDriverModal(false);
+                            setAssigningBooking(null);
+                        }}
+                        onSaved={() => {
+                            setShowAssignDriverModal(false);
+                            setAssigningBooking(null);
+                            fetchMonthData();
+                        }}
+                    />
                 )}
             </AnimatePresence>
         </div>

@@ -176,7 +176,10 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
         tenureMonths: '',
         monthlyEMI: '',
         startDate: '',
-        remarks: ''
+        remarks: '',
+        paymentMode: 'Cash',
+        bankAccountId: '',
+        paidBy: 'Company'
     });
     const [submittingLoan, setSubmittingLoan] = useState(false);
     const [editingLoanId, setEditingLoanId] = useState(null);
@@ -189,7 +192,10 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
         amount: '',
         date: '',
         remark: '',
-        type: 'Other'
+        type: 'Other',
+        paymentMode: 'Cash',
+        bankAccountId: '',
+        paidBy: 'Company'
     });
     const [submittingAllowance, setSubmittingAllowance] = useState(false);
     const [allowanceMessage, setAllowanceMessage] = useState({ type: '', text: '' });
@@ -385,7 +391,7 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
             }
             setShowLoanModal(false);
             setEditingLoanId(null);
-            setLoanFormData({ driverId: '', totalAmount: '', tenureMonths: '', monthlyEMI: '', startDate: '', remarks: '' });
+            setLoanFormData({ driverId: '', totalAmount: '', tenureMonths: '', monthlyEMI: '', startDate: '', remarks: '', paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' });
             fetchLoans();
             fetchSalaries();
         } catch (err) {
@@ -404,7 +410,10 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
             tenureMonths: tenure,
             monthlyEMI: loan.monthlyEMI,
             startDate: loan.startDate ? toISTDateString(loan.startDate) : '',
-            remarks: loan.remarks || ''
+            remarks: loan.remarks || '',
+            paymentMode: loan.paymentMode || 'Cash',
+            bankAccountId: loan.bankAccount?._id || loan.bankAccount || '',
+            paidBy: loan.paidBy || 'Company'
         });
         setShowLoanModal(true);
     };
@@ -546,7 +555,7 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
             setTimeout(() => {
                 setShowAllowanceModal(false);
                 setEditingAllowanceId(null);
-                setAllowanceFormData({ driverId: '', amount: '', date: '', remark: '', type: 'Other' });
+                setAllowanceFormData({ driverId: '', amount: '', date: '', remark: '', type: 'Other', paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' });
                 setAllowanceMessage({ type: '', text: '' });
                 fetchSalaries();
                 fetchAllowances();
@@ -565,7 +574,10 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
             amount: a.amount || '',
             date: a.date ? toISTDateString(a.date) : '',
             remark: a.remark || '',
-            type: a.type || 'Other'
+            type: a.type || 'Other',
+            paymentMode: a.paymentMode || 'Cash',
+            bankAccountId: a.bankAccount?._id || a.bankAccount || '',
+            paidBy: a.paidBy || 'Company'
         });
         setShowAllowanceModal(true);
     };
@@ -1182,14 +1194,14 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                 <TrendingDown size={14} /> <span className="hide-mobile">ADVANCE</span><span className="show-mobile">ADV</span>
                             </button>
                             <button
-                                onClick={() => { setEditingLoanId(null); setLoanFormData({ driverId: '', totalAmount: '', tenureMonths: '', monthlyEMI: '', remarks: '' }); setShowLoanModal(true); }}
+                                onClick={() => { setEditingLoanId(null); setLoanFormData({ driverId: '', totalAmount: '', tenureMonths: '', monthlyEMI: '', remarks: '', paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' }); setShowLoanModal(true); }}
                                 className="btn-primary"
                                 style={{ height: '38px', padding: '0 15px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: 'none' }}
                             >
                                 <Wallet size={14} /> <span className="hide-mobile">LOAN</span><span className="show-mobile">LOAN</span>
                             </button>
                             <button
-                                onClick={() => { setEditingAllowanceId(null); setAllowanceFormData({ driverId: '', amount: '', date: todayIST(), remark: '', type: 'Other' }); setShowAllowanceModal(true); }}
+                                onClick={() => { setEditingAllowanceId(null); setAllowanceFormData({ driverId: '', amount: '', date: todayIST(), remark: '', type: 'Other', paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' }); setShowAllowanceModal(true); }}
                                 className="btn-primary"
                                 style={{ height: '38px', padding: '0 15px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: 'none' }}
                             >
@@ -1279,11 +1291,11 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                             <button onClick={() => setShowAdvanceModal(true)} className="btn-primary" style={{ height: '36px', padding: '0 15px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', background: 'rgba(244, 63, 94, 0.15)', color: '#f43f5e', border: 'none' }}>
                                 <TrendingDown size={14} /> ADVANCE
                             </button>
-                            <button onClick={() => { setEditingLoanId(null); setLoanFormData({ driverId: '', totalAmount: '', tenureMonths: '', monthlyEMI: '', remarks: '' }); setShowLoanModal(true); }} className="btn-primary" style={{ height: '36px', padding: '0 15px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: 'none' }}>
+                            <button onClick={() => { setEditingLoanId(null); setLoanFormData({ driverId: '', totalAmount: '', tenureMonths: '', monthlyEMI: '', remarks: '', paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' }); setShowLoanModal(true); }} className="btn-primary" style={{ height: '36px', padding: '0 15px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: 'none' }}>
                                 <Wallet size={14} /> LOAN
                             </button>
                             <button
-                                onClick={() => { setEditingAllowanceId(null); setAllowanceFormData({ driverId: '', amount: '', date: todayIST(), remark: '', type: 'Other' }); setShowAllowanceModal(true); }}
+                                onClick={() => { setEditingAllowanceId(null); setAllowanceFormData({ driverId: '', amount: '', date: todayIST(), remark: '', type: 'Other', paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' }); setShowAllowanceModal(true); }}
                                 className="btn-primary"
                                 style={{ height: '36px', padding: '0 15px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: 'none' }}
                             >
@@ -1758,6 +1770,14 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                             </td>
                                             <td style={{ padding: '20px 25px' }}>
                                                 <div style={{ color: 'white', fontWeight: '800' }}>₹ {loan.totalAmount?.toLocaleString()}</div>
+                                                <div style={{
+                                                    fontSize: '10px',
+                                                    fontWeight: '700',
+                                                    marginTop: '3px',
+                                                    color: (loan.paymentMode === 'Others' || loan.paidBy === 'Others') ? '#c084fc' : (loan.bankAccount || loan.paymentMode === 'Bank' || loan.paymentMode === 'Bank Transfer') ? '#38bdf8' : '#10b981'
+                                                }}>
+                                                    {(loan.paymentMode === 'Others' || loan.paidBy === 'Others') ? '💼 Others' : (loan.bankAccount?.bankName || loan.paymentMode === 'Bank' || loan.paymentMode === 'Bank Transfer') ? `🏦 ${loan.bankAccount?.bankName || 'Bank'}` : '💵 Cash'}
+                                                </div>
                                             </td>
                                             <td style={{ padding: '20px 25px' }}>
                                                 <div style={{ color: 'var(--primary)', fontWeight: '800' }}>₹ {loan.monthlyEMI?.toLocaleString()}</div>
@@ -1844,6 +1864,9 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                         <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '10px' }}>
                                             <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800' }}>Loan Amount</div>
                                             <div style={{ color: 'white', fontWeight: '800', fontSize: '15px' }}>₹{loan.totalAmount?.toLocaleString()}</div>
+                                            <div style={{ fontSize: '10px', fontWeight: '700', marginTop: '2px', color: (loan.paymentMode === 'Others' || loan.paidBy === 'Others') ? '#c084fc' : (loan.bankAccount || loan.paymentMode === 'Bank' || loan.paymentMode === 'Bank Transfer') ? '#38bdf8' : '#10b981' }}>
+                                                {(loan.paymentMode === 'Others' || loan.paidBy === 'Others') ? '💼 Others' : (loan.bankAccount?.bankName || loan.paymentMode === 'Bank' || loan.paymentMode === 'Bank Transfer') ? `🏦 ${loan.bankAccount?.bankName || 'Bank'}` : '💵 Cash'}
+                                            </div>
                                         </div>
                                         <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '10px' }}>
                                             <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800' }}>Monthly EMI</div>
@@ -2076,51 +2099,89 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                         <CreditCard size={13} /> Payment Method (Paid by Company)
                                     </label>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
                                         <button
                                             type="button"
                                             onClick={() => setAdvanceFormData({ ...advanceFormData, paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company', givenBy: 'Office' })}
                                             style={{
-                                                padding: '10px 12px',
+                                                padding: '10px 8px',
                                                 borderRadius: '10px',
-                                                border: (!advanceFormData.bankAccountId && (advanceFormData.paymentMode === 'Cash' || !advanceFormData.paymentMode)) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
-                                                background: (!advanceFormData.bankAccountId && (advanceFormData.paymentMode === 'Cash' || !advanceFormData.paymentMode)) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
-                                                color: (!advanceFormData.bankAccountId && (advanceFormData.paymentMode === 'Cash' || !advanceFormData.paymentMode)) ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                                border: (!advanceFormData.bankAccountId && advanceFormData.paidBy !== 'Others' && (advanceFormData.paymentMode === 'Cash' || !advanceFormData.paymentMode)) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (!advanceFormData.bankAccountId && advanceFormData.paidBy !== 'Others' && (advanceFormData.paymentMode === 'Cash' || !advanceFormData.paymentMode)) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (!advanceFormData.bankAccountId && advanceFormData.paidBy !== 'Others' && (advanceFormData.paymentMode === 'Cash' || !advanceFormData.paymentMode)) ? '#10b981' : 'rgba(255,255,255,0.6)',
                                                 fontWeight: '800',
-                                                fontSize: '12px',
+                                                fontSize: '11px',
                                                 cursor: 'pointer',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'center',
-                                                gap: '6px'
+                                                gap: '5px'
                                             }}
                                         >
                                             💵 Cash in Hand
                                         </button>
                                         <button
                                             type="button"
-                                            onClick={() => setAdvanceFormData({ ...advanceFormData, paymentMode: 'Bank Transfer', bankAccountId: advanceFormData.bankAccountId || (bankAccounts[0]?._id || ''), paidBy: 'Company', givenBy: 'Office' })}
+                                            onClick={() => {
+                                                const defaultBank = advanceFormData.bankAccountId || bankAccounts[0]?._id || '';
+                                                setAdvanceFormData({ ...advanceFormData, paymentMode: 'Bank Transfer', bankAccountId: defaultBank, paidBy: 'Company', givenBy: 'Office' });
+                                            }}
                                             style={{
-                                                padding: '10px 12px',
+                                                padding: '10px 8px',
                                                 borderRadius: '10px',
-                                                border: (advanceFormData.bankAccountId || advanceFormData.paymentMode === 'Bank Transfer' || advanceFormData.paymentMode === 'UPI') ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
-                                                background: (advanceFormData.bankAccountId || advanceFormData.paymentMode === 'Bank Transfer' || advanceFormData.paymentMode === 'UPI') ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
-                                                color: (advanceFormData.bankAccountId || advanceFormData.paymentMode === 'Bank Transfer' || advanceFormData.paymentMode === 'UPI') ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                border: (advanceFormData.paidBy !== 'Others' && (advanceFormData.bankAccountId || advanceFormData.paymentMode === 'Bank Transfer' || advanceFormData.paymentMode === 'UPI')) ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (advanceFormData.paidBy !== 'Others' && (advanceFormData.bankAccountId || advanceFormData.paymentMode === 'Bank Transfer' || advanceFormData.paymentMode === 'UPI')) ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (advanceFormData.paidBy !== 'Others' && (advanceFormData.bankAccountId || advanceFormData.paymentMode === 'Bank Transfer' || advanceFormData.paymentMode === 'UPI')) ? '#38bdf8' : 'rgba(255,255,255,0.6)',
                                                 fontWeight: '800',
-                                                fontSize: '12px',
+                                                fontSize: '11px',
                                                 cursor: 'pointer',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'center',
-                                                gap: '6px'
+                                                gap: '5px'
                                             }}
                                         >
                                             🏦 Bank Account
                                         </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAdvanceFormData({ ...advanceFormData, paymentMode: 'Others', bankAccountId: '', paidBy: 'Others', givenBy: 'Others' })}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '10px',
+                                                border: (advanceFormData.paymentMode === 'Others' || advanceFormData.paidBy === 'Others') ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (advanceFormData.paymentMode === 'Others' || advanceFormData.paidBy === 'Others') ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (advanceFormData.paymentMode === 'Others' || advanceFormData.paidBy === 'Others') ? '#c084fc' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            💼 Others / Personal
+                                        </button>
                                     </div>
 
-                                    {/* If Cash is chosen: Live Cash in Hand Balance Impact */}
-                                    {(!advanceFormData.bankAccountId && (advanceFormData.paymentMode === 'Cash' || !advanceFormData.paymentMode)) ? (
+                                    {/* Indicators */}
+                                    {(advanceFormData.paymentMode === 'Others' || advanceFormData.paidBy === 'Others') ? (
+                                        <div style={{
+                                            background: 'rgba(168, 85, 247, 0.08)',
+                                            border: '1px solid rgba(168, 85, 247, 0.25)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            fontSize: '12px',
+                                            color: '#c084fc',
+                                            fontWeight: '700'
+                                        }}>
+                                            <span>💼</span> Paid via Others / Personal Account (Does NOT deduct company cash or bank balance)
+                                        </div>
+                                    ) : (!advanceFormData.bankAccountId && (advanceFormData.paymentMode === 'Cash' || !advanceFormData.paymentMode)) ? (
                                         <div style={{
                                             background: 'rgba(16, 185, 129, 0.08)',
                                             border: '1px solid rgba(16, 185, 129, 0.25)',
@@ -2183,11 +2244,11 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
             {/* RECORD ADDITIONAL PAYMENT (ALLOWANCE) MODAL */}
             <AnimatePresence>
                 {showAllowanceModal && (
-                    <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', zIndex: 1100, position: 'fixed', inset: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', zIndex: 1100, position: 'fixed', inset: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', overflowY: 'auto' }}>
                         <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
-                            className="modal-container" style={{ width: '100%', maxWidth: '480px', padding: '30px', background: '#0f172a', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            className="modal-container" style={{ width: '100%', maxWidth: '520px', padding: '25px', maxHeight: '90vh', overflowY: 'auto', margin: 'auto', background: '#0f172a', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)' }}>
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '25px', position: 'sticky', top: 0, background: '#0f172a', zIndex: 10, paddingBottom: '10px' }}>
                                 <h2 style={{ color: 'white', fontSize: '22px', fontWeight: '900', margin: 0 }}>{editingAllowanceId ? 'Edit Payment' : 'Record Special Payment'}</h2>
                                 <button onClick={() => { setShowAllowanceModal(false); setEditingAllowanceId(null); }} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}><X size={24} /></button>
                             </div>
@@ -2239,6 +2300,134 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                         <option value="Other">Other Adjustment</option>
                                     </select>
                                 </div>
+
+                                {/* Payment Method (Paid by Company) */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                        <CreditCard size={13} /> Payment Method (Paid by Company)
+                                    </label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAllowanceFormData({ ...allowanceFormData, paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' })}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '10px',
+                                                border: (!allowanceFormData.bankAccountId && allowanceFormData.paidBy !== 'Others' && (allowanceFormData.paymentMode === 'Cash' || !allowanceFormData.paymentMode)) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (!allowanceFormData.bankAccountId && allowanceFormData.paidBy !== 'Others' && (allowanceFormData.paymentMode === 'Cash' || !allowanceFormData.paymentMode)) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (!allowanceFormData.bankAccountId && allowanceFormData.paidBy !== 'Others' && (allowanceFormData.paymentMode === 'Cash' || !allowanceFormData.paymentMode)) ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            💵 Cash in Hand
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const defaultBank = allowanceFormData.bankAccountId || bankAccounts[0]?._id || '';
+                                                setAllowanceFormData({ ...allowanceFormData, paymentMode: 'Bank Transfer', bankAccountId: defaultBank, paidBy: 'Company' });
+                                            }}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '10px',
+                                                border: (allowanceFormData.paidBy !== 'Others' && (allowanceFormData.bankAccountId || allowanceFormData.paymentMode === 'Bank Transfer' || allowanceFormData.paymentMode === 'Bank')) ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (allowanceFormData.paidBy !== 'Others' && (allowanceFormData.bankAccountId || allowanceFormData.paymentMode === 'Bank Transfer' || allowanceFormData.paymentMode === 'Bank')) ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (allowanceFormData.paidBy !== 'Others' && (allowanceFormData.bankAccountId || allowanceFormData.paymentMode === 'Bank Transfer' || allowanceFormData.paymentMode === 'Bank')) ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            🏦 Bank Account
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAllowanceFormData({ ...allowanceFormData, paymentMode: 'Others', bankAccountId: '', paidBy: 'Others' })}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '10px',
+                                                border: (allowanceFormData.paymentMode === 'Others' || allowanceFormData.paidBy === 'Others') ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (allowanceFormData.paymentMode === 'Others' || allowanceFormData.paidBy === 'Others') ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (allowanceFormData.paymentMode === 'Others' || allowanceFormData.paidBy === 'Others') ? '#c084fc' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            💼 Others / Personal
+                                        </button>
+                                    </div>
+
+                                    {/* Indicators */}
+                                    {(allowanceFormData.paymentMode === 'Others' || allowanceFormData.paidBy === 'Others') ? (
+                                        <div style={{
+                                            background: 'rgba(168, 85, 247, 0.08)',
+                                            border: '1px solid rgba(168, 85, 247, 0.25)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            fontSize: '12px',
+                                            color: '#c084fc',
+                                            fontWeight: '700'
+                                        }}>
+                                            <span>💼</span> Paid via Others / Personal Account (Does NOT deduct company cash or bank balance)
+                                        </div>
+                                    ) : (!allowanceFormData.bankAccountId && (allowanceFormData.paymentMode === 'Cash' || !allowanceFormData.paymentMode)) ? (
+                                        <div style={{
+                                            background: 'rgba(16, 185, 129, 0.08)',
+                                            border: '1px solid rgba(16, 185, 129, 0.25)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '8px'
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Current Cash in Hand:</span>
+                                                <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '900' }}>₹{(selectedCompany?.cashBalance || 0).toLocaleString('en-IN')}</span>
+                                            </div>
+                                            {Number(allowanceFormData.amount) > 0 && (
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(16, 185, 129, 0.2)', paddingTop: '6px' }}>
+                                                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Cash Balance After:</span>
+                                                    <span style={{
+                                                        fontSize: '14px',
+                                                        fontWeight: '950',
+                                                        color: ((selectedCompany?.cashBalance || 0) - Number(allowanceFormData.amount)) < 0 ? '#f43f5e' : '#10b981'
+                                                    }}>
+                                                        ₹{((selectedCompany?.cashBalance || 0) - Number(allowanceFormData.amount)).toLocaleString('en-IN')}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <div style={{ fontSize: '11px', color: '#10b981', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                <span>💵</span> Deducts from Cash in Hand & logs in Cash Book
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <BankSelector
+                                            bankAccounts={bankAccounts}
+                                            value={allowanceFormData.bankAccountId}
+                                            amount={allowanceFormData.amount}
+                                            onChange={(bId) => setAllowanceFormData({ ...allowanceFormData, bankAccountId: bId, paymentMode: 'Bank Transfer', paidBy: 'Company' })}
+                                        />
+                                    )}
+                                </div>
+
                                 <div>
                                     <label style={{ display: 'block', color: 'rgba(255,255,255,0.6)', fontSize: '11px', fontWeight: '800', marginBottom: '8px', textTransform: 'uppercase' }}>Remark</label>
                                     <textarea className="input-field" value={allowanceFormData.remark} onChange={(e) => setAllowanceFormData({ ...allowanceFormData, remark: e.target.value })} style={{ width: '100%', padding: '15px', background: '#1e293b', color: 'white', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }} rows="2" placeholder="Ex: Special work bonus..." />
@@ -2637,11 +2826,11 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
             {/* LOAN MODAL */}
             <AnimatePresence>
                 {showLoanModal && (
-                    <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', zIndex: 11000, position: 'fixed', inset: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', zIndex: 11000, position: 'fixed', inset: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', overflowY: 'auto' }}>
                         <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }}
-                            className="modal-container" style={{ width: '100%', maxWidth: '480px', padding: '30px', background: '#0f172a', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            className="modal-container" style={{ width: '100%', maxWidth: '520px', padding: '25px', maxHeight: '90vh', overflowY: 'auto', margin: 'auto', background: '#0f172a', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)' }}>
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '25px', position: 'sticky', top: 0, background: '#0f172a', zIndex: 10, paddingBottom: '10px' }}>
                                 <h2 style={{ color: 'white', fontSize: '22px', fontWeight: '900', margin: 0 }}>{editingLoanId ? 'Update Driver Loan' : 'Add Driver Loan'}</h2>
                                 <button onClick={() => setShowLoanModal(false)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }}><X size={24} /></button>
                             </div>
@@ -2687,6 +2876,134 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                         <input type="number" className="input-field" readOnly value={loanFormData.monthlyEMI} style={{ width: '100%', height: '50px', background: 'rgba(255,255,255,0.05)', color: 'var(--primary)', borderRadius: '12px', padding: '0 15px', border: '1px solid rgba(255,255,255,0.1)', cursor: 'not-allowed', fontWeight: '800' }} placeholder="₹ 0" />
                                     </div>
                                 </div>
+
+                                {/* Payment Method (Loan Disbursement) */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                        <CreditCard size={13} /> Loan Disbursement Method (Paid by Company)
+                                    </label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setLoanFormData({ ...loanFormData, paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' })}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '10px',
+                                                border: (!loanFormData.bankAccountId && loanFormData.paidBy !== 'Others' && (loanFormData.paymentMode === 'Cash' || !loanFormData.paymentMode)) ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (!loanFormData.bankAccountId && loanFormData.paidBy !== 'Others' && (loanFormData.paymentMode === 'Cash' || !loanFormData.paymentMode)) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (!loanFormData.bankAccountId && loanFormData.paidBy !== 'Others' && (loanFormData.paymentMode === 'Cash' || !loanFormData.paymentMode)) ? '#10b981' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            💵 Cash in Hand
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const defaultBank = loanFormData.bankAccountId || bankAccounts[0]?._id || '';
+                                                setLoanFormData({ ...loanFormData, paymentMode: 'Bank Transfer', bankAccountId: defaultBank, paidBy: 'Company' });
+                                            }}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '10px',
+                                                border: (loanFormData.paidBy !== 'Others' && (loanFormData.bankAccountId || loanFormData.paymentMode === 'Bank Transfer' || loanFormData.paymentMode === 'Bank')) ? '2px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (loanFormData.paidBy !== 'Others' && (loanFormData.bankAccountId || loanFormData.paymentMode === 'Bank Transfer' || loanFormData.paymentMode === 'Bank')) ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (loanFormData.paidBy !== 'Others' && (loanFormData.bankAccountId || loanFormData.paymentMode === 'Bank Transfer' || loanFormData.paymentMode === 'Bank')) ? '#38bdf8' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            🏦 Bank Account
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setLoanFormData({ ...loanFormData, paymentMode: 'Others', bankAccountId: '', paidBy: 'Others' })}
+                                            style={{
+                                                padding: '10px 8px',
+                                                borderRadius: '10px',
+                                                border: (loanFormData.paymentMode === 'Others' || loanFormData.paidBy === 'Others') ? '2px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (loanFormData.paymentMode === 'Others' || loanFormData.paidBy === 'Others') ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: (loanFormData.paymentMode === 'Others' || loanFormData.paidBy === 'Others') ? '#c084fc' : 'rgba(255,255,255,0.6)',
+                                                fontWeight: '800',
+                                                fontSize: '11px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '5px'
+                                            }}
+                                        >
+                                            💼 Others / Personal
+                                        </button>
+                                    </div>
+
+                                    {/* Indicators */}
+                                    {(loanFormData.paymentMode === 'Others' || loanFormData.paidBy === 'Others') ? (
+                                        <div style={{
+                                            background: 'rgba(168, 85, 247, 0.08)',
+                                            border: '1px solid rgba(168, 85, 247, 0.25)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            fontSize: '12px',
+                                            color: '#c084fc',
+                                            fontWeight: '700'
+                                        }}>
+                                            <span>💼</span> Disbursed via Others / Personal Account (Does NOT deduct company cash or bank balance)
+                                        </div>
+                                    ) : (!loanFormData.bankAccountId && (loanFormData.paymentMode === 'Cash' || !loanFormData.paymentMode)) ? (
+                                        <div style={{
+                                            background: 'rgba(16, 185, 129, 0.08)',
+                                            border: '1px solid rgba(16, 185, 129, 0.25)',
+                                            borderRadius: '12px',
+                                            padding: '12px 14px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '8px'
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Current Cash in Hand:</span>
+                                                <span style={{ fontSize: '13px', color: '#10b981', fontWeight: '900' }}>₹{(selectedCompany?.cashBalance || 0).toLocaleString('en-IN')}</span>
+                                            </div>
+                                            {Number(loanFormData.totalAmount) > 0 && (
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(16, 185, 129, 0.2)', paddingTop: '6px' }}>
+                                                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>Cash Balance After:</span>
+                                                    <span style={{
+                                                        fontSize: '14px',
+                                                        fontWeight: '950',
+                                                        color: ((selectedCompany?.cashBalance || 0) - Number(loanFormData.totalAmount)) < 0 ? '#f43f5e' : '#10b981'
+                                                    }}>
+                                                        ₹{((selectedCompany?.cashBalance || 0) - Number(loanFormData.totalAmount)).toLocaleString('en-IN')}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <div style={{ fontSize: '11px', color: '#10b981', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                <span>💵</span> Deducts from Cash in Hand & logs in Cash Book
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <BankSelector
+                                            bankAccounts={bankAccounts}
+                                            value={loanFormData.bankAccountId}
+                                            amount={loanFormData.totalAmount}
+                                            onChange={(bId) => setLoanFormData({ ...loanFormData, bankAccountId: bId, paymentMode: 'Bank Transfer', paidBy: 'Company' })}
+                                        />
+                                    )}
+                                </div>
+
                                 <div>
                                     <label style={{ display: 'block', color: 'rgba(255,255,255,0.6)', fontSize: '11px', fontWeight: '800', marginBottom: '8px', textTransform: 'uppercase' }}>Remarks</label>
                                     <textarea className="input-field" value={loanFormData.remarks} onChange={(e) => setLoanFormData({ ...loanFormData, remarks: e.target.value })} style={{ width: '100%', padding: '15px', background: '#1e293b', color: 'white', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }} rows="2" placeholder="Loan purpose..." />
