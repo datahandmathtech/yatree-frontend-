@@ -305,6 +305,9 @@ const CarUtility = () => {
             if (formData instanceof FormData) {
                 if (!formData.get('vehicleId')) formData.set('vehicleId', targetId);
                 formData.set('maintenanceType', 'Driver Services');
+                formData.set('source', 'Car Utility');
+                formData.set('sourceType', 'Car Utility');
+                formData.set('isCarUtility', 'true');
             }
             await axios.post('/api/admin/maintenance', formData, {
                 headers: {
@@ -1247,6 +1250,9 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 fd.set('date', finalDate);
                 fd.set('billDate', finalDate);
                 fd.set('maintenanceType', 'Driver Services'); // Strict isolation tag
+                fd.set('source', 'Car Utility');
+                fd.set('sourceType', 'Car Utility');
+                fd.set('isCarUtility', 'true');
                 fd.set('category', form.category || 'Car Wash');
                 fd.set('description', form.remarks || '');
                 fd.set('remarks', form.remarks || '');

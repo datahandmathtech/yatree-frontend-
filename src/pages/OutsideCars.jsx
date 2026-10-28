@@ -1826,137 +1826,108 @@ const OutsideCars = () => {
                                 boxShadow: '0 30px 90px -15px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.05)'
                             }}
                         >
-                            {/* Modal Header */}
+                            {/* Top Header Bar matching Emjay Brewery */}
                             <div style={{ 
-                                padding: '18px 28px', 
+                                padding: '16px 28px', 
                                 borderBottom: '1px solid rgba(255,255,255,0.08)', 
                                 display: 'flex', 
                                 justifyContent: 'space-between', 
                                 alignItems: 'center', 
-                                background: 'rgba(15, 23, 42, 0.85)',
-                                backdropFilter: 'blur(12px)',
+                                background: 'rgba(15, 23, 42, 0.95)',
                                 gap: '16px',
                                 flexShrink: 0,
                                 flexWrap: 'wrap'
                             }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
-                                    <div style={{ 
-                                        width: '42px', 
-                                        height: '42px', 
-                                        borderRadius: '12px', 
-                                        background: 'rgba(255, 255, 255, 0.05)', 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        justifyContent: 'center', 
-                                        border: '1px solid rgba(255, 255, 255, 0.08)',
-                                        flexShrink: 0
-                                    }}>
-                                        <Store size={20} color="rgba(255,255,255,0.85)" />
-                                    </div>
-                                    <div style={{ minWidth: 0 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                            <h2 style={{ color: '#ffffff', fontSize: '18px', fontWeight: '800', margin: 0, letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>
-                                                {selectedVendorForLedger.vendorName}
-                                            </h2>
-                                            <span style={{ 
-                                                fontSize: '11px', 
-                                                background: 'rgba(255,255,255,0.06)', 
-                                                color: 'rgba(255,255,255,0.7)', 
-                                                border: '1px solid rgba(255,255,255,0.1)', 
-                                                padding: '2px 8px', 
-                                                borderRadius: '6px', 
-                                                fontWeight: '700',
-                                                letterSpacing: '0.4px',
-                                                whiteSpace: 'nowrap'
-                                            }}>
-                                                Vendor Ledger
-                                            </span>
+                                {/* Left: Back button + Title */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedVendorForLedger(null)}
+                                        className="glass-card-hover-effect"
+                                        style={{
+                                            width: '38px',
+                                            height: '38px',
+                                            borderRadius: '10px',
+                                            background: 'rgba(255,255,255,0.06)',
+                                            border: '1px solid rgba(255,255,255,0.12)',
+                                            color: 'white',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                            transition: '0.15s'
+                                        }}
+                                        title="Back to All Vendors"
+                                    >
+                                        <ChevronLeft size={20} />
+                                    </button>
+                                    <div>
+                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px' }}>
+                                            Vendor Ledger
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                                            <span style={{ 
-                                                fontSize: '11px', 
-                                                color: 'rgba(255,255,255,0.5)', 
-                                                fontWeight: '600'
-                                            }}>
-                                                {selectedVendorForLedger.totalDuties} Total Duties • {selectedVendorForLedger.vehicles.length} Vehicle(s)
-                                            </span>
-                                        </div>
+                                        <h2 style={{ color: '#ffffff', fontSize: '20px', fontWeight: '950', margin: '2px 0 0', letterSpacing: '-0.3px' }}>
+                                            {selectedVendorForLedger.vendorName}
+                                        </h2>
                                     </div>
                                 </div>
 
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flexShrink: 0 }}>
-                                    {/* Due Payable Card */}
-                                    <div style={{ 
-                                        textAlign: 'right',
-                                        background: 'rgba(15, 23, 42, 0.6)',
-                                        border: '1px solid rgba(255,255,255,0.07)',
-                                        borderRadius: '10px',
-                                        padding: '7px 14px'
-                                    }}>
-                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.5px' }}>
-                                            Due Payable
-                                        </div>
-                                        <div style={{ fontSize: '15px', fontWeight: '800', color: '#f87171', lineHeight: '1.2' }}>
-                                            ₹{(selectedVendorForLedger.duePayable ?? selectedVendorForLedger.totalDena ?? 0).toLocaleString('en-IN')}
-                                        </div>
+                                {/* Right: Filter Period (Month Dropdown) + Record Payment + Export CSV + Close */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                                    {/* Filter Period Label & Dropdown */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                                            Filter Period
+                                        </span>
+                                        <select
+                                            value={vendorLedgerMonth}
+                                            onChange={(e) => setVendorLedgerMonth(e.target.value)}
+                                            style={{
+                                                height: '36px',
+                                                padding: '0 12px',
+                                                borderRadius: '8px',
+                                                background: '#070c18',
+                                                border: '1px solid rgba(255,255,255,0.15)',
+                                                color: 'white',
+                                                fontSize: '12px',
+                                                fontWeight: '700',
+                                                cursor: 'pointer',
+                                                outline: 'none'
+                                            }}
+                                        >
+                                            <option value="All">All Months ({selectedVendorForLedger.duties.length})</option>
+                                            {selectedVendorForLedger.monthlyBreakdown?.map(mb => (
+                                                <option key={mb.month} value={mb.month}>
+                                                    {formatMonthYear(mb.month)} ({mb.count})
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
 
-                                    {/* Due Receivable Card */}
-                                    <div style={{ 
-                                        textAlign: 'right',
-                                        background: 'rgba(15, 23, 42, 0.6)',
-                                        border: '1px solid rgba(255,255,255,0.07)',
-                                        borderRadius: '10px',
-                                        padding: '7px 14px'
-                                    }}>
-                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.5px' }}>
-                                            Due Receivable
-                                        </div>
-                                        <div style={{ fontSize: '15px', fontWeight: '800', color: '#34d399', lineHeight: '1.2' }}>
-                                            ₹{(selectedVendorForLedger.dueReceivable ?? selectedVendorForLedger.totalLena ?? 0).toLocaleString('en-IN')}
-                                        </div>
-                                    </div>
-
-                                    {/* Net Balance Card */}
-                                    <div style={{ 
-                                        textAlign: 'right',
-                                        background: 'rgba(15, 23, 42, 0.6)',
-                                        border: '1px solid rgba(255,255,255,0.07)',
-                                        borderRadius: '10px',
-                                        padding: '7px 14px'
-                                    }}>
-                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.5px' }}>
-                                            Net Balance
-                                        </div>
-                                        <div style={{ fontSize: '15px', fontWeight: '800', color: selectedVendorForLedger.netBalance > 0 ? '#f87171' : selectedVendorForLedger.netBalance < 0 ? '#34d399' : '#ffffff', lineHeight: '1.2' }}>
-                                            ₹{Math.abs(selectedVendorForLedger.netBalance || 0).toLocaleString('en-IN')}
-                                        </div>
-                                    </div>
-
-                                    {/* Record Payment Button */}
+                                    {/* Primary Record Payment Button (matches Emjay Brewery) */}
                                     <button 
                                         type="button"
                                         onClick={() => openNewPaymentModal(selectedVendorForLedger.vendorName, selectedVendorForLedger.netBalance > 0 ? 'Paid' : 'Received')}
                                         className="glass-card-hover-effect"
                                         style={{ 
-                                            background: `${theme.primary}18`, 
-                                            border: `1px solid ${theme.primary}44`, 
-                                            color: theme.primary, 
-                                            padding: '8px 14px', 
+                                            background: '#2563eb', 
+                                            border: 'none', 
+                                            color: '#ffffff', 
+                                            padding: '9px 18px', 
                                             borderRadius: '8px', 
                                             fontSize: '12px', 
-                                            fontWeight: '700', 
+                                            fontWeight: '900', 
                                             cursor: 'pointer', 
-                                            display: 'flex', 
+                                            display: 'inline-flex', 
                                             alignItems: 'center', 
                                             gap: '6px',
                                             height: '36px',
-                                            flexShrink: 0
+                                            letterSpacing: '0.4px',
+                                            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)'
                                         }}
                                         title={`Record payment or settlement for ${selectedVendorForLedger.vendorName}`}
                                     >
                                         <Plus size={14} />
-                                        <span>Record Payment</span>
+                                        <span>RECORD PAYMENT</span>
                                     </button>
 
                                     {/* Export CSV Button */}
@@ -1976,8 +1947,7 @@ const OutsideCars = () => {
                                             display: 'flex', 
                                             alignItems: 'center', 
                                             gap: '6px',
-                                            height: '36px',
-                                            flexShrink: 0
+                                            height: '36px'
                                         }}
                                         title="Export Ledger to Excel / CSV"
                                     >
@@ -1985,7 +1955,7 @@ const OutsideCars = () => {
                                         <span>Export CSV</span>
                                     </button>
 
-                                    {/* Close Button */}
+                                    {/* Close Modal Button */}
                                     <button 
                                         type="button"
                                         onClick={() => setSelectedVendorForLedger(null)} 
@@ -1993,15 +1963,14 @@ const OutsideCars = () => {
                                         style={{ 
                                             background: 'rgba(255,255,255,0.05)', 
                                             border: '1px solid rgba(255,255,255,0.1)', 
-                                            color: 'rgba(255,255,255,0.7)', 
+                                            color: 'rgba(255,255,255,0.6)', 
                                             cursor: 'pointer', 
                                             borderRadius: '8px', 
                                             width: '36px', 
                                             height: '36px', 
                                             display: 'flex', 
                                             alignItems: 'center', 
-                                            justifyContent: 'center',
-                                            flexShrink: 0
+                                            justifyContent: 'center'
                                         }}
                                         title="Close"
                                     >
@@ -2010,256 +1979,179 @@ const OutsideCars = () => {
                                 </div>
                             </div>
 
-                            {/* Month-Wise Tabs - Clean LogKaro Segmented Bar */}
-                            <div style={{ 
-                                padding: '8px 24px', 
-                                background: 'rgba(0, 0, 0, 0.25)', 
-                                borderBottom: '1px solid rgba(255,255,255,0.06)', 
-                                display: 'flex', 
-                                alignItems: 'center',
-                                gap: '6px', 
-                                overflowX: 'auto',
-                                flexShrink: 0
-                            }} className="custom-scrollbar">
-                                <button
-                                    type="button"
-                                    onClick={() => setVendorLedgerMonth('All')}
-                                    style={{
-                                        padding: '6px 14px', 
-                                        borderRadius: '7px', 
-                                        border: 'none',
-                                        cursor: 'pointer', 
-                                        whiteSpace: 'nowrap',
-                                        background: vendorLedgerMonth === 'All' ? theme.primary : 'rgba(255,255,255,0.04)',
-                                        color: vendorLedgerMonth === 'All' ? '#ffffff' : 'rgba(255,255,255,0.65)',
-                                        fontWeight: '700', 
-                                        fontSize: '11.5px', 
-                                        display: 'inline-flex', 
-                                        alignItems: 'center', 
-                                        gap: '6px',
-                                        flexShrink: 0,
-                                        transition: 'all 0.15s ease'
-                                    }}
-                                >
-                                    <span>All Months ({selectedVendorForLedger.duties.length})</span>
-                                </button>
-
-                                {selectedVendorForLedger.monthlyBreakdown?.map(mb => {
-                                    const isActive = vendorLedgerMonth === mb.month;
-                                    return (
-                                        <button
-                                            key={mb.month}
-                                            type="button"
-                                            onClick={() => setVendorLedgerMonth(mb.month)}
-                                            style={{
-                                                padding: '6px 14px', 
-                                                borderRadius: '7px', 
-                                                border: 'none',
-                                                cursor: 'pointer', 
-                                                whiteSpace: 'nowrap',
-                                                background: isActive ? theme.primary : 'rgba(255,255,255,0.04)',
-                                                color: isActive ? '#ffffff' : 'rgba(255,255,255,0.65)',
-                                                fontWeight: '700', 
-                                                fontSize: '11.5px', 
-                                                display: 'inline-flex', 
-                                                alignItems: 'center', 
-                                                gap: '6px',
-                                                flexShrink: 0,
-                                                transition: 'all 0.15s ease'
-                                            }}
-                                        >
-                                            <span>{formatMonthYear(mb.month)} ({mb.count})</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Secondary Filter & Search Strip - Streamlined Single Row */}
-                            <div style={{ 
-                                padding: '10px 24px', 
-                                background: 'rgba(255,255,255,0.02)', 
-                                display: 'flex', 
-                                justifyContent: 'space-between', 
-                                alignItems: 'center', 
-                                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                                flexWrap: 'wrap',
-                                gap: '10px',
-                                flexShrink: 0
-                            }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '260px', flexWrap: 'wrap' }}>
-                                    <div style={{ position: 'relative', width: '100%', maxWidth: '240px' }}>
-                                        <Search size={13} color="rgba(255,255,255,0.4)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
-                                        <input
-                                            type="text"
-                                            value={ledgerDutySearch}
-                                            onChange={(e) => setLedgerDutySearch(e.target.value)}
-                                            placeholder="Search plate, guest, duty or route..."
-                                            style={{
-                                                width: '100%',
-                                                height: '34px',
-                                                padding: '6px 10px 6px 30px',
-                                                background: '#070c18',
-                                                border: '1px solid rgba(255,255,255,0.1)',
-                                                borderRadius: '8px',
-                                                color: 'white',
-                                                fontSize: '12px',
-                                                outline: 'none',
-                                                boxSizing: 'border-box'
-                                            }}
-                                        />
-                                        {ledgerDutySearch && (
-                                            <button 
-                                                type="button" 
-                                                onClick={() => setLedgerDutySearch('')}
-                                                style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '2px' }}
-                                            >
-                                                <X size={12} />
-                                            </button>
-                                        )}
+                            {/* 3 Top Summary Cards */}
+                            <div style={{ padding: '20px 28px 0', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', flexShrink: 0 }}>
+                                {/* Card 1: TOTAL BILLED */}
+                                <div style={{
+                                    background: 'rgba(15, 23, 42, 0.6)',
+                                    border: '1px solid rgba(255,255,255,0.07)',
+                                    borderRadius: '14px',
+                                    padding: '16px 20px'
+                                }}>
+                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.6px' }}>
+                                        Total Billed
                                     </div>
-
-                                    {/* Vehicle Filter Dropdown */}
-                                    <select
-                                        value={ledgerVehicleFilter}
-                                        onChange={(e) => setLedgerVehicleFilter(e.target.value)}
-                                        style={{
-                                            height: '34px',
-                                            padding: '4px 10px',
-                                            background: '#070c18',
-                                            border: '1px solid rgba(255,255,255,0.1)',
-                                            borderRadius: '8px',
-                                            color: 'rgba(255,255,255,0.85)',
-                                            fontSize: '12px',
-                                            fontWeight: '600',
-                                            outline: 'none',
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        <option value="All">All Linked Vehicles ({selectedVendorForLedger.vehicles.length})</option>
-                                        {selectedVendorForLedger.vehicles.map(p => (
-                                            <option key={p} value={p}>{p}</option>
-                                        ))}
-                                    </select>
-
-                                    {/* Transaction Type Filter Pills - Clean No Emojis */}
-                                    <div style={{ display: 'flex', gap: '3px', background: 'rgba(0,0,0,0.3)', padding: '2px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap' }}>
-                                        <button
-                                            type="button"
-                                            onClick={() => setLedgerTxTypeFilter('All')}
-                                            style={{
-                                                padding: '4px 10px',
-                                                borderRadius: '6px',
-                                                border: 'none',
-                                                fontSize: '11px',
-                                                fontWeight: '700',
-                                                cursor: 'pointer',
-                                                background: ledgerTxTypeFilter === 'All' ? 'rgba(255,255,255,0.12)' : 'transparent',
-                                                color: ledgerTxTypeFilter === 'All' ? '#ffffff' : 'rgba(255,255,255,0.6)',
-                                                transition: '0.15s'
-                                            }}
-                                        >
-                                            All ({selectedVendorForLedger.duties.length})
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setLedgerTxTypeFilter('Buy')}
-                                            style={{
-                                                padding: '4px 10px',
-                                                borderRadius: '6px',
-                                                border: 'none',
-                                                fontSize: '11px',
-                                                fontWeight: '700',
-                                                cursor: 'pointer',
-                                                background: ledgerTxTypeFilter === 'Buy' ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
-                                                color: ledgerTxTypeFilter === 'Buy' ? '#f87171' : 'rgba(255,255,255,0.6)',
-                                                transition: '0.15s'
-                                            }}
-                                        >
-                                            Payable ({selectedVendorForLedger.duties.filter(d => !d.isPayment && d.isBuy).length})
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setLedgerTxTypeFilter('Sell')}
-                                            style={{
-                                                padding: '4px 10px',
-                                                borderRadius: '6px',
-                                                border: 'none',
-                                                fontSize: '11px',
-                                                fontWeight: '700',
-                                                cursor: 'pointer',
-                                                background: ledgerTxTypeFilter === 'Sell' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
-                                                color: ledgerTxTypeFilter === 'Sell' ? '#34d399' : 'rgba(255,255,255,0.6)',
-                                                transition: '0.15s'
-                                            }}
-                                        >
-                                            Receivable ({selectedVendorForLedger.duties.filter(d => !d.isPayment && !d.isBuy).length})
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setLedgerTxTypeFilter('Payment')}
-                                            style={{
-                                                padding: '4px 10px',
-                                                borderRadius: '6px',
-                                                border: 'none',
-                                                fontSize: '11px',
-                                                fontWeight: '700',
-                                                cursor: 'pointer',
-                                                background: ledgerTxTypeFilter === 'Payment' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
-                                                color: ledgerTxTypeFilter === 'Payment' ? '#34d399' : 'rgba(255,255,255,0.6)',
-                                                transition: '0.15s'
-                                            }}
-                                        >
-                                            Paid ({selectedVendorForLedger.duties.filter(d => d.isPayment && d.paymentType === 'Paid').length})
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setLedgerTxTypeFilter('Receipt')}
-                                            style={{
-                                                padding: '4px 10px',
-                                                borderRadius: '6px',
-                                                border: 'none',
-                                                fontSize: '11px',
-                                                fontWeight: '700',
-                                                cursor: 'pointer',
-                                                background: ledgerTxTypeFilter === 'Receipt' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
-                                                color: ledgerTxTypeFilter === 'Receipt' ? '#38bdf8' : 'rgba(255,255,255,0.6)',
-                                                transition: '0.15s'
-                                            }}
-                                        >
-                                            Received ({selectedVendorForLedger.duties.filter(d => d.isPayment && d.paymentType === 'Received').length})
-                                        </button>
+                                    <div style={{ fontSize: '24px', fontWeight: '1000', color: 'white', marginTop: '4px' }}>
+                                        ₹{(vendorLedgerMonth === 'All' ? (selectedVendorForLedger.totalDena + selectedVendorForLedger.totalLena) : (activeMonthDenaTotal + activeMonthLenaTotal)).toLocaleString('en-IN')}
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: '600', marginTop: '4px' }}>
+                                        {filteredVendorDuties.filter(d => !d.isPayment).length} transactions
                                     </div>
                                 </div>
 
-                                <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.5)', fontWeight: '600' }}>
-                                    Showing <strong style={{ color: 'white' }}>{filteredVendorDuties.length}</strong> / {selectedVendorForLedger.duties.length} entries
+                                {/* Card 2: TOTAL PAID */}
+                                <div style={{
+                                    background: 'rgba(15, 23, 42, 0.6)',
+                                    border: '1px solid rgba(255,255,255,0.07)',
+                                    borderRadius: '14px',
+                                    padding: '16px 20px'
+                                }}>
+                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.6px' }}>
+                                        Total Paid
+                                    </div>
+                                    <div style={{ fontSize: '24px', fontWeight: '1000', color: '#34d399', marginTop: '4px' }}>
+                                        ₹{(vendorLedgerMonth === 'All' ? (selectedVendorForLedger.totalPaid + selectedVendorForLedger.totalReceived) : (activeMonthPaidTotal + activeMonthReceivedTotal)).toLocaleString('en-IN')}
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: '600', marginTop: '4px' }}>
+                                        {filteredVendorDuties.filter(d => d.isPayment).length} payments
+                                    </div>
+                                </div>
+
+                                {/* Card 3: CURRENT BALANCE */}
+                                <div style={{
+                                    background: 'rgba(15, 23, 42, 0.6)',
+                                    border: '1px solid rgba(255,255,255,0.07)',
+                                    borderRadius: '14px',
+                                    padding: '16px 20px'
+                                }}>
+                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.6px' }}>
+                                        Current Balance
+                                    </div>
+                                    <div style={{ 
+                                        fontSize: '24px', 
+                                        fontWeight: '1000', 
+                                        marginTop: '4px',
+                                        color: (vendorLedgerMonth === 'All' ? selectedVendorForLedger.netBalance : activeMonthNetBalance) > 0 ? '#f87171' : (vendorLedgerMonth === 'All' ? selectedVendorForLedger.netBalance : activeMonthNetBalance) < 0 ? '#34d399' : 'white'
+                                    }}>
+                                        ₹{Math.abs(vendorLedgerMonth === 'All' ? selectedVendorForLedger.netBalance : activeMonthNetBalance).toLocaleString('en-IN')}
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: '600', marginTop: '4px' }}>
+                                        {(vendorLedgerMonth === 'All' ? selectedVendorForLedger.netBalance : activeMonthNetBalance) > 0 ? 'Payable to vendor' : (vendorLedgerMonth === 'All' ? selectedVendorForLedger.netBalance : activeMonthNetBalance) < 0 ? 'Receivable from vendor' : 'Account Settled'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Total Outstanding Banner */}
+                            <div style={{
+                                margin: '16px 28px 0',
+                                padding: '16px 22px',
+                                borderRadius: '12px',
+                                background: (vendorLedgerMonth === 'All' ? selectedVendorForLedger.netBalance : activeMonthNetBalance) > 0 
+                                    ? 'rgba(239, 68, 68, 0.08)' 
+                                    : (vendorLedgerMonth === 'All' ? selectedVendorForLedger.netBalance : activeMonthNetBalance) < 0 
+                                        ? 'rgba(34, 197, 94, 0.08)' 
+                                        : 'rgba(255,255,255,0.03)',
+                                border: (vendorLedgerMonth === 'All' ? selectedVendorForLedger.netBalance : activeMonthNetBalance) > 0 
+                                    ? '1px solid rgba(239, 68, 68, 0.25)' 
+                                    : (vendorLedgerMonth === 'All' ? selectedVendorForLedger.netBalance : activeMonthNetBalance) < 0 
+                                        ? '1px solid rgba(34, 197, 94, 0.25)' 
+                                        : '1px solid rgba(255,255,255,0.08)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                flexShrink: 0
+                            }}>
+                                <div>
+                                    <div style={{ 
+                                        fontSize: '11px', 
+                                        color: (vendorLedgerMonth === 'All' ? selectedVendorForLedger.netBalance : activeMonthNetBalance) > 0 ? '#f87171' : '#34d399', 
+                                        fontWeight: '900', 
+                                        textTransform: 'uppercase', 
+                                        letterSpacing: '0.6px' 
+                                    }}>
+                                        Total Outstanding
+                                    </div>
+                                    <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.5)', marginTop: '2px', fontWeight: '600' }}>
+                                        Net standing balance for this vendor
+                                    </div>
+                                </div>
+                                <div style={{ 
+                                    fontSize: '26px', 
+                                    fontWeight: '1000', 
+                                    color: (vendorLedgerMonth === 'All' ? selectedVendorForLedger.netBalance : activeMonthNetBalance) > 0 ? '#f87171' : (vendorLedgerMonth === 'All' ? selectedVendorForLedger.netBalance : activeMonthNetBalance) < 0 ? '#34d399' : 'white' 
+                                }}>
+                                    ₹{Math.abs(vendorLedgerMonth === 'All' ? selectedVendorForLedger.netBalance : activeMonthNetBalance).toLocaleString('en-IN')}
+                                </div>
+                            </div>
+
+                            {/* Transaction Ledger Section Header */}
+                            <div style={{ 
+                                padding: '20px 28px 10px', 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center',
+                                flexShrink: 0
+                            }}>
+                                <h3 style={{ 
+                                    fontSize: '11px', 
+                                    fontWeight: '900', 
+                                    color: 'rgba(255,255,255,0.5)', 
+                                    textTransform: 'uppercase', 
+                                    letterSpacing: '0.8px', 
+                                    margin: 0 
+                                }}>
+                                    Transaction Ledger
+                                </h3>
+                                <div style={{ position: 'relative', width: '240px' }}>
+                                    <Search size={13} color="rgba(255,255,255,0.4)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
+                                    <input
+                                        type="text"
+                                        value={ledgerDutySearch}
+                                        onChange={(e) => setLedgerDutySearch(e.target.value)}
+                                        placeholder="Search narration, ref, car..."
+                                        style={{
+                                            width: '100%',
+                                            height: '32px',
+                                            padding: '4px 10px 4px 28px',
+                                            background: '#070c18',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            borderRadius: '6px',
+                                            color: 'white',
+                                            fontSize: '11.5px',
+                                            outline: 'none',
+                                            boxSizing: 'border-box'
+                                        }}
+                                    />
+                                    {ledgerDutySearch && (
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setLedgerDutySearch('')}
+                                            style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '2px' }}
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Duties Table with Sticky Header */}
-                            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 24px 20px' }}>
-                                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 4px' }}>
+                            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 28px 20px' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                     <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: '#0a101d' }}>
-                                        <tr>
-                                            <th style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Duty Date</th>
-                                            <th style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Vehicle & Model</th>
-                                            <th style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Guest & Route</th>
-                                            <th style={{ padding: '12px 14px', textAlign: 'center', fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Type</th>
-                                            <th style={{ padding: '12px 14px', textAlign: 'right', fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Payable (₹)</th>
-                                            <th style={{ padding: '12px 14px', textAlign: 'right', fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Receivable (₹)</th>
-                                            <th style={{ padding: '12px 14px', textAlign: 'right', fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Balance (₹)</th>
-                                            <th style={{ padding: '12px 14px', textAlign: 'right', fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Actions</th>
+                                        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                                            <th style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', width: '13%' }}>Date</th>
+                                            <th style={{ padding: '12px 14px', textAlign: 'left', fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', width: '41%' }}>Narration</th>
+                                            <th style={{ padding: '12px 14px', textAlign: 'right', fontSize: '11px', color: '#34d399', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', width: '15%' }}>Paid Amount</th>
+                                            <th style={{ padding: '12px 14px', textAlign: 'right', fontSize: '11px', color: '#f87171', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', width: '15%' }}>Bill Amount</th>
+                                            <th style={{ padding: '12px 14px', textAlign: 'right', fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.8px', width: '16%' }}>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {filteredVendorDuties.length === 0 ? (
                                             <tr>
-                                                <td colSpan="8" style={{ padding: '60px 20px', textAlign: 'center' }}>
+                                                <td colSpan="5" style={{ padding: '60px 20px', textAlign: 'center' }}>
                                                     <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '14px', fontWeight: '700' }}>
-                                                        No duties found matching the selected filters.
-                                                    </div>
-                                                    <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '12px', marginTop: '4px' }}>
-                                                        Try selecting "All Months", "All" transaction type, or clearing the search box.
+                                                        No entries found for this vendor in the selected period.
                                                     </div>
                                                 </td>
                                             </tr>
@@ -2267,227 +2159,145 @@ const OutsideCars = () => {
                                             filteredVendorDuties.map((d, dIdx) => (
                                                 <tr 
                                                     key={d._id || dIdx} 
+                                                    className="table-row-hover"
                                                     style={{ 
-                                                        background: d.isPayment 
-                                                            ? (d.paymentType === 'Paid' ? 'rgba(16, 185, 129, 0.04)' : 'rgba(56, 189, 248, 0.04)') 
-                                                            : 'rgba(15, 23, 42, 0.45)',
-                                                        borderRadius: '8px',
+                                                        borderBottom: '1px solid rgba(255,255,255,0.03)',
+                                                        background: d.isPayment ? 'rgba(16, 185, 129, 0.02)' : 'transparent',
                                                         transition: '0.15s'
                                                     }}
                                                 >
-                                                    {/* Duty / Payment Date */}
-                                                    <td style={{ padding: '10px 14px', borderTopLeftRadius: '8px', borderBottomLeftRadius: '8px', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)', borderLeft: d.isPayment ? (d.paymentType === 'Paid' ? '3px solid #10b981' : '3px solid #38bdf8') : '1px solid rgba(255,255,255,0.04)' }}>
-                                                        <div style={{ fontSize: '12.5px', fontWeight: '700', color: '#ffffff' }}>
-                                                            {formatDateIST(d.effectiveDate)}
-                                                        </div>
-                                                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontWeight: '600' }}>
-                                                            {d.effectiveDate?.substring(0, 10)}
-                                                        </div>
+                                                    {/* Date */}
+                                                    <td style={{ padding: '12px 14px', color: 'rgba(255,255,255,0.85)', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                                                        {formatDateIST(d.effectiveDate)}
                                                     </td>
 
-                                                    {/* Vehicle & Model OR Payment Mode */}
-                                                    <td style={{ padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                                    {/* Narration */}
+                                                    <td style={{ padding: '12px 14px' }}>
                                                         {d.isPayment ? (
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                                <span style={{ 
-                                                                    fontSize: '11px', 
-                                                                    fontWeight: '700', 
-                                                                    color: d.paymentType === 'Paid' ? '#34d399' : '#38bdf8',
-                                                                    background: d.paymentType === 'Paid' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(56, 189, 248, 0.12)',
-                                                                    border: d.paymentType === 'Paid' ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(56, 189, 248, 0.25)',
-                                                                    padding: '2px 7px',
-                                                                    borderRadius: '5px',
-                                                                    display: 'inline-flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '4px'
-                                                                }}>
-                                                                    <CreditCard size={11} />
-                                                                    {d.paymentMode || 'Payment'}
-                                                                </span>
-                                                                {d.referenceNumber && (
-                                                                    <span style={{ fontSize: '10.5px', color: '#94a3b8', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>
-                                                                        Ref: {d.referenceNumber}
+                                                            <div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                                    <span style={{ 
+                                                                        fontSize: '12px', 
+                                                                        fontWeight: '800', 
+                                                                        color: d.paymentType === 'Paid' ? '#34d399' : '#38bdf8' 
+                                                                    }}>
+                                                                        Payment {d.paymentType === 'Paid' ? 'Paid' : 'Received'} via {d.paymentMode || 'Cash'}
                                                                     </span>
+                                                                    {d.referenceNumber && (
+                                                                        <span style={{ fontSize: '11px', color: '#94a3b8', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>
+                                                                            Ref: {d.referenceNumber}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                {d.notes && (
+                                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>
+                                                                        {d.notes}
+                                                                    </div>
                                                                 )}
                                                             </div>
                                                         ) : (
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                <span style={{ 
-                                                                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                                                                    fontSize: '12px', 
-                                                                    fontWeight: '750', 
-                                                                    color: '#ffffff',
-                                                                    background: '#070c18',
-                                                                    border: '1px solid rgba(255,255,255,0.12)',
-                                                                    padding: '2px 6px',
-                                                                    borderRadius: '5px',
-                                                                    letterSpacing: '0.5px',
-                                                                    display: 'inline-flex',
-                                                                    alignItems: 'center',
-                                                                    gap: '4px'
-                                                                }}>
-                                                                    <Car size={11} color="rgba(255,255,255,0.7)" />
-                                                                    {d.carNumber?.split('#')[0]}
-                                                                </span>
-                                                                <span style={{ 
-                                                                    fontSize: '10.5px', 
-                                                                    color: 'rgba(255,255,255,0.6)',
-                                                                    background: 'rgba(255,255,255,0.05)',
-                                                                    border: '1px solid rgba(255,255,255,0.08)',
-                                                                    padding: '1px 6px',
-                                                                    borderRadius: '4px',
-                                                                    fontWeight: '600'
-                                                                }}>
-                                                                    {d.model || 'Standard'}
-                                                                </span>
+                                                            <div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                                    <span style={{ 
+                                                                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                                                                        fontSize: '12px', 
+                                                                        fontWeight: '800', 
+                                                                        color: 'white' 
+                                                                    }}>
+                                                                        {d.carNumber?.split('#')[0]}
+                                                                    </span>
+                                                                    {d.model && (
+                                                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.55)' }}>
+                                                                            ({d.model})
+                                                                        </span>
+                                                                    )}
+                                                                    <span style={{ 
+                                                                        fontSize: '10px', 
+                                                                        padding: '2px 6px', 
+                                                                        borderRadius: '4px',
+                                                                        background: d.isBuy ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+                                                                        color: d.isBuy ? '#f87171' : '#34d399',
+                                                                        border: d.isBuy ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(16, 185, 129, 0.25)',
+                                                                        fontWeight: '800'
+                                                                    }}>
+                                                                        {d.isBuy ? 'Duty Payable' : 'Duty Receivable'}
+                                                                    </span>
+                                                                </div>
+                                                                {(d.property || d.guestName || d.dutyType || d.dropLocation) && (
+                                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '3px' }}>
+                                                                        {[d.property, d.guestName, d.dutyType, d.dropLocation].filter(Boolean).join(' • ')}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </td>
 
-                                                    {/* Guest & Route OR Notes */}
-                                                    <td style={{ padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                                    {/* Paid Amount */}
+                                                    <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                                                         {d.isPayment ? (
-                                                            <div>
-                                                                <div style={{ fontSize: '12.5px', fontWeight: '700', color: '#ffffff' }}>
-                                                                    {d.notes || (d.paymentType === 'Paid' ? 'Vendor Settlement Payment' : 'Vendor Payment Receipt')}
-                                                                </div>
-                                                            </div>
-                                                        ) : (
-                                                            <div>
-                                                                <div style={{ fontSize: '12.5px', fontWeight: '700', color: '#ffffff' }}>
-                                                                    {d.guestName || d.property || 'Direct Guest'}
-                                                                </div>
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap', marginTop: '2px' }}>
-                                                                    {d.property && d.guestName && (
-                                                                        <span style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.7)', fontWeight: '600' }}>
-                                                                            {d.property}
-                                                                        </span>
-                                                                    )}
-                                                                    {d.dutyType && (
-                                                                        <span style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.4)', fontWeight: '500' }}>
-                                                                            • {d.dutyType}
-                                                                        </span>
-                                                                    )}
-                                                                    {d.dropLocation && (
-                                                                        <span style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.4)', fontWeight: '500' }}>
-                                                                            → {d.dropLocation}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </td>
-
-                                                    {/* Tx Type */}
-                                                    <td style={{ padding: '10px 14px', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                                        {d.isPayment ? (
-                                                            <span style={{
-                                                                fontSize: '10.5px',
-                                                                fontWeight: '700',
-                                                                padding: '2px 7px',
-                                                                borderRadius: '5px',
-                                                                background: d.paymentType === 'Paid' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(56, 189, 248, 0.12)',
-                                                                color: d.paymentType === 'Paid' ? '#34d399' : '#38bdf8',
-                                                                border: d.paymentType === 'Paid' ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(56, 189, 248, 0.25)',
-                                                                whiteSpace: 'nowrap'
-                                                            }}>
-                                                                {d.paymentType === 'Paid' ? 'Paid' : 'Received'}
+                                                            <span style={{ color: '#34d399', fontWeight: '900', fontSize: '14px' }}>
+                                                                ₹{d.effectiveAmount.toLocaleString('en-IN')}
                                                             </span>
                                                         ) : (
-                                                            <span style={{
-                                                                fontSize: '10.5px',
-                                                                fontWeight: '700',
-                                                                padding: '2px 7px',
-                                                                borderRadius: '5px',
-                                                                background: d.isBuy ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                                                                color: d.isBuy ? '#f87171' : '#34d399',
-                                                                border: d.isBuy ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)',
-                                                                whiteSpace: 'nowrap'
-                                                            }}>
-                                                                {d.isBuy ? 'Payable' : 'Receivable'}
+                                                            <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '13px' }}>
+                                                                ₹0
                                                             </span>
                                                         )}
                                                     </td>
 
-                                                    {/* Payable (₹) */}
-                                                    <td style={{ padding: '10px 14px', textAlign: 'right', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                                    {/* Bill Amount */}
+                                                    <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                                                         {d.isPayment ? (
-                                                            d.paymentType === 'Paid' ? (
-                                                                <div style={{ fontSize: '13px', fontWeight: '750', color: '#34d399' }}>
-                                                                    -₹{d.effectiveAmount.toLocaleString('en-IN')}
-                                                                </div>
-                                                            ) : (
-                                                                <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>
-                                                            )
+                                                            <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '13px' }}>
+                                                                —
+                                                            </span>
                                                         ) : (
-                                                            <div style={{ fontSize: '13px', fontWeight: '750', color: d.isBuy ? 'white' : 'rgba(255,255,255,0.2)' }}>
-                                                                {d.isBuy ? `₹${(d.denaAmount || d.effectiveAmount).toLocaleString('en-IN')}` : '—'}
-                                                            </div>
+                                                            <span style={{ 
+                                                                color: d.isBuy ? '#f87171' : '#34d399', 
+                                                                fontWeight: '900', 
+                                                                fontSize: '14px' 
+                                                            }}>
+                                                                ₹{(d.denaAmount || d.lenaAmount || d.effectiveAmount).toLocaleString('en-IN')}
+                                                            </span>
                                                         )}
                                                     </td>
 
-                                                    {/* Receivable (₹) */}
-                                                    <td style={{ padding: '10px 14px', textAlign: 'right', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                                        {d.isPayment ? (
-                                                            d.paymentType === 'Received' ? (
-                                                                <div style={{ fontSize: '13px', fontWeight: '750', color: '#38bdf8' }}>
-                                                                    -₹{d.effectiveAmount.toLocaleString('en-IN')}
-                                                                </div>
-                                                            ) : (
-                                                                <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>
-                                                            )
-                                                        ) : (
-                                                            <div style={{ fontSize: '13px', fontWeight: '750', color: !d.isBuy ? 'white' : 'rgba(255,255,255,0.2)' }}>
-                                                                {!d.isBuy ? `₹${(d.lenaAmount || d.effectiveAmount).toLocaleString('en-IN')}` : '—'}
-                                                            </div>
-                                                        )}
-                                                    </td>
-
-                                                    {/* Balance (₹) */}
-                                                    <td style={{ padding: '10px 14px', textAlign: 'right', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                                        <span style={{ 
-                                                            fontSize: '13px', 
-                                                            fontWeight: '800', 
-                                                            color: d.runningBalance > 0 ? '#f87171' : d.runningBalance < 0 ? '#34d399' : 'rgba(255,255,255,0.6)' 
-                                                        }}>
-                                                            ₹{Math.abs(d.runningBalance || 0).toLocaleString('en-IN')}
-                                                        </span>
-                                                    </td>
-
-                                                    {/* Actions */}
-                                                    <td style={{ padding: '12px 16px', textAlign: 'right', borderTopRightRadius: '10px', borderBottomRightRadius: '10px', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)', borderRight: '1px solid rgba(255,255,255,0.04)' }}>
-                                                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                                    {/* Actions: Edit & Delete for both payments and duties */}
+                                                    <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                                                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
                                                             {d.isPayment ? (
                                                                 <>
                                                                     <button 
                                                                         type="button"
                                                                         onClick={() => handleEditPayment(d)} 
+                                                                        className="glass-card-hover-effect"
                                                                         style={{ 
-                                                                            width: '32px', 
-                                                                            height: '32px', 
-                                                                            borderRadius: '8px', 
-                                                                            background: 'rgba(16, 185, 129, 0.12)', 
-                                                                            border: '1px solid rgba(16, 185, 129, 0.3)', 
-                                                                            color: '#34d399', 
+                                                                            width: '30px', 
+                                                                            height: '30px', 
+                                                                            borderRadius: '6px', 
+                                                                            background: 'rgba(255, 255, 255, 0.05)', 
+                                                                            border: '1px solid rgba(255, 255, 255, 0.1)', 
+                                                                            color: 'rgba(255,255,255,0.75)', 
                                                                             cursor: 'pointer', 
                                                                             display: 'flex', 
                                                                             alignItems: 'center', 
                                                                             justifyContent: 'center',
                                                                             transition: '0.15s'
                                                                         }}
-                                                                        title="Edit Payment"
+                                                                        title="Edit Payment (Date, Month, Amount, Mode)"
                                                                     >
                                                                         <Edit size={13} />
                                                                     </button>
                                                                     <button 
                                                                         type="button"
                                                                         onClick={() => handleDeletePayment(d._id)} 
+                                                                        className="glass-card-hover-effect"
                                                                         style={{ 
-                                                                            width: '32px', 
-                                                                            height: '32px', 
-                                                                            borderRadius: '8px', 
-                                                                            background: 'rgba(244, 63, 94, 0.12)', 
-                                                                            border: '1px solid rgba(244, 63, 94, 0.25)', 
+                                                                            width: '30px', 
+                                                                            height: '30px', 
+                                                                            borderRadius: '6px', 
+                                                                            background: 'rgba(244, 63, 94, 0.1)', 
+                                                                            border: '1px solid rgba(244, 63, 94, 0.2)', 
                                                                             color: '#f43f5e', 
                                                                             cursor: 'pointer', 
                                                                             display: 'flex', 
@@ -2507,12 +2317,12 @@ const OutsideCars = () => {
                                                                         onClick={() => handleEdit(d)} 
                                                                         className="glass-card-hover-effect"
                                                                         style={{ 
-                                                                            width: '28px', 
-                                                                            height: '28px', 
+                                                                            width: '30px', 
+                                                                            height: '30px', 
                                                                             borderRadius: '6px', 
                                                                             background: 'rgba(255, 255, 255, 0.05)', 
                                                                             border: '1px solid rgba(255, 255, 255, 0.1)', 
-                                                                            color: 'rgba(255,255,255,0.7)', 
+                                                                            color: 'rgba(255,255,255,0.75)', 
                                                                             cursor: 'pointer', 
                                                                             display: 'flex', 
                                                                             alignItems: 'center', 
@@ -2521,15 +2331,15 @@ const OutsideCars = () => {
                                                                         }}
                                                                         title="Edit Duty Entry"
                                                                     >
-                                                                        <Edit size={12} />
+                                                                        <Edit size={13} />
                                                                     </button>
                                                                     <button 
                                                                         type="button"
                                                                         onClick={() => handleDelete(d._id)} 
                                                                         className="glass-card-hover-effect"
                                                                         style={{ 
-                                                                            width: '28px', 
-                                                                            height: '28px', 
+                                                                            width: '30px', 
+                                                                            height: '30px', 
                                                                             borderRadius: '6px', 
                                                                             background: 'rgba(244, 63, 94, 0.1)', 
                                                                             border: '1px solid rgba(244, 63, 94, 0.2)', 
@@ -2542,7 +2352,7 @@ const OutsideCars = () => {
                                                                         }}
                                                                         title="Delete Duty Entry"
                                                                     >
-                                                                        <Trash2 size={12} />
+                                                                        <Trash2 size={13} />
                                                                     </button>
                                                                 </>
                                                             )}
