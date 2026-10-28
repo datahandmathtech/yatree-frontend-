@@ -447,13 +447,16 @@ const OutsideCars = () => {
                 }
             }
 
+            const amtVal = Number(formData.dutyAmount) || 0;
             let payload = {
                 carNumber: internalCarNumber,
                 model: formData.model?.trim(),
                 property: formData.property?.trim(),
                 dutyType: formData.dutyType?.trim() || '',
                 ownerName: formData.ownerName?.trim(),
-                dutyAmount: Number(formData.dutyAmount) || 0,
+                dutyAmount: amtVal,
+                buyAmount: (formData.transactionType || 'Buy') === 'Buy' ? amtVal : 0,
+                sellAmount: formData.transactionType === 'Sell' ? amtVal : 0,
                 dropLocation: formData.dropLocation?.trim() || '',
                 companyId: selectedCompany._id,
                 isOutsideCar: true,
@@ -491,13 +494,20 @@ const OutsideCars = () => {
     };
 
     const handleEdit = (vehicle) => {
+        const isBuy = (vehicle.transactionType || 'Buy') === 'Buy';
+        const effectivePayout = (isBuy && vehicle.buyAmount !== undefined && vehicle.buyAmount !== null && Number(vehicle.buyAmount) > 0)
+            ? vehicle.buyAmount
+            : (vehicle.buyAmount !== undefined && vehicle.buyAmount !== null && vehicle.buyAmount !== ''
+                ? vehicle.buyAmount
+                : (vehicle.dutyAmount !== undefined && vehicle.dutyAmount !== null ? vehicle.dutyAmount : ''));
+
         setFormData({
             carNumber: vehicle.carNumber?.split('#')[0] || '',
             model: vehicle.model,
             property: vehicle.property || '',
             dutyType: vehicle.dutyType,
             ownerName: vehicle.ownerName,
-            dutyAmount: vehicle.dutyAmount,
+            dutyAmount: effectivePayout,
             dropLocation: vehicle.dropLocation,
             transactionType: vehicle.transactionType || 'Buy',
             workBasis: vehicle.workBasis || 'Fix Basis',

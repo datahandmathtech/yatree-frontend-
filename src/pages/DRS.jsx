@@ -104,6 +104,8 @@ export default function DRS() {
         carType: 'Sedan',
         customCarNumber: '',
         customDriverName: '',
+        vendorName: '',
+        vendorPayout: '',
         driver: null,
         vehicle: null,
         isDirectBooking: true,
@@ -336,6 +338,8 @@ export default function DRS() {
             carType: duty.carType || '',
             customCarNumber: duty.customCarNumber || duty.carNumber || (duty.vehicle?.carNumber || ''),
             customDriverName: duty.customDriverName || duty.driverName || (duty.driver?.name || ''),
+            vendorName: duty.vendorName || duty.ownerName || duty.vehicle?.ownerName || '',
+            vendorPayout: duty.vendorPayout !== undefined && duty.vendorPayout !== null ? duty.vendorPayout : (duty.buyAmount || ''),
             driver: duty.driver ? { value: duty.driver._id, label: duty.driver.name } : null,
             vehicle: duty.vehicle ? { value: duty.vehicle._id, label: `${duty.vehicle.carNumber} - ${duty.vehicle.model}` } : null,
             isDirectBooking: duty.isDirectBooking !== false,
@@ -361,6 +365,10 @@ export default function DRS() {
                 (formData.vehicle?.value && String(v._id) === String(formData.vehicle.value) && (!cleanCarNum || v.carNumber?.trim().toLowerCase() === cleanCarNum.toLowerCase()))
             );
 
+            const finalVendor = (formData.vendorName || '').trim();
+            const finalPayout = Number(formData.vendorPayout) || 0;
+            const isOutside = Boolean(finalVendor || (!matchedFleetVehicle && cleanCarNum));
+
             const payload = {
                 ...formData,
                 company: selectedCompany?._id,
@@ -369,6 +377,11 @@ export default function DRS() {
                 driverMobile: matchedFleetDriver ? (matchedFleetDriver.mobile || matchedFleetDriver.phone || '') : (formData.driverMobile || ''),
                 vehicle: matchedFleetVehicle ? matchedFleetVehicle._id : null,
                 customCarNumber: cleanCarNum || (matchedFleetVehicle ? matchedFleetVehicle.carNumber : ''),
+                vendorName: finalVendor,
+                ownerName: finalVendor,
+                vendorPayout: finalPayout,
+                buyAmount: finalPayout,
+                isOutsideCar: isOutside,
                 revenue: Number(formData.revenue) || 0,
                 status: (matchedFleetDriver || cleanDrvName || matchedFleetVehicle || cleanCarNum) ? 'Assigned' : 'Pending'
             };
@@ -748,7 +761,13 @@ export default function DRS() {
 
                                         {/* 9. Car Number */}
                                         <td style={{ padding: '13px 16px', color: 'rgba(255,255,255,0.85)', fontSize: '13px' }}>
-                                            {carNumDisplay}
+                                            <div>{carNumDisplay}</div>
+                                            {Boolean(duty.vendorName || duty.ownerName || duty.vehicle?.ownerName) && (
+                                                <div style={{ fontSize: '10.5px', color: '#c084fc', fontWeight: '700', marginTop: '2px' }}>
+                                                    🏢 {duty.vendorName || duty.ownerName || duty.vehicle?.ownerName}
+                                                    {duty.vendorPayout ? ` (₹${duty.vendorPayout})` : ''}
+                                                </div>
+                                            )}
                                         </td>
 
                                         {/* 10. Driver Name */}
@@ -1195,7 +1214,10 @@ export default function DRS() {
                                                         ...formData,
                                                         vehicle: { value: v._id, label: `${v.carNumber} - ${v.model || v.type}` },
                                                         customCarNumber: v.carNumber,
-                                                        carType: v.model || v.type || formData.carType
+                                                        carType: v.model || v.type || formData.carType,
+                                                        ...(v.ownerName ? { vendorName: v.ownerName } : {}),
+                                                        ...(v.buyAmount ? { vendorPayout: v.buyAmount } : {}),
+                                                        ...(v.driverName && !formData.customDriverName ? { customDriverName: v.driverName } : {})
                                                     });
                                                 }
                                             }}
@@ -1212,10 +1234,67 @@ export default function DRS() {
                                     <input 
                                         type="text" 
                                         value={formData.customCarNumber} 
-                                        onChange={e => setFormData({ ...formData, customCarNumber: e.target.value })} 
+                                        onChange={e => {
+                                            const val = e.target.value.toUpperCase();
+                                            const clean = val.replace(/[\s-]/g, '');
+                                            const matchedOut = (vehicles || []).find(v => {
+                                                const vPlate = (v.carNumber || '').replace(/[\s-]/g, '').toUpperCase();
+                                                return vPlate && (vPlate === clean || clean.includes(vPlate) || vPlate.includes(clean));
+                                            });
+                                            const matchedDuty = (duties || []).find(d => {
+                                                const dPlate = (d.vehicle?.carNumber || d.customCarNumber || '').replace(/[\s-]/g, '').toUpperCase();
+                                                return dPlate && (dPlate === clean || clean.includes(dPlate) || dPlate.includes(clean)) && (d.vendorName || d.ownerName);
+                                            });
+                                            const autoVendor = matchedOut?.ownerName || matchedDuty?.vendorName || matchedDuty?.ownerName || '';
+                                            const autoPayout = matchedOut?.buyAmount || matchedDuty?.vendorPayout || '';
+                                            const autoDriver = matchedOut?.driverName || matchedDuty?.driver?.name || matchedDuty?.customDriverName || '';
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                customCarNumber: val,
+                                                ...(autoVendor && !prev.vendorName ? { vendorName: autoVendor } : {}),
+                                                ...(autoPayout && !prev.vendorPayout ? { vendorPayout: autoPayout } : {}),
+                                                ...(autoDriver && !prev.customDriverName ? { customDriverName: autoDriver } : {})
+                                            }));
+                                        }} 
                                         style={inputStyle} 
                                         placeholder="e.g. RJ27 TA 8946 or type custom car no." 
                                     />
+                                    {/* Vendor / Owner & Payout Section directly below Car Number */}
+                                    <div style={{
+                                        marginTop: '8px',
+                                        background: 'rgba(192, 132, 252, 0.05)',
+                                        border: '1px solid rgba(192, 132, 252, 0.25)',
+                                        borderRadius: '8px',
+                                        padding: '8px 10px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '6px'
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <label style={{ color: '#c084fc', fontSize: '11.5px', fontWeight: '800' }}>
+                                                🏢 Outside Vendor / Market Owner & Payout
+                                            </label>
+                                            <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
+                                                (Auto-matches external vehicle & vendor ledger)
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '8px' }}>
+                                            <input 
+                                                type="text" 
+                                                value={formData.vendorName || ''} 
+                                                onChange={e => setFormData(prev => ({ ...prev, vendorName: e.target.value }))} 
+                                                style={{ ...inputStyle, padding: '7px 10px', fontSize: '12px', color: '#e9d5ff' }} 
+                                                placeholder="Vendor / Owner Name" 
+                                            />
+                                            <input 
+                                                type="number" 
+                                                value={formData.vendorPayout || ''} 
+                                                onChange={e => setFormData(prev => ({ ...prev, vendorPayout: e.target.value }))} 
+                                                style={{ ...inputStyle, padding: '7px 10px', fontSize: '12px', color: '#fca5a5' }} 
+                                                placeholder="Payout (₹)" 
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* 10. Driver Name */}

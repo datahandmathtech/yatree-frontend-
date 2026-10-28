@@ -93,6 +93,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
     // Dropdowns
     const [drivers, setDrivers] = useState([]);
     const [vehicles, setVehicles] = useState([]);
+    const [outsideVehicles, setOutsideVehicles] = useState([]);
     const [banks, setBanks] = useState([]);
 
     // Modal States
@@ -107,6 +108,8 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
     const [assignCustomDriverName, setAssignCustomDriverName] = useState('');
     const [assignVehicleId, setAssignVehicleId] = useState('');
     const [assignCustomCarNumber, setAssignCustomCarNumber] = useState('');
+    const [assignVendorName, setAssignVendorName] = useState('');
+    const [assignVendorPayout, setAssignVendorPayout] = useState('');
     const [savingAssign, setSavingAssign] = useState(false);
     const [savingEdit, setSavingEdit] = useState(false);
 
@@ -268,17 +271,109 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
     const fetchDropdowns = async () => {
         if (!selectedCompany?._id) return;
         try {
-            const [dRes, vRes, bRes] = await Promise.all([
+            const [dRes, vRes, bRes, outVRes] = await Promise.all([
                 axios.get(`/api/admin/drivers/${selectedCompany._id}?usePagination=false&status=active`).catch(() => ({ data: [] })),
                 axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false`).catch(() => ({ data: [] })),
-                axios.get(`/api/banks/company/${selectedCompany._id}`).catch(() => ({ data: [] }))
+                axios.get(`/api/banks/company/${selectedCompany._id}`).catch(() => ({ data: [] })),
+                axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false&type=outside&includeBlocked=true`).catch(() => ({ data: [] }))
             ]);
             setDrivers(dRes.data?.drivers || dRes.data || []);
             setVehicles(vRes.data?.vehicles || vRes.data || []);
             setBanks(Array.isArray(bRes.data) ? bRes.data : []);
+            setOutsideVehicles(outVRes.data?.vehicles || outVRes.data || []);
         } catch (err) {
             console.error('Error loading dropdowns in Live DRS:', err);
         }
+    };
+
+    // Memoized list of all unique vendors across outside fleet, vehicles, and duties
+    const uniqueVendorsList = useMemo(() => {
+        const set = new Set();
+        (outsideVehicles || []).forEach(v => {
+            if (v.ownerName?.trim()) set.add(v.ownerName.trim());
+            if (v.vendorName?.trim()) set.add(v.vendorName.trim());
+        });
+        (vehicles || []).forEach(v => {
+            if (v.ownerName?.trim()) set.add(v.ownerName.trim());
+        });
+        (duties || []).forEach(d => {
+            if (d.vendorName?.trim()) set.add(d.vendorName.trim());
+            if (d.ownerName?.trim()) set.add(d.ownerName.trim());
+        });
+        return Array.from(set).sort();
+    }, [outsideVehicles, vehicles, duties]);
+
+    // Helper: Find vendor, driver and payout for a given car plate
+    const findMatchingVendorAndDriver = (inputCarNo) => {
+        if (!inputCarNo) return null;
+        const cleanInput = inputCarNo.replace(/[\s-]/g, '').toUpperCase();
+        if (!cleanInput) return null;
+
+        // 1. Search in outside vehicles
+        const matchedOut = (outsideVehicles || []).find(v => {
+            const vPlate = (v.carNumber || v.plateNumber || '').replace(/[\s-]/g, '').toUpperCase();
+            return vPlate && (vPlate === cleanInput || cleanInput.includes(vPlate) || vPlate.includes(cleanInput));
+        });
+        if (matchedOut) {
+            return {
+                vendorName: matchedOut.ownerName || matchedOut.vendorName || '',
+                driverName: matchedOut.driverName || matchedOut.driver?.name || '',
+                driverPhone: matchedOut.driverPhone || matchedOut.driver?.mobile || '',
+                buyAmount: matchedOut.buyAmount || matchedOut.dailyRate || matchedOut.payout || '',
+                carType: matchedOut.carType || matchedOut.model || ''
+            };
+        }
+
+        // 2. Search in all vehicles (in case an outside car was saved in main vehicle collection)
+        const matchedFleet = (vehicles || []).find(v => {
+            const vPlate = (v.carNumber || v.plateNumber || '').replace(/[\s-]/g, '').toUpperCase();
+            return vPlate && (vPlate === cleanInput || cleanInput.includes(vPlate) || vPlate.includes(cleanInput));
+        });
+        if (matchedFleet && (matchedFleet.ownerName || matchedFleet.isOutsideCar)) {
+            return {
+                vendorName: matchedFleet.ownerName || '',
+                driverName: matchedFleet.driverName || matchedFleet.driver?.name || '',
+                driverPhone: matchedFleet.driverPhone || matchedFleet.driver?.mobile || '',
+                buyAmount: matchedFleet.buyAmount || '',
+                carType: matchedFleet.carType || matchedFleet.model || ''
+            };
+        }
+
+        // 3. Search past duties
+        const matchedDuty = (duties || []).find(d => {
+            const dPlate = (d.vehicle?.carNumber || d.customCarNumber || '').replace(/[\s-]/g, '').toUpperCase();
+            return dPlate && (dPlate === cleanInput || cleanInput.includes(dPlate) || dPlate.includes(cleanInput)) && (d.vendorName || d.ownerName);
+        });
+        if (matchedDuty) {
+            return {
+                vendorName: matchedDuty.vendorName || matchedDuty.ownerName || '',
+                driverName: matchedDuty.driver?.name || matchedDuty.customDriverName || '',
+                driverPhone: matchedDuty.driver?.mobile || '',
+                buyAmount: matchedDuty.vendorPayout || '',
+                carType: matchedDuty.carType || ''
+            };
+        }
+
+        return null;
+    };
+
+    // Helper: Find vendor name by driver name
+    const findVendorByDriver = (driverNameOrId) => {
+        if (!driverNameOrId) return '';
+        const clean = String(driverNameOrId).toLowerCase().trim();
+        const outV = (outsideVehicles || []).find(v => {
+            const dName = (v.driverName || v.driver?.name || '').toLowerCase().trim();
+            return dName && (dName === clean || dName.includes(clean) || clean.includes(dName));
+        });
+        if (outV && (outV.ownerName || outV.vendorName)) return outV.ownerName || outV.vendorName;
+
+        const pastDuty = (duties || []).find(d => {
+            const dName = (d.driver?.name || d.customDriverName || '').toLowerCase().trim();
+            return dName && (dName === clean || dName.includes(clean) || clean.includes(dName)) && (d.vendorName || d.ownerName);
+        });
+        if (pastDuty) return pastDuty.vendorName || pastDuty.ownerName;
+
+        return '';
     };
 
     // Filter & Sort Duties
@@ -1188,10 +1283,30 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
         setSelectedDutyForAssign(duty);
         const drvId = duty.driver?._id || (typeof duty.driver === 'string' ? duty.driver : '');
         const vehId = duty.vehicle?._id || (typeof duty.vehicle === 'string' ? duty.vehicle : '');
+        const carNum = duty.vehicle?.carNumber || duty.customCarNumber || '';
+        const drvName = duty.driver?.name || duty.customDriverName || '';
+
+        let initialVendor = duty.vendorName || duty.ownerName || duty.vehicle?.ownerName || '';
+        let initialPayout = duty.vendorPayout !== undefined && duty.vendorPayout !== null ? duty.vendorPayout : (duty.buyAmount || '');
+
+        if (!initialVendor && carNum) {
+            const match = findMatchingVendorAndDriver(carNum);
+            if (match?.vendorName) {
+                initialVendor = match.vendorName;
+                if (!initialPayout && match.buyAmount) initialPayout = match.buyAmount;
+            }
+        }
+        if (!initialVendor && drvName) {
+            const vMatch = findVendorByDriver(drvName);
+            if (vMatch) initialVendor = vMatch;
+        }
+
         setAssignDriverId(drvId || '');
-        setAssignCustomDriverName(duty.driver?.name || duty.customDriverName || '');
+        setAssignCustomDriverName(drvName);
         setAssignVehicleId(vehId || '');
-        setAssignCustomCarNumber(duty.vehicle?.carNumber || duty.customCarNumber || '');
+        setAssignCustomCarNumber(carNum);
+        setAssignVendorName(initialVendor);
+        setAssignVendorPayout(initialPayout);
         setShowAssignModal(true);
     };
 
@@ -1206,6 +1321,9 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
 
             const finalDriverName = selectedDriverObj ? selectedDriverObj.name : (assignCustomDriverName || '').trim();
             const finalCarNumber = selectedVehicleObj ? selectedVehicleObj.carNumber : (assignCustomCarNumber || '').trim();
+            const finalVendorName = (assignVendorName || '').trim();
+            const finalVendorPayout = Number(assignVendorPayout) || 0;
+            const isOutside = Boolean(finalVendorName || (!selectedVehicleObj && finalCarNumber));
 
             const updatePayload = {
                 driver: assignDriverId || null,
@@ -1213,6 +1331,11 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                 vehicle: assignVehicleId || null,
                 customCarNumber: finalCarNumber,
                 carType: selectedVehicleObj ? (selectedVehicleObj.model || selectedVehicleObj.type || selectedDutyForAssign.carType) : selectedDutyForAssign.carType,
+                vendorName: finalVendorName,
+                ownerName: finalVendorName,
+                vendorPayout: finalVendorPayout,
+                buyAmount: finalVendorPayout,
+                isOutsideCar: isOutside,
                 status: (assignDriverId || finalDriverName || assignVehicleId || finalCarNumber) ? 'Assigned' : selectedDutyForAssign.status
             };
 
@@ -1237,6 +1360,9 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
         try {
             const selectedDriverObj = drivers.find(d => d._id === editForm.driver);
             const selectedVehicleObj = vehicles.find(v => v._id === editForm.vehicle);
+            const finalVendorName = (editForm.vendorName || '').trim();
+            const finalVendorPayout = Number(editForm.vendorPayout) || 0;
+            const isOutside = Boolean(finalVendorName || (!selectedVehicleObj && (editForm.customCarNumber || '').trim()));
 
             const updatePayload = {
                 clientName: editForm.clientName,
@@ -1253,6 +1379,11 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                 customDriverName: selectedDriverObj ? selectedDriverObj.name : editForm.customDriverName,
                 vehicle: editForm.vehicle || null,
                 customCarNumber: selectedVehicleObj ? selectedVehicleObj.carNumber : editForm.customCarNumber,
+                vendorName: finalVendorName,
+                ownerName: finalVendorName,
+                vendorPayout: finalVendorPayout,
+                buyAmount: finalVendorPayout,
+                isOutsideCar: isOutside,
                 status: editForm.status || 'Scheduled',
                 guestRemarks: editForm.guestRemarks || ''
             };
@@ -1271,6 +1402,22 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
 
     const openEditModal = (duty) => {
         setSelectedDutyForEdit(duty);
+        const carNum = duty.vehicle?.carNumber || duty.customCarNumber || '';
+        const drvName = duty.driver?.name || duty.customDriverName || '';
+        let initVendor = duty.vendorName || duty.ownerName || duty.vehicle?.ownerName || '';
+        let initPayout = duty.vendorPayout !== undefined && duty.vendorPayout !== null ? duty.vendorPayout : (duty.buyAmount || '');
+        if (!initVendor && carNum) {
+            const m = findMatchingVendorAndDriver(carNum);
+            if (m?.vendorName) {
+                initVendor = m.vendorName;
+                if (!initPayout && m.buyAmount) initPayout = m.buyAmount;
+            }
+        }
+        if (!initVendor && drvName) {
+            const vm = findVendorByDriver(drvName);
+            if (vm) initVendor = vm;
+        }
+
         setEditForm({
             clientName: duty.clientName || '',
             mobileNumber: duty.mobileNumber || '',
@@ -1282,9 +1429,11 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
             revenue: duty.revenue || 0,
             paymentStatus: duty.paymentStatus || 'Advance Received',
             driver: duty.driver?._id || duty.driver || '',
-            customDriverName: duty.customDriverName || '',
+            customDriverName: drvName,
             vehicle: duty.vehicle?._id || duty.vehicle || '',
-            customCarNumber: duty.customCarNumber || '',
+            customCarNumber: carNum,
+            vendorName: initVendor,
+            vendorPayout: initPayout,
             status: duty.status || 'Scheduled',
             guestRemarks: duty.guestRemarks || ''
         });
@@ -1548,6 +1697,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                         selectedCompany={selectedCompany}
                         drivers={drivers}
                         vehicles={vehicles}
+                        outsideVehicles={outsideVehicles}
                         onRefresh={() => {
                             fetchDuties();
                             fetchAllCompanyBookings();
@@ -2654,6 +2804,12 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                                     <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: '11px', fontWeight: '600' }}>
                                                         {carModel}
                                                     </span>
+                                                    {Boolean(duty.vendorName || duty.ownerName || duty.vehicle?.ownerName) && (
+                                                        <span style={{ fontSize: '10.5px', color: '#c084fc', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                                            🏢 {duty.vendorName || duty.ownerName || duty.vehicle?.ownerName}
+                                                            {duty.vendorPayout ? ` (₹${duty.vendorPayout})` : ''}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             ) : (
                                                 <button
@@ -3236,6 +3392,8 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                                     const vObj = vehicles.find(v => v._id === linkedVehId);
                                                     if (vObj) setAssignCustomCarNumber(vObj.carNumber);
                                                 }
+                                                const vendorByDrv = findVendorByDriver(dObj.name);
+                                                if (vendorByDrv && !assignVendorName) setAssignVendorName(vendorByDrv);
                                             }
                                         }}
                                         style={{ width: '100%', padding: '11px 12px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
@@ -3249,8 +3407,13 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                         type="text"
                                         value={assignCustomDriverName}
                                         onChange={(e) => {
-                                            setAssignCustomDriverName(e.target.value);
+                                            const dVal = e.target.value;
+                                            setAssignCustomDriverName(dVal);
                                             if (assignDriverId) setAssignDriverId('');
+                                            if (dVal && !assignVendorName) {
+                                                const vendorByDrv = findVendorByDriver(dVal);
+                                                if (vendorByDrv) setAssignVendorName(vendorByDrv);
+                                            }
                                         }}
                                         placeholder="Or type Driver Name (e.g., Ramesh / Vendor Driver)"
                                         style={{ marginTop: '6px', width: '100%', padding: '9px 12px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(74, 222, 128, 0.3)', borderRadius: '8px', color: '#4ade80', fontSize: '12.5px', fontWeight: '700', outline: 'none' }}
@@ -3269,6 +3432,11 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                             const vObj = vehicles.find(v => v._id === vId);
                                             if (vObj) {
                                                 setAssignCustomCarNumber(vObj.carNumber);
+                                                if (vObj.ownerName) setAssignVendorName(vObj.ownerName);
+                                                if (vObj.buyAmount) setAssignVendorPayout(vObj.buyAmount);
+                                                if (vObj.driverName && !assignCustomDriverName && !assignDriverId) {
+                                                    setAssignCustomDriverName(vObj.driverName);
+                                                }
                                             }
                                         }}
                                         style={{ width: '100%', padding: '11px 12px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
@@ -3282,12 +3450,64 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                         type="text"
                                         value={assignCustomCarNumber}
                                         onChange={(e) => {
-                                            setAssignCustomCarNumber(e.target.value.toUpperCase());
+                                            const val = e.target.value.toUpperCase();
+                                            setAssignCustomCarNumber(val);
                                             if (assignVehicleId) setAssignVehicleId('');
+                                            if (val) {
+                                                const match = findMatchingVendorAndDriver(val);
+                                                if (match) {
+                                                    if (match.vendorName && !assignVendorName) setAssignVendorName(match.vendorName);
+                                                    if (match.buyAmount && !assignVendorPayout) setAssignVendorPayout(match.buyAmount);
+                                                    if (match.driverName && !assignCustomDriverName && !assignDriverId) {
+                                                        setAssignCustomDriverName(match.driverName);
+                                                    }
+                                                }
+                                            }
                                         }}
                                         placeholder="Or type Car Number (e.g., RJ27TA9053)"
                                         style={{ marginTop: '6px', width: '100%', padding: '9px 12px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '8px', color: '#38bdf8', fontSize: '12.5px', fontWeight: '800', outline: 'none' }}
                                     />
+                                </div>
+
+                                {/* 🏢 3. Outside Vendor / Owner & Payout Details */}
+                                <div style={{
+                                    background: 'rgba(192, 132, 252, 0.05)',
+                                    border: '1px solid rgba(192, 132, 252, 0.25)',
+                                    borderRadius: '12px',
+                                    padding: '12px 14px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <label style={{ fontSize: '12px', color: '#c084fc', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                            🏢 3. Vendor / Owner & Payout Details
+                                        </label>
+                                        <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
+                                            (Auto-matches external vehicle & vendor ledger)
+                                        </span>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '8px' }}>
+                                        <div>
+                                            <input
+                                                type="text"
+                                                list="drsOpsVendorDataList"
+                                                value={assignVendorName}
+                                                onChange={(e) => setAssignVendorName(e.target.value)}
+                                                placeholder="Vendor / Owner Name (e.g. Travel World)"
+                                                style={{ width: '100%', padding: '9px 12px', background: '#0f172a', border: '1px solid rgba(192, 132, 252, 0.45)', borderRadius: '8px', color: '#e9d5ff', fontSize: '12px', fontWeight: '700', outline: 'none' }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <input
+                                                type="number"
+                                                value={assignVendorPayout}
+                                                onChange={(e) => setAssignVendorPayout(e.target.value)}
+                                                placeholder="Payout (₹)"
+                                                style={{ width: '100%', padding: '9px 12px', background: '#0f172a', border: '1px solid rgba(248, 113, 113, 0.45)', borderRadius: '8px', color: '#fca5a5', fontSize: '12px', fontWeight: '700', outline: 'none' }}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
@@ -3469,27 +3689,120 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                         <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>Driver</label>
                                         <select
                                             value={editForm.driver}
-                                            onChange={(e) => setEditForm({ ...editForm, driver: e.target.value })}
+                                            onChange={(e) => {
+                                                const dId = e.target.value;
+                                                const dObj = drivers.find(d => d._id === dId);
+                                                const vendorByDrv = dObj ? findVendorByDriver(dObj.name) : '';
+                                                setEditForm(prev => ({
+                                                    ...prev,
+                                                    driver: dId,
+                                                    customDriverName: dObj ? dObj.name : prev.customDriverName,
+                                                    ...(vendorByDrv && !prev.vendorName ? { vendorName: vendorByDrv } : {})
+                                                }));
+                                            }}
                                             style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
                                         >
-                                            <option value="">-- No Driver --</option>
+                                            <option value="">-- No / Outside Driver --</option>
                                             {drivers.map(d => (
                                                 <option key={d._id} value={d._id}>{d.name} ({d.mobile || 'No mob'})</option>
                                             ))}
                                         </select>
+                                        <input
+                                            type="text"
+                                            value={editForm.customDriverName || ''}
+                                            onChange={(e) => {
+                                                const dVal = e.target.value;
+                                                const vendorByDrv = findVendorByDriver(dVal);
+                                                setEditForm(prev => ({
+                                                    ...prev,
+                                                    customDriverName: dVal,
+                                                    ...(prev.driver ? { driver: '' } : {}),
+                                                    ...(vendorByDrv && !prev.vendorName ? { vendorName: vendorByDrv } : {})
+                                                }));
+                                            }}
+                                            placeholder="Or enter driver name"
+                                            style={{ marginTop: '5px', width: '100%', padding: '7px 10px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(74, 222, 128, 0.3)', borderRadius: '7px', color: '#4ade80', fontSize: '11.5px', fontWeight: '700', outline: 'none' }}
+                                        />
                                     </div>
                                     <div>
                                         <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>Vehicle</label>
                                         <select
                                             value={editForm.vehicle}
-                                            onChange={(e) => setEditForm({ ...editForm, vehicle: e.target.value })}
+                                            onChange={(e) => {
+                                                const vId = e.target.value;
+                                                const vObj = vehicles.find(v => v._id === vId);
+                                                setEditForm(prev => ({
+                                                    ...prev,
+                                                    vehicle: vId,
+                                                    customCarNumber: vObj ? vObj.carNumber : prev.customCarNumber,
+                                                    carType: vObj ? (vObj.model || vObj.type || prev.carType) : prev.carType,
+                                                    ...(vObj?.ownerName ? { vendorName: vObj.ownerName } : {}),
+                                                    ...(vObj?.buyAmount ? { vendorPayout: vObj.buyAmount } : {}),
+                                                    ...(vObj?.driverName && !prev.customDriverName ? { customDriverName: vObj.driverName } : {})
+                                                }));
+                                            }}
                                             style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
                                         >
-                                            <option value="">-- No Vehicle --</option>
+                                            <option value="">-- No / Outside Vehicle --</option>
                                             {vehicles.map(v => (
                                                 <option key={v._id} value={v._id}>{v.carNumber} - {v.model || v.type}</option>
                                             ))}
                                         </select>
+                                        <input
+                                            type="text"
+                                            value={editForm.customCarNumber || ''}
+                                            onChange={(e) => {
+                                                const val = e.target.value.toUpperCase();
+                                                const match = findMatchingVendorAndDriver(val);
+                                                setEditForm(prev => ({
+                                                    ...prev,
+                                                    customCarNumber: val,
+                                                    ...(prev.vehicle ? { vehicle: '' } : {}),
+                                                    ...(match?.vendorName && !prev.vendorName ? { vendorName: match.vendorName } : {}),
+                                                    ...(match?.buyAmount && !prev.vendorPayout ? { vendorPayout: match.buyAmount } : {}),
+                                                    ...(match?.driverName && !prev.customDriverName ? { customDriverName: match.driverName } : {})
+                                                }));
+                                            }}
+                                            placeholder="Or enter car number"
+                                            style={{ marginTop: '5px', width: '100%', padding: '7px 10px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '7px', color: '#38bdf8', fontSize: '11.5px', fontWeight: '800', outline: 'none' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* 🏢 Vendor & Payout Section in Edit Modal */}
+                                <div style={{
+                                    background: 'rgba(192, 132, 252, 0.05)',
+                                    border: '1px solid rgba(192, 132, 252, 0.25)',
+                                    borderRadius: '12px',
+                                    padding: '12px 14px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <label style={{ fontSize: '12px', color: '#c084fc', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                            🏢 Outside Vendor / Market Owner & Payout
+                                        </label>
+                                        <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
+                                            (Auto-matches external vehicle & vendor ledger)
+                                        </span>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '8px' }}>
+                                        <input
+                                            type="text"
+                                            list="drsOpsVendorDataList"
+                                            value={editForm.vendorName || ''}
+                                            onChange={(e) => setEditForm({ ...editForm, vendorName: e.target.value })}
+                                            placeholder="Vendor / Owner Name (e.g. Travel World)"
+                                            style={{ width: '100%', padding: '9px 12px', background: '#0f172a', border: '1px solid rgba(192, 132, 252, 0.45)', borderRadius: '8px', color: '#e9d5ff', fontSize: '12px', fontWeight: '700', outline: 'none' }}
+                                        />
+                                        <input
+                                            type="number"
+                                            value={editForm.vendorPayout || ''}
+                                            onChange={(e) => setEditForm({ ...editForm, vendorPayout: e.target.value })}
+                                            placeholder="Payout (₹)"
+                                            style={{ width: '100%', padding: '9px 12px', background: '#0f172a', border: '1px solid rgba(248, 113, 113, 0.45)', borderRadius: '8px', color: '#fca5a5', fontSize: '12px', fontWeight: '700', outline: 'none' }}
+                                        />
                                     </div>
                                 </div>
 
@@ -4467,6 +4780,12 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                     />
                 )}
             </AnimatePresence>
+
+            <datalist id="drsOpsVendorDataList">
+                {uniqueVendorsList.map((vName, vIdx) => (
+                    <option key={vIdx} value={vName} />
+                ))}
+            </datalist>
         </div>
     );
 }

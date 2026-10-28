@@ -10,6 +10,7 @@ import DriverSalaries from './DriverSalaries';
 import DriverPerformance from './DriverPerformance';
 
 import { X } from 'lucide-react'; // Added X for modal
+import { useAuth } from '../context/AuthContext';
 
 const Chip = ({ label, value, color, onClick }) => (
     <div 
@@ -37,12 +38,16 @@ const Chip = ({ label, value, color, onClick }) => (
 
 const DriversPanel = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
     const rawTab = searchParams.get('tab') || 'drivers';
     const activeTab = (rawTab === 'drs-roster' || rawTab === 'drs_roster') ? 'drivers' : rawTab;
     const [salaryStats, setSalaryStats] = React.useState({ sdr: 0, nights: 0, sdrBreakdown: [], nightsBreakdown: [] });
     const [showBreakdownModal, setShowBreakdownModal] = React.useState(false);
     const [breakdownType, setBreakdownType] = React.useState('DA'); // 'DA' or 'NIGHTS'
+
+    // SuperAdmin or SuperAdmin proxy can access / handle DA/Night & Parking tab
+    const isSuperAdmin = user?.role?.toLowerCase() === 'superadmin' || user?.isSuperAdminProxy || localStorage.getItem('ENABLE_ALLOWANCES_HUB') === 'true';
 
     const setActiveTab = (tab) => {
         setSearchParams({ tab });
@@ -52,6 +57,7 @@ const DriversPanel = () => {
         { id: 'drivers', title: 'DRIVERS', icon: User },
         // { id: 'dutys', title: 'DUTYS', icon: Car },
         { id: 'settlement', title: 'Salaries', icon: IndianRupee },
+        ...(isSuperAdmin ? [{ id: 'allowances', title: 'DA/Night & Parking', icon: IndianRupee }] : []),
         { id: 'performance', title: 'Performance', icon: AlertCircle }
     ];
 
@@ -66,7 +72,9 @@ const DriversPanel = () => {
             case 'dutys':
                 return <Reports isSubComponent={true} />;
             case 'settlement':
-                return <DriverSalaries isSubComponent={true} onStatsUpdate={handleStatsUpdate} />;
+                return <DriverSalaries isSubComponent={true} defaultViewMode="salaries" onStatsUpdate={handleStatsUpdate} />;
+            case 'allowances':
+                return <DriverSalaries isSubComponent={true} defaultViewMode="allowances" onStatsUpdate={handleStatsUpdate} />;
             case 'performance':
                 return <DriverPerformance />;
             default:
@@ -99,7 +107,7 @@ const DriversPanel = () => {
                     </div>
                 </div>
 
-                {activeTab === 'settlement' && (
+                {(activeTab === 'settlement' || activeTab === 'allowances') && (
                     <div style={{ display: 'flex', gap: '15px' }}>
                         <Chip 
                             label={`TOTAL DA (${salaryStats.sdrCount || 0})`} 

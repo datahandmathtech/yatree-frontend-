@@ -50,6 +50,7 @@ const matchFleetVehicle = (vId, vNum, fleetList) => {
 export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, companyId }) {
     const [driversList, setDriversList] = useState([]);
     const [vehiclesList, setVehiclesList] = useState([]);
+    const [outsideVehiclesList, setOutsideVehiclesList] = useState([]);
     const [assignItinerary, setAssignItinerary] = useState([]);
     const [copySuccessMsg, setCopySuccessMsg] = useState('');
     const [savingAssignment, setSavingAssignment] = useState(false);
@@ -65,15 +66,19 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
             const compId = companyId || (typeof booking?.company === 'object' ? booking?.company?._id : booking?.company);
             let dList = [];
             let vList = [];
+            let outVList = [];
             if (compId) {
-                const [dRes, vRes] = await Promise.all([
+                const [dRes, vRes, outVRes] = await Promise.all([
                     axios.get(`/api/admin/drivers/${compId}?usePagination=false&status=active`).catch(() => ({ data: [] })),
-                    axios.get(`/api/admin/vehicles/${compId}?usePagination=false`).catch(() => ({ data: [] }))
+                    axios.get(`/api/admin/vehicles/${compId}?usePagination=false`).catch(() => ({ data: [] })),
+                    axios.get(`/api/admin/vehicles/${compId}?usePagination=false&type=outside&includeBlocked=true`).catch(() => ({ data: [] }))
                 ]);
                 dList = Array.isArray(dRes.data) ? dRes.data : (dRes.data?.drivers || []);
                 vList = Array.isArray(vRes.data) ? vRes.data : (vRes.data?.vehicles || []);
+                outVList = Array.isArray(outVRes.data) ? outVRes.data : (outVRes.data?.vehicles || []);
                 setDriversList(dList);
                 setVehiclesList(vList);
+                setOutsideVehiclesList(outVList);
             }
             initAssignmentItinerary(vList, dList);
         } catch (err) {
@@ -96,6 +101,57 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
     const showTemporaryCopyBanner = (msg) => {
         setCopySuccessMsg(msg);
         setTimeout(() => setCopySuccessMsg(''), 3500);
+    };
+
+    const uniqueVendorsList = useMemo(() => {
+        const set = new Set();
+        (outsideVehiclesList || []).forEach(v => {
+            if (v.ownerName?.trim()) set.add(v.ownerName.trim());
+            if (v.vendorName?.trim()) set.add(v.vendorName.trim());
+        });
+        (vehiclesList || []).forEach(v => {
+            if (v.ownerName?.trim()) set.add(v.ownerName.trim());
+        });
+        (assignItinerary || []).forEach(day => {
+            if (day.ownerName?.trim()) set.add(day.ownerName.trim());
+        });
+        return Array.from(set).sort();
+    }, [outsideVehiclesList, vehiclesList, assignItinerary]);
+
+    const findMatchingOutsideVendor = (inputPlate) => {
+        if (!inputPlate) return null;
+        const clean = inputPlate.replace(/[\s-]/g, '').toUpperCase();
+        if (!clean) return null;
+
+        const matchedOut = (outsideVehiclesList || []).find(v => {
+            const vPlate = (v.carNumber || v.plateNumber || '').replace(/[\s-]/g, '').toUpperCase();
+            return vPlate && (vPlate === clean || clean.includes(vPlate) || vPlate.includes(clean));
+        });
+        if (matchedOut) {
+            return {
+                ownerName: matchedOut.ownerName || matchedOut.vendorName || '',
+                buyAmount: matchedOut.buyAmount || matchedOut.dailyRate || matchedOut.payout || '',
+                driverName: matchedOut.driverName || matchedOut.driver?.name || '',
+                driverPhone: matchedOut.driverPhone || matchedOut.driver?.mobile || '',
+                vehicleType: matchedOut.carType || matchedOut.model || ''
+            };
+        }
+
+        const matchedFleet = (vehiclesList || []).find(v => {
+            const vPlate = (v.carNumber || v.plateNumber || '').replace(/[\s-]/g, '').toUpperCase();
+            return vPlate && (vPlate === clean || clean.includes(vPlate) || vPlate.includes(clean)) && v.ownerName;
+        });
+        if (matchedFleet) {
+            return {
+                ownerName: matchedFleet.ownerName || '',
+                buyAmount: matchedFleet.buyAmount || '',
+                driverName: matchedFleet.driverName || '',
+                driverPhone: matchedFleet.driverPhone || '',
+                vehicleType: matchedFleet.carType || matchedFleet.model || ''
+            };
+        }
+
+        return null;
     };
 
     const initAssignmentItinerary = (currentVehicles = vehiclesList, currentDrivers = driversList) => {
@@ -816,8 +872,15 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                                             handleUpdateDayField(idx, 'ownerName', '');
                                                             handleUpdateDayField(idx, 'buyAmount', '');
                                                         } else {
+                                                            const matchOut = findMatchingOutsideVendor(val);
                                                             handleUpdateDayField(idx, 'vehicleNumber', val);
                                                             handleUpdateDayField(idx, 'isOutsideCar', true);
+                                                            if (matchOut) {
+                                                                if (matchOut.ownerName && !day.ownerName) handleUpdateDayField(idx, 'ownerName', matchOut.ownerName);
+                                                                if (matchOut.buyAmount && !day.buyAmount) handleUpdateDayField(idx, 'buyAmount', matchOut.buyAmount);
+                                                                if (matchOut.driverName && !day.driverName) handleUpdateDayField(idx, 'driverName', matchOut.driverName);
+                                                                if (matchOut.vehicleType && !day.vehicleType) handleUpdateDayField(idx, 'vehicleType', matchOut.vehicleType);
+                                                            }
                                                         }
                                                     }}
                                                     style={{ ...inputStyle, height: '30px', fontSize: '11px', fontWeight: '700', padding: '3px 8px' }}
@@ -825,6 +888,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '4px' }}>
                                                     <input
                                                         type="text"
+                                                        list="assignModalVendorList"
                                                         placeholder="Vendor / Owner Name"
                                                         value={day.ownerName || ''}
                                                         onChange={(e) => handleUpdateDayField(idx, 'ownerName', e.target.value)}
@@ -1056,6 +1120,12 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                     </div>
                 </div>
             </motion.div>
+
+            <datalist id="assignModalVendorList">
+                {uniqueVendorsList.map((vName, vIdx) => (
+                    <option key={vIdx} value={vName} />
+                ))}
+            </datalist>
         </div>
     );
 }

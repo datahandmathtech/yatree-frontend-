@@ -1622,19 +1622,31 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                     {/* ========================================================= */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
                         {/* Left: Special Remarks */}
-                        <div style={{ background: '#0a101d', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '16px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                        <div style={{ background: '#0a101d', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                                 <span style={{ fontSize: '12px', fontWeight: '700', color: 'white' }}>
                                     Any Remark / Special Request of Guest
                                 </span>
+                                {(specialRemarks || '').length > 0 && (
+                                    <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '600' }}>
+                                        {(specialRemarks || '').length} characters
+                                    </span>
+                                )}
                             </div>
                             <textarea
-                                maxLength={500}
-                                rows={4}
+                                rows={5}
                                 placeholder="e.g. Need wheelchair assistance, prefer Non-AC on hills, baby seat..."
                                 value={specialRemarks}
-                                onChange={e => setSpecialRemarks(e.target.value)}
-                                style={{ ...darkInputStyle, resize: 'vertical', minHeight: '90px', lineHeight: '1.4' }}
+                                onChange={e => {
+                                    setSpecialRemarks(e.target.value);
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = `${Math.max(110, e.target.scrollHeight)}px`;
+                                }}
+                                onFocus={e => {
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = `${Math.max(110, e.target.scrollHeight)}px`;
+                                }}
+                                style={{ ...darkInputStyle, resize: 'vertical', minHeight: '110px', lineHeight: '1.6' }}
                             />
                         </div>
 

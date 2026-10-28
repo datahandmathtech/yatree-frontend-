@@ -55,6 +55,7 @@ export default function LiveDRSExcelView({
     selectedCompany,
     drivers = [],
     vehicles = [],
+    outsideVehicles = [],
     onRefresh,
     onOpenDirectBooking,
     onOpenEditDuty,
@@ -64,6 +65,93 @@ export default function LiveDRSExcelView({
 }) {
     // Mode: 'month' (Full Month Sheet), 'single' (Single Date Sheet), 'range' (Date Range Sheet)
     const [filterMode, setFilterMode] = useState('month');
+
+    // Known Unique Vendors list across outside vehicles and past duties
+    const uniqueVendorsList = useMemo(() => {
+        const set = new Set();
+        (outsideVehicles || []).forEach(v => {
+            if (v.ownerName?.trim()) set.add(v.ownerName.trim());
+        });
+        (vehicles || []).forEach(v => {
+            if (v.ownerName?.trim()) set.add(v.ownerName.trim());
+        });
+        (duties || []).forEach(d => {
+            if (d.vendorName?.trim()) set.add(d.vendorName.trim());
+            if (d.ownerName?.trim()) set.add(d.ownerName.trim());
+            if (d.vehicle?.ownerName?.trim()) set.add(d.vehicle.ownerName.trim());
+        });
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }, [outsideVehicles, vehicles, duties]);
+
+    // Lookup matching vendor and driver from known outside cars and duties
+    const findMatchingVendorAndDriver = (carNoInput) => {
+        if (!carNoInput) return null;
+        const normTarget = String(carNoInput).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        if (!normTarget) return null;
+
+        // 1. Check outsideVehicles
+        const matchedOutVeh = (outsideVehicles || []).find(v => {
+            const vPlate = String(v.carNumber || '').split('#')[0].replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            return vPlate && vPlate === normTarget;
+        });
+        if (matchedOutVeh && (matchedOutVeh.ownerName || matchedOutVeh.driverName)) {
+            return {
+                vendorName: matchedOutVeh.ownerName || '',
+                driverName: matchedOutVeh.driverName || '',
+                buyAmount: matchedOutVeh.buyAmount || ''
+            };
+        }
+
+        // 2. Check previous duties with this car
+        const matchedDuty = (duties || []).find(d => {
+            const dPlate = String(d.customCarNumber || d.vehicle?.carNumber || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            return dPlate && dPlate === normTarget && (d.vendorName || d.ownerName);
+        });
+        if (matchedDuty) {
+            return {
+                vendorName: matchedDuty.vendorName || matchedDuty.ownerName || '',
+                driverName: matchedDuty.customDriverName || (matchedDuty.driver?.name || ''),
+                buyAmount: matchedDuty.vendorPayout || ''
+            };
+        }
+
+        // 3. Check all vehicles
+        const matchedVeh = (vehicles || []).find(v => {
+            const vPlate = String(v.carNumber || '').split('#')[0].replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            return vPlate && vPlate === normTarget && v.ownerName;
+        });
+        if (matchedVeh) {
+            return {
+                vendorName: matchedVeh.ownerName || '',
+                driverName: matchedVeh.driverName || '',
+                buyAmount: matchedVeh.buyAmount || ''
+            };
+        }
+
+        return null;
+    };
+
+    // Lookup matching vendor when driver is entered or selected
+    const findVendorByDriver = (driverNameOrId) => {
+        if (!driverNameOrId) return '';
+        const target = String(driverNameOrId).trim().toLowerCase();
+        const matchedDuty = (duties || []).find(d => {
+            const dName = (d.customDriverName || d.driver?.name || '').trim().toLowerCase();
+            const dId = String(d.driver?._id || d.driver || '');
+            return (dName === target || dId === target) && (d.vendorName || d.ownerName);
+        });
+        if (matchedDuty) {
+            return matchedDuty.vendorName || matchedDuty.ownerName || '';
+        }
+        const matchedOut = (outsideVehicles || []).find(v => {
+            const vDrv = (v.driverName || '').trim().toLowerCase();
+            return vDrv && vDrv === target && v.ownerName;
+        });
+        if (matchedOut) {
+            return matchedOut.ownerName || '';
+        }
+        return '';
+    };
     
     // Dynamic Month Selection
     const [selectedYear, setSelectedYear] = useState(2026);
@@ -456,6 +544,10 @@ export default function LiveDRSExcelView({
 
         const effectiveDriverId = matchedDriver ? matchedDriver._id : curDriverId;
         const effectiveVehicleId = matchedVehicle ? matchedVehicle._id : curVehicleId;
+        const curCarNo = duty.vehicle?.carNumber || duty.customCarNumber || (matchedVehicle?.carNumber || '');
+        const autoMatched = findMatchingVendorAndDriver(curCarNo);
+        const curVendorName = duty.vendorName || duty.ownerName || duty.vehicle?.ownerName || (autoMatched?.vendorName || '');
+        const curVendorPayout = duty.vendorPayout !== undefined ? duty.vendorPayout : (duty.vehicle?.buyAmount || (autoMatched?.buyAmount || ''));
 
         setInlineFormData({
             hotel: duty.hotel || '',
@@ -467,9 +559,12 @@ export default function LiveDRSExcelView({
             cOut: duty.cOut || getDutyPackageEndDate(duty) || '',
             carType: duty.carType || (matchedVehicle ? (matchedVehicle.type || matchedVehicle.model) : 'Sedan'),
             vehicleId: effectiveVehicleId || '',
-            customCarNumber: duty.vehicle?.carNumber || duty.customCarNumber || (matchedVehicle?.carNumber || ''),
+            customCarNumber: curCarNo,
+            vendorName: curVendorName,
+            vendorPayout: curVendorPayout,
+            isOutsideCar: Boolean(duty.isOutsideCar || curVendorName || (!effectiveVehicleId && curCarNo)),
             driverId: effectiveDriverId || '',
-            customDriverName: duty.driver?.name || duty.customDriverName || (matchedDriver?.name || ''),
+            customDriverName: duty.driver?.name || duty.customDriverName || (matchedDriver?.name || (autoMatched?.driverName || '')),
             driverMobile: duty.driver?.mobile || duty.driver?.phone || duty.driverMobile || (matchedDriver?.mobile || matchedDriver?.phone || '')
         });
     };
@@ -494,6 +589,11 @@ export default function LiveDRSExcelView({
                 carType: inlineFormData.carType,
                 vehicle: inlineFormData.vehicleId || null,
                 customCarNumber: inlineFormData.customCarNumber,
+                vendorName: inlineFormData.vendorName || '',
+                ownerName: inlineFormData.vendorName || '',
+                vendorPayout: Number(inlineFormData.vendorPayout) || 0,
+                buyAmount: Number(inlineFormData.vendorPayout) || 0,
+                isOutsideCar: Boolean(inlineFormData.vendorName || !inlineFormData.vehicleId),
                 driver: inlineFormData.driverId || null,
                 customDriverName: inlineFormData.customDriverName,
                 driverMobile: inlineFormData.driverMobile
@@ -998,7 +1098,7 @@ export default function LiveDRSExcelView({
                                                             />
                                                         </td>
                                                         {/* Car Selector */}
-                                                        <td style={{ padding: '6px', borderRight: '1px solid rgba(255,255,255,0.06)', minWidth: '135px' }}>
+                                                        <td style={{ padding: '6px', borderRight: '1px solid rgba(255,255,255,0.06)', minWidth: '155px' }}>
                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                                 <select
                                                                     value={inlineFormData.vehicleId || ''}
@@ -1010,13 +1110,17 @@ export default function LiveDRSExcelView({
                                                                                 ...prev,
                                                                                 vehicleId: selectedId,
                                                                                 customCarNumber: vObj?.carNumber || prev.customCarNumber,
-                                                                                carType: vObj?.type || vObj?.model || prev.carType
+                                                                                carType: vObj?.type || vObj?.model || prev.carType,
+                                                                                vendorName: vObj?.ownerName || '',
+                                                                                vendorPayout: vObj?.buyAmount || '',
+                                                                                isOutsideCar: Boolean(vObj?.isOutsideCar)
                                                                             }));
                                                                         } else {
                                                                             setInlineFormData(prev => ({
                                                                                 ...prev,
                                                                                 vehicleId: '',
-                                                                                customCarNumber: prev.customCarNumber || ''
+                                                                                customCarNumber: prev.customCarNumber || '',
+                                                                                isOutsideCar: true
                                                                             }));
                                                                         }
                                                                     }}
@@ -1030,12 +1134,45 @@ export default function LiveDRSExcelView({
                                                                     ))}
                                                                 </select>
                                                                 {(!inlineFormData.vehicleId || !(vehicles || []).some(v => String(v._id) === String(inlineFormData.vehicleId))) && (
-                                                                    <input 
-                                                                        value={inlineFormData.customCarNumber}
-                                                                        onChange={e => setInlineFormData(prev => ({ ...prev, customCarNumber: e.target.value.toUpperCase(), vehicleId: '' }))}
-                                                                        placeholder="Type Car No (e.g. RJ27TA9053)"
-                                                                        style={{ width: '100%', padding: '3px 6px', background: '#0b1120', border: '1px dashed #38bdf8', borderRadius: '4px', color: '#38bdf8', fontSize: '11px', fontWeight: '700' }}
-                                                                    />
+                                                                    <>
+                                                                        <input 
+                                                                            value={inlineFormData.customCarNumber || ''}
+                                                                            onChange={e => {
+                                                                                const val = e.target.value.toUpperCase();
+                                                                                const matched = findMatchingVendorAndDriver(val);
+                                                                                setInlineFormData(prev => ({
+                                                                                    ...prev,
+                                                                                    customCarNumber: val,
+                                                                                    vehicleId: '',
+                                                                                    isOutsideCar: true,
+                                                                                    ...(matched?.vendorName && !prev.vendorName ? { vendorName: matched.vendorName } : {}),
+                                                                                    ...(matched?.buyAmount && !prev.vendorPayout ? { vendorPayout: matched.buyAmount } : {}),
+                                                                                    ...(matched?.driverName && !prev.customDriverName ? { customDriverName: matched.driverName } : {})
+                                                                                }));
+                                                                            }}
+                                                                            placeholder="Type Car No (e.g. RJ57 UA 0350)"
+                                                                            style={{ width: '100%', padding: '3px 6px', background: '#0b1120', border: '1px dashed #38bdf8', borderRadius: '4px', color: '#38bdf8', fontSize: '11px', fontWeight: '700' }}
+                                                                        />
+                                                                        {/* 🏢 Vendor & Payout Section Below Car (Auto-populated from outside vehicle & past duties) */}
+                                                                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '3px', marginTop: '2px' }}>
+                                                                            <input
+                                                                                list="drsVendorDataList"
+                                                                                value={inlineFormData.vendorName || ''}
+                                                                                onChange={e => setInlineFormData(prev => ({ ...prev, vendorName: e.target.value, isOutsideCar: true }))}
+                                                                                placeholder="Vendor / Owner"
+                                                                                title="Outside Vendor / Market Owner"
+                                                                                style={{ width: '100%', padding: '3px 5px', background: '#0b1120', border: '1px solid rgba(192, 132, 252, 0.45)', borderRadius: '4px', color: '#c084fc', fontSize: '10px', fontWeight: '800', outline: 'none' }}
+                                                                            />
+                                                                            <input
+                                                                                type="number"
+                                                                                value={inlineFormData.vendorPayout || ''}
+                                                                                onChange={e => setInlineFormData(prev => ({ ...prev, vendorPayout: e.target.value }))}
+                                                                                placeholder="Payout (₹)"
+                                                                                title="Vendor Payout / Buy Amount"
+                                                                                style={{ width: '100%', padding: '3px 5px', background: '#0b1120', border: '1px solid rgba(248, 113, 113, 0.45)', borderRadius: '4px', color: '#f87171', fontSize: '10px', fontWeight: '800', outline: 'none' }}
+                                                                            />
+                                                                        </div>
+                                                                    </>
                                                                 )}
                                                             </div>
                                                         </td>
@@ -1051,6 +1188,7 @@ export default function LiveDRSExcelView({
                                                                             const dObj = (drivers || []).find(d => String(d._id) === String(selectedId));
                                                                             if (dObj) {
                                                                                 const linkedVehId = dObj.assignedVehicle?._id || (typeof dObj.assignedVehicle === 'string' ? dObj.assignedVehicle : '');
+                                                                                const vendorByDrv = findVendorByDriver(dObj.name);
                                                                                 setInlineFormData(prev => ({
                                                                                     ...prev,
                                                                                     driverId: dObj._id,
@@ -1059,7 +1197,8 @@ export default function LiveDRSExcelView({
                                                                                     ...(linkedVehId && !prev.vehicleId ? {
                                                                                         vehicleId: linkedVehId,
                                                                                         customCarNumber: (vehicles || []).find(v => String(v._id) === String(linkedVehId))?.carNumber || prev.customCarNumber
-                                                                                    } : {})
+                                                                                    } : {}),
+                                                                                    ...(vendorByDrv && !prev.vendorName ? { vendorName: vendorByDrv } : {})
                                                                                 }));
                                                                             }
                                                                         } else {
@@ -1082,7 +1221,16 @@ export default function LiveDRSExcelView({
                                                                 {(!inlineFormData.driverId || !(drivers || []).some(d => String(d._id) === String(inlineFormData.driverId))) && (
                                                                     <input 
                                                                         value={inlineFormData.customDriverName}
-                                                                        onChange={e => setInlineFormData(prev => ({ ...prev, customDriverName: e.target.value, driverId: '' }))}
+                                                                        onChange={e => {
+                                                                            const drvVal = e.target.value;
+                                                                            const vendorByDrv = findVendorByDriver(drvVal);
+                                                                            setInlineFormData(prev => ({
+                                                                                ...prev,
+                                                                                customDriverName: drvVal,
+                                                                                driverId: '',
+                                                                                ...(vendorByDrv && !prev.vendorName ? { vendorName: vendorByDrv } : {})
+                                                                            }));
+                                                                        }}
                                                                         placeholder="Type outside driver name"
                                                                         style={{ width: '100%', padding: '3px 6px', background: '#0b1120', border: '1px dashed #4ade80', borderRadius: '4px', color: '#4ade80', fontSize: '11px', fontWeight: '700' }}
                                                                     />
@@ -1292,6 +1440,12 @@ export default function LiveDRSExcelView({
                                                                             {carLabel}
                                                                         </span>
                                                                     )}
+                                                                    {Boolean(duty.vendorName || duty.ownerName || duty.vehicle?.ownerName) && (
+                                                                        <span style={{ fontSize: '10px', color: '#c084fc', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                                                            🏢 {duty.vendorName || duty.ownerName || duty.vehicle?.ownerName}
+                                                                            {duty.vendorPayout ? ` (₹${duty.vendorPayout})` : ''}
+                                                                        </span>
+                                                                    )}
                                                                 </>
                                                             ) : (
                                                                 <span style={{
@@ -1405,6 +1559,11 @@ export default function LiveDRSExcelView({
                         )}
                     </tbody>
                 </table>
+                <datalist id="drsVendorDataList">
+                    {uniqueVendorsList.map((vName, vIdx) => (
+                        <option key={vIdx} value={vName} />
+                    ))}
+                </datalist>
             </div>
         </div>
     );

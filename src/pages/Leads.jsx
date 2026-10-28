@@ -6341,34 +6341,48 @@ export default function Leads() {
                                         background: '#0a101d',
                                         border: '1px solid rgba(255, 255, 255, 0.1)',
                                         borderRadius: '12px',
-                                        padding: '16px'
+                                        padding: '16px',
+                                        display: 'flex',
+                                        flexDirection: 'column'
                                     }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
-                                            <span style={{ fontSize: '12px', fontWeight: '700', color: 'white' }}>
-                                                Any Remark / Special Request of Guest
-                                            </span>
-                                            <Info size={13} color="rgba(255,255,255,0.4)" />
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <span style={{ fontSize: '12px', fontWeight: '700', color: 'white' }}>
+                                                    Any Remark / Special Request of Guest
+                                                </span>
+                                                <Info size={13} color="rgba(255,255,255,0.4)" />
+                                            </div>
+                                            {(formData.specialRemarks || '').length > 0 && (
+                                                <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '600' }}>
+                                                    {(formData.specialRemarks || '').length} characters
+                                                </span>
+                                            )}
                                         </div>
 
                                         <textarea
-                                            maxLength={500}
-                                            rows={4}
+                                            rows={5}
                                             placeholder="e.g. Have elderly travellers, need wheelchair assistance at airport. Prefer Non-AC for hill areas. Any other special request..."
                                             value={formData.specialRemarks}
-                                            onChange={e => setFormData({ ...formData, specialRemarks: e.target.value })}
+                                            onChange={e => {
+                                                setFormData({ ...formData, specialRemarks: e.target.value });
+                                                e.target.style.height = 'auto';
+                                                e.target.style.height = `${Math.max(110, e.target.scrollHeight)}px`;
+                                            }}
+                                            onFocus={e => {
+                                                e.target.style.height = 'auto';
+                                                e.target.style.height = `${Math.max(110, e.target.scrollHeight)}px`;
+                                            }}
                                             style={{
                                                 ...darkInputStyle,
-                                                resize: 'none',
-                                                lineHeight: '1.5',
-                                                background: 'transparent',
-                                                border: 'none',
-                                                padding: 0
+                                                resize: 'vertical',
+                                                minHeight: '110px',
+                                                lineHeight: '1.6',
+                                                background: 'rgba(255, 255, 255, 0.02)',
+                                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                                borderRadius: '8px',
+                                                padding: '10px 12px'
                                             }}
                                         />
-
-                                        <div style={{ textAlign: 'right', fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '6px' }}>
-                                            {(formData.specialRemarks || '').length}/500
-                                        </div>
                                     </div>
 
                                     {/* Right: Trip Inclusion Remarks */}

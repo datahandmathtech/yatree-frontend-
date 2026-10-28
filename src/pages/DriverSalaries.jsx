@@ -21,7 +21,7 @@ import {
 import PremiumDateInput from '../components/common/PremiumDateInput';
 import BankSelector from '../components/common/BankSelector';
 
-const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUpdate }) => {
+const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUpdate, defaultViewMode = 'salaries' }) => {
     const { selectedCompany } = useCompany();
     useEffect(() => {
         const style = document.createElement('style');
@@ -139,6 +139,11 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
     const [selectedDriverDetails, setSelectedDriverDetails] = useState(null);
     const [detailLoading, setDetailLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('payroll');
+    const [viewMode, setViewMode] = useState(defaultViewMode); // 'salaries' | 'allowances'
+
+    useEffect(() => {
+        setViewMode(defaultViewMode);
+    }, [defaultViewMode]);
 
     // Advances states
     const [advances, setAdvances] = useState([]);
@@ -1117,6 +1122,21 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                         </div>
                     </div>
 
+                    <div style={{ display: 'flex', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '5px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <button 
+                            onClick={() => setViewMode('salaries')}
+                            style={{ padding: '8px 16px', borderRadius: '10px', border: 'none', background: viewMode === 'salaries' ? 'var(--primary)' : 'transparent', color: viewMode === 'salaries' ? 'black' : 'var(--text-muted)', fontWeight: '800', cursor: 'pointer', transition: 'all 0.3s' }}
+                        >
+                            Salaries
+                        </button>
+                        <button 
+                            onClick={() => { setViewMode('allowances'); setActiveTab('payroll'); }}
+                            style={{ padding: '8px 16px', borderRadius: '10px', border: 'none', background: viewMode === 'allowances' ? '#10b981' : 'transparent', color: viewMode === 'allowances' ? 'white' : 'var(--text-muted)', fontWeight: '800', cursor: 'pointer', transition: 'all 0.3s' }}
+                        >
+                            DA / Night & Parking
+                        </button>
+                    </div>
+
                     <div className="salaries-controls">
                         {/* MONTH SELECTOR */}
                         <div style={{
@@ -1215,7 +1235,9 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
             {isSubComponent && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', flexWrap: 'wrap', gap: '20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <h2 style={{ color: 'white', fontSize: '20px', fontWeight: '900', margin: 0, letterSpacing: '-0.5px' }}>Salaries & Settlements</h2>
+                        <h2 style={{ color: 'white', fontSize: '20px', fontWeight: '900', margin: 0, letterSpacing: '-0.5px' }}>
+                            {viewMode === 'salaries' ? 'Salaries & Settlements' : 'DA / Night & Parking'}
+                        </h2>
                         <span style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(52, 211, 153, 0.1)', color: '#34d399', fontSize: '10px', fontWeight: '900', letterSpacing: '0.5px' }}>MONTHLY REPORT</span>
                     </div>
 
@@ -1287,26 +1309,29 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 style={{ background: 'transparent', border: 'none', color: 'white', height: '100%', outline: 'none', width: '120px', fontSize: '13px' }} />
                         </div>
-                        <div style={{ display: 'flex', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '6px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                            <button onClick={() => setShowAdvanceModal(true)} className="btn-primary" style={{ height: '36px', padding: '0 15px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', background: 'rgba(244, 63, 94, 0.15)', color: '#f43f5e', border: 'none' }}>
-                                <TrendingDown size={14} /> ADVANCE
-                            </button>
-                            <button onClick={() => { setEditingLoanId(null); setLoanFormData({ driverId: '', totalAmount: '', tenureMonths: '', monthlyEMI: '', remarks: '', paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' }); setShowLoanModal(true); }} className="btn-primary" style={{ height: '36px', padding: '0 15px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: 'none' }}>
-                                <Wallet size={14} /> LOAN
-                            </button>
-                            <button
-                                onClick={() => { setEditingAllowanceId(null); setAllowanceFormData({ driverId: '', amount: '', date: todayIST(), remark: '', type: 'Other', paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' }); setShowAllowanceModal(true); }}
-                                className="btn-primary"
-                                style={{ height: '36px', padding: '0 15px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: 'none' }}
-                            >
-                                <Plus size={14} /> PAY
-                            </button>
-                        </div>
+                        {viewMode === 'salaries' && (
+                            <div style={{ display: 'flex', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '6px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                <button onClick={() => setShowAdvanceModal(true)} className="btn-primary" style={{ height: '36px', padding: '0 15px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', background: 'rgba(244, 63, 94, 0.15)', color: '#f43f5e', border: 'none' }}>
+                                    <TrendingDown size={14} /> ADVANCE
+                                </button>
+                                <button onClick={() => { setEditingLoanId(null); setLoanFormData({ driverId: '', totalAmount: '', tenureMonths: '', monthlyEMI: '', remarks: '', paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' }); setShowLoanModal(true); }} className="btn-primary" style={{ height: '36px', padding: '0 15px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: 'none' }}>
+                                    <Wallet size={14} /> LOAN
+                                </button>
+                                <button
+                                    onClick={() => { setEditingAllowanceId(null); setAllowanceFormData({ driverId: '', amount: '', date: todayIST(), remark: '', type: 'Other', paymentMode: 'Cash', bankAccountId: '', paidBy: 'Company' }); setShowAllowanceModal(true); }}
+                                    className="btn-primary"
+                                    style={{ height: '36px', padding: '0 15px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '800', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: 'none' }}
+                                >
+                                    <Plus size={14} /> PAY
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
             {/* SUMMARY CARDS - ACTING AS NAVIGATION */}
-            <div className="stats-grid">
+            {viewMode === 'salaries' ? (
+                <div className="stats-grid">
                 <div
                     onClick={() => setActiveTab('payroll')}
                     className="glass-card glass-card-hover-effect"
@@ -1463,6 +1488,30 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                     </div>
                 </div>
             </div>
+            ) : (
+                <div className="stats-grid" style={{ marginBottom: '20px' }}>
+                    <div className="glass-card" style={{ padding: '20px', background: 'rgba(56,189,248,0.05)', borderLeft: '4px solid #38bdf8' }}>
+                        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>TOTAL DA / OT</p>
+                        <h3 style={{ margin: '8px 0 0', color: 'white', fontSize: '24px' }}>₹ {totalSDRAmount.toLocaleString()}</h3>
+                        <p style={{ margin: '4px 0 0', color: '#38bdf8', fontSize: '11px', fontWeight: '600' }}>{totalSDRCount} Days</p>
+                    </div>
+                    <div className="glass-card" style={{ padding: '20px', background: 'rgba(16,185,129,0.05)', borderLeft: '4px solid #10b981' }}>
+                        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>TOTAL NIGHTS</p>
+                        <h3 style={{ margin: '8px 0 0', color: 'white', fontSize: '24px' }}>₹ {totalNightsAmount.toLocaleString()}</h3>
+                        <p style={{ margin: '4px 0 0', color: '#10b981', fontSize: '11px', fontWeight: '600' }}>{totalNightsCount} Nights</p>
+                    </div>
+                    <div className="glass-card" style={{ padding: '20px', background: 'rgba(251,191,36,0.05)', borderLeft: '4px solid #fbbf24' }}>
+                        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>TOTAL PARKING</p>
+                        <h3 style={{ margin: '8px 0 0', color: 'white', fontSize: '24px' }}>₹ {salaries.reduce((sum, s) => sum + (s.totalParking || 0), 0).toLocaleString()}</h3>
+                        <p style={{ margin: '4px 0 0', color: '#fbbf24', fontSize: '11px', fontWeight: '600' }}>Parking Records</p>
+                    </div>
+                    <div className="glass-card" style={{ padding: '20px', background: 'rgba(168,85,247,0.05)', borderLeft: '4px solid #a855f7' }}>
+                        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '12px', fontWeight: '800', textTransform: 'uppercase' }}>TOTAL ALLOWANCES</p>
+                        <h3 style={{ margin: '8px 0 0', color: 'white', fontSize: '24px' }}>₹ {(totalSDRAmount + totalNightsAmount + salaries.reduce((sum, s) => sum + (s.totalParking || 0), 0)).toLocaleString()}</h3>
+                        <p style={{ margin: '4px 0 0', color: '#a855f7', fontSize: '11px', fontWeight: '600' }}>Combined Monthly Total</p>
+                    </div>
+                </div>
+            )}
 
             <AnimatePresence mode="wait">
                 {activeTab === 'payroll' && (
@@ -1473,9 +1522,15 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                             <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px', padding: '0 10px', minWidth: '800px' }}>
                                 <thead>
                                     <tr style={{ textAlign: 'left' }}>
-                                        {['Driver', 'Daily Wage', 'Duty Days', 'Nights', 'Earnings', 'Advances', 'EMI', 'Total', 'Reports'].map(h => (
-                                            <th key={h} style={{ padding: '15px 20px', color: (h === 'Total' || h === 'Reports') ? '#10b981' : 'var(--text-muted)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>{h}</th>
-                                        ))}
+                                        {viewMode === 'salaries' ? (
+                                            ['Driver', 'Wage/Salary', 'Duty Days', 'DA / Nights', 'Earnings', 'Advances', 'EMI', 'Total', 'Reports'].map(h => (
+                                                <th key={h} style={{ padding: '15px 20px', color: (h === 'Total' || h === 'Reports') ? '#10b981' : 'var(--text-muted)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>{h}</th>
+                                            ))
+                                        ) : (
+                                            ['Driver', 'DA (Same Day)', 'Night Allowance', 'Parking Reimb', 'Other Expenses', 'Total Reimb', 'Reports'].map(h => (
+                                                <th key={h} style={{ padding: '15px 20px', color: (h === 'Total Reimb' || h === 'Reports') ? '#10b981' : 'var(--text-muted)', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>{h}</th>
+                                            ))
+                                        )}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1494,19 +1549,35 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                                         <div style={{ fontWeight: '700', color: 'white' }}>{s.name}</div>
                                                         <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{s.mobile}</div>
                                                     </td>
-                                                    <td style={{ padding: '20px 20px', color: 'rgba(255,255,255,0.7)', fontWeight: '600', fontFamily: 'monospace' }}>₹ {s.dailyWage}</td>
-                                                    <td style={{ padding: '20px 20px', color: 'white', fontWeight: '800' }}>{s.workingDays || 0}</td>
-                                                    <td style={{ padding: '20px 20px' }}>
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                            {s.nightStayCount > 0 && <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.1)', color: 'var(--primary)', padding: '2px 6px', borderRadius: '4px', fontWeight: '800' }}>{s.nightStayCount} NIGHTS</span>}
-                                                            {s.sameDayCount > 0 && <span style={{ fontSize: '10px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '2px 6px', borderRadius: '4px', fontWeight: '800' }}>{s.sameDayCount} DAY</span>}
-                                                            {!(s.nightStayCount > 0 || s.sameDayCount > 0) && <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>}
-                                                        </div>
-                                                    </td>
-                                                    <td style={{ padding: '20px 20px', color: '#38bdf8', fontWeight: '700' }}>₹ {s.totalEarned - (s.totalAllowances || 0)}</td>
-                                                    <td style={{ padding: '20px 20px', color: '#f43f5e', fontWeight: '700' }}>₹ {(s.totalAdvances || 0).toLocaleString()}</td>
-                                                    <td style={{ padding: '20px 20px', color: 'var(--primary)', fontWeight: '700' }}>₹ {s.totalEMI}</td>
-                                                    <td style={{ padding: '20px 20px', color: '#10b981', fontWeight: '900', fontSize: '15px' }}>₹ {s.netPayable}</td>
+                                                    {viewMode === 'salaries' ? (
+                                                        <>
+                                                            <td style={{ padding: '20px 20px', color: 'rgba(255,255,255,0.7)', fontWeight: '600', fontFamily: 'monospace' }}>
+                                                                {(Number(s.salary) > 0 || s.driverType === 'Bus') ? `₹ ${(s.salary || 0).toLocaleString()}/mo` : `₹ ${(s.dailyWage || 0).toLocaleString()}/d`}
+                                                            </td>
+                                                            <td style={{ padding: '20px 20px', color: 'white', fontWeight: '800' }}>{s.workingDays || 0}</td>
+                                                            <td style={{ padding: '20px 20px' }}>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                    {s.nightStayCount > 0 && <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.1)', color: 'var(--primary)', padding: '2px 6px', borderRadius: '4px', fontWeight: '800' }}>{s.nightStayCount} NIGHTS</span>}
+                                                                    {s.sameDayCount > 0 && <span style={{ fontSize: '10px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '2px 6px', borderRadius: '4px', fontWeight: '800' }}>{s.sameDayCount} DAY</span>}
+                                                                    {!(s.nightStayCount > 0 || s.sameDayCount > 0) && <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>-</span>}
+                                                                </div>
+                                                            </td>
+                                                            <td style={{ padding: '20px 20px', color: '#38bdf8', fontWeight: '700' }}>₹ {s.totalEarned - (s.totalAllowances || 0)}</td>
+                                                            <td style={{ padding: '20px 20px', color: '#f43f5e', fontWeight: '700' }}>₹ {(s.totalAdvances || 0).toLocaleString()}</td>
+                                                            <td style={{ padding: '20px 20px', color: 'var(--primary)', fontWeight: '700' }}>₹ {s.totalEMI}</td>
+                                                            <td style={{ padding: '20px 20px', color: '#10b981', fontWeight: '900', fontSize: '15px' }}>₹ {s.netPayable}</td>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <td style={{ padding: '20px 20px', color: '#a855f7', fontWeight: '800' }}>
+                                                                ₹ {(s.totalSDR || 0).toLocaleString()}
+                                                            </td>
+                                                            <td style={{ padding: '20px 20px', color: '#38bdf8', fontWeight: '700' }}>₹ {(s.totalNight || 0).toLocaleString()}</td>
+                                                            <td style={{ padding: '20px 20px', color: '#fbbf24', fontWeight: '700' }}>₹ {(s.totalParking || 0).toLocaleString()}</td>
+                                                            <td style={{ padding: '20px 20px', color: '#a78bfa', fontWeight: '700' }}>₹ {(s.totalUtility || 0).toLocaleString()}</td>
+                                                            <td style={{ padding: '20px 20px', color: '#10b981', fontWeight: '900', fontSize: '15px' }}>₹ {((s.totalSDR || 0) + (s.totalNight || 0) + (s.totalParking || 0) + (s.totalUtility || 0)).toLocaleString()}</td>
+                                                        </>
+                                                    )}
                                                     <td style={{ padding: '20px 20px', borderTopRightRadius: '12px', borderBottomRightRadius: '12px' }}>
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); handleQuickDownload(s.driverId); }}
@@ -1535,11 +1606,21 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '12px' }}>{s.mobile}</p>
                                         </div>
                                         <div style={{ textAlign: 'right' }}>
-                                            <p style={{ margin: '0 0 4px', color: 'rgba(255,255,255,0.4)', fontSize: '10px' }}>
-                                                Earnings: ₹{s.totalEarned - (s.totalAllowances || 0)}
-                                            </p>
+                                            {viewMode === 'salaries' ? (
+                                                <p style={{ margin: '0 0 4px', color: 'rgba(255,255,255,0.4)', fontSize: '10px' }}>
+                                                    Earnings: ₹{s.totalEarned - (s.totalAllowances || 0)}
+                                                </p>
+                                            ) : (
+                                                <p style={{ margin: '0 0 4px', color: 'rgba(255,255,255,0.4)', fontSize: '10px' }}>
+                                                    Total Reimbursement
+                                                </p>
+                                            )}
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
-                                                <h3 style={{ margin: 0, color: '#10b981', fontSize: '18px' }}>₹ {s.netPayable}</h3>
+                                                {viewMode === 'salaries' ? (
+                                                    <h3 style={{ margin: 0, color: '#10b981', fontSize: '18px' }}>₹ {s.netPayable}</h3>
+                                                ) : (
+                                                    <h3 style={{ margin: 0, color: '#10b981', fontSize: '18px' }}>₹ {((s.totalSDR || 0) + (s.totalNight || 0) + (s.totalParking || 0) + (s.totalUtility || 0)).toLocaleString()}</h3>
+                                                )}
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleQuickDownload(s.driverId); }}
                                                     style={{ background: 'rgba(16,185,129,0.1)', border: 'none', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
@@ -1550,13 +1631,23 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                         </div>
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
-                                        {[
-                                            ['DAILY WAGE', `₹ ${s.dailyWage}`, 'rgba(255,255,255,0.7)'],
+                                        {viewMode === 'salaries' ? [
+                                            ['WAGE/SALARY', (Number(s.salary) > 0 || s.driverType === 'Bus') ? `₹ ${(s.salary || 0).toLocaleString()}/mo` : `₹ ${s.dailyWage}/d`, 'rgba(255,255,255,0.7)'],
                                             ['DUTY DAYS', s.workingDays, 'white'],
                                             ['NIGHTS', s.nightStayCount || 0, 'var(--primary)'],
                                             ['SAME DAY', s.sameDayCount || 0, '#10b981'],
                                             ['EARNINGS', `₹ ${s.totalEarned - (s.totalAllowances || 0)}`, 'white'],
                                             ['ADVANCES', `₹ ${(s.totalAdvances || 0).toLocaleString()}`, '#f43f5e']
+                                        ].map(([label, val, color]) => (
+                                            <div key={label} style={{ background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '8px' }}>
+                                                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '10px' }}>{label}</p>
+                                                <p style={{ margin: '4px 0 0', color, fontWeight: '700' }}>{val}</p>
+                                            </div>
+                                        )) : [
+                                            ['DA (SAME DAY)', `₹ ${(s.totalSDR || 0).toLocaleString()}`, '#a855f7'],
+                                            ['NIGHT ALLOWANCE', `₹ ${(s.totalNight || 0).toLocaleString()}`, '#38bdf8'],
+                                            ['PARKING (REIMB)', `₹ ${(s.totalParking || 0).toLocaleString()}`, '#fbbf24'],
+                                            ['OTHER EXP', `₹ ${(s.totalUtility || 0).toLocaleString()}`, '#a78bfa']
                                         ].map(([label, val, color]) => (
                                             <div key={label} style={{ background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '8px' }}>
                                                 <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '10px' }}>{label}</p>
@@ -2460,7 +2551,7 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                             <div style={{ padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(to right, rgba(255,255,255,0.02), transparent)', position: 'sticky', top: 0, backdropFilter: 'blur(10px)', zIndex: 10 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                                     <div>
-                                        <h2 style={{ color: 'white', fontSize: '18px', fontWeight: '800', margin: 0 }}>Salary Breakdown {selectedDriverDetails?.vID && <span style={{ fontSize: '10px', color: 'var(--primary)' }}>({selectedDriverDetails.vID})</span>}</h2>
+                                        <h2 style={{ color: 'white', fontSize: '18px', fontWeight: '800', margin: 0 }}>{viewMode === 'salaries' ? 'Salary Breakdown' : 'Allowances Ledger'} {selectedDriverDetails?.vID && <span style={{ fontSize: '10px', color: 'var(--primary)' }}>({selectedDriverDetails.vID})</span>}</h2>
                                         {driverName && <p style={{ color: 'var(--primary)', fontSize: '13px', margin: '4px 0 0', fontWeight: '600' }}>{driverName}</p>}
                                     </div>
                                     {selectedDriverDetails && !detailLoading && (
@@ -2568,7 +2659,7 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                                         </div>
 
                                         {/* ─── DUTY BREAKDOWN TABLE ─── */}
-                                        <h3 style={{ fontSize: '14px', color: 'white', marginBottom: '15px', borderLeft: '3px solid var(--primary)', paddingLeft: '10px' }}>Duty Calendar (Earnings)</h3>
+                                        <h3 style={{ fontSize: '14px', color: 'white', marginBottom: '15px', borderLeft: '3px solid var(--primary)', paddingLeft: '10px' }}>Duty Calendar ({viewMode === 'salaries' ? 'Earnings' : 'Allowances'})</h3>
                                         <div style={{ overflowX: 'auto', marginBottom: '30px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
                                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                                                 <thead>
