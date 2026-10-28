@@ -217,9 +217,15 @@ const CarUtility = () => {
 
             // Strict client-side filter: Guarantee NO mechanical workshop repair ever leaks into Car Utility
             const safeServices = (servicesRes.data || []).filter(r => {
+                const src = String(r.source || r.sourceType || '').toLowerCase();
+                const mType = String(r.maintenanceType || '').toLowerCase();
+                // Entries created from Car Utility or Driver App must always be shown
+                if (src === 'car utility' || src === 'driver app' || src === 'utility' || mType.includes('driver service') || mType.includes('car utility')) {
+                    return true;
+                }
                 const cat = String(r.category || '').toLowerCase();
-                const desc = String(r.description || '').toLowerCase();
-                if (/engine|clutch|gear|suspension|brake|timing belt|radiator|alternator|overhaul|periodic service|general servicing|oil filter|air filter|fuel filter/i.test(cat + ' ' + desc)) {
+                const desc = String(r.description || r.remarks || '').toLowerCase();
+                if (/engine|clutch|gear|suspension|brake|timing belt|radiator|alternator|overhaul|periodic service|oil filter|air filter|fuel filter/i.test(cat + ' ' + desc)) {
                     return false;
                 }
                 return true;
@@ -1096,7 +1102,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
         billDate: '',
         validTill: '',
         driverId: '',
-        category: 'General Servicing',
+        category: 'Car Wash',
         vehicleId: vehicle?._id || '',
         paymentSource: 'Office',
         paymentMode: 'UPI',
