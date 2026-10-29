@@ -164,6 +164,27 @@ const Sidebar = ({ isOpen, onClose }) => {
     };
 
     const hasAccess = (moduleKey, subKey = null) => {
+        // MULTI-TENANT: Check Company Operational Settings from SuperAdmin
+        const activeCompany = selectedCompany || user?.company;
+        const opSettings = activeCompany?.operationalSettings;
+        if (opSettings) {
+            const opKeyMap = {
+                'parking': 'parking',
+                'fuel': 'fuel',
+                'outsideCars': 'outsideCars',
+                'borderTax': 'borderTax',
+                'fastag': 'fastag',
+                'maintenance': 'maintenance',
+                'leads': 'leads',
+                'drs': 'drs',
+                'invoices': 'invoices'
+            };
+            const mappedKey = opKeyMap[moduleKey];
+            if (mappedKey && opSettings[mappedKey] && opSettings[mappedKey].enabled === false) {
+                return false;
+            }
+        }
+
         if (isAdmin) return true;
         const perm = user.permissions?.[moduleKey];
         if (perm === undefined) return false;

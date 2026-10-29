@@ -11,6 +11,7 @@ import DriverPerformance from './DriverPerformance';
 
 import { X } from 'lucide-react'; // Added X for modal
 import { useAuth } from '../context/AuthContext';
+import { useCompany } from '../context/CompanyContext';
 
 const Chip = ({ label, value, color, onClick }) => (
     <div 
@@ -39,6 +40,8 @@ const Chip = ({ label, value, color, onClick }) => (
 const DriversPanel = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
+    const { selectedCompany } = useCompany();
+    const activeCompany = selectedCompany || user?.company;
     const [searchParams, setSearchParams] = useSearchParams();
     const rawTab = searchParams.get('tab') || 'drivers';
     const activeTab = (rawTab === 'drs-roster' || rawTab === 'drs_roster') ? 'drivers' : rawTab;
@@ -47,7 +50,7 @@ const DriversPanel = () => {
     const [breakdownType, setBreakdownType] = React.useState('DA'); // 'DA' or 'NIGHTS'
 
     // SuperAdmin or SuperAdmin proxy can access / handle DA/Night & Parking tab
-    const isSuperAdmin = user?.role?.toLowerCase() === 'superadmin' || user?.isSuperAdminProxy || localStorage.getItem('ENABLE_ALLOWANCES_HUB') === 'true';
+    const hasAllowancesHub = activeCompany?.salarySettings?.dayAllowance?.enabled || activeCompany?.salarySettings?.nightAllowance?.enabled || activeCompany?.operationalSettings?.parking?.enabled || user?.role?.toLowerCase() === 'superadmin' || user?.isSuperAdminProxy || localStorage.getItem('ENABLE_ALLOWANCES_HUB') === 'true';
 
     const setActiveTab = (tab) => {
         setSearchParams({ tab });
@@ -57,7 +60,7 @@ const DriversPanel = () => {
         { id: 'drivers', title: 'DRIVERS', icon: User },
         // { id: 'dutys', title: 'DUTYS', icon: Car },
         { id: 'settlement', title: 'Salaries', icon: IndianRupee },
-        ...(isSuperAdmin ? [{ id: 'allowances', title: 'DA/Night & Parking', icon: IndianRupee }] : []),
+        ...(hasAllowancesHub ? [{ id: 'allowances', title: 'DA/Night & Parking', icon: IndianRupee }] : []),
         { id: 'performance', title: 'Performance', icon: AlertCircle }
     ];
 
