@@ -444,9 +444,27 @@ const DriverPortal = () => {
     };
 
     const handlePunch = async (type) => {
-        if (!km || !selfie || !kmPhoto || !carSelfie) {
-            setMessage({ type: 'error', text: t('mandatoryFields') });
-            return;
+        const photoUploadCount = user?.company?.driverAppSettings?.photoUploadCount ?? 3;
+        if (photoUploadCount >= 3) {
+            if (!km || !selfie || !kmPhoto || !carSelfie) {
+                setMessage({ type: 'error', text: t('mandatoryFields') });
+                return;
+            }
+        } else if (photoUploadCount === 2) {
+            if (!km || !selfie || !kmPhoto) {
+                setMessage({ type: 'error', text: t('mandatoryFields') });
+                return;
+            }
+        } else if (photoUploadCount === 1) {
+            if (!km || !kmPhoto) {
+                setMessage({ type: 'error', text: t('mandatoryFields') });
+                return;
+            }
+        } else if (photoUploadCount === 0) {
+            if (!km) {
+                setMessage({ type: 'error', text: t('mandatoryFields') });
+                return;
+            }
         }
 
         if (type === 'punch-in' && !selectedVehicleId) {
@@ -463,7 +481,11 @@ const DriverPortal = () => {
                 }
             }
             if (parkingPaid) {
-                const invalid = parkingEntries.some(e => !e.amount || !e.slip);
+                const parkingCanEnterAmt = user?.company?.driverAppSettings?.parking?.driverCanEnterAmount !== false && user?.company?.operationalSettings?.parking?.driverCanEnterAmount !== false;
+                const invalid = parkingEntries.some(e => {
+                    if (!parkingCanEnterAmt) return !e.slip;
+                    return !e.amount || !e.slip;
+                });
                 if (invalid) {
                     setMessage({ type: 'error', text: t('parkingValidation') });
                     return;
@@ -501,16 +523,16 @@ const DriverPortal = () => {
         }
 
         const [compressedSelfie, compressedKmPhoto, compressedCarSelfie] = await Promise.all([
-            compressImage(selfie),
-            compressImage(kmPhoto),
-            compressImage(carSelfie)
+            selfie ? compressImage(selfie) : null,
+            kmPhoto ? compressImage(kmPhoto) : null,
+            carSelfie ? compressImage(carSelfie) : null
         ]);
 
         const formData = new FormData();
         formData.append('km', km);
-        formData.append('selfie', compressedSelfie);
-        formData.append('kmPhoto', compressedKmPhoto);
-        formData.append('carSelfie', compressedCarSelfie);
+        if (compressedSelfie) formData.append('selfie', compressedSelfie);
+        if (compressedKmPhoto) formData.append('kmPhoto', compressedKmPhoto);
+        if (compressedCarSelfie) formData.append('carSelfie', compressedCarSelfie);
         formData.append('dutyCount', '1');
         formData.append('specialPay', '0');
         formData.append('specialPayRemark', '');
@@ -614,8 +636,14 @@ const DriverPortal = () => {
     };
 
     const handleSubmitExpense = async () => {
-        // Filter out entries that don't have an amount
-        const activeEntries = expenseEntries.filter(e => e.amount && e.amount > 0);
+        const parkingCanEnterAmt = user?.company?.driverAppSettings?.parking?.driverCanEnterAmount !== false && user?.company?.operationalSettings?.parking?.driverCanEnterAmount !== false;
+        // Filter active entries (parking in slip-only mode is valid if slip is uploaded)
+        const activeEntries = expenseEntries.filter(e => {
+            if (e.type === 'parking' && !parkingCanEnterAmt) {
+                return !!e.slip;
+            }
+            return (e.amount && Number(e.amount) > 0) || (e.type === 'parking' && e.slip);
+        });
 
         if (activeEntries.length === 0) {
             setMessage({ type: 'error', text: t('mandatoryFields') });
@@ -1708,89 +1736,109 @@ const DriverPortal = () => {
                                                 />
                                             </div>
 
-                                            {/* Photo Captures */}
-                                            <div className="photo-capture-grid" style={{ marginBottom: 'clamp(20px, 5vw, 28px)' }}>
-                                                {/* Selfie */}
-                                                <div>
-                                                    <p className="input-label" style={{ marginBottom: '8px' }}>{t('driverSelfie')}</p>
-                                                    {!selfiePreview ? (
-                                                        <div
-                                                            onClick={() => setActiveCamera('selfie')}
-                                                            className="photo-capture-button"
-                                                        >
-                                                            <Camera size={24} color="var(--primary)" />
-                                                            <span style={{ fontSize: 'clamp(10px, 2.5vw, 11px)', color: 'var(--text-muted)', fontWeight: '700' }}>{t('takeSelfie')}</span>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="photo-preview-container">
-                                                            <img src={selfiePreview} alt="Selfie" className="photo-preview-image" />
-                                                            <button
-                                                                onClick={() => {
-                                                                    setSelfie(null);
-                                                                    setSelfiePreview(null);
-                                                                }}
-                                                                className="photo-delete-button"
-                                                            >
-                                                                <X size={14} />
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
+                                            {/* Photo Captures (Dynamic based on SuperAdmin Tenant Setting) */}
+                                            {(() => {
+                                                const pCount = user?.company?.driverAppSettings?.photoUploadCount ?? 3;
+                                                if (pCount === 0) return null;
+                                                return (
+                                                    <div
+                                                        className="photo-capture-grid"
+                                                        style={{
+                                                            marginBottom: 'clamp(20px, 5vw, 28px)',
+                                                            display: 'grid',
+                                                            gridTemplateColumns: pCount === 1 ? '1fr' : (pCount === 2 ? '1fr 1fr' : 'repeat(auto-fit, minmax(90px, 1fr))'),
+                                                            gap: '12px'
+                                                        }}
+                                                    >
+                                                        {/* Selfie: Required for 2 or 3 photos */}
+                                                        {pCount >= 2 && (
+                                                            <div>
+                                                                <p className="input-label" style={{ marginBottom: '8px' }}>{t('driverSelfie')}</p>
+                                                                {!selfiePreview ? (
+                                                                    <div
+                                                                        onClick={() => setActiveCamera('selfie')}
+                                                                        className="photo-capture-button"
+                                                                    >
+                                                                        <Camera size={24} color="var(--primary)" />
+                                                                        <span style={{ fontSize: 'clamp(10px, 2.5vw, 11px)', color: 'var(--text-muted)', fontWeight: '700' }}>{t('takeSelfie')}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="photo-preview-container">
+                                                                        <img src={selfiePreview} alt="Selfie" className="photo-preview-image" />
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setSelfie(null);
+                                                                                setSelfiePreview(null);
+                                                                            }}
+                                                                            className="photo-delete-button"
+                                                                        >
+                                                                            <X size={14} />
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
 
-                                                {/* KM Photo */}
-                                                <div>
-                                                    <p className="input-label" style={{ marginBottom: '8px' }}>{t('kmPhoto')}</p>
-                                                    {!kmPreview ? (
-                                                        <div
-                                                            onClick={() => setActiveCamera('km')}
-                                                            className="photo-capture-button"
-                                                        >
-                                                            <Camera size={24} color="var(--primary)" />
-                                                            <span style={{ fontSize: 'clamp(10px, 2.5vw, 11px)', color: 'var(--text-muted)', fontWeight: '700' }}>{t('takeKmPhoto')}</span>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="photo-preview-container">
-                                                            <img src={kmPreview} alt="KM" className="photo-preview-image" />
-                                                            <button
-                                                                onClick={() => {
-                                                                    setKmPhoto(null);
-                                                                    setKmPreview(null);
-                                                                }}
-                                                                className="photo-delete-button"
-                                                            >
-                                                                <X size={14} />
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                        {/* KM Photo: Required for 1, 2, or 3 photos */}
+                                                        {pCount >= 1 && (
+                                                            <div>
+                                                                <p className="input-label" style={{ marginBottom: '8px' }}>{t('kmPhoto')}</p>
+                                                                {!kmPreview ? (
+                                                                    <div
+                                                                        onClick={() => setActiveCamera('km')}
+                                                                        className="photo-capture-button"
+                                                                    >
+                                                                        <Camera size={24} color="var(--primary)" />
+                                                                        <span style={{ fontSize: 'clamp(10px, 2.5vw, 11px)', color: 'var(--text-muted)', fontWeight: '700' }}>{t('takeKmPhoto')}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="photo-preview-container">
+                                                                        <img src={kmPreview} alt="KM" className="photo-preview-image" />
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setKmPhoto(null);
+                                                                                setKmPreview(null);
+                                                                            }}
+                                                                            className="photo-delete-button"
+                                                                        >
+                                                                            <X size={14} />
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
 
-                                                {/* Car Selfie */}
-                                                <div>
-                                                    <p className="input-label" style={{ marginBottom: '8px' }}>{t('carSelfie')}</p>
-                                                    {!carPreview ? (
-                                                        <div
-                                                            onClick={() => setActiveCamera('car')}
-                                                            className="photo-capture-button"
-                                                        >
-                                                            <Camera size={24} color="var(--primary)" />
-                                                            <span style={{ fontSize: 'clamp(10px, 2.5vw, 11px)', color: 'var(--text-muted)', fontWeight: '700' }}>{t('takeCarPhoto')}</span>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="photo-preview-container">
-                                                            <img src={carPreview} alt="Car" className="photo-preview-image" />
-                                                            <button
-                                                                onClick={() => {
-                                                                    setCarSelfie(null);
-                                                                    setCarPreview(null);
-                                                                }}
-                                                                className="photo-delete-button"
-                                                            >
-                                                                <X size={14} />
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
+                                                        {/* Car Selfie: Required ONLY for 3 photos */}
+                                                        {pCount >= 3 && (
+                                                            <div>
+                                                                <p className="input-label" style={{ marginBottom: '8px' }}>{t('carSelfie')}</p>
+                                                                {!carPreview ? (
+                                                                    <div
+                                                                        onClick={() => setActiveCamera('car')}
+                                                                        className="photo-capture-button"
+                                                                    >
+                                                                        <Camera size={24} color="var(--primary)" />
+                                                                        <span style={{ fontSize: 'clamp(10px, 2.5vw, 11px)', color: 'var(--text-muted)', fontWeight: '700' }}>{t('takeCarPhoto')}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="photo-preview-container">
+                                                                        <img src={carPreview} alt="Car" className="photo-preview-image" />
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setCarSelfie(null);
+                                                                                setCarPreview(null);
+                                                                            }}
+                                                                            className="photo-delete-button"
+                                                                        >
+                                                                            <X size={14} />
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
 
                                             {/* Punch-Out Specific Questions */}
                                             {showPunchOut && (
@@ -2009,86 +2057,96 @@ const DriverPortal = () => {
                                                                 </button>
                                                             </div>
 
-                                                            <div className="input-grid-2" style={{ marginBottom: '16px' }}>
-                                                                <div className="input-wrapper-full">
-                                                                    <label className="input-label" style={{ fontSize: '10px' }}>{t('amount')}</label>
-                                                                    <input
-                                                                        type="number"
-                                                                        className="input-field"
-                                                                        placeholder="0.00"
-                                                                        value={entry.amount}
-                                                                        onChange={(e) => {
-                                                                            const newEntries = [...expenseEntries];
-                                                                            newEntries[index].amount = e.target.value;
-                                                                            setExpenseEntries(newEntries);
-                                                                        }}
-                                                                        style={{ padding: '10px', fontSize: '14px', height: '45px' }}
-                                                                    />
+                                                            {/* Parking Slip-Only Notice if Driver Amount Disabled */}
+                                                            {entry.type === 'parking' && (user?.company?.driverAppSettings?.parking?.driverCanEnterAmount === false || user?.company?.operationalSettings?.parking?.driverCanEnterAmount === false) ? (
+                                                                <div style={{ padding: '12px 14px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#38bdf8', fontWeight: '700' }}>
+                                                                    <span>📸</span> Slip Only Mode: Please upload the parking ticket slip photo below. Office admin will enter and approve the amount.
                                                                 </div>
-                                                                {entry.type === 'fuel' && (
-                                                                    <>
+                                                            ) : (
+                                                                <div className="input-grid-2" style={{ marginBottom: '16px' }}>
+                                                                    {/* Amount Field: Conditionally rendered for Fuel or Standard Parking/Other */}
+                                                                    {(entry.type !== 'fuel' || (user?.company?.driverAppSettings?.fuel?.showAmount !== false && user?.company?.operationalSettings?.fuel?.showAmount !== false)) && (
                                                                         <div className="input-wrapper-full">
-                                                                            <label className="input-label" style={{ fontSize: '10px' }}>{entry.fuelType === 'Electric' ? t('charging_units') : t('volume_optional')}</label>
+                                                                            <label className="input-label" style={{ fontSize: '10px' }}>{t('amount')}</label>
                                                                             <input
                                                                                 type="number"
                                                                                 className="input-field"
-                                                                                placeholder={entry.fuelType === 'Electric' ? "kWh" : "L"}
-                                                                                value={entry.quantity || ''}
+                                                                                placeholder="0.00"
+                                                                                value={entry.amount}
                                                                                 onChange={(e) => {
                                                                                     const newEntries = [...expenseEntries];
-                                                                                    newEntries[index].quantity = e.target.value;
-
-                                                                                    // Auto-calculate Rate if Amount and Liters are available
-                                                                                    if (newEntries[index].amount && e.target.value) {
-                                                                                        newEntries[index].rate = (Number(newEntries[index].amount) / Number(e.target.value)).toFixed(2);
-                                                                                    }
+                                                                                    newEntries[index].amount = e.target.value;
                                                                                     setExpenseEntries(newEntries);
                                                                                 }}
                                                                                 style={{ padding: '10px', fontSize: '14px', height: '45px' }}
                                                                             />
                                                                         </div>
+                                                                    )}
+                                                                    {entry.type === 'fuel' && (user?.company?.driverAppSettings?.fuel?.showLiters !== false && user?.company?.operationalSettings?.fuel?.showLiters !== false) && (
+                                                                        <>
+                                                                            <div className="input-wrapper-full">
+                                                                                <label className="input-label" style={{ fontSize: '10px' }}>{entry.fuelType === 'Electric' ? t('charging_units') : t('volume_optional')}</label>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    className="input-field"
+                                                                                    placeholder={entry.fuelType === 'Electric' ? "kWh" : "L"}
+                                                                                    value={entry.quantity || ''}
+                                                                                    onChange={(e) => {
+                                                                                        const newEntries = [...expenseEntries];
+                                                                                        newEntries[index].quantity = e.target.value;
+
+                                                                                        // Auto-calculate Rate if Amount and Liters are available
+                                                                                        if (newEntries[index].amount && e.target.value) {
+                                                                                            newEntries[index].rate = (Number(newEntries[index].amount) / Number(e.target.value)).toFixed(2);
+                                                                                        }
+                                                                                        setExpenseEntries(newEntries);
+                                                                                    }}
+                                                                                    style={{ padding: '10px', fontSize: '14px', height: '45px' }}
+                                                                                />
+                                                                            </div>
+                                                                            <div className="input-wrapper-full">
+                                                                                <label className="input-label" style={{ fontSize: '10px' }}>{entry.fuelType === 'Electric' ? t('rate_per_kwh') : t('rate_per_l')} *</label>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    className="input-field"
+                                                                                    placeholder={entry.fuelType === 'Electric' ? "₹/kWh" : "₹/L"}
+                                                                                    value={entry.rate || ''}
+                                                                                    onChange={(e) => {
+                                                                                        const newEntries = [...expenseEntries];
+                                                                                        newEntries[index].rate = e.target.value;
+
+                                                                                        // Auto-calculate Liters if Amount and Rate are available
+                                                                                        if (newEntries[index].amount && e.target.value) {
+                                                                                            newEntries[index].quantity = (Number(newEntries[index].amount) / Number(e.target.value)).toFixed(2);
+                                                                                        }
+                                                                                        setExpenseEntries(newEntries);
+                                                                                    }}
+                                                                                    style={{ padding: '10px', fontSize: '14px', height: '45px' }}
+                                                                                />
+                                                                            </div>
+                                                                        </>
+                                                                    )}
+                                                                    {entry.type === 'fuel' && (user?.company?.driverAppSettings?.fuel?.showKm !== false && user?.company?.operationalSettings?.fuel?.showKm !== false) && (
                                                                         <div className="input-wrapper-full">
-                                                                            <label className="input-label" style={{ fontSize: '10px' }}>{entry.fuelType === 'Electric' ? t('rate_per_kwh') : t('rate_per_l')} *</label>
+                                                                            <label className="input-label" style={{ fontSize: '10px' }}>{t('meterKm')} (Opt)</label>
                                                                             <input
                                                                                 type="number"
                                                                                 className="input-field"
-                                                                                placeholder={entry.fuelType === 'Electric' ? "₹/kWh" : "₹/L"}
-                                                                                value={entry.rate || ''}
+                                                                                placeholder="KM"
+                                                                                value={entry.km}
                                                                                 onChange={(e) => {
                                                                                     const newEntries = [...expenseEntries];
-                                                                                    newEntries[index].rate = e.target.value;
-
-                                                                                    // Auto-calculate Liters if Amount and Rate are available
-                                                                                    if (newEntries[index].amount && e.target.value) {
-                                                                                        newEntries[index].quantity = (Number(newEntries[index].amount) / Number(e.target.value)).toFixed(2);
-                                                                                    }
+                                                                                    newEntries[index].km = e.target.value;
                                                                                     setExpenseEntries(newEntries);
                                                                                 }}
                                                                                 style={{ padding: '10px', fontSize: '14px', height: '45px' }}
                                                                             />
                                                                         </div>
-                                                                    </>
-                                                                )}
-                                                                {entry.type === 'fuel' && (
-                                                                    <div className="input-wrapper-full">
-                                                                        <label className="input-label" style={{ fontSize: '10px' }}>{t('meterKm')} (Opt)</label>
-                                                                        <input
-                                                                            type="number"
-                                                                            className="input-field"
-                                                                            placeholder="KM"
-                                                                            value={entry.km}
-                                                                            onChange={(e) => {
-                                                                                const newEntries = [...expenseEntries];
-                                                                                newEntries[index].km = e.target.value;
-                                                                                setExpenseEntries(newEntries);
-                                                                            }}
-                                                                            style={{ padding: '10px', fontSize: '14px', height: '45px' }}
-                                                                        />
-                                                                    </div>
-                                                                )}
-                                                            </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
 
-                                                            {entry.type === 'fuel' && (
+                                                            {entry.type === 'fuel' && (user?.company?.driverAppSettings?.fuel?.showFuelType !== false && user?.company?.operationalSettings?.fuel?.showFuelType !== false) && (
                                                                 <>
                                                                     <div className="input-wrapper-full" style={{ marginTop: '4px', marginBottom: '16px' }}>
                                                                         <label className="input-label" style={{ fontSize: '10px', marginBottom: '6px' }}>{t('fuelType')}</label>

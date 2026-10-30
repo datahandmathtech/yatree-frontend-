@@ -155,6 +155,7 @@ const ParkingPage = () => {
     const [selectedImage, setSelectedImage] = useState('');
     const [showCamera, setShowCamera] = useState(false);
     const [lastSeenPendingParking, setLastSeenPendingParking] = useState(0);
+    const [approvalModal, setApprovalModal] = useState({ show: false, entry: null, amount: '' });
 
     useEffect(() => {
         setSearchTerm('');
@@ -867,7 +868,7 @@ const ParkingPage = () => {
                                 </div>
                                 <div style={{ display: 'flex', gap: '10px' }}>
                                     <button
-                                        onClick={() => handleApproveReject(entry.attendanceId, entry._id, 'approved')}
+                                        onClick={() => setApprovalModal({ show: true, entry, amount: (entry.amount && Number(entry.amount) > 0) ? String(entry.amount) : '' })}
                                         style={{
                                             flex: 1.5,
                                             background: '#10b981',
@@ -1552,6 +1553,123 @@ const ParkingPage = () => {
                                 </motion.div>
                             </div>
                         )}
+                        
+                        {/* PARKING VERIFY & APPROVE MODAL */}
+                        {approvalModal.show && (
+                            <div style={{
+                                position: 'fixed', inset: 0,
+                                background: 'rgba(2, 6, 23, 0.88)', backdropFilter: 'blur(16px)',
+                                display: 'flex', justifyContent: 'center', alignItems: 'center',
+                                zIndex: 9999, padding: '20px'
+                            }}>
+                                <motion.div
+                                    initial={{ scale: 0.92, opacity: 0, y: 15 }}
+                                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                                    exit={{ scale: 0.92, opacity: 0, y: 15 }}
+                                    style={{
+                                        background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)',
+                                        borderRadius: '24px', width: '100%', maxWidth: '460px',
+                                        padding: '24px', color: 'white', boxShadow: '0 25px 60px rgba(0,0,0,0.7)',
+                                        display: 'flex', flexDirection: 'column', gap: '16px'
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: 'white' }}>
+                                                Verify & Approve Parking
+                                            </h3>
+                                            <span style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '700' }}>
+                                                Check Receipt & Confirm Entry Amount
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => setApprovalModal({ show: false, entry: null, amount: '' })}
+                                            style={{ background: 'rgba(255,255,255,0.06)', border: 'none', color: 'white', width: '32px', height: '32px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+
+                                    {/* Receipt Slip Preview */}
+                                    {approvalModal.entry?.slipPhoto ? (
+                                        <div style={{ textAlign: 'center', background: 'rgba(0,0,0,0.4)', borderRadius: '16px', padding: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                            <img
+                                                src={getImageUrl(approvalModal.entry.slipPhoto)}
+                                                alt="Receipt"
+                                                onClick={() => { setSelectedImage(approvalModal.entry.slipPhoto); setShowImageModal(true); }}
+                                                style={{ maxHeight: '180px', maxWidth: '100%', borderRadius: '10px', objectFit: 'contain', cursor: 'pointer' }}
+                                            />
+                                            <span style={{ display: 'block', fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '6px' }}>Click image to zoom</span>
+                                        </div>
+                                    ) : (
+                                        <div style={{ padding: '16px', borderRadius: '14px', background: 'rgba(255,255,255,0.03)', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '12px', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                                            No slip photo attached
+                                        </div>
+                                    )}
+
+                                    {/* Meta Details */}
+                                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px 16px', borderRadius: '14px', display: 'flex', justifyContent: 'space-between', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                        <div>
+                                            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', display: 'block' }}>DRIVER</span>
+                                            <strong style={{ fontSize: '14px', color: 'white' }}>{approvalModal.entry?.driver}</strong>
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', fontWeight: '800', textTransform: 'uppercase', display: 'block' }}>VEHICLE</span>
+                                            <strong style={{ fontSize: '14px', color: '#fbbf24' }}>#{approvalModal.entry?.carNumber}</strong>
+                                        </div>
+                                    </div>
+
+                                    {/* Amount Input */}
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: 'rgba(255,255,255,0.85)', marginBottom: '8px' }}>
+                                            Parking Amount (₹) *
+                                        </label>
+                                        <input
+                                            type="number"
+                                            autoFocus
+                                            placeholder="Enter parking amount in ₹"
+                                            value={approvalModal.amount}
+                                            onChange={e => setApprovalModal({ ...approvalModal, amount: e.target.value })}
+                                            style={{
+                                                width: '100%', padding: '14px 16px', background: 'rgba(255,255,255,0.06)',
+                                                border: '2px solid rgba(16, 185, 129, 0.4)', borderRadius: '14px',
+                                                color: '#10b981', fontSize: '22px', fontWeight: '950', outline: 'none'
+                                            }}
+                                        />
+                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', display: 'block', marginTop: '6px' }}>
+                                            Type the exact amount printed on the parking receipt slip.
+                                        </span>
+                                    </div>
+
+                                    {/* Buttons */}
+                                    <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setApprovalModal({ show: false, entry: null, amount: '' })}
+                                            style={{ flex: 1, padding: '12px', background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '12px', color: 'white', fontWeight: '800', cursor: 'pointer' }}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const amt = Number(approvalModal.amount);
+                                                if (isNaN(amt) || amt <= 0) {
+                                                    alert('Please enter a valid parking amount (> 0) from the receipt slip.');
+                                                    return;
+                                                }
+                                                handleApproveReject(approvalModal.entry.attendanceId, approvalModal.entry._id, 'approved', amt);
+                                                setApprovalModal({ show: false, entry: null, amount: '' });
+                                            }}
+                                            style={{ flex: 2, padding: '12px', background: '#10b981', border: 'none', borderRadius: '12px', color: 'white', fontWeight: '900', cursor: 'pointer', boxShadow: '0 4px 18px rgba(16, 185, 129, 0.35)', fontSize: '14px' }}
+                                        >
+                                            ✓ Confirm & Approve (₹{approvalModal.amount || 0})
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )}
+
                         {showImageModal && (
                             <div
                                 style={{ position: 'fixed', inset: 0, background: 'rgba(2, 6, 23, 0.95)', backdropFilter: 'blur(20px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '20px' }}
