@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from '../api/axios';
 import { Plus, Search, Trash2, User as UserIcon, Users, X, CheckCircle, AlertCircle, LogIn, LogOut, Car, Filter, Download, Phone, Edit2, IndianRupee, Calendar, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Camera, Image as ImageIcon, Eye, TrendingUp, History, Fuel, MapPin, FileText, RefreshCw, ZapOff, Save } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useAuth } from '../context/AuthContext';
 import { useCompany } from '../context/CompanyContext';
 import { useTheme } from '../context/ThemeContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -231,6 +232,11 @@ const Freelancers = () => {
         return () => document.head.removeChild(style);
     }, []);
     const { selectedCompany } = useCompany();
+    const { user } = useAuth();
+    const activeCompany = selectedCompany || user?.company;
+    const salarySettings = activeCompany?.salarySettings || {};
+    const isDaAllowed = salarySettings?.dayAllowance?.enabled !== false;
+    const isNightStayAllowed = salarySettings?.nightAllowance?.enabled !== false;
     const [drivers, setDrivers] = useState([]);
     const [allDrivers, setAllDrivers] = useState([]); // Includes both regular and freelancers
     const [vehicles, setVehicles] = useState([]);
@@ -2022,7 +2028,9 @@ const Freelancers = () => {
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
                                     <Field label="Daily Wage" type="number" value={editForm.dailyWage} onChange={v => setEditForm({ ...editForm, dailyWage: v })} />
-                                    <Field label="Night Stay" type="number" value={editForm.nightStayBonus} onChange={v => setEditForm({ ...editForm, nightStayBonus: v })} />
+                                    {isNightStayAllowed && (
+                                        <Field label="Night Stay (₹)" type="number" value={editForm.nightStayBonus} onChange={v => setEditForm({ ...editForm, nightStayBonus: v })} />
+                                    )}
                                 </div>
                                 <div style={{ background: 'rgba(59, 130, 246, 0.05)', padding: '15px', borderRadius: '16px', border: '1px solid rgba(59, 130, 246, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <div>

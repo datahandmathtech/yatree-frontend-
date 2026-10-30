@@ -85,7 +85,16 @@ const Drivers = ({ isSubComponent = false }) => {
     }, []);
     const navigate = useNavigate();
     const location = useLocation();
+    const { user } = useAuth();
     const { selectedCompany } = useCompany();
+    const activeCompany = selectedCompany || user?.company;
+    const salarySettings = activeCompany?.salarySettings || {};
+
+    // Feature permissions from SuperAdmin (If banned in SuperAdmin, hide from driver creation & editing)
+    const isDaAllowed = salarySettings?.dayAllowance?.enabled !== false;
+    const isNightStayAllowed = salarySettings?.nightAllowance?.enabled !== false;
+    const isLeavesAllowed = salarySettings?.allowLeaves !== false;
+    const isDailyWageOnly = salarySettings?.salaryType === 'daily_wage';
     const [drivers, setDrivers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -998,11 +1007,13 @@ const Drivers = ({ isSubComponent = false }) => {
                                             <label>Driving License Number</label>
                                             <input className="input-field" value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} />
                                         </div>
-                                        <div className="form-group">
-                                            <label>Night Stay Bonus</label>
-                                            <input type="number" className="input-field" value={nightStayBonus} onChange={(e) => setNightStayBonus(e.target.value)} />
-                                        </div>
-                                        {sameDayReturnEnabled && (
+                                        {isNightStayAllowed && (
+                                            <div className="form-group">
+                                                <label>Night Stay Bonus (₹)</label>
+                                                <input type="number" className="input-field" value={nightStayBonus} onChange={(e) => setNightStayBonus(e.target.value)} placeholder="0" />
+                                            </div>
+                                        )}
+                                        {isDaAllowed && sameDayReturnEnabled && (
                                             <div className="form-group">
                                                 <label>Same Day Return Bonus (₹)</label>
                                                 <input type="number" className="input-field" value={sameDayReturnBonus} onChange={(e) => setSameDayReturnBonus(e.target.value)} placeholder="Enter amount" />
@@ -1010,29 +1021,31 @@ const Drivers = ({ isSubComponent = false }) => {
                                         )}
                                     </div>
 
-                                    <div style={{ marginTop: '10px', padding: '15px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.1)', marginBottom: '20px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <p style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <IndianRupee size={14} /> Same Day Return Policy
-                                            </p>
-                                            <button
-                                                type="button"
-                                                onClick={() => setSameDayReturnEnabled(!sameDayReturnEnabled)}
-                                                style={{
-                                                    background: sameDayReturnEnabled ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
-                                                    color: 'white',
-                                                    border: 'none',
-                                                    padding: '4px 12px',
-                                                    borderRadius: '20px',
-                                                    fontSize: '10px',
-                                                    fontWeight: '800',
-                                                    cursor: 'pointer'
-                                                }}
-                                            >
-                                                {sameDayReturnEnabled ? 'ENABLED' : 'DISABLED'}
-                                            </button>
+                                    {isDaAllowed && (
+                                        <div style={{ marginTop: '10px', padding: '15px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.1)', marginBottom: '20px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <p style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <IndianRupee size={14} /> Same Day Return Policy
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSameDayReturnEnabled(!sameDayReturnEnabled)}
+                                                    style={{
+                                                        background: sameDayReturnEnabled ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
+                                                        color: 'white',
+                                                        border: 'none',
+                                                        padding: '4px 12px',
+                                                        borderRadius: '20px',
+                                                        fontSize: '10px',
+                                                        fontWeight: '800',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    {sameDayReturnEnabled ? 'ENABLED' : 'DISABLED'}
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
 
                                     <div style={{ marginTop: '20px' }}>
                                         <p style={{ color: '#8b5cf6', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1193,45 +1206,51 @@ const Drivers = ({ isSubComponent = false }) => {
                                             <label className="input-label" style={{ marginBottom: '6px' }}>License Number</label>
                                             <input className="input-field" value={editForm.licenseNumber} onChange={(e) => setEditForm({ ...editForm, licenseNumber: e.target.value })} style={{ background: 'rgba(0,0,0,0.2)' }} />
                                         </div>
-                                        <div>
-                                            <label className="input-label" style={{ marginBottom: '6px' }}>Night Stay Bonus</label>
-                                            <div style={{ position: 'relative' }}>
-                                                <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>₹</span>
-                                                <input type="number" className="input-field" value={editForm.nightStayBonus} onChange={(e) => setEditForm({ ...editForm, nightStayBonus: e.target.value })} style={{ background: 'rgba(0,0,0,0.2)', paddingLeft: '28px' }} />
+                                        {isNightStayAllowed && (
+                                            <div>
+                                                <label className="input-label" style={{ marginBottom: '6px' }}>Night Stay Bonus</label>
+                                                <div style={{ position: 'relative' }}>
+                                                    <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>₹</span>
+                                                    <input type="number" className="input-field" value={editForm.nightStayBonus} onChange={(e) => setEditForm({ ...editForm, nightStayBonus: e.target.value })} style={{ background: 'rgba(0,0,0,0.2)', paddingLeft: '28px' }} />
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div>
-                                            <label className="input-label" style={{ marginBottom: '6px' }}>Same Day Bonus</label>
-                                            <div style={{ position: 'relative' }}>
-                                                <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>₹</span>
-                                                <input type="number" className="input-field" value={editForm.sameDayReturnBonus} onChange={(e) => setEditForm({ ...editForm, sameDayReturnBonus: e.target.value })} style={{ background: 'rgba(0,0,0,0.2)', paddingLeft: '28px' }} />
+                                        )}
+                                        {isDaAllowed && (
+                                            <div>
+                                                <label className="input-label" style={{ marginBottom: '6px' }}>Same Day Bonus</label>
+                                                <div style={{ position: 'relative' }}>
+                                                    <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>₹</span>
+                                                    <input type="number" className="input-field" value={editForm.sameDayReturnBonus} onChange={(e) => setEditForm({ ...editForm, sameDayReturnBonus: e.target.value })} style={{ background: 'rgba(0,0,0,0.2)', paddingLeft: '28px' }} />
+                                                </div>
                                             </div>
-                                        </div>
+                                        )}
                                     </div>
 
-                                    <div style={{ marginTop: '10px', padding: '15px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.1)', marginBottom: '20px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <p style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <IndianRupee size={14} /> Same Day Return Policy
-                                            </p>
-                                            <button
-                                                type="button"
-                                                onClick={() => setEditForm({ ...editForm, sameDayReturnEnabled: !editForm.sameDayReturnEnabled })}
-                                                style={{
-                                                    background: editForm.sameDayReturnEnabled ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
-                                                    color: 'white',
-                                                    border: 'none',
-                                                    padding: '4px 12px',
-                                                    borderRadius: '20px',
-                                                    fontSize: '10px',
-                                                    fontWeight: '800',
-                                                    cursor: 'pointer'
-                                                }}
-                                            >
-                                                {editForm.sameDayReturnEnabled ? 'ENABLED' : 'DISABLED'}
-                                            </button>
+                                    {isDaAllowed && (
+                                        <div style={{ marginTop: '10px', padding: '15px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.1)', marginBottom: '20px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <p style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <IndianRupee size={14} /> Same Day Return Policy
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEditForm({ ...editForm, sameDayReturnEnabled: !editForm.sameDayReturnEnabled })}
+                                                    style={{
+                                                        background: editForm.sameDayReturnEnabled ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
+                                                        color: 'white',
+                                                        border: 'none',
+                                                        padding: '4px 12px',
+                                                        borderRadius: '20px',
+                                                        fontSize: '10px',
+                                                        fontWeight: '800',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    {editForm.sameDayReturnEnabled ? 'ENABLED' : 'DISABLED'}
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
 
                                     <div style={{ marginTop: '20px' }}>
                                         <p style={{ color: '#8b5cf6', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1444,20 +1463,24 @@ const Drivers = ({ isSubComponent = false }) => {
                                     </div>
 
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                                        <div style={{ padding: '15px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', border: manualDutyForm.allowanceTA ? '1px solid #10b981' : '1px solid transparent' }} onClick={() => setManualDutyForm({ ...manualDutyForm, allowanceTA: !manualDutyForm.allowanceTA })}>
-                                            <input type="checkbox" checked={manualDutyForm.allowanceTA} readOnly style={{ width: '18px', height: '18px' }} />
-                                            <div>
-                                                <div style={{ color: 'white', fontSize: '13px', fontWeight: '700' }}>Day Bonus</div>
-                                                <div style={{ color: '#10b981', fontSize: '11px', fontWeight: '800' }}>+ ₹100</div>
+                                        {isDaAllowed && (
+                                            <div style={{ padding: '15px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', border: manualDutyForm.allowanceTA ? '1px solid #10b981' : '1px solid transparent' }} onClick={() => setManualDutyForm({ ...manualDutyForm, allowanceTA: !manualDutyForm.allowanceTA })}>
+                                                <input type="checkbox" checked={manualDutyForm.allowanceTA} readOnly style={{ width: '18px', height: '18px' }} />
+                                                <div>
+                                                    <div style={{ color: 'white', fontSize: '13px', fontWeight: '700' }}>Day Bonus (DA)</div>
+                                                    <div style={{ color: '#10b981', fontSize: '11px', fontWeight: '800' }}>+ ₹100</div>
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div style={{ padding: '15px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', border: manualDutyForm.nightStayAmount ? '1px solid var(--primary)' : '1px solid transparent' }} onClick={() => setManualDutyForm({ ...manualDutyForm, nightStayAmount: !manualDutyForm.nightStayAmount })}>
-                                            <input type="checkbox" checked={manualDutyForm.nightStayAmount} readOnly style={{ width: '18px', height: '18px' }} />
-                                            <div>
-                                                <div style={{ color: 'white', fontSize: '13px', fontWeight: '700' }}>Night Bonus</div>
-                                                <div style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: '800' }}>+ ₹500</div>
+                                        )}
+                                        {isNightStayAllowed && (
+                                            <div style={{ padding: '15px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', border: manualDutyForm.nightStayAmount ? '1px solid var(--primary)' : '1px solid transparent' }} onClick={() => setManualDutyForm({ ...manualDutyForm, nightStayAmount: !manualDutyForm.nightStayAmount })}>
+                                                <input type="checkbox" checked={manualDutyForm.nightStayAmount} readOnly style={{ width: '18px', height: '18px' }} />
+                                                <div>
+                                                    <div style={{ color: 'white', fontSize: '13px', fontWeight: '700' }}>Night Stay Bonus</div>
+                                                    <div style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: '800' }}>+ ₹500</div>
+                                                </div>
                                             </div>
-                                        </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -1725,19 +1748,25 @@ const Drivers = ({ isSubComponent = false }) => {
                                                     <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>Daily Wage</span>
                                                     <span style={{ color: '#10b981', fontWeight: '900', fontSize: '18px' }}>₹{viewingDriver.dailyWage || 0}</span>
                                                 </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>Night Bonus</span>
-                                                    <span style={{ color: 'white', fontWeight: '700', fontSize: '14px' }}>₹{viewingDriver.nightStayBonus || 0}</span>
-                                                </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>SD Return Policy</span>
-                                                    <span style={{ padding: '4px 10px', background: viewingDriver.sameDayReturnEnabled ? '#10b981' : 'rgba(255,255,255,0.05)', color: viewingDriver.sameDayReturnEnabled ? 'black' : 'rgba(255,255,255,0.4)', borderRadius: '8px', fontSize: '9px', fontWeight: '900' }}>{viewingDriver.sameDayReturnEnabled ? 'ENABLED' : 'DISABLED'}</span>
-                                                </div>
-                                                {viewingDriver.sameDayReturnEnabled && (
+                                                {isNightStayAllowed && (
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>SD Bonus Amount</span>
-                                                        <span style={{ color: 'white', fontWeight: '700', fontSize: '14px' }}>₹{viewingDriver.sameDayReturnBonus || 0}</span>
+                                                        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>Night Bonus</span>
+                                                        <span style={{ color: 'white', fontWeight: '700', fontSize: '14px' }}>₹{viewingDriver.nightStayBonus || 0}</span>
                                                     </div>
+                                                )}
+                                                {isDaAllowed && (
+                                                    <>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>SD Return Policy</span>
+                                                            <span style={{ padding: '4px 10px', background: viewingDriver.sameDayReturnEnabled ? '#10b981' : 'rgba(255,255,255,0.05)', color: viewingDriver.sameDayReturnEnabled ? 'black' : 'rgba(255,255,255,0.4)', borderRadius: '8px', fontSize: '9px', fontWeight: '900' }}>{viewingDriver.sameDayReturnEnabled ? 'ENABLED' : 'DISABLED'}</span>
+                                                        </div>
+                                                        {viewingDriver.sameDayReturnEnabled && (
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>SD Bonus Amount</span>
+                                                                <span style={{ color: 'white', fontWeight: '700', fontSize: '14px' }}>₹{viewingDriver.sameDayReturnBonus || 0}</span>
+                                                            </div>
+                                                        )}
+                                                    </>
                                                 )}
                                             </div>
                                         </div>
