@@ -86,8 +86,22 @@ const Drivers = ({ isSubComponent = false }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const { user } = useAuth();
-    const { selectedCompany } = useCompany();
-    const activeCompany = selectedCompany || user?.company;
+    const { selectedCompany, refreshCompany } = useCompany();
+    
+    // Always get the freshest company data including salary & feature permissions
+    const getActiveCompany = () => {
+        if (selectedCompany && selectedCompany.salarySettings) return selectedCompany;
+        try {
+            const raw = localStorage.getItem('selectedCompany');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed.salarySettings) return parsed;
+            }
+        } catch (e) {}
+        return selectedCompany || user?.company;
+    };
+
+    const activeCompany = getActiveCompany();
     const salarySettings = activeCompany?.salarySettings || {};
 
     // Feature permissions from SuperAdmin (If banned in SuperAdmin, hide from driver creation & editing)
@@ -95,6 +109,10 @@ const Drivers = ({ isSubComponent = false }) => {
     const isNightStayAllowed = salarySettings?.nightAllowance?.enabled !== false;
     const isLeavesAllowed = salarySettings?.allowLeaves !== false;
     const isDailyWageOnly = salarySettings?.salaryType === 'daily_wage';
+
+    useEffect(() => {
+        if (refreshCompany) refreshCompany();
+    }, []);
     const [drivers, setDrivers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -1000,8 +1018,14 @@ const Drivers = ({ isSubComponent = false }) => {
 
                                     <div className="modal-form-grid" style={{ marginBottom: '15px' }}>
                                         <div className="form-group">
-                                            <label>Daily Wage (Salary)</label>
-                                            <input type="number" className="input-field" value={dailyWage} onChange={(e) => setDailyWage(e.target.value)} />
+                                            <label>{isDailyWageOnly ? 'Daily Wage (Salary ₹)' : 'Fixed Monthly Salary (₹)'}</label>
+                                            <input 
+                                                type="number" 
+                                                className="input-field" 
+                                                value={dailyWage} 
+                                                onChange={(e) => setDailyWage(e.target.value)} 
+                                                placeholder={isDailyWageOnly ? 'Enter daily wage (e.g. 500)' : 'Enter monthly salary (e.g. 15000)'} 
+                                            />
                                         </div>
                                         <div className="form-group">
                                             <label>Driving License Number</label>
@@ -1196,10 +1220,19 @@ const Drivers = ({ isSubComponent = false }) => {
 
                                     <div className="form-grid-2" style={{ marginBottom: '15px' }}>
                                         <div>
-                                            <label className="input-label" style={{ marginBottom: '6px' }}>Daily Wage (Salary)</label>
+                                            <label className="input-label" style={{ marginBottom: '6px' }}>
+                                                {isDailyWageOnly ? 'Daily Wage (Salary ₹)' : 'Fixed Monthly Salary (₹)'}
+                                            </label>
                                             <div style={{ position: 'relative' }}>
                                                 <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>₹</span>
-                                                <input type="number" className="input-field" value={editForm.dailyWage} onChange={(e) => setEditForm({ ...editForm, dailyWage: e.target.value })} style={{ background: 'rgba(0,0,0,0.2)', paddingLeft: '28px' }} />
+                                                <input 
+                                                    type="number" 
+                                                    className="input-field" 
+                                                    value={editForm.dailyWage} 
+                                                    onChange={(e) => setEditForm({ ...editForm, dailyWage: e.target.value })} 
+                                                    placeholder={isDailyWageOnly ? '500' : '15000'}
+                                                    style={{ background: 'rgba(0,0,0,0.2)', paddingLeft: '28px' }} 
+                                                />
                                             </div>
                                         </div>
                                         <div>
@@ -1745,8 +1778,15 @@ const Drivers = ({ isSubComponent = false }) => {
                                             <p style={{ color: '#10b981', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '15px' }}>Remuneration</p>
                                             <div style={{ background: 'rgba(16, 185, 129, 0.03)', border: '1px solid rgba(16, 185, 129, 0.1)', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>Daily Wage</span>
-                                                    <span style={{ color: '#10b981', fontWeight: '900', fontSize: '18px' }}>₹{viewingDriver.dailyWage || 0}</span>
+                                                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>
+                                                        {isDailyWageOnly ? 'Daily Wage' : 'Fixed Monthly Salary'}
+                                                    </span>
+                                                    <span style={{ color: '#10b981', fontWeight: '900', fontSize: '18px' }}>
+                                                        ₹{viewingDriver.dailyWage || viewingDriver.salary || 0}
+                                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginLeft: '4px', fontWeight: '600' }}>
+                                                            {isDailyWageOnly ? '/ day' : '/ month'}
+                                                        </span>
+                                                    </span>
                                                 </div>
                                                 {isNightStayAllowed && (
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

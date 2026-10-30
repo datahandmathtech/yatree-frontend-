@@ -44,14 +44,7 @@ export const CompanyProvider = ({ children }) => {
         if (!nextCompany) return;
         localStorage.setItem('selectedCompany', JSON.stringify(nextCompany));
         setSelectedCompany(prev => {
-            if (
-                prev &&
-                String(prev._id) === String(nextCompany._id) &&
-                prev.name === nextCompany.name &&
-                prev.gstRate === nextCompany.gstRate &&
-                prev.gstNumber === nextCompany.gstNumber &&
-                Number(prev.cashBalance) === Number(nextCompany.cashBalance)
-            ) {
+            if (prev && JSON.stringify(prev) === JSON.stringify(nextCompany)) {
                 return prev;
             }
             return nextCompany;
