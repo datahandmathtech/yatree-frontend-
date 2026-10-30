@@ -1070,351 +1070,482 @@ const DriverPortal = () => {
     const showPunchOut = tripStatus === 'active';
 
     return (
-        <div className="admin-layout-wrapper">
+        <div className="driver-mobile-wrapper">
+            <style>{`
+                .driver-mobile-wrapper {
+                    min-height: 100vh;
+                    background: #090d16;
+                    padding: 12px 12px 48px;
+                    max-width: 520px;
+                    margin: 0 auto;
+                    width: 100%;
+                    box-sizing: border-box;
+                    color: white;
+                }
+                .driver-header {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                    margin-bottom: 16px;
+                    padding-bottom: 14px;
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                }
+                .driver-header-top {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    width: 100%;
+                }
+                .driver-profile-info {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    min-width: 0;
+                }
+                .driver-logo-box {
+                    width: 42px;
+                    height: 42px;
+                    border-radius: 12px;
+                    background: rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    overflow: hidden;
+                    flex-shrink: 0;
+                }
+                .driver-name-text {
+                    font-size: 15px;
+                    font-weight: 900;
+                    color: white;
+                    letter-spacing: -0.3px;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    margin: 0;
+                }
+                .driver-company-sub {
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: var(--primary);
+                    margin: 0;
+                    display: flex;
+                    align-items: center;
+                    gap: 5px;
+                }
+                .driver-header-actions {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex-shrink: 0;
+                }
+                .driver-actions-bar {
+                    display: flex;
+                    gap: 8px;
+                    align-items: center;
+                    overflow-x: auto;
+                    padding-bottom: 2px;
+                    -webkit-overflow-scrolling: touch;
+                    scrollbar-width: none;
+                }
+                .driver-actions-bar::-webkit-scrollbar {
+                    display: none;
+                }
+                .driver-action-pill {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 8px 12px;
+                    border-radius: 10px;
+                    font-size: 11.5px;
+                    font-weight: 800;
+                    white-space: nowrap;
+                    border: none;
+                    cursor: pointer;
+                    flex-shrink: 0;
+                    transition: transform 0.15s ease;
+                }
+                .driver-action-pill:active {
+                    transform: scale(0.96);
+                }
+                .driver-tracker-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 10px;
+                    margin-bottom: 16px;
+                }
+                .driver-tracker-box {
+                    padding: 12px 14px;
+                    border-radius: 14px;
+                    position: relative;
+                    overflow: hidden;
+                    box-sizing: border-box;
+                    transition: all 0.2s ease;
+                }
+                .driver-nav-tabs {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+                    gap: 6px;
+                    margin-bottom: 18px;
+                    background: rgba(255, 255, 255, 0.04);
+                    padding: 5px;
+                    border-radius: 14px;
+                    border: 1px solid rgba(255, 255, 255, 0.08);
+                }
+                .driver-nav-tab-btn {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 4px;
+                    padding: 9px 4px;
+                    border-radius: 10px;
+                    border: none;
+                    cursor: pointer;
+                    font-weight: 800;
+                    font-size: 11px;
+                    line-height: 1.2;
+                    text-align: center;
+                    transition: all 0.25s ease;
+                    color: rgba(255, 255, 255, 0.65);
+                    background: transparent;
+                }
+                .driver-nav-tab-btn.active {
+                    color: white;
+                }
+                .driver-on-duty-card {
+                    padding: 24px 16px;
+                    border-radius: 20px;
+                    text-align: center;
+                    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.03) 100%);
+                    border: 1px solid rgba(16, 185, 129, 0.2);
+                    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+                    position: relative;
+                    overflow: hidden;
+                }
+                .driver-submit-btn {
+                    width: 100%;
+                    background: linear-gradient(135deg, #f43f5e 0%, #dc2626 100%);
+                    padding: 15px 20px;
+                    box-shadow: 0 6px 20px rgba(244, 63, 94, 0.35);
+                    font-size: 14.5px;
+                    font-weight: 800;
+                    border-radius: 14px;
+                    border: none;
+                    color: white;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                }
+                @media (min-width: 480px) {
+                    .driver-nav-tab-btn {
+                        flex-direction: row;
+                        gap: 7px;
+                        font-size: 12.5px;
+                        padding: 11px 12px;
+                    }
+                }
+            `}</style>
+
             <SEO title="Driver Portal" />
-            <div className="main-content">
-                <div className="container-fluid">
-                    <header className="dashboard-header" style={{ marginBottom: '32px', paddingBottom: '24px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div className="header-logo-section">
-                            <img
-                                src={user.company?.logo || "/logos/logo.png"}
-                                alt={user.company?.name || "LogKaro"}
-                                style={{
-                                    width: '100px',
-                                    height: 'auto',
-                                    marginRight: '15px'
-                                }}
-                            />
-                            <div>
-                                <h1 className="header-title" style={{ fontSize: 'clamp(20px, 5vw, 26px)', fontWeight: '900', letterSpacing: '-0.5px', background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '4px' }}>
-                                    {user.company?.name || "LogKaro"}
-                                </h1>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }}></div>
-                                    <p className="header-subtitle" style={{ fontSize: 'clamp(13px, 3.2vw, 15px)', fontWeight: '700', color: 'rgba(255,255,255,0.8)', margin: 0 }}>{user.name}</p>
+            <div className="driver-portal-inner">
+                <div className="driver-portal-content">
+                    {/* ── Driver Portal Mobile Header ── */}
+                    <header className="driver-header">
+                        <div className="driver-header-top">
+                            <div className="driver-profile-info">
+                                <div className="driver-logo-box">
+                                    <img
+                                        src={user.company?.logo || "/logos/logo.png"}
+                                        alt={user.company?.name || "LogKaro"}
+                                        style={{ width: '32px', height: '32px', objectFit: 'contain' }}
+                                    />
+                                </div>
+                                <div>
+                                    <div className="driver-company-sub">
+                                        <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 6px #10b981' }}></span>
+                                        {user.company?.name || "LogKaro"}
+                                    </div>
+                                    <h1 className="driver-name-text">{user.name}</h1>
                                 </div>
                             </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                            {showPunchOut && (
-                                <>
-                                    {todayAttendance?.pendingExpenses?.length > 0 && (
-                                        <div style={{
-                                            background: 'rgba(245, 158, 11, 0.15)',
-                                            padding: '6px 10px',
-                                            borderRadius: '10px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '6px',
-                                            color: 'var(--primary)',
-                                            fontSize: '12px',
-                                            fontWeight: '800',
-                                            border: '1px solid rgba(245, 158, 11, 0.2)'
-                                        }}>
-                                            <Clock size={14} /> {todayAttendance.pendingExpenses.length}
-                                        </div>
-                                    )}
-                                    <button
-                                        onClick={() => {
-                                            const newFuelEntry = { type: 'fuel', amount: '', quantity: '', km: '', fuelType: 'Diesel', paymentSource: 'Office', slip: null, preview: null };
-                                            setExpenseEntries([newFuelEntry]);
-                                            setExpenseModalType('fuel');
-                                            setShowExpenseModal(true);
-                                        }}
-                                        style={{
-                                            background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%)',
-                                            color: 'white',
-                                            height: '42px',
-                                            padding: '0 14px',
-                                            borderRadius: '12px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            gap: '6px',
-                                            border: 'none',
-                                            boxShadow: '0 6px 16px rgba(14, 165, 233, 0.25)',
-                                            cursor: 'pointer',
-                                            fontWeight: '700',
-                                            fontSize: '13px'
-                                        }}
-                                    >
-                                        <Droplets size={18} /> {t('logFuel')}
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setExpenseEntries([{ type: 'parking', amount: '', quantity: '', km: '', fuelType: '', slip: null, preview: null }]);
-                                            setExpenseModalType('parking');
-                                            setShowExpenseModal(true);
-                                        }}
-                                        style={{
-                                            background: 'linear-gradient(135deg, var(--primary) 0%, #d97706 100%)',
-                                            color: 'white',
-                                            height: '42px',
-                                            padding: '0 14px',
-                                            borderRadius: '12px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            gap: '6px',
-                                            border: 'none',
-                                            boxShadow: '0 6px 16px rgba(245, 158, 11, 0.25)',
-                                            cursor: 'pointer',
-                                            fontWeight: '700',
-                                            fontSize: '13px'
-                                        }}
-                                    >
-                                        <Car size={18} /> {t('parking')}
-                                    </button>
-                                    <button
-                                        onClick={handleAirCheck}
-                                        style={{
-                                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                                            color: 'white',
-                                            height: '42px',
-                                            padding: '0 14px',
-                                            borderRadius: '12px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            gap: '6px',
-                                            border: 'none',
-                                            boxShadow: '0 6px 16px rgba(16, 185, 129, 0.25)',
-                                            cursor: 'pointer',
-                                            fontWeight: '700',
-                                            fontSize: '13px'
-                                        }}
-                                    >
-                                        <CheckCircle size={18} /> Air Check
-                                    </button>
-                                    {showPunchOut && !showPunchOutForm && (
-                                        <button
-                                            onClick={() => setShowPunchOutForm(true)}
-                                            style={{
-                                                background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
-                                                color: 'white',
-                                                height: '42px',
-                                                padding: '0 14px',
-                                                borderRadius: '12px',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '6px',
-                                                border: 'none',
-                                                boxShadow: '0 6px 16px rgba(239, 68, 68, 0.3)',
-                                                cursor: 'pointer',
-                                                fontWeight: '800',
-                                                fontSize: '13px'
-                                            }}
-                                        >
-                                            <LogOut size={16} /> {t('punchOut')}
-                                        </button>
-                                    )}
-                                </>
-                            )}
-                            <button
-                                onClick={() => setShowPasswordSection(true)}
-                                style={{
-                                    background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)',
-                                    color: 'white',
-                                    padding: '10px 14px',
-                                    borderRadius: '12px',
-                                    fontWeight: '800',
-                                    fontSize: '11px',
+
+                            <div className="driver-header-actions">
+                                {/* Language Switcher Pill */}
+                                <div style={{
+                                    background: 'rgba(255,255,255,0.06)',
+                                    borderRadius: '10px',
+                                    padding: '3px',
                                     display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    border: '1px solid rgba(255,255,255,0.1)',
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                    transition: 'all 0.3s ease',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.5px'
-                                }}
-                            >
-                                <Lock size={14} color="var(--primary)" /> {t('security') || 'Security'}
-                            </button>
-                            <div className="language-switcher" style={{
-                                background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)',
-                                borderRadius: '12px',
-                                padding: '5px',
-                                display: 'flex',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                            }}>
+                                    border: '1px solid rgba(255,255,255,0.1)'
+                                }}>
+                                    <button
+                                        onClick={() => setLanguage('en')}
+                                        style={{
+                                            padding: '5px 9px',
+                                            borderRadius: '8px',
+                                            fontSize: '11px',
+                                            fontWeight: '800',
+                                            background: language === 'en' ? 'var(--primary)' : 'transparent',
+                                            color: language === 'en' ? '#090d16' : 'rgba(255,255,255,0.7)',
+                                            border: 'none',
+                                            cursor: 'pointer'
+                                        }}
+                                    >EN</button>
+                                    <button
+                                        onClick={() => setLanguage('hi')}
+                                        style={{
+                                            padding: '5px 9px',
+                                            borderRadius: '8px',
+                                            fontSize: '11px',
+                                            fontWeight: '800',
+                                            background: language === 'hi' ? 'var(--primary)' : 'transparent',
+                                            color: language === 'hi' ? '#090d16' : 'rgba(255,255,255,0.7)',
+                                            border: 'none',
+                                            cursor: 'pointer'
+                                        }}
+                                    >हिन्दी</button>
+                                </div>
+
+                                {/* Security Password Change */}
                                 <button
-                                    onClick={() => setLanguage('en')}
+                                    onClick={() => setShowPasswordSection(true)}
+                                    title={t('security') || 'Security'}
                                     style={{
-                                        padding: '8px 14px',
-                                        borderRadius: '9px',
-                                        fontSize: '12px',
-                                        fontWeight: '800',
-                                        background: language === 'en' ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%)' : 'transparent',
+                                        background: 'rgba(255,255,255,0.06)',
                                         color: 'white',
-                                        transition: 'all 0.3s ease',
-                                        boxShadow: language === 'en' ? '0 4px 12px rgba(14, 165, 233, 0.3)' : 'none'
+                                        width: '34px',
+                                        height: '34px',
+                                        borderRadius: '10px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        cursor: 'pointer'
                                     }}
                                 >
-                                    EN
+                                    <Lock size={15} color="var(--primary)" />
                                 </button>
+
+                                {/* Logout Button */}
                                 <button
-                                    onClick={() => setLanguage('hi')}
+                                    onClick={logout}
+                                    title={t('logout')}
                                     style={{
-                                        padding: '8px 14px',
-                                        borderRadius: '9px',
-                                        fontSize: '12px',
-                                        fontWeight: '800',
-                                        background: language === 'hi' ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%)' : 'transparent',
-                                        color: 'white',
-                                        transition: 'all 0.3s ease',
-                                        boxShadow: language === 'hi' ? '0 4px 12px rgba(14, 165, 233, 0.3)' : 'none'
+                                        background: 'rgba(244,63,94,0.12)',
+                                        color: '#f43f5e',
+                                        width: '34px',
+                                        height: '34px',
+                                        borderRadius: '10px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        border: '1px solid rgba(244,63,94,0.3)',
+                                        cursor: 'pointer'
                                     }}
                                 >
-                                    हिन्दी
+                                    <LogOut size={15} />
                                 </button>
                             </div>
-                            <button onClick={logout} style={{
-                                background: 'linear-gradient(135deg, rgba(244,63,94,0.15) 0%, rgba(244,63,94,0.08) 100%)',
-                                color: '#f43f5e',
-                                padding: '10px 18px',
-                                borderRadius: '12px',
-                                fontWeight: '800',
-                                fontSize: '13px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                border: '1px solid rgba(244,63,94,0.2)',
-                                boxShadow: '0 4px 12px rgba(244,63,94,0.15)',
-                                transition: 'all 0.3s ease'
-                            }}>
-                                <LogOut size={16} /> {t('logout')}
-                            </button>
                         </div>
+
+                        {/* Quick Action Pill Bar (Fuel, Parking, Air Check) */}
+                        {showPunchOut && (
+                            <div className="driver-actions-bar">
+                                {todayAttendance?.pendingExpenses?.length > 0 && (
+                                    <div style={{
+                                        background: 'rgba(245, 158, 11, 0.15)',
+                                        padding: '6px 10px',
+                                        borderRadius: '8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        color: 'var(--primary)',
+                                        fontSize: '11px',
+                                        fontWeight: '800',
+                                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                                        flexShrink: 0
+                                    }}>
+                                        <Clock size={13} /> {todayAttendance.pendingExpenses.length}
+                                    </div>
+                                )}
+                                <button
+                                    onClick={() => {
+                                        const newFuelEntry = { type: 'fuel', amount: '', quantity: '', km: '', fuelType: 'Diesel', paymentSource: 'Office', slip: null, preview: null };
+                                        setExpenseEntries([newFuelEntry]);
+                                        setExpenseModalType('fuel');
+                                        setShowExpenseModal(true);
+                                    }}
+                                    className="driver-action-pill"
+                                    style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%)', color: '#090d16' }}
+                                >
+                                    <Droplets size={15} /> {t('logFuel')}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setExpenseEntries([{ type: 'parking', amount: '', quantity: '', km: '', fuelType: '', slip: null, preview: null }]);
+                                        setExpenseModalType('parking');
+                                        setShowExpenseModal(true);
+                                    }}
+                                    className="driver-action-pill"
+                                    style={{ background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.35)' }}
+                                >
+                                    <Car size={15} /> {t('parking')}
+                                </button>
+                                <button
+                                    onClick={handleAirCheck}
+                                    className="driver-action-pill"
+                                    style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.35)' }}
+                                >
+                                    <CheckCircle size={15} /> Air Check
+                                </button>
+                                {!showPunchOutForm && (
+                                    <button
+                                        onClick={() => setShowPunchOutForm(true)}
+                                        className="driver-action-pill"
+                                        style={{ background: 'rgba(244, 63, 94, 0.2)', color: '#f43f5e', border: '1px solid rgba(244, 63, 94, 0.35)' }}
+                                    >
+                                        <LogOut size={15} /> {t('punchOut')}
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </header>
 
-                    {/* Status Tracker Global - Moved above tabs per user request */}
-                    <div className="glass-card" style={{
-                        padding: 'clamp(20px, 4vw, 24px)',
-                        background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                        marginBottom: '24px'
-                    }}>
-                        <div className="modal-grid-2" style={{ gap: 'clamp(12px, 3vw, 20px)' }}>
-                            <div style={{
-                                background: isPunchedIn ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%)' : 'rgba(255,255,255,0.02)',
-                                padding: 'clamp(14px, 3vw, 18px)',
-                                borderRadius: '16px',
-                                border: isPunchedIn ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(255,255,255,0.05)',
-                                position: 'relative',
-                                overflow: 'hidden'
-                            }}>
-                                {isPunchedIn && (
-                                    <div style={{
-                                        position: 'absolute',
-                                        top: '8px',
-                                        right: '8px',
-                                        width: '8px',
-                                        height: '8px',
-                                        borderRadius: '50%',
-                                        background: '#10b981',
-                                        boxShadow: '0 0 12px #10b981',
-                                        animation: 'pulse 2s infinite'
-                                    }}></div>
-                                )}
-                                <p className="section-subtitle" style={{ fontSize: 'clamp(9px, 2vw, 10px)', fontWeight: '800', letterSpacing: '0.5px', marginBottom: '6px' }}>{t('punchIn')}</p>
-                                <p style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: '900', color: isPunchedIn ? '#10b981' : 'rgba(255,255,255,0.2)', letterSpacing: '-1px' }}>
-                                    {isPunchedIn ? formatTimeIST(todayAttendance.punchIn.time) : '--:--'}
+                    {/* ── Status Tracker (Punch-In / Punch-Out Times) Side-By-Side ── */}
+                    <div className="driver-tracker-grid">
+                        {/* Punch In */}
+                        <div
+                            className="driver-tracker-box"
+                            style={{
+                                background: isPunchedIn ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.05) 100%)' : 'rgba(255,255,255,0.03)',
+                                border: isPunchedIn ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(255,255,255,0.06)'
+                            }}
+                        >
+                            {isPunchedIn && (
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '8px',
+                                    right: '8px',
+                                    width: '8px',
+                                    height: '8px',
+                                    borderRadius: '50%',
+                                    background: '#10b981',
+                                    boxShadow: '0 0 10px #10b981'
+                                }}></div>
+                            )}
+                            <p style={{ fontSize: '10px', fontWeight: '800', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 4px' }}>
+                                {t('punchIn')}
+                            </p>
+                            <p style={{ fontSize: '20px', fontWeight: '900', color: isPunchedIn ? '#10b981' : 'rgba(255,255,255,0.3)', margin: 0, letterSpacing: '-0.5px' }}>
+                                {isPunchedIn ? formatTimeIST(todayAttendance.punchIn.time) : '--:--'}
+                            </p>
+                        </div>
+
+                        {/* Punch Out */}
+                        <div
+                            onClick={() => {
+                                if (showPunchOut && !showPunchOutForm) {
+                                    setActiveTab('home');
+                                    setShowPunchOutForm(true);
+                                }
+                            }}
+                            className="driver-tracker-box"
+                            style={{
+                                background: isPunchedOut ? 'linear-gradient(135deg, rgba(244, 63, 94, 0.12) 0%, rgba(244, 63, 94, 0.05) 100%)' : 'rgba(255,255,255,0.03)',
+                                border: isPunchedOut ? '1px solid rgba(244, 63, 94, 0.25)' : '1px solid rgba(255,255,255,0.06)',
+                                cursor: (showPunchOut && !showPunchOutForm) ? 'pointer' : 'default'
+                            }}
+                        >
+                            {isPunchedOut && (
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '8px',
+                                    right: '8px',
+                                    width: '8px',
+                                    height: '8px',
+                                    borderRadius: '50%',
+                                    background: '#f43f5e',
+                                    boxShadow: '0 0 10px #f43f5e'
+                                }}></div>
+                            )}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 4px' }}>
+                                <p style={{ fontSize: '10px', fontWeight: '800', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>
+                                    {t('punchOut')}
                                 </p>
+                                {showPunchOut && !showPunchOutForm && <ArrowRight size={13} color="#f43f5e" />}
                             </div>
-                            <div
-                                onClick={() => {
-                                    if (showPunchOut && !showPunchOutForm) {
-                                        setActiveTab('home');
-                                        setShowPunchOutForm(true);
-                                    }
-                                }}
-                                style={{
-                                    background: isPunchedOut ? 'linear-gradient(135deg, rgba(244, 63, 94, 0.1) 0%, rgba(244, 63, 94, 0.05) 100%)' : 'rgba(255,255,255,0.02)',
-                                    padding: 'clamp(14px, 3vw, 18px)',
-                                    borderRadius: '16px',
-                                    border: isPunchedOut ? '1px solid rgba(244, 63, 94, 0.2)' : '1px solid rgba(255,255,255,0.05)',
-                                    position: 'relative',
-                                    overflow: 'hidden',
-                                    cursor: (showPunchOut && !showPunchOutForm) ? 'pointer' : 'default'
-                                }}
-                            >
-                                {isPunchedOut && (
-                                    <div style={{
-                                        position: 'absolute',
-                                        top: '8px',
-                                        right: '8px',
-                                        width: '8px',
-                                        height: '8px',
-                                        borderRadius: '50%',
-                                        background: '#f43f5e',
-                                        boxShadow: '0 0 12px #f43f5e'
-                                    }}></div>
-                                )}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                    <p className="section-subtitle" style={{ fontSize: 'clamp(9px, 2vw, 10px)', fontWeight: '800', letterSpacing: '0.5px', margin: 0 }}>{t('punchOut')}</p>
-                                    {showPunchOut && !showPunchOutForm && <ArrowRight size={14} color="#f43f5e" />}
-                                </div>
-                                <p style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: '900', color: isPunchedOut ? '#f43f5e' : 'rgba(255,255,255,0.2)', letterSpacing: '-1px' }}>
-                                    {isPunchedOut ? formatTimeIST(todayAttendance.punchOut.time) : '--:--'}
-                                </p>
-                            </div>
+                            <p style={{ fontSize: '20px', fontWeight: '900', color: isPunchedOut ? '#f43f5e' : 'rgba(255,255,255,0.3)', margin: 0, letterSpacing: '-0.5px' }}>
+                                {isPunchedOut ? formatTimeIST(todayAttendance.punchOut.time) : '--:--'}
+                            </p>
                         </div>
                     </div>
 
-                    <div className="tab-navigation" style={{ display: 'flex', gap: '8px', marginBottom: '24px', background: 'rgba(255,255,255,0.03)', padding: '6px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    {/* ── Responsive Mobile Tab Navigation ── */}
+                    <div className="driver-nav-tabs">
                         <button
                             onClick={() => setActiveTab('home')}
-                            style={{ flex: 1, padding: '12px', borderRadius: '12px', background: activeTab === 'home' ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%)' : 'transparent', color: 'white', fontWeight: '800', fontSize: '13.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: 'none', transition: 'all 0.3s' }}
+                            className={`driver-nav-tab-btn ${activeTab === 'home' ? 'active' : ''}`}
+                            style={{
+                                background: activeTab === 'home' ? 'linear-gradient(135deg, var(--primary) 0%, #0284c7 100%)' : 'transparent',
+                                color: activeTab === 'home' ? 'white' : 'rgba(255,255,255,0.6)',
+                                boxShadow: activeTab === 'home' ? '0 4px 12px rgba(14,165,233,0.3)' : 'none'
+                            }}
                         >
-                            <LayoutDashboard size={17} /> {t('today')}
+                            <LayoutDashboard size={18} />
+                            <span>{t('today')}</span>
                         </button>
+
                         {showUpcomingRidesTab && (
                             <button
                                 onClick={() => {
                                     setActiveTab('rides');
                                     fetchUpcomingRides();
                                 }}
+                                className={`driver-nav-tab-btn ${activeTab === 'rides' ? 'active' : ''}`}
                                 style={{
-                                    flex: 1.15,
-                                    padding: '12px',
-                                    borderRadius: '12px',
                                     background: activeTab === 'rides' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
-                                    color: 'white',
-                                    fontWeight: '800',
-                                    fontSize: '13.5px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '6px',
-                                    border: 'none',
-                                    transition: 'all 0.3s'
+                                    color: activeTab === 'rides' ? 'white' : 'rgba(255,255,255,0.6)',
+                                    boxShadow: activeTab === 'rides' ? '0 4px 12px rgba(245,158,11,0.3)' : 'none'
                                 }}
                             >
-                                <Calendar size={17} /> {t('upcomingRides')}
-                                {showUpcomingRidesTab && upcomingRides.length > 0 && (
-                                    <span style={{
-                                        background: activeTab === 'rides' ? '#fff' : '#f59e0b',
-                                        color: activeTab === 'rides' ? '#090d16' : '#000',
-                                        borderRadius: '10px',
-                                        padding: '1px 7px',
-                                        fontSize: '11px',
-                                        fontWeight: '900',
-                                        marginLeft: '3px'
-                                    }}>
-                                        {upcomingRides.length}
-                                    </span>
-                                )}
+                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Calendar size={18} />
+                                    {upcomingRides.length > 0 && (
+                                        <span style={{
+                                            position: 'absolute',
+                                            top: '-6px',
+                                            right: '-10px',
+                                            background: '#f43f5e',
+                                            color: 'white',
+                                            borderRadius: '10px',
+                                            padding: '0 5px',
+                                            fontSize: '9px',
+                                            fontWeight: '900',
+                                            lineHeight: '14px'
+                                        }}>
+                                            {upcomingRides.length}
+                                        </span>
+                                    )}
+                                </div>
+                                <span>{t('upcomingRides')}</span>
                             </button>
                         )}
+
                         {showSalaryLedgerTab && (
                             <button
                                 onClick={() => setActiveTab('ledger')}
-                                style={{ flex: 1, padding: '12px', borderRadius: '12px', background: activeTab === 'ledger' ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%)' : 'transparent', color: 'white', fontWeight: '800', fontSize: '13.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: 'none', transition: 'all 0.3s' }}
+                                className={`driver-nav-tab-btn ${activeTab === 'ledger' ? 'active' : ''}`}
+                                style={{
+                                    background: activeTab === 'ledger' ? 'linear-gradient(135deg, var(--primary) 0%, #0284c7 100%)' : 'transparent',
+                                    color: activeTab === 'ledger' ? 'white' : 'rgba(255,255,255,0.6)',
+                                    boxShadow: activeTab === 'ledger' ? '0 4px 12px rgba(14,165,233,0.3)' : 'none'
+                                }}
                             >
-                                <Wallet size={17} /> {t('ledger')}
+                                <Wallet size={18} />
+                                <span>{t('ledger')}</span>
                             </button>
                         )}
                     </div>
@@ -1673,59 +1804,40 @@ const DriverPortal = () => {
                                         </div>
                                     )}
 
-                                    {/* On Duty Screen */}
+                                    {/* On Duty Screen (Optimized for Mobile Visibility) */}
                                     {showPunchOut && !showPunchOutForm && (
-                                        <div className="glass-card" style={{
-                                            padding: 'clamp(32px, 8vw, 48px)',
-                                            textAlign: 'center',
-                                            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.03) 100%)',
-                                            border: '1px solid rgba(16, 185, 129, 0.15)',
-                                            boxShadow: '0 8px 32px rgba(16, 185, 129, 0.15)',
-                                            position: 'relative',
-                                            overflow: 'hidden'
-                                        }}>
+                                        <div className="driver-on-duty-card">
                                             <div style={{
                                                 position: 'absolute',
-                                                top: '-50px',
-                                                right: '-50px',
-                                                width: '150px',
-                                                height: '150px',
-                                                background: 'radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, transparent 70%)',
+                                                top: '-40px',
+                                                right: '-40px',
+                                                width: '120px',
+                                                height: '120px',
+                                                background: 'radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 70%)',
                                                 pointerEvents: 'none'
                                             }}></div>
                                             <div style={{
-                                                width: '80px',
-                                                height: '80px',
-                                                margin: '0 auto 20px',
-                                                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.05) 100%)',
+                                                width: '54px',
+                                                height: '54px',
+                                                margin: '0 auto 10px',
+                                                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.05) 100%)',
                                                 borderRadius: '50%',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'center',
-                                                border: '2px solid rgba(16, 185, 129, 0.2)',
-                                                boxShadow: '0 8px 24px rgba(16, 185, 129, 0.2)',
+                                                border: '2px solid rgba(16, 185, 129, 0.3)',
+                                                boxShadow: '0 4px 16px rgba(16, 185, 129, 0.25)',
                                                 position: 'relative'
                                             }}>
-                                                <Car size={40} color="#10b981" />
+                                                <Car size={26} color="#10b981" />
                                             </div>
-                                            <h2 style={{ color: 'white', fontSize: 'clamp(20px, 5vw, 24px)', marginBottom: '12px', fontWeight: '900', letterSpacing: '-0.5px', position: 'relative' }}>{t('onDuty')}</h2>
-                                            <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: '28px', fontSize: 'clamp(14px, 3.5vw, 15px)', fontWeight: '600', position: 'relative' }}>{t('driveSafely')}</p>
+                                            <h2 style={{ color: 'white', fontSize: '18px', marginBottom: '4px', fontWeight: '900', letterSpacing: '-0.3px', position: 'relative' }}>{t('onDuty')}</h2>
+                                            <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '14px', fontSize: '12px', fontWeight: '600', position: 'relative' }}>{t('driveSafely')}</p>
                                             <button
                                                 onClick={() => setShowPunchOutForm(true)}
-                                                className="btn-primary"
-                                                style={{
-                                                    width: '100%',
-                                                    background: 'linear-gradient(135deg, #f43f5e 0%, #dc2626 100%)',
-                                                    padding: '16px 24px',
-                                                    boxShadow: '0 8px 24px rgba(244, 63, 94, 0.3)',
-                                                    fontSize: '15px',
-                                                    fontWeight: '800',
-                                                    borderRadius: '14px',
-                                                    border: 'none',
-                                                    position: 'relative'
-                                                }}
+                                                className="driver-submit-btn"
                                             >
-                                                {t('submitReports')}
+                                                <LogOut size={16} /> {t('submitReports')}
                                             </button>
                                         </div>
                                     )}
