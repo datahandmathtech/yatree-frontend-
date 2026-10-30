@@ -237,6 +237,23 @@ const DriverPortal = () => {
     const [ridesYear, setRidesYear] = useState(new Date(Date.now() + 5.5 * 60 * 60 * 1000).getUTCFullYear());
     const [selectedDutyModal, setSelectedDutyModal] = useState(null);
 
+    // Active Company & Dynamic Multi-Tenant Settings (ALWAYS up-to-date with dashboardData)
+    const activeCompany = dashboardData?.driver?.company || user?.company;
+    const driverAppSettings = activeCompany?.driverAppSettings || {};
+    const operationalSettings = activeCompany?.operationalSettings || {};
+    const salarySettings = activeCompany?.salarySettings || {};
+
+    const pCount = driverAppSettings?.photoUploadCount ?? 3;
+    const showMeterReading = driverAppSettings?.dutyForm?.showMeterReading !== false;
+    const showDutyDetails = driverAppSettings?.dutyForm?.showDutyDetails !== false;
+
+    // Outside City logic: If dutyForm.showOutsideCityQuestion === false OR both dayAllowance and nightAllowance are disabled, HIDE Outside City!
+    const isDaOrNightAllowed = !(salarySettings?.dayAllowance?.enabled === false && salarySettings?.nightAllowance?.enabled === false);
+    const showOutsideCity = driverAppSettings?.dutyForm?.showOutsideCityQuestion !== false && isDaOrNightAllowed;
+
+    const parkingCanEnterAmt = driverAppSettings?.parking?.driverCanEnterAmount !== false && operationalSettings?.parking?.driverCanEnterAmount !== false;
+    const fuelSettings = driverAppSettings?.fuel || {};
+
     useEffect(() => {
         fetchDashboard();
     }, []);
@@ -312,6 +329,16 @@ const DriverPortal = () => {
                 headers: { Authorization: `Bearer ${user.token}` }
             });
             setDashboardData(data);
+            if (data?.driver?.company) {
+                try {
+                    const stored = localStorage.getItem('userInfo');
+                    if (stored) {
+                        const parsed = JSON.parse(stored);
+                        parsed.company = data.driver.company;
+                        localStorage.setItem('userInfo', JSON.stringify(parsed));
+                    }
+                } catch (e) {}
+            }
             if (data?.upcomingRides && Array.isArray(data.upcomingRides)) {
                 const todayStr = todayIST();
                 const currentAndUpcoming = data.upcomingRides.filter(r => r.isToday || (r.dateStr && r.dateStr >= todayStr));
@@ -444,23 +471,21 @@ const DriverPortal = () => {
     };
 
     const handlePunch = async (type) => {
-        const photoUploadCount = user?.company?.driverAppSettings?.photoUploadCount ?? 3;
-        const reqKm = user?.company?.driverAppSettings?.dutyForm?.showMeterReading !== false;
-        if (reqKm && !km) {
+        if (showMeterReading && !km) {
             setMessage({ type: 'error', text: t('mandatoryFields') });
             return;
         }
-        if (photoUploadCount >= 3) {
+        if (pCount >= 3) {
             if (!selfie || !kmPhoto || !carSelfie) {
                 setMessage({ type: 'error', text: t('mandatoryFields') });
                 return;
             }
-        } else if (photoUploadCount === 2) {
+        } else if (pCount === 2) {
             if (!selfie || !kmPhoto) {
                 setMessage({ type: 'error', text: t('mandatoryFields') });
                 return;
             }
-        } else if (photoUploadCount === 1) {
+        } else if (pCount === 1) {
             if (!kmPhoto) {
                 setMessage({ type: 'error', text: t('mandatoryFields') });
                 return;
@@ -481,7 +506,6 @@ const DriverPortal = () => {
                 }
             }
             if (parkingPaid) {
-                const parkingCanEnterAmt = user?.company?.driverAppSettings?.parking?.driverCanEnterAmount !== false && user?.company?.operationalSettings?.parking?.driverCanEnterAmount !== false;
                 const invalid = parkingEntries.some(e => {
                     if (!parkingCanEnterAmt) return !e.slip;
                     return !e.amount || !e.slip;
@@ -636,7 +660,6 @@ const DriverPortal = () => {
     };
 
     const handleSubmitExpense = async () => {
-        const parkingCanEnterAmt = user?.company?.driverAppSettings?.parking?.driverCanEnterAmount !== false && user?.company?.operationalSettings?.parking?.driverCanEnterAmount !== false;
         // Filter active entries (parking in slip-only mode is valid if slip is uploaded)
         const activeEntries = expenseEntries.filter(e => {
             if (e.type === 'parking' && !parkingCanEnterAmt) {
@@ -1725,7 +1748,7 @@ const DriverPortal = () => {
                                                 </div>
                                             )}
 
-                                            {user?.company?.driverAppSettings?.dutyForm?.showMeterReading !== false && (
+                                            {showMeterReading && (
 <div className="input-wrapper-full" style={{ marginBottom: 'clamp(16px, 4vw, 20px)' }}>
                                                 <label className="input-label">{t('currentKm')}</label>
                                                 <input
@@ -1740,7 +1763,6 @@ const DriverPortal = () => {
 
                                             {/* Photo Captures (Dynamic based on SuperAdmin Tenant Setting) */}
                                             {(() => {
-                                                const pCount = user?.company?.driverAppSettings?.photoUploadCount ?? 3;
                                                 if (pCount === 0) return null;
                                                 return (
                                                     <div
@@ -1842,18 +1864,11 @@ const DriverPortal = () => {
                                                 );
                                             })()}
 
-                                            {/* Punch-Out Specific Questions */}
-                                            {showPunchOut && (
+                                            {/* Outside Trip Question (Hidden if Outside City or DA/Night Allowance is disabled) */}
+                                            {showPunchOut && showOutsideCity && (
                                                 <div style={{ marginBottom: 'clamp(20px, 5vw, 28px)' }}>
                                                     <h3 className="section-title">{t('expenditureDetails')}</h3>
-
-
-
-
-
-                                                    {/* Outside Trip Question */}
-                                                    {user?.company?.driverAppSettings?.dutyForm?.showOutsideCityQuestion !== false && (
-<div style={{ marginBottom: 'clamp(16px, 4vw, 20px)' }}>
+                                                    <div style={{ marginBottom: 'clamp(16px, 4vw, 20px)' }}>
                                                         <p className="input-label" style={{ marginBottom: '10px' }}>{t('outsideCityQuestion')}</p>
                                                         <div className="yes-no-button-group">
                                                             <button
@@ -1906,12 +1921,11 @@ const DriverPortal = () => {
                                                             </div>
                                                         )}
                                                     </div>
-                                                )}
-                                            </div>
-                                        )}
+                                                </div>
+                                            )}
 
                                             {/* Remarks (Punch-Out only) */}
-                                            {showPunchOut && user?.company?.driverAppSettings?.dutyForm?.showDutyDetails !== false && (
+                                            {showPunchOut && showDutyDetails && (
                                                 <div style={{ marginBottom: 'clamp(20px, 5vw, 28px)' }}>
                                                     <div className="input-wrapper-full" style={{ marginTop: '4px' }}>
                                                         <label className="input-label">Duty Details</label>
@@ -2062,14 +2076,14 @@ const DriverPortal = () => {
                                                             </div>
 
                                                             {/* Parking Slip-Only Notice if Driver Amount Disabled */}
-                                                            {entry.type === 'parking' && (user?.company?.driverAppSettings?.parking?.driverCanEnterAmount === false || user?.company?.operationalSettings?.parking?.driverCanEnterAmount === false) ? (
+                                                            {entry.type === 'parking' && !parkingCanEnterAmt ? (
                                                                 <div style={{ padding: '12px 14px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '12px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#38bdf8', fontWeight: '700' }}>
                                                                     <span>📸</span> Slip Only Mode: Please upload the parking ticket slip photo below. Office admin will enter and approve the amount.
                                                                 </div>
                                                             ) : (
                                                                 <div className="input-grid-2" style={{ marginBottom: '16px' }}>
                                                                     {/* Amount Field: Conditionally rendered for Fuel or Standard Parking/Other */}
-                                                                    {(entry.type !== 'fuel' || (user?.company?.driverAppSettings?.fuel?.showAmount !== false && user?.company?.operationalSettings?.fuel?.showAmount !== false)) && (
+                                                                    {(entry.type !== 'fuel' || (fuelSettings.showAmount !== false && operationalSettings.fuel?.showAmount !== false)) && (
                                                                         <div className="input-wrapper-full">
                                                                             <label className="input-label" style={{ fontSize: '10px' }}>{t('amount')}</label>
                                                                             <input
@@ -2086,7 +2100,7 @@ const DriverPortal = () => {
                                                                             />
                                                                         </div>
                                                                     )}
-                                                                    {entry.type === 'fuel' && (user?.company?.driverAppSettings?.fuel?.showLiters !== false && user?.company?.operationalSettings?.fuel?.showLiters !== false) && (
+                                                                    {entry.type === 'fuel' && (fuelSettings.showLiters !== false && operationalSettings.fuel?.showLiters !== false) && (
                                                                         <>
                                                                             <div className="input-wrapper-full">
                                                                                 <label className="input-label" style={{ fontSize: '10px' }}>{entry.fuelType === 'Electric' ? t('charging_units') : t('volume_optional')}</label>
@@ -2130,7 +2144,7 @@ const DriverPortal = () => {
                                                                             </div>
                                                                         </>
                                                                     )}
-                                                                    {entry.type === 'fuel' && (user?.company?.driverAppSettings?.fuel?.showKm !== false && user?.company?.operationalSettings?.fuel?.showKm !== false) && (
+                                                                    {entry.type === 'fuel' && (fuelSettings.showKm !== false && operationalSettings.fuel?.showKm !== false) && (
                                                                         <div className="input-wrapper-full">
                                                                             <label className="input-label" style={{ fontSize: '10px' }}>{t('meterKm')} (Opt)</label>
                                                                             <input
@@ -2150,7 +2164,7 @@ const DriverPortal = () => {
                                                                 </div>
                                                             )}
 
-                                                            {entry.type === 'fuel' && (user?.company?.driverAppSettings?.fuel?.showFuelType !== false && user?.company?.operationalSettings?.fuel?.showFuelType !== false) && (
+                                                            {entry.type === 'fuel' && (fuelSettings.showFuelType !== false && operationalSettings.fuel?.showFuelType !== false) && (
                                                                 <>
                                                                     <div className="input-wrapper-full" style={{ marginTop: '4px', marginBottom: '16px' }}>
                                                                         <label className="input-label" style={{ fontSize: '10px', marginBottom: '6px' }}>{t('fuelType')}</label>
