@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">LogKaro Driver</string>
+    <string name="title_activity_main">LogKaro Driver</string>
+    <string name="package_name">com.logkaro.driver</string>
+    <string name="custom_url_scheme">logkaro</string>
+</resources>

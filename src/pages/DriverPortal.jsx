@@ -21,6 +21,7 @@ import {
     Wallet,
     LayoutDashboard,
     Download,
+    Smartphone,
     ClipboardList,
     ArrowRight,
     Lock,
@@ -218,6 +219,11 @@ const DriverPortal = () => {
     const [showPasswordSection, setShowPasswordSection] = useState(false);
     const [passwordData, setPasswordData] = useState({ oldPassword: '', newPassword: '' });
 
+    // PWA & Native Mobile App Installation
+    const [installPrompt, setInstallPrompt] = useState(null);
+    const [isInstalledApp, setIsInstalledApp] = useState(false);
+    const [showIosInstallModal, setShowIosInstallModal] = useState(false);
+
     // Mid-Trip Expense states
     const [showExpenseModal, setShowExpenseModal] = useState(false);
     const [expenseModalType, setExpenseModalType] = useState(null); // 'fuel', 'parking', 'other'
@@ -271,6 +277,67 @@ const DriverPortal = () => {
     useEffect(() => {
         fetchDashboard();
     }, []);
+
+    // ── Driver PWA Manifest & App Install Setup ──
+    useEffect(() => {
+        let manifestLink = document.querySelector("link[rel='manifest']");
+        if (manifestLink) {
+            manifestLink.setAttribute('href', '/driver-manifest.json?v=2');
+        } else {
+            manifestLink = document.createElement('link');
+            manifestLink.rel = 'manifest';
+            manifestLink.href = '/driver-manifest.json?v=2';
+            document.head.appendChild(manifestLink);
+        }
+
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        if (isStandalone) {
+            setIsInstalledApp(true);
+        }
+
+        const handleBeforeInstall = (e) => {
+            e.preventDefault();
+            setInstallPrompt(e);
+        };
+        window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+        return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+    }, []);
+
+    // ── Screen WakeLock on Duty (Keeps phone screen on while driving) ──
+    useEffect(() => {
+        let wakeLockObj = null;
+        const requestWakeLock = async () => {
+            try {
+                if ('wakeLock' in navigator && todayAttendance?.punchIn?.time && !todayAttendance?.punchOut?.time) {
+                    wakeLockObj = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) {
+                // Ignore wakeLock failures silently
+            }
+        };
+        requestWakeLock();
+        return () => {
+            if (wakeLockObj) wakeLockObj.release().catch(() => {});
+        };
+    }, [todayAttendance?.punchIn?.time, todayAttendance?.punchOut?.time]);
+
+    const handleInstallClick = async () => {
+        if (installPrompt) {
+            installPrompt.prompt();
+            const choice = await installPrompt.userChoice;
+            if (choice && choice.outcome === 'accepted') {
+                setInstallPrompt(null);
+                setIsInstalledApp(true);
+            }
+        } else {
+            const isIos = /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
+            if (isIos) {
+                setShowIosInstallModal(true);
+            } else {
+                alert('📱 App Install karne ke liye: Chrome browser ke 3 dots (⋮) par click karein aur "Install App" ya "Add to Home screen" chunein.');
+            }
+        }
+    };
 
     useEffect(() => {
         if (activeTab === 'ledger') {
@@ -1308,6 +1375,31 @@ const DriverPortal = () => {
                                         }}
                                     >हिन्दी</button>
                                 </div>
+
+                                {/* Native App Install Button */}
+                                {!isInstalledApp && (
+                                    <button
+                                        onClick={handleInstallClick}
+                                        title={language === 'hi' ? 'ऐप इंस्टॉल करें' : 'Install Driver App'}
+                                        style={{
+                                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                            color: 'white',
+                                            padding: '5px 10px',
+                                            borderRadius: '10px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            fontSize: '11px',
+                                            fontWeight: '900',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)',
+                                            whiteSpace: 'nowrap'
+                                        }}
+                                    >
+                                        <Smartphone size={13} /> {language === 'hi' ? 'ऐप इंस्टॉल' : 'Install App'}
+                                    </button>
+                                )}
 
                                 {/* Security Password Change */}
                                 <button
