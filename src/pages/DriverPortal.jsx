@@ -251,6 +251,20 @@ const DriverPortal = () => {
     const isDaOrNightAllowed = !(salarySettings?.dayAllowance?.enabled === false && salarySettings?.nightAllowance?.enabled === false);
     const showOutsideCity = driverAppSettings?.dutyForm?.showOutsideCityQuestion !== false && isDaOrNightAllowed;
 
+    // Navigation Tabs Controls (from SuperAdmin)
+    const showUpcomingRidesTab = driverAppSettings?.tabs?.showUpcomingRides !== false;
+    const showSalaryLedgerTab = driverAppSettings?.tabs?.showSalaryLedger !== false;
+
+    // If a tab is turned OFF, automatically switch driver to 'home'
+    useEffect(() => {
+        if (activeTab === 'rides' && !showUpcomingRidesTab) {
+            setActiveTab('home');
+        }
+        if (activeTab === 'ledger' && !showSalaryLedgerTab) {
+            setActiveTab('home');
+        }
+    }, [activeTab, showUpcomingRidesTab, showSalaryLedgerTab]);
+
     const parkingCanEnterAmt = driverAppSettings?.parking?.driverCanEnterAmount !== false && operationalSettings?.parking?.driverCanEnterAmount !== false;
     const fuelSettings = driverAppSettings?.fuel || {};
 
@@ -1357,48 +1371,52 @@ const DriverPortal = () => {
                         >
                             <LayoutDashboard size={17} /> {t('today')}
                         </button>
-                        <button
-                            onClick={() => {
-                                setActiveTab('rides');
-                                fetchUpcomingRides();
-                            }}
-                            style={{
-                                flex: 1.15,
-                                padding: '12px',
-                                borderRadius: '12px',
-                                background: activeTab === 'rides' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
-                                color: 'white',
-                                fontWeight: '800',
-                                fontSize: '13.5px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '6px',
-                                border: 'none',
-                                transition: 'all 0.3s'
-                            }}
-                        >
-                            <Calendar size={17} /> {t('upcomingRides')}
-                            {upcomingRides.length > 0 && (
-                                <span style={{
-                                    background: activeTab === 'rides' ? '#fff' : '#f59e0b',
-                                    color: activeTab === 'rides' ? '#090d16' : '#000',
-                                    borderRadius: '10px',
-                                    padding: '1px 7px',
-                                    fontSize: '11px',
-                                    fontWeight: '900',
-                                    marginLeft: '3px'
-                                }}>
-                                    {upcomingRides.length}
-                                </span>
-                            )}
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('ledger')}
-                            style={{ flex: 1, padding: '12px', borderRadius: '12px', background: activeTab === 'ledger' ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%)' : 'transparent', color: 'white', fontWeight: '800', fontSize: '13.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: 'none', transition: 'all 0.3s' }}
-                        >
-                            <Wallet size={17} /> {t('ledger')}
-                        </button>
+                        {showUpcomingRidesTab && (
+                            <button
+                                onClick={() => {
+                                    setActiveTab('rides');
+                                    fetchUpcomingRides();
+                                }}
+                                style={{
+                                    flex: 1.15,
+                                    padding: '12px',
+                                    borderRadius: '12px',
+                                    background: activeTab === 'rides' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'transparent',
+                                    color: 'white',
+                                    fontWeight: '800',
+                                    fontSize: '13.5px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px',
+                                    border: 'none',
+                                    transition: 'all 0.3s'
+                                }}
+                            >
+                                <Calendar size={17} /> {t('upcomingRides')}
+                                {showUpcomingRidesTab && upcomingRides.length > 0 && (
+                                    <span style={{
+                                        background: activeTab === 'rides' ? '#fff' : '#f59e0b',
+                                        color: activeTab === 'rides' ? '#090d16' : '#000',
+                                        borderRadius: '10px',
+                                        padding: '1px 7px',
+                                        fontSize: '11px',
+                                        fontWeight: '900',
+                                        marginLeft: '3px'
+                                    }}>
+                                        {upcomingRides.length}
+                                    </span>
+                                )}
+                            </button>
+                        )}
+                        {showSalaryLedgerTab && (
+                            <button
+                                onClick={() => setActiveTab('ledger')}
+                                style={{ flex: 1, padding: '12px', borderRadius: '12px', background: activeTab === 'ledger' ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary) 100%)' : 'transparent', color: 'white', fontWeight: '800', fontSize: '13.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', border: 'none', transition: 'all 0.3s' }}
+                            >
+                                <Wallet size={17} /> {t('ledger')}
+                            </button>
+                        )}
                     </div>
 
                     {activeTab === 'home' && (
