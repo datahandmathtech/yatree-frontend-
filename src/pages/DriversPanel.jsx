@@ -50,7 +50,8 @@ const DriversPanel = () => {
     const [breakdownType, setBreakdownType] = React.useState('DA'); // 'DA' or 'NIGHTS'
 
     // SuperAdmin or SuperAdmin proxy can access / handle DA/Night & Parking tab
-    const hasAllowancesHub = activeCompany?.salarySettings?.dayAllowance?.enabled || activeCompany?.salarySettings?.nightAllowance?.enabled || activeCompany?.operationalSettings?.parking?.enabled || user?.role?.toLowerCase() === 'superadmin' || user?.isSuperAdminProxy || localStorage.getItem('ENABLE_ALLOWANCES_HUB') === 'true';
+    // Allowances Hub (DA/Night & Parking separate tab) is controlled via SuperAdmin salarySettings.separateAllowancesSection (Default: false)
+    const hasAllowancesHub = activeCompany?.salarySettings?.separateAllowancesSection === true;
 
     const setActiveTab = (tab) => {
         setSearchParams({ tab });

@@ -9,6 +9,7 @@ import {
     AlertCircle, Edit2, Download, Trash2, Wallet, Building2, UserCheck, CreditCard
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
 import { useCompany } from '../context/CompanyContext';
 import SEO from '../components/SEO';
 import {
@@ -22,7 +23,10 @@ import PremiumDateInput from '../components/common/PremiumDateInput';
 import BankSelector from '../components/common/BankSelector';
 
 const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUpdate, defaultViewMode = 'salaries' }) => {
+    const { user } = useAuth();
     const { selectedCompany } = useCompany();
+    const activeCompany = selectedCompany || user?.company;
+    const hasAllowancesHub = activeCompany?.salarySettings?.separateAllowancesSection === true;
     useEffect(() => {
         const style = document.createElement('style');
         style.textContent = `
@@ -1122,20 +1126,22 @@ const DriverSalaries = ({ isSubComponent = false, driverType = 'Taxi', onStatsUp
                         </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '5px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                        <button 
-                            onClick={() => setViewMode('salaries')}
-                            style={{ padding: '8px 16px', borderRadius: '10px', border: 'none', background: viewMode === 'salaries' ? 'var(--primary)' : 'transparent', color: viewMode === 'salaries' ? 'black' : 'var(--text-muted)', fontWeight: '800', cursor: 'pointer', transition: 'all 0.3s' }}
-                        >
-                            Salaries
-                        </button>
-                        <button 
-                            onClick={() => { setViewMode('allowances'); setActiveTab('payroll'); }}
-                            style={{ padding: '8px 16px', borderRadius: '10px', border: 'none', background: viewMode === 'allowances' ? '#10b981' : 'transparent', color: viewMode === 'allowances' ? 'white' : 'var(--text-muted)', fontWeight: '800', cursor: 'pointer', transition: 'all 0.3s' }}
-                        >
-                            DA / Night & Parking
-                        </button>
-                    </div>
+                    {hasAllowancesHub && (
+                        <div style={{ display: 'flex', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '5px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                            <button 
+                                onClick={() => setViewMode('salaries')}
+                                style={{ padding: '8px 16px', borderRadius: '10px', border: 'none', background: viewMode === 'salaries' ? 'var(--primary)' : 'transparent', color: viewMode === 'salaries' ? 'black' : 'var(--text-muted)', fontWeight: '800', cursor: 'pointer', transition: 'all 0.3s' }}
+                            >
+                                Salaries
+                            </button>
+                            <button 
+                                onClick={() => { setViewMode('allowances'); setActiveTab('payroll'); }}
+                                style={{ padding: '8px 16px', borderRadius: '10px', border: 'none', background: viewMode === 'allowances' ? '#10b981' : 'transparent', color: viewMode === 'allowances' ? 'white' : 'var(--text-muted)', fontWeight: '800', cursor: 'pointer', transition: 'all 0.3s' }}
+                            >
+                                DA / Night & Parking
+                            </button>
+                        </div>
+                    )}
 
                     <div className="salaries-controls">
                         {/* MONTH SELECTOR */}
