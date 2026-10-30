@@ -445,23 +445,23 @@ const DriverPortal = () => {
 
     const handlePunch = async (type) => {
         const photoUploadCount = user?.company?.driverAppSettings?.photoUploadCount ?? 3;
+        const reqKm = user?.company?.driverAppSettings?.dutyForm?.showMeterReading !== false;
+        if (reqKm && !km) {
+            setMessage({ type: 'error', text: t('mandatoryFields') });
+            return;
+        }
         if (photoUploadCount >= 3) {
-            if (!km || !selfie || !kmPhoto || !carSelfie) {
+            if (!selfie || !kmPhoto || !carSelfie) {
                 setMessage({ type: 'error', text: t('mandatoryFields') });
                 return;
             }
         } else if (photoUploadCount === 2) {
-            if (!km || !selfie || !kmPhoto) {
+            if (!selfie || !kmPhoto) {
                 setMessage({ type: 'error', text: t('mandatoryFields') });
                 return;
             }
         } else if (photoUploadCount === 1) {
-            if (!km || !kmPhoto) {
-                setMessage({ type: 'error', text: t('mandatoryFields') });
-                return;
-            }
-        } else if (photoUploadCount === 0) {
-            if (!km) {
+            if (!kmPhoto) {
                 setMessage({ type: 'error', text: t('mandatoryFields') });
                 return;
             }
@@ -1725,7 +1725,8 @@ const DriverPortal = () => {
                                                 </div>
                                             )}
 
-                                            <div className="input-wrapper-full" style={{ marginBottom: 'clamp(16px, 4vw, 20px)' }}>
+                                            {user?.company?.driverAppSettings?.dutyForm?.showMeterReading !== false && (
+<div className="input-wrapper-full" style={{ marginBottom: 'clamp(16px, 4vw, 20px)' }}>
                                                 <label className="input-label">{t('currentKm')}</label>
                                                 <input
                                                     type="number"
@@ -1735,6 +1736,7 @@ const DriverPortal = () => {
                                                     onChange={(e) => setKm(e.target.value)}
                                                 />
                                             </div>
+)}
 
                                             {/* Photo Captures (Dynamic based on SuperAdmin Tenant Setting) */}
                                             {(() => {
@@ -1850,7 +1852,8 @@ const DriverPortal = () => {
 
 
                                                     {/* Outside Trip Question */}
-                                                    <div style={{ marginBottom: 'clamp(16px, 4vw, 20px)' }}>
+                                                    {user?.company?.driverAppSettings?.dutyForm?.showOutsideCityQuestion !== false && (
+<div style={{ marginBottom: 'clamp(16px, 4vw, 20px)' }}>
                                                         <p className="input-label" style={{ marginBottom: '10px' }}>{t('outsideCityQuestion')}</p>
                                                         <div className="yes-no-button-group">
                                                             <button
@@ -1903,11 +1906,12 @@ const DriverPortal = () => {
                                                             </div>
                                                         )}
                                                     </div>
-                                                </div>
-                                            )}
+                                                )}
+                                            </div>
+                                        )}
 
                                             {/* Remarks (Punch-Out only) */}
-                                            {showPunchOut && (
+                                            {showPunchOut && user?.company?.driverAppSettings?.dutyForm?.showDutyDetails !== false && (
                                                 <div style={{ marginBottom: 'clamp(20px, 5vw, 28px)' }}>
                                                     <div className="input-wrapper-full" style={{ marginTop: '4px' }}>
                                                         <label className="input-label">Duty Details</label>
