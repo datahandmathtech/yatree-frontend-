@@ -308,7 +308,8 @@ const DriverPortal = () => {
         let wakeLockObj = null;
         const requestWakeLock = async () => {
             try {
-                if ('wakeLock' in navigator && todayAttendance?.punchIn?.time && !todayAttendance?.punchOut?.time) {
+                const att = dashboardData?.todayAttendance;
+                if ('wakeLock' in navigator && att?.punchIn?.time && !att?.punchOut?.time) {
                     wakeLockObj = await navigator.wakeLock.request('screen');
                 }
             } catch (err) {
@@ -319,7 +320,7 @@ const DriverPortal = () => {
         return () => {
             if (wakeLockObj) wakeLockObj.release().catch(() => {});
         };
-    }, [todayAttendance?.punchIn?.time, todayAttendance?.punchOut?.time]);
+    }, [dashboardData?.todayAttendance?.punchIn?.time, dashboardData?.todayAttendance?.punchOut?.time]);
 
     const handleInstallClick = async () => {
         if (installPrompt) {
