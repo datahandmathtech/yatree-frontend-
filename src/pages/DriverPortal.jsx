@@ -1328,19 +1328,21 @@ const DriverPortal = () => {
                                     <img
                                         src={user.company?.logo || "/logos/logo.png"}
                                         alt={user.company?.name || "LogKaro"}
-                                        style={{ width: '32px', height: '32px', objectFit: 'contain' }}
+                                        style={{ width: '30px', height: '30px', objectFit: 'contain' }}
                                     />
                                 </div>
-                                <div>
-                                    <div className="driver-company-sub">
-                                        <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 6px #10b981' }}></span>
+                                <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                                    <div className="driver-company-sub" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 6px #10b981', flexShrink: 0 }}></span>
                                         {user.company?.name || "LogKaro"}
                                     </div>
-                                    <h1 className="driver-name-text">{user.name}</h1>
+                                    <h1 className="driver-name-text" style={{ fontSize: '15px', fontWeight: '900', color: 'white', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {user.name}
+                                    </h1>
                                 </div>
                             </div>
 
-                            <div className="driver-header-actions">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                                 {/* Language Switcher Pill */}
                                 <div style={{
                                     background: 'rgba(255,255,255,0.06)',
@@ -1352,8 +1354,8 @@ const DriverPortal = () => {
                                     <button
                                         onClick={() => setLanguage('en')}
                                         style={{
-                                            padding: '5px 9px',
-                                            borderRadius: '8px',
+                                            padding: '4px 8px',
+                                            borderRadius: '7px',
                                             fontSize: '11px',
                                             fontWeight: '800',
                                             background: language === 'en' ? 'var(--primary)' : 'transparent',
@@ -1365,8 +1367,8 @@ const DriverPortal = () => {
                                     <button
                                         onClick={() => setLanguage('hi')}
                                         style={{
-                                            padding: '5px 9px',
-                                            borderRadius: '8px',
+                                            padding: '4px 8px',
+                                            borderRadius: '7px',
                                             fontSize: '11px',
                                             fontWeight: '800',
                                             background: language === 'hi' ? 'var(--primary)' : 'transparent',
@@ -1376,31 +1378,6 @@ const DriverPortal = () => {
                                         }}
                                     >हिन्दी</button>
                                 </div>
-
-                                {/* Native App Install Button */}
-                                {!isInstalledApp && (
-                                    <button
-                                        onClick={handleInstallClick}
-                                        title={language === 'hi' ? 'ऐप इंस्टॉल करें' : 'Install Driver App'}
-                                        style={{
-                                            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                                            color: 'white',
-                                            padding: '5px 10px',
-                                            borderRadius: '10px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '4px',
-                                            fontSize: '11px',
-                                            fontWeight: '900',
-                                            border: 'none',
-                                            cursor: 'pointer',
-                                            boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)',
-                                            whiteSpace: 'nowrap'
-                                        }}
-                                    >
-                                        <Smartphone size={13} /> {language === 'hi' ? 'ऐप इंस्टॉल' : 'Install App'}
-                                    </button>
-                                )}
 
                                 {/* Security Password Change */}
                                 <button
@@ -1444,30 +1421,12 @@ const DriverPortal = () => {
                             </div>
                         </div>
 
-                        {/* Quick Action Pill Bar (Fuel, Parking, Air Check) */}
+                        {/* Quick Action Bar for On-Duty Drivers */}
                         {showPunchOut && (
-                            <div className="driver-actions-bar">
-                                {todayAttendance?.pendingExpenses?.length > 0 && (
-                                    <div style={{
-                                        background: 'rgba(245, 158, 11, 0.15)',
-                                        padding: '6px 10px',
-                                        borderRadius: '8px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '5px',
-                                        color: 'var(--primary)',
-                                        fontSize: '11px',
-                                        fontWeight: '800',
-                                        border: '1px solid rgba(245, 158, 11, 0.25)',
-                                        flexShrink: 0
-                                    }}>
-                                        <Clock size={13} /> {todayAttendance.pendingExpenses.length}
-                                    </div>
-                                )}
+                            <div className="driver-actions-bar" style={{ marginTop: '10px' }}>
                                 <button
                                     onClick={() => {
-                                        const newFuelEntry = { type: 'fuel', amount: '', quantity: '', km: '', fuelType: 'Diesel', paymentSource: 'Office', slip: null, preview: null };
-                                        setExpenseEntries([newFuelEntry]);
+                                        setExpenseEntries([{ type: 'fuel', amount: '', quantity: '', km: '', fuelType: '', slip: null, preview: null }]);
                                         setExpenseModalType('fuel');
                                         setShowExpenseModal(true);
                                     }}
