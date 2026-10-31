@@ -124,7 +124,7 @@ const InlineRemarkEditor = ({ lead, fetchLeads, setViewingImage, customRemarks, 
     };
 
     return (
-        <div style={{ width: '100%', minWidth: '220px', position: 'relative' }}>
+        <div style={{ width: '100%', minWidth: '160px', position: 'relative' }}>
             {lastRemark ? (
                 <div 
                     onMouseEnter={() => setIsHovered(true)}
@@ -2282,7 +2282,7 @@ export default function Leads() {
     };
 
     return (
-        <div className="container-fluid" style={{ padding: '24px', minHeight: '100vh', background: 'transparent' }}>
+        <div className="container-fluid" style={{ padding: '16px 18px', minHeight: '100vh', background: 'transparent' }}>
             <SEO title="Open - Leads & Quotes" description="Manage taxi fleet sales leads, client codes, quotes and conversions." />
 
             {/* 1. Header with 'Sales God' Title & KPI Summary Cards */}
@@ -2787,7 +2787,7 @@ export default function Leads() {
                                     if (sortField === 'date') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
                                     else { setSortField('date'); setSortOrder('desc'); }
                                 }}
-                                style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: sortField === 'date' ? '#38bdf8' : 'rgba(255,255,255,0.7)', letterSpacing: '0.3px', cursor: 'pointer', userSelect: 'none' }}
+                                style={{ padding: '11px 12px', fontWeight: '700', fontSize: '11.5px', whiteSpace: 'nowrap', color: sortField === 'date' ? '#38bdf8' : 'rgba(255,255,255,0.7)', letterSpacing: '0.3px', cursor: 'pointer', userSelect: 'none' }}
                                 title="Click to sort by date"
                             >
                                 Lead Created {sortField === 'date' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
@@ -2797,18 +2797,18 @@ export default function Leads() {
                                     if (sortField === 'clientCode') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
                                     else { setSortField('clientCode'); setSortOrder('desc'); }
                                 }}
-                                style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: sortField === 'clientCode' ? '#38bdf8' : 'rgba(255,255,255,0.7)', letterSpacing: '0.3px', cursor: 'pointer', userSelect: 'none' }}
+                                style={{ padding: '11px 12px', fontWeight: '700', fontSize: '11.5px', whiteSpace: 'nowrap', color: sortField === 'clientCode' ? '#38bdf8' : 'rgba(255,255,255,0.7)', letterSpacing: '0.3px', cursor: 'pointer', userSelect: 'none' }}
                                 title="Click to sort sequentially by Lead ID / Code"
                             >
                                 Lead ID / Code {sortField === 'clientCode' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
                             </th>
-                            <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
+                            <th style={{ padding: '11px 12px', fontWeight: '700', fontSize: '11.5px', whiteSpace: 'nowrap', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
                                 Status ↕
                             </th>
-                            <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
+                            <th style={{ padding: '11px 12px', fontWeight: '700', fontSize: '11.5px', whiteSpace: 'nowrap', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
                                 Source ↕
                             </th>
-                            <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
+                            <th style={{ padding: '11px 12px', fontWeight: '700', fontSize: '11.5px', whiteSpace: 'nowrap', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
                                 Travel Dates ↕
                             </th>
                             <th 
@@ -2816,15 +2816,15 @@ export default function Leads() {
                                     if (sortField === 'price') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
                                     else { setSortField('price'); setSortOrder('desc'); }
                                 }}
-                                style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: sortField === 'price' ? '#38bdf8' : 'rgba(255,255,255,0.7)', letterSpacing: '0.3px', cursor: 'pointer', userSelect: 'none' }}
+                                style={{ padding: '11px 12px', fontWeight: '700', fontSize: '11.5px', whiteSpace: 'nowrap', color: sortField === 'price' ? '#38bdf8' : 'rgba(255,255,255,0.7)', letterSpacing: '0.3px', cursor: 'pointer', userSelect: 'none' }}
                                 title="Click to sort by price"
                             >
                                 Price {sortField === 'price' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
                             </th>
-                            <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
+                            <th style={{ padding: '11px 12px', fontWeight: '700', fontSize: '11.5px', whiteSpace: 'nowrap', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
                                 Last Remark ↕
                             </th>
-                            <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', textAlign: 'right' }}>
+                            <th style={{ padding: '11px 12px', fontWeight: '700', fontSize: '11.5px', whiteSpace: 'nowrap', color: 'rgba(255,255,255,0.7)', textAlign: 'right' }}>
                                 Actions
                             </th>
                         </tr>
@@ -2852,12 +2852,12 @@ export default function Leads() {
                             return (
                                 <tr key={lead._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.15s ease' }}>
                                     {/* 1. Lead Created */}
-                                    <td style={{ padding: '16px 20px', fontSize: '13px', color: 'rgba(255,255,255,0.9)' }}>
+                                    <td style={{ padding: '10px 12px', fontSize: '13px', color: 'rgba(255,255,255,0.9)' }}>
                                         {formatCreatedDate(lead.leadDate || lead.createdAt)}
                                     </td>
 
                                     {/* 2. Client Code (MM/SS with Tooltip) */}
-                                    <td style={{ padding: '16px 20px', position: 'relative' }}>
+                                    <td style={{ padding: '10px 12px', position: 'relative' }}>
                                         <div
                                             style={{ position: 'relative', display: 'inline-block' }}
                                             onMouseEnter={() => setHoveredLeadId(lead._id)}
@@ -2869,10 +2869,10 @@ export default function Leads() {
                                                 gap: '6px',
                                                 color: '#38bdf8',
                                                 fontWeight: '900',
-                                                fontSize: '15px',
+                                                fontSize: '13.5px',
                                                 cursor: 'pointer'
                                             }}>
-                                                <User size={15} color="#38bdf8" />
+                                                <User size={13.5} color="#38bdf8" />
                                                 <span>{lead.clientCode || lead.leadId || 'N/A'}</span>
                                             </div>
                                             <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
@@ -2931,7 +2931,7 @@ export default function Leads() {
                                     </td>
 
                                     {/* 3. Status Badge */}
-                                    <td style={{ padding: '16px 20px', verticalAlign: 'middle' }}>
+                                    <td style={{ padding: '10px 12px', verticalAlign: 'middle' }}>
                                         {leadRideCompleted ? (
                                             <span style={{
                                                 background: 'rgba(56, 189, 248, 0.15)',
@@ -3016,20 +3016,20 @@ export default function Leads() {
                                     </td>
 
                                     {/* 4. Source */}
-                                    <td style={{ padding: '16px 20px', fontSize: '13px', fontWeight: '600' }}>
+                                    <td style={{ padding: '10px 12px', fontSize: '13px', fontWeight: '600' }}>
                                         {renderSourceIcon(lead.source)}
                                     </td>
 
 
                                     {/* 5. Travel Dates */}
-                                    <td style={{ padding: '16px 20px' }}>
+                                    <td style={{ padding: '10px 12px' }}>
                                         {lead.travelStartDate ? (() => {
                                             const totalStay = getDaysDifference(toLocalDateString(lead.travelStartDate), toLocalDateString(lead.travelEndDate || lead.travelStartDate));
                                             const exclDates = Array.isArray(lead.excludedDates) ? lead.excludedDates : [];
                                             const activeDays = exclDates.length > 0 ? Math.max(1, totalStay - exclDates.length) : totalStay;
                                             return (
                                                 <div>
-                                                    <div style={{ fontSize: '13px', color: 'white', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                                                    <div style={{ fontSize: '12px', color: 'white', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
                                                         <Calendar size={13} color="#fbbf24" />
                                                         <span>
                                                             {formatTourDate(lead.travelStartDate)}
@@ -3075,20 +3075,20 @@ export default function Leads() {
                                     </td>
 
                                     {/* 6. Price */}
-                                    <td style={{ padding: '16px 20px' }}>
-                                        <div style={{ fontWeight: '900', color: 'white', fontSize: '15px' }}>
+                                    <td style={{ padding: '10px 12px' }}>
+                                        <div style={{ fontWeight: '900', color: 'white', fontSize: '14px', whiteSpace: 'nowrap' }}>
                                             ₹{(lead.totalAmount || 0).toLocaleString('en-IN')}
                                         </div>
                                     </td>
 
                                     {/* 7. Last Remark */}
-                                    <td style={{ padding: '16px 20px', maxWidth: '240px', verticalAlign: 'middle' }}>
+                                    <td style={{ padding: '10px 12px', maxWidth: '200px', verticalAlign: 'middle' }}>
                                         <InlineRemarkEditor lead={lead} fetchLeads={fetchLeads} setViewingImage={setViewingImage} customRemarks={customRemarks} setCustomRemarks={setCustomRemarks} selectedCompany={selectedCompany} />
                                     </td>
 
                                     {/* 8. Actions */}
-                                    <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end', alignItems: 'center' }}>
                                             {/* Record Advance / Confirm action */}
                                             {leadRideCompleted ? (
                                                 <button
