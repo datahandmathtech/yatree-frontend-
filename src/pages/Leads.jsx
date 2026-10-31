@@ -1773,6 +1773,12 @@ export default function Leads() {
                 return sortOrder === 'asc' ? priceA - priceB : priceB - priceA;
             }
 
+            if (sortField === 'carType') {
+                const carA = (a.carType || a.vehicleModel || '').toLowerCase();
+                const carB = (b.carType || b.vehicleModel || '').toLowerCase();
+                return sortOrder === 'asc' ? carA.localeCompare(carB) : carB.localeCompare(carA);
+            }
+
             return 0;
         });
 
@@ -2781,6 +2787,16 @@ export default function Leads() {
                             <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
                                 Source ↕
                             </th>
+                            <th 
+                                onClick={() => {
+                                    if (sortField === 'carType') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                                    else { setSortField('carType'); setSortOrder('asc'); }
+                                }}
+                                style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: sortField === 'carType' ? '#38bdf8' : 'rgba(255,255,255,0.7)', letterSpacing: '0.3px', cursor: 'pointer', userSelect: 'none' }}
+                                title="Click to sort by Vehicle Model"
+                            >
+                                Vehicle Model {sortField === 'carType' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                            </th>
                             <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
                                 Travel Dates ↕
                             </th>
@@ -2805,7 +2821,7 @@ export default function Leads() {
                     <tbody>
                         {loading ? (
                             <tr>
-                                <td colSpan="8" style={{ textAlign: 'center', padding: '60px' }}>
+                                <td colSpan="9" style={{ textAlign: 'center', padding: '60px' }}>
                                     <div className="loader" style={{ margin: '0 auto' }}></div>
                                     <div style={{ marginTop: '12px', color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>Loading leads...</div>
                                 </td>
@@ -2969,6 +2985,38 @@ export default function Leads() {
                                     {/* 4. Source */}
                                     <td style={{ padding: '16px 20px', fontSize: '13px', fontWeight: '600' }}>
                                         {renderSourceIcon(lead.source)}
+                                    </td>
+
+                                    {/* 4.5 Vehicle Model */}
+                                    <td style={{ padding: '16px 20px', verticalAlign: 'middle' }}>
+                                        {(() => {
+                                            const carName = lead.carType || lead.vehicleModel || (lead.itinerary && lead.itinerary.find(i => i.vehicleType)?.vehicleType) || (lead.vehicleMatrices && lead.vehicleMatrices[0]?.carType);
+                                            const count = Number(lead.numberOfCars) || 1;
+                                            if (!carName) {
+                                                return (
+                                                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
+                                                        —
+                                                    </span>
+                                                );
+                                            }
+                                            return (
+                                                <span style={{
+                                                    background: 'rgba(168, 85, 247, 0.14)',
+                                                    color: '#c084fc',
+                                                    border: '1px solid rgba(168, 85, 247, 0.35)',
+                                                    padding: '4px 10px',
+                                                    borderRadius: '8px',
+                                                    fontSize: '12px',
+                                                    fontWeight: '800',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                    whiteSpace: 'nowrap'
+                                                }}>
+                                                    🚗 {count > 1 ? `${count}x ` : ''}{carName}
+                                                </span>
+                                            );
+                                        })()}
                                     </td>
 
                                     {/* 5. Travel Dates */}
@@ -3799,6 +3847,11 @@ export default function Leads() {
                                                                             <div>
                                                                                 {ld.mobileNumber && <span>📞 {ld.mobileNumber}</span>}
                                                                                 {ld.source && <span style={{ marginLeft: ld.mobileNumber ? '6px' : '0' }}>• {ld.source}</span>}
+                                                                                {(ld.carType || ld.vehicleModel) && (
+                                                                                    <span style={{ marginLeft: '6px', color: '#c084fc', fontWeight: '800' }}>
+                                                                                        • 🚗 {ld.numberOfCars && ld.numberOfCars > 1 ? `${ld.numberOfCars}x ` : ''}{ld.carType || ld.vehicleModel}
+                                                                                    </span>
+                                                                                )}
                                                                                 {ld.travelStartDate ? (
                                                                                     <span style={{ marginLeft: '6px', color: '#38bdf8', fontWeight: '800' }} title={ld.travelEndDate ? ("Tour: " + formatTourDate(ld.travelStartDate) + " to " + formatTourDate(ld.travelEndDate)) : ("Starts: " + formatTourDate(ld.travelStartDate))}>
                                                                                         • 📅 {formatTourDate(ld.travelStartDate)}

@@ -430,7 +430,8 @@ const OutsideCars = () => {
             const userInfo = JSON.parse(localStorage.getItem('userInfo'));
             if (!selectedCompany?._id) return alert("Select a company first!");
 
-            let internalCarNumber = `${formData.carNumber}#${formData.date}`;
+            const cleanPlate = (formData.carNumber || '').split('#')[0].trim().toUpperCase();
+            let internalCarNumber = `${cleanPlate}#${formData.date}`;
 
             // Add a unique suffix for new entries or when carNumber/date changes in edit mode to avoid collisions
             if (!editMode) {
@@ -654,7 +655,10 @@ const OutsideCars = () => {
         const matchesProperty = propertyFilter === 'All' || currentProperty === filterProperty;
 
         // Date Range Logic
-        const dutyTagDateStr = v.carNumber?.split('#')[1];
+        const rawTagDate = v.carNumber?.split('#')[1];
+        const dutyTagDateStr = (rawTagDate && /^\d{4}-\d{2}-\d{2}$/.test(rawTagDate))
+            ? rawTagDate
+            : toISTDateString(v.createdAt);
         if (!dutyTagDateStr) return false;
 
         const matchesDate = dutyTagDateStr >= fromDate && dutyTagDateStr <= toDate;
@@ -663,8 +667,10 @@ const OutsideCars = () => {
 
         return matchesSearch && matchesOwner && matchesProperty && matchesDate && matchesTransaction && matchesTab;
     }).sort((a, b) => {
-        const dateA = a.carNumber?.split('#')[1] || '';
-        const dateB = b.carNumber?.split('#')[1] || '';
+        const rawA = a.carNumber?.split('#')[1];
+        const dateA = (rawA && /^\d{4}-\d{2}-\d{2}$/.test(rawA)) ? rawA : toISTDateString(a.createdAt);
+        const rawB = b.carNumber?.split('#')[1];
+        const dateB = (rawB && /^\d{4}-\d{2}-\d{2}$/.test(rawB)) ? rawB : toISTDateString(b.createdAt);
         if (dateA !== dateB) return dateB.localeCompare(dateA);
         return new Date(b.createdAt) - new Date(a.createdAt);
     });
@@ -1028,7 +1034,8 @@ const OutsideCars = () => {
     // ── DYNAMIC FILTERS ──
     const ownerBalances = vehicles.reduce((acc, v) => {
         const owner = v.ownerName?.trim();
-        const dutyDate = v.carNumber?.split('#')[1];
+        const rawDate = v.carNumber?.split('#')[1];
+        const dutyDate = (rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) ? rawDate : toISTDateString(v.createdAt);
         if (owner && dutyDate >= fromDate && dutyDate <= toDate && (v.transactionType || 'Buy') === transactionFilter) {
             acc[owner] = (acc[owner] || 0) + (Number((v.transactionType === 'Buy' && v.buyAmount) ? v.buyAmount : v.dutyAmount) || 0);
         }
@@ -1040,7 +1047,8 @@ const OutsideCars = () => {
     const uniqueProperties = Object.values(vehicles
         .filter(v => {
             const ownerMatch = ownerFilter === 'All' || v.ownerName?.trim() === ownerFilter?.trim();
-            const dutyDate = v.carNumber?.split('#')[1];
+            const rawDate = v.carNumber?.split('#')[1];
+            const dutyDate = (rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) ? rawDate : toISTDateString(v.createdAt);
             const dateMatch = dutyDate >= fromDate && dutyDate <= toDate;
             const transMatch = (v.transactionType || 'Buy') === transactionFilter;
             return ownerMatch && dateMatch && transMatch;
