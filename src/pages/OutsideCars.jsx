@@ -439,11 +439,10 @@ const OutsideCars = () => {
                 const originalVehicle = vehicles.find(v => v._id === selectedId);
                 const oldParts = originalVehicle?.carNumber?.split('#') || [];
                 // If the plate and date are the same as before, keep the old unique suffix
-                if (formData.carNumber === oldParts[0] && formData.date === oldParts[1] && oldParts[2]) {
-                    internalCarNumber += `#${oldParts[2]}`;
+                if (oldParts[2]) {
+                    internalCarNumber += '#' + oldParts[2];
                 } else {
-                    // Plate or date changed, generate new suffix to be safe
-                    internalCarNumber += `#${Math.random().toString(36).substring(2, 7)}`;
+                    internalCarNumber += '#' + Math.random().toString(36).substring(2, 7);
                 }
             }
 

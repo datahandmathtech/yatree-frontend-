@@ -139,9 +139,46 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
         driver: '',
         vehicle: '',
         guestRemarks: '',
-        createConfirmedBooking: true
+        createConfirmedBooking: true,
+        assignedVehicles: [
+            { id: 1, carType: 'Sedan', driver: '', vehicle: '' }
+        ]
     };
     const [directForm, setDirectForm] = useState(initialDirectBookingForm);
+
+    const handleAddDirectVehicle = () => {
+        setDirectForm(prev => ({
+            ...prev,
+            assignedVehicles: [
+                ...(prev.assignedVehicles || [{ id: 1, carType: prev.carType || 'Sedan', driver: prev.driver || '', vehicle: prev.vehicle || '' }]),
+                { id: Date.now(), carType: 'Sedan', driver: '', vehicle: '' }
+            ]
+        }));
+    };
+
+    const handleRemoveDirectVehicle = (vIndex) => {
+        setDirectForm(prev => {
+            const updated = (prev.assignedVehicles || []).filter((_, i) => i !== vIndex);
+            return {
+                ...prev,
+                assignedVehicles: updated.length > 0 ? updated : [{ id: 1, carType: 'Sedan', driver: '', vehicle: '' }]
+            };
+        });
+    };
+
+    const handleUpdateDirectVehicleField = (vIndex, field, value) => {
+        setDirectForm(prev => {
+            const list = [...(prev.assignedVehicles || [{ id: 1, carType: 'Sedan', driver: '', vehicle: '' }])];
+            list[vIndex] = { ...list[vIndex], [field]: value };
+            const patch = { assignedVehicles: list };
+            if (vIndex === 0) {
+                if (field === 'carType') patch.carType = value;
+                if (field === 'driver') patch.driver = value;
+                if (field === 'vehicle') patch.vehicle = value;
+            }
+            return { ...prev, ...patch };
+        });
+    };
     const [editForm, setEditForm] = useState({});
     const [submittingDirect, setSubmittingDirect] = useState(false);
     const [successBanner, setSuccessBanner] = useState(null);
@@ -1231,8 +1268,31 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
 
         setSubmittingDirect(true);
         try {
-            const selectedDriverObj = drivers.find(d => d._id === directForm.driver);
-            const selectedVehicleObj = vehicles.find(v => v._id === directForm.vehicle);
+            const vList = (directForm.assignedVehicles && directForm.assignedVehicles.length > 0)
+                ? directForm.assignedVehicles
+                : [{ carType: directForm.carType || 'Sedan', driver: directForm.driver || '', vehicle: directForm.vehicle || '' }];
+
+            const mappedVehicles = vList.map(v => {
+                const sDrv = drivers.find(d => d._id === v.driver);
+                const sVeh = vehicles.find(vh => vh._id === v.vehicle);
+                const carNum = sVeh ? sVeh.carNumber : (v.customCarNumber || '');
+                const drvName = sDrv ? sDrv.name : (v.customDriverName || '');
+                const isOutside = Boolean(v.isOutsideCar || v.vendorName || (!sVeh && carNum));
+                return {
+                    carType: v.carType || 'Sedan',
+                    driver: v.driver || null,
+                    customDriverName: drvName,
+                    vehicle: v.vehicle || null,
+                    customCarNumber: carNum,
+                    vendorName: v.vendorName || '',
+                    vendorPayout: Number(v.vendorPayout) || 0,
+                    isOutsideCar: isOutside
+                };
+            });
+
+            const firstV = mappedVehicles[0] || {};
+            const selectedDriverObj = drivers.find(d => d._id === (firstV.driver || directForm.driver));
+            const selectedVehicleObj = vehicles.find(v => v._id === (firstV.vehicle || directForm.vehicle));
 
             const payload = {
                 company: selectedCompany._id,
@@ -1253,6 +1313,8 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                 paymentMode: directForm.paymentMode,
                 bankAccountId: directForm.bankAccountId || null,
                 guestRemarks: directForm.guestRemarks || '',
+                vehicles: mappedVehicles,
+                numberOfCars: mappedVehicles.length,
                 createConfirmedBooking: directForm.createConfirmedBooking,
                 status: (directForm.driver || selectedDriverObj) ? 'Assigned' : 'Scheduled'
             };
@@ -3184,55 +3246,126 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                     </div>
                                 </div>
 
-                                {/* Row 4: Car Type, Assign Driver & Vehicle */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
-                                    <div>
-                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
-                                            Car Type
-                                        </label>
-                                        <select
-                                            value={directForm.carType}
-                                            onChange={(e) => setDirectForm({ ...directForm, carType: e.target.value })}
-                                            style={{ width: '100%', padding: '10px 14px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
+                                {/* Multi-Vehicle Assignment Section */}
+                                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span style={{ fontSize: '12px', color: '#fbbf24', fontWeight: '800', letterSpacing: '0.3px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                🚗 Assign Vehicle(s) & Driver(s)
+                                            </span>
+                                            <span style={{ fontSize: '10.5px', background: 'rgba(251, 191, 36, 0.2)', color: '#fbbf24', padding: '2px 8px', borderRadius: '12px', fontWeight: '800' }}>
+                                                {(directForm.assignedVehicles || []).length} { (directForm.assignedVehicles || []).length > 1 ? 'Cars' : 'Car' }
+                                            </span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleAddDirectVehicle}
+                                            style={{
+                                                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.15))',
+                                                border: '1px dashed #fbbf24',
+                                                color: '#fbbf24',
+                                                padding: '6px 14px',
+                                                borderRadius: '8px',
+                                                fontSize: '11px',
+                                                fontWeight: '800',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px'
+                                            }}
                                         >
-                                            <option value="Sedan">Sedan (Dzire / Etios)</option>
-                                            <option value="Innova Crysta">Innova Crysta</option>
-                                            <option value="Ertiga">Ertiga</option>
-                                            <option value="Innova">Innova</option>
-                                            <option value="Tempo Traveller">Tempo Traveller</option>
-                                            <option value="Luxury / SUV">Luxury / SUV</option>
-                                        </select>
+                                            <Plus size={13} /> + Add Another Vehicle
+                                        </button>
                                     </div>
-                                    <div>
-                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
-                                            Assign Driver
-                                        </label>
-                                        <select
-                                            value={directForm.driver}
-                                            onChange={(e) => setDirectForm({ ...directForm, driver: e.target.value })}
-                                            style={{ width: '100%', padding: '10px 14px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
-                                        >
-                                            <option value="">-- Select Driver (Optional) --</option>
-                                            {drivers.map(d => (
-                                                <option key={d._id} value={d._id}>{d.name} ({d.mobile || 'No mob'})</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
-                                            Assign Vehicle
-                                        </label>
-                                        <select
-                                            value={directForm.vehicle}
-                                            onChange={(e) => setDirectForm({ ...directForm, vehicle: e.target.value })}
-                                            style={{ width: '100%', padding: '10px 14px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
-                                        >
-                                            <option value="">-- Select Vehicle (Optional) --</option>
-                                            {vehicles.map(v => (
-                                                <option key={v._id} value={v._id}>{v.carNumber} - {v.model || v.type}</option>
-                                            ))}
-                                        </select>
-                                    </div>
+
+                                    {(directForm.assignedVehicles || [{ id: 1, carType: directForm.carType || 'Sedan', driver: directForm.driver || '', vehicle: directForm.vehicle || '' }]).map((vItem, vIdx) => (
+                                        <div key={vItem.id || vIdx} style={{
+                                            background: 'rgba(15, 23, 42, 0.7)',
+                                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                                            borderRadius: '10px',
+                                            padding: '10px 12px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '8px'
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '11px', fontWeight: '800', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <Car size={12} /> Vehicle #{vIdx + 1}
+                                                </span>
+                                                {(directForm.assignedVehicles || []).length > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveDirectVehicle(vIdx)}
+                                                        style={{
+                                                            background: 'rgba(239, 68, 68, 0.15)',
+                                                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                            color: '#f87171',
+                                                            padding: '3px 8px',
+                                                            borderRadius: '6px',
+                                                            fontSize: '10.5px',
+                                                            fontWeight: '700',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '4px'
+                                                        }}
+                                                    >
+                                                        <Trash2 size={11} /> Remove Car
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                                                <div>
+                                                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '3px' }}>
+                                                        Car Type
+                                                    </label>
+                                                    <select
+                                                        value={vItem.carType || 'Sedan'}
+                                                        onChange={(e) => handleUpdateDirectVehicleField(vIdx, 'carType', e.target.value)}
+                                                        style={{ width: '100%', padding: '8px 10px', background: '#0b1120', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '12px', outline: 'none' }}
+                                                    >
+                                                        <option value="Sedan">Sedan (Dzire / Etios)</option>
+                                                        <option value="Innova Crysta">Innova Crysta</option>
+                                                        <option value="Ertiga">Ertiga</option>
+                                                        <option value="Innova">Innova</option>
+                                                        <option value="Tempo Traveller">Tempo Traveller</option>
+                                                        <option value="Luxury / SUV">Luxury / SUV</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '3px' }}>
+                                                        Assign Driver
+                                                    </label>
+                                                    <select
+                                                        value={vItem.driver || ''}
+                                                        onChange={(e) => handleUpdateDirectVehicleField(vIdx, 'driver', e.target.value)}
+                                                        style={{ width: '100%', padding: '8px 10px', background: '#0b1120', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '12px', outline: 'none' }}
+                                                    >
+                                                        <option value="">-- Select Driver (Optional) --</option>
+                                                        {drivers.map(d => (
+                                                            <option key={d._id} value={d._id}>{d.name} ({d.mobile || 'No mob'})</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '3px' }}>
+                                                        Assign Vehicle
+                                                    </label>
+                                                    <select
+                                                        value={vItem.vehicle || ''}
+                                                        onChange={(e) => handleUpdateDirectVehicleField(vIdx, 'vehicle', e.target.value)}
+                                                        style={{ width: '100%', padding: '8px 10px', background: '#0b1120', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '12px', outline: 'none' }}
+                                                    >
+                                                        <option value="">-- Select Vehicle (Optional) --</option>
+                                                        {vehicles.map(v => (
+                                                            <option key={v._id} value={v._id}>{v.carNumber} - {v.model || v.type}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
 
                                 {/* Row 5: Package Revenue & Advance */}
