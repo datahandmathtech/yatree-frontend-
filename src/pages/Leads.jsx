@@ -3799,7 +3799,13 @@ export default function Leads() {
                                                                             <div>
                                                                                 {ld.mobileNumber && <span>📞 {ld.mobileNumber}</span>}
                                                                                 {ld.source && <span style={{ marginLeft: ld.mobileNumber ? '6px' : '0' }}>• {ld.source}</span>}
-                                                                                {ld.salesPerson && <span style={{ marginLeft: '6px' }}>• {ld.salesPerson}</span>}
+                                                                                {ld.travelStartDate ? (
+                                                                                    <span style={{ marginLeft: '6px', color: '#38bdf8', fontWeight: '800' }} title={ld.travelEndDate ? ("Tour: " + formatTourDate(ld.travelStartDate) + " to " + formatTourDate(ld.travelEndDate)) : ("Starts: " + formatTourDate(ld.travelStartDate))}>
+                                                                                        • 📅 {formatTourDate(ld.travelStartDate)}
+                                                                                    </span>
+                                                                                ) : (ld.salesPerson ? (
+                                                                                    <span style={{ marginLeft: '6px' }}>• {ld.salesPerson}</span>
+                                                                                ) : null)}
                                                                             </div>
                                                                             <div>
                                                                                 <span style={{
@@ -3865,6 +3871,9 @@ export default function Leads() {
                                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                                                 <span style={{ fontWeight: '800', color: '#4ade80' }}>#{cld.clientCode || cld.leadId || 'N/A'}</span>
                                                                                 <span style={{ color: 'white', fontWeight: '600' }}>{cld.clientName}</span>
+                                                                                    {cld.travelStartDate && (
+                                                                                        <span style={{ fontSize: '10.5px', color: '#38bdf8', fontWeight: '700', marginLeft: '6px' }}>• 📅 {formatTourDate(cld.travelStartDate)}</span>
+                                                                                    )}
                                                                             </div>
                                                                             <span style={{ fontWeight: '800', color: '#34d399' }}>₹{(Number(cld.totalAmount) || 0).toLocaleString('en-IN')}</span>
                                                                         </div>
