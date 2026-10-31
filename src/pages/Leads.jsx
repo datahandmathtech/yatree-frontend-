@@ -484,56 +484,6 @@ export default function Leads() {
         return Array.from(set).filter(Boolean);
     }, [customSources, leads, selectedCompany?.leadSources, formData?.source]);
 
-    // Source Filter Dropdown Options with Active Leads Count
-    const sourceFilterStats = useMemo(() => {
-        const counts = {};
-        let totalCount = 0;
-        (basePeriodLeads || []).forEach(l => {
-            if (!l.source) return;
-            const norm = normalizeSource(l.source);
-            if (!norm) return;
-            counts[norm] = (counts[norm] || 0) + 1;
-            totalCount += 1;
-        });
-
-        const standard = [
-            'Website',
-            'Google Ads',
-            'Yatree Ads',
-            'GGG Ads',
-            'Repeat Guest',
-            'Hotel',
-            'Referral',
-            'Agent',
-            'Walk-in',
-            'Corporate',
-            'Social Media',
-            'WhatsApp',
-            'Justdial',
-            'Live DRS',
-            'Other'
-        ];
-
-        const allSources = new Set();
-        Object.keys(counts).forEach(s => allSources.add(s));
-        standard.forEach(s => allSources.add(s));
-
-        const list = Array.from(allSources).map(name => ({
-            name,
-            count: counts[name] || 0
-        }));
-
-        list.sort((a, b) => {
-            if (b.count !== a.count) return b.count - a.count;
-            return a.name.localeCompare(b.name);
-        });
-
-        return {
-            list,
-            total: (basePeriodLeads || []).length
-        };
-    }, [basePeriodLeads]);
-
     const ALL_VEHICLES = useMemo(() => {
         const set = new Set([...VEHICLE_OPTIONS, ...customVehicles]);
         (leads || []).forEach(l => {
@@ -1670,6 +1620,56 @@ export default function Leads() {
             return true;
         });
     }, [leads, fyLeadMonthFilter, monthFilter, selectedFy, SIDEBAR_MONTH_OPTIONS]);
+
+    // Source Filter Dropdown Options with Active Leads Count
+    const sourceFilterStats = useMemo(() => {
+        const counts = {};
+        let totalCount = 0;
+        (basePeriodLeads || []).forEach(l => {
+            if (!l.source) return;
+            const norm = normalizeSource(l.source);
+            if (!norm) return;
+            counts[norm] = (counts[norm] || 0) + 1;
+            totalCount += 1;
+        });
+
+        const standard = [
+            'Website',
+            'Google Ads',
+            'Yatree Ads',
+            'GGG Ads',
+            'Repeat Guest',
+            'Hotel',
+            'Referral',
+            'Agent',
+            'Walk-in',
+            'Corporate',
+            'Social Media',
+            'WhatsApp',
+            'Justdial',
+            'Live DRS',
+            'Other'
+        ];
+
+        const allSources = new Set();
+        Object.keys(counts).forEach(s => allSources.add(s));
+        standard.forEach(s => allSources.add(s));
+
+        const list = Array.from(allSources).map(name => ({
+            name,
+            count: counts[name] || 0
+        }));
+
+        list.sort((a, b) => {
+            if (b.count !== a.count) return b.count - a.count;
+            return a.name.localeCompare(b.name);
+        });
+
+        return {
+            list,
+            total: (basePeriodLeads || []).length
+        };
+    }, [basePeriodLeads]);
 
     // Calculate month-wise breakdown across All, Confirmed, Cancelled, Lost, and Open
     const statusCounts = useMemo(() => {
