@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Car, CheckCircle, Plus, Trash2, Copy, Save } from 'lucide-react';
+import { X, Car, CheckCircle, Plus, Trash2, Copy, Save, Search, Moon, RotateCcw } from 'lucide-react';
 import axios from '../../api/axios';
 
 const inputStyle = {
@@ -46,6 +46,277 @@ const matchFleetVehicle = (vId, vNum, fleetList) => {
     }
     return null;
 };
+
+// Searchable Driver Combobox
+function DriverSelectDropdown({ day, idx, driversList, onSelectDriver, onSelectCustom }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState('');
+    const wrapperRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+                setIsOpen(false);
+            }
+        };
+        if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isOpen]);
+
+    const q = search.trim().toLowerCase();
+    const filteredDrivers = (driversList || []).filter(d => {
+        if (!q) return true;
+        const name = (d.name || '').toLowerCase();
+        const mob = (d.mobile || d.phone || '').toLowerCase();
+        return name.includes(q) || mob.includes(q);
+    });
+
+    const isSelected = Boolean(day.driverName);
+
+    return (
+        <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
+            <div
+                onClick={() => { setIsOpen(!isOpen); setSearch(''); }}
+                style={{
+                    ...inputStyle,
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    color: isSelected ? '#34d399' : 'rgba(255,255,255,0.7)',
+                    border: isSelected ? '1px solid rgba(52, 211, 153, 0.45)' : '1px solid rgba(255,255,255,0.15)',
+                    fontWeight: isSelected ? '800' : '600',
+                    background: isSelected ? 'rgba(52, 211, 153, 0.08)' : '#070d18'
+                }}
+                title={day.driverName ? `${day.driverName} (${day.driverPhone || ''})` : 'Search & Select Driver'}
+            >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11.5px' }}>
+                    {isSelected ? `👤 ${day.driverName}` : '-- Select Driver (Search) --'}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px', opacity: 0.65, flexShrink: 0 }}>
+                    <Search size={12} />
+                    <span style={{ fontSize: '8px' }}>▼</span>
+                </span>
+            </div>
+
+            {isOpen && (
+                <div style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999999,
+                    background: '#0d1829', border: '1px solid #34d399', borderRadius: '8px',
+                    boxShadow: '0 12px 30px rgba(0,0,0,0.85)', marginTop: '4px', maxHeight: '250px',
+                    display: 'flex', flexDirection: 'column', overflow: 'hidden'
+                }}>
+                    <div style={{ padding: '6px', background: '#09111e', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Search size={13} color="#34d399" />
+                        <input
+                            type="text"
+                            autoFocus
+                            placeholder="Type driver name or phone..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ width: '100%', background: 'transparent', border: 'none', color: 'white', fontSize: '11.5px', outline: 'none' }}
+                        />
+                        {search && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setSearch(''); }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '11px' }}>✕</button>
+                        )}
+                    </div>
+                    <div style={{ overflowY: 'auto', flex: 1, padding: '4px' }}>
+                        {filteredDrivers.length > 0 ? (
+                            filteredDrivers.map(drv => (
+                                <div
+                                    key={drv._id}
+                                    onClick={() => { onSelectDriver(drv); setIsOpen(false); }}
+                                    style={{
+                                        padding: '6px 8px', borderRadius: '5px', cursor: 'pointer',
+                                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                        background: day.driverId === drv._id ? 'rgba(52, 211, 153, 0.15)' : 'transparent'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(52, 211, 153, 0.2)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = day.driverId === drv._id ? 'rgba(52, 211, 153, 0.15)' : 'transparent'}
+                                >
+                                    <span style={{ fontWeight: '800', color: '#34d399', fontSize: '12px' }}>👤 {drv.name}</span>
+                                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.55)' }}>{drv.mobile || drv.phone}</span>
+                                </div>
+                            ))
+                        ) : (
+                            <div style={{ padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '11px' }}>No drivers found for "{search}"</div>
+                        )}
+                        <div
+                            onClick={() => { onSelectCustom(); setIsOpen(false); }}
+                            style={{ padding: '7px 8px', marginTop: '3px', borderTop: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', color: '#fbbf24', fontSize: '11.5px', fontWeight: '800', textAlign: 'center', borderRadius: '4px' }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(245, 158, 11, 0.15)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                            + Other / Outsourced Driver (Custom)
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// Searchable Vehicle Combobox
+function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, onSelectVehicle, onSelectCustom }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState('');
+    const wrapperRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+                setIsOpen(false);
+            }
+        };
+        if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isOpen]);
+
+    const q = search.trim().toLowerCase();
+    const companyVehicles = (vehiclesList || []).filter(v => !v.isOutsideCar);
+    const filteredCompany = companyVehicles.filter(v => {
+        if (!q) return true;
+        const num = (v.carNumber || '').toLowerCase();
+        const model = (v.model || v.carType || '').toLowerCase();
+        return num.includes(q) || model.includes(q);
+    });
+
+    const filteredOutside = (outsideVehiclesList || []).filter(v => {
+        if (!q) return false;
+        const num = (v.carNumber || v.plateNumber || '').toLowerCase();
+        const owner = (v.ownerName || v.vendorName || '').toLowerCase();
+        const model = (v.carType || v.model || '').toLowerCase();
+        return num.includes(q) || owner.includes(q) || model.includes(q);
+    });
+
+    const isSelected = Boolean(day.vehicleNumber);
+
+    return (
+        <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
+            <div
+                onClick={() => { setIsOpen(!isOpen); setSearch(''); }}
+                style={{
+                    ...inputStyle,
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    color: isSelected ? '#38bdf8' : 'rgba(255,255,255,0.7)',
+                    border: isSelected ? '1px solid rgba(56, 189, 248, 0.45)' : '1px solid rgba(255,255,255,0.15)',
+                    fontWeight: isSelected ? '800' : '600',
+                    background: isSelected ? 'rgba(56, 189, 248, 0.08)' : '#070d18'
+                }}
+                title={day.vehicleNumber ? `${day.vehicleNumber} (${day.vehicleType || 'Cab'})` : 'Search & Select Vehicle'}
+            >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11.5px' }}>
+                    {isSelected ? `🚗 ${day.vehicleNumber}` : '-- Select Vehicle (Search) --'}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '3px', opacity: 0.65, flexShrink: 0 }}>
+                    <Search size={12} />
+                    <span style={{ fontSize: '8px' }}>▼</span>
+                </span>
+            </div>
+
+            {isOpen && (
+                <div style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999999,
+                    background: '#0d1829', border: '1px solid #38bdf8', borderRadius: '8px',
+                    boxShadow: '0 12px 30px rgba(0,0,0,0.85)', marginTop: '4px', maxHeight: '250px',
+                    display: 'flex', flexDirection: 'column', overflow: 'hidden'
+                }}>
+                    <div style={{ padding: '6px', background: '#09111e', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Search size={13} color="#38bdf8" />
+                        <input
+                            type="text"
+                            autoFocus
+                            placeholder="Search car number or model (e.g. 9836, Crysta)..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ width: '100%', background: 'transparent', border: 'none', color: 'white', fontSize: '11.5px', outline: 'none' }}
+                        />
+                        {search && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setSearch(''); }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '11px' }}>✕</button>
+                        )}
+                    </div>
+                    <div style={{ overflowY: 'auto', flex: 1, padding: '4px' }}>
+                        {filteredCompany.length > 0 && (
+                            <div>
+                                <div style={{ fontSize: '9.5px', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', padding: '3px 8px', letterSpacing: '0.4px' }}>
+                                    Company Fleet ({filteredCompany.length})
+                                </div>
+                                {filteredCompany.map(veh => (
+                                    <div
+                                        key={veh._id}
+                                        onClick={() => { onSelectVehicle(veh); setIsOpen(false); }}
+                                        style={{
+                                            padding: '6px 8px', borderRadius: '5px', cursor: 'pointer',
+                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                            background: day.vehicleId === veh._id ? 'rgba(56, 189, 248, 0.15)' : 'transparent'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.2)'}
+                                        onMouseLeave={(e) => e.currentTarget.style.background = day.vehicleId === veh._id ? 'rgba(56, 189, 248, 0.15)' : 'transparent'}
+                                    >
+                                        <span style={{ fontWeight: '800', color: '#38bdf8', fontSize: '12px' }}>🚗 {veh.carNumber}</span>
+                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.55)' }}>{veh.carType || veh.model || 'Cab'}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {filteredOutside.length > 0 && (
+                            <div style={{ marginTop: '4px' }}>
+                                <div style={{ fontSize: '9.5px', color: '#c084fc', fontWeight: '800', textTransform: 'uppercase', padding: '3px 8px', letterSpacing: '0.4px' }}>
+                                    Market / Outside Cars ({filteredOutside.length})
+                                </div>
+                                {filteredOutside.map(veh => (
+                                    <div
+                                        key={veh._id || veh.carNumber}
+                                        onClick={() => {
+                                            onSelectVehicle({
+                                                _id: 'custom',
+                                                carNumber: veh.carNumber || veh.plateNumber,
+                                                carType: veh.carType || veh.model,
+                                                isOutsideCar: true,
+                                                ownerName: veh.ownerName || veh.vendorName,
+                                                buyAmount: veh.buyAmount || veh.dailyRate || veh.payout,
+                                                driverName: veh.driverName || veh.driver?.name,
+                                                driverPhone: veh.driverPhone || veh.driver?.mobile
+                                            });
+                                            setIsOpen(false);
+                                        }}
+                                        style={{ padding: '6px 8px', borderRadius: '5px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(192, 132, 252, 0.2)'}
+                                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                    >
+                                        <div>
+                                            <span style={{ fontWeight: '800', color: '#c084fc', fontSize: '12px' }}>🏢 {veh.carNumber || veh.plateNumber}</span>
+                                            <span style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.6)', marginLeft: '6px' }}>{veh.ownerName || veh.vendorName}</span>
+                                        </div>
+                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>{veh.carType || veh.model}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {filteredCompany.length === 0 && filteredOutside.length === 0 && (
+                            <div style={{ padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '11px' }}>No vehicles found for "{search}"</div>
+                        )}
+                        <div
+                            onClick={() => { onSelectCustom(); setIsOpen(false); }}
+                            style={{ padding: '7px 8px', marginTop: '3px', borderTop: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', color: '#fbbf24', fontSize: '11.5px', fontWeight: '800', textAlign: 'center', borderRadius: '4px' }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(245, 158, 11, 0.15)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                            + Other / Outsourced Vehicle (Custom)
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
 
 export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, companyId }) {
     const [driversList, setDriversList] = useState([]);
@@ -345,7 +616,8 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                 ownerName: ownerNameVal,
                 buyAmount: buyAmtVal,
                 amount: amtVal,
-                km: itinItem.km || 0
+                km: itinItem.km || 0,
+                stayType: drsItem?.stayType || itinItem?.stayType || 'Same Day Return'
             });
         }
 
@@ -441,7 +713,8 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
             buyAmount: '',
             amount: '',
             km: target.km || 0,
-            isAdditionalCar: true
+            isAdditionalCar: true,
+            stayType: target.stayType || 'Same Day Return'
         };
         setAssignItinerary(prev => {
             const next = [...prev];
@@ -467,26 +740,71 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
     const handleCopyDayToAll = (sourceIdx = 0, mode = 'all') => {
         const src = assignItinerary[sourceIdx];
         if (!src) return;
-        setAssignItinerary(prev => prev.map((day, idx) => {
-            if (idx === sourceIdx) return day;
-            if (mode === 'below' && idx < sourceIdx) return day;
-            return {
-                ...day,
-                driverId: src.driverId || '',
-                driverName: src.driverName || '',
-                driverPhone: src.driverPhone || '',
-                vehicleId: src.vehicleId || '',
-                vehicleNumber: src.vehicleNumber || '',
-                vehicleType: src.vehicleType || day.vehicleType,
-                ownerName: src.ownerName || '',
-                isOutsideCar: Boolean(src.isOutsideCar)
-                // PRESERVED: time, isApg, pickupPoint, duty (tour), amount (price), and buyAmount are kept intact per day
-            };
-        }));
+
+        const srcKey = src.date ? String(src.date).slice(0, 10) : `day_${src.dayNo}`;
+        const sourceCars = assignItinerary.filter(row => {
+            const k = row.date ? String(row.date).slice(0, 10) : `day_${row.dayNo}`;
+            return k === srcKey;
+        });
+
+        if (sourceCars.length === 0) return;
+
+        const distinctDaysMap = new Map();
+        assignItinerary.forEach(row => {
+            const k = row.date ? String(row.date).slice(0, 10) : `day_${row.dayNo}`;
+            if (!distinctDaysMap.has(k)) {
+                distinctDaysMap.set(k, { key: k, dayNo: row.dayNo, date: row.date, rows: [] });
+            }
+            distinctDaysMap.get(k).rows.push(row);
+        });
+
+        const dayKeys = Array.from(distinctDaysMap.keys());
+        const srcDayIndex = dayKeys.indexOf(srcKey);
+        const newItinerary = [];
+
+        dayKeys.forEach((k, dIdx) => {
+            const dayData = distinctDaysMap.get(k);
+            const isSourceDay = k === srcKey;
+            const isBeforeSource = dIdx < srcDayIndex;
+
+            if (isSourceDay || (mode === 'below' && isBeforeSource)) {
+                dayData.rows.forEach(r => newItinerary.push(r));
+                return;
+            }
+
+            // Target day: replicate exact multi-car structure of sourceCars
+            sourceCars.forEach((srcCar, cIdx) => {
+                const existingCar = dayData.rows[cIdx] || dayData.rows[0] || {};
+                newItinerary.push({
+                    dayNo: dayData.dayNo,
+                    date: dayData.date,
+                    time: existingCar.time || srcCar.time || '09:00 AM',
+                    isApg: existingCar.isApg !== undefined ? existingCar.isApg : Boolean(srcCar.isApg),
+                    pickupPoint: existingCar.pickupPoint || srcCar.pickupPoint || '',
+                    duty: existingCar.duty || srcCar.duty || '',
+                    vehicleType: srcCar.vehicleType || existingCar.vehicleType || 'Innova Crysta',
+                    driverId: srcCar.driverId || '',
+                    driverName: srcCar.driverName || '',
+                    driverPhone: srcCar.driverPhone || '',
+                    vehicleId: srcCar.vehicleId || '',
+                    vehicleNumber: srcCar.vehicleNumber || '',
+                    isOutsideCar: Boolean(srcCar.isOutsideCar),
+                    ownerName: srcCar.ownerName || '',
+                    buyAmount: srcCar.buyAmount || '',
+                    stayType: srcCar.stayType || 'Same Day Return',
+                    amount: existingCar.amount !== undefined ? existingCar.amount : (cIdx === 0 ? srcCar.amount : ''),
+                    km: existingCar.km || srcCar.km || 0,
+                    isAdditionalCar: cIdx > 0
+                });
+            });
+        });
+
+        setAssignItinerary(newItinerary);
+        const carCountText = sourceCars.length > 1 ? `${sourceCars.length} Cabs & Drivers` : 'Driver & Vehicle';
         if (mode === 'all') {
-            showTemporaryCopyBanner(`Copied Driver & Vehicle from Day ${sourceIdx + 1} across all ${assignItinerary.length} days! (Tours & Prices preserved)`);
+            showTemporaryCopyBanner(`Copied ${carCountText} from Day ${src.dayNo || (srcDayIndex + 1)} across all ${dayKeys.length} days! (Tours & Rates preserved)`);
         } else {
-            showTemporaryCopyBanner(`Copied Driver & Vehicle from Day ${sourceIdx + 1} to rows below! (Tours & Prices preserved)`);
+            showTemporaryCopyBanner(`Copied ${carCountText} from Day ${src.dayNo || (srcDayIndex + 1)} to days below!`);
         }
     };
 
@@ -520,7 +838,8 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                     vehicleType: matched ? (matched.carType || matched.model || d.vehicleType) : d.vehicleType,
                     isOutsideCar: isCompany ? false : Boolean(d.isOutsideCar),
                     ownerName: isCompany ? '' : (d.ownerName || ''),
-                    buyAmount: isCompany ? '' : (d.buyAmount || '')
+                    buyAmount: isCompany ? '' : (d.buyAmount || ''),
+                    stayType: d.stayType || 'Same Day Return'
                 };
             });
 
@@ -711,7 +1030,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                         <div>Day & Date</div>
                         <div style={{ color: '#34d399' }}>1. Assign Driver</div>
                         <div style={{ color: '#38bdf8' }}>2. Assign Vehicle</div>
-                        <div style={{ color: '#fbbf24' }}>3. Time</div>
+                        <div style={{ color: '#fbbf24' }}>3. Time & Stay</div>
                         <div style={{ color: '#c084fc' }}>4. Guest Tour / Duty Details</div>
                         <div style={{ color: '#4ade80' }}>5. Amount (₹)</div>
                         <div style={{ textAlign: 'right' }}>Action</div>
@@ -787,28 +1106,17 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
 
                                     {/* 1. Assign Driver */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                        <select
-                                            value={isCustomDriver ? '__custom__' : (day.driverId || '')}
-                                            onChange={(e) => handleUpdateDayDriver(idx, e.target.value)}
-                                            style={{
-                                                ...inputStyle,
-                                                height: '36px',
-                                                color: day.driverName ? '#34d399' : 'rgba(255,255,255,0.8)',
-                                                border: day.driverName ? '1px solid rgba(52, 211, 153, 0.4)' : '1px solid rgba(255,255,255,0.15)',
-                                                fontSize: '12px',
-                                                fontWeight: '600'
+                                        <DriverSelectDropdown
+                                            day={day}
+                                            idx={idx}
+                                            driversList={allDrivers}
+                                            onSelectDriver={(drv) => {
+                                                handleUpdateDayDriver(idx, drv._id);
                                             }}
-                                        >
-                                            <option value="">-- Select Driver --</option>
-                                            <optgroup label="Company Drivers">
-                                                {allDrivers.map(drv => (
-                                                    <option key={drv._id} value={drv._id}>
-                                                        {drv.name} ({drv.mobile || drv.phone})
-                                                    </option>
-                                                ))}
-                                            </optgroup>
-                                            <option value="__custom__">+ Other / Outsourced Driver</option>
-                                        </select>
+                                            onSelectCustom={() => {
+                                                handleUpdateDayDriver(idx, '__custom__');
+                                            }}
+                                        />
 
                                         {isCustomDriver && (
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
@@ -832,28 +1140,29 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
 
                                     {/* 2. Assign Vehicle */}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                        <select
-                                            value={matchedFleetVehicle ? matchedFleetVehicle._id : (isCustomVehicle ? '__custom__' : '')}
-                                            onChange={(e) => handleUpdateDayVehicleSelect(idx, e.target.value)}
-                                            style={{
-                                                ...inputStyle,
-                                                height: '36px',
-                                                color: day.vehicleNumber ? '#38bdf8' : 'rgba(255,255,255,0.8)',
-                                                border: day.vehicleNumber ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(255,255,255,0.15)',
-                                                fontSize: '12px',
-                                                fontWeight: '600'
+                                        <VehicleSelectDropdown
+                                            day={day}
+                                            idx={idx}
+                                            vehiclesList={allVehicles}
+                                            outsideVehiclesList={outsideVehiclesList}
+                                            onSelectVehicle={(veh) => {
+                                                if (veh._id === 'custom') {
+                                                    handleUpdateDayField(idx, 'vehicleId', 'custom');
+                                                    handleUpdateDayField(idx, 'vehicleNumber', veh.carNumber || '');
+                                                    handleUpdateDayField(idx, 'vehicleType', veh.carType || day.vehicleType);
+                                                    handleUpdateDayField(idx, 'isOutsideCar', true);
+                                                    if (veh.ownerName) handleUpdateDayField(idx, 'ownerName', veh.ownerName);
+                                                    if (veh.buyAmount) handleUpdateDayField(idx, 'buyAmount', veh.buyAmount);
+                                                    if (veh.driverName && !day.driverName) handleUpdateDayField(idx, 'driverName', veh.driverName);
+                                                    if (veh.driverPhone && !day.driverPhone) handleUpdateDayField(idx, 'driverPhone', veh.driverPhone);
+                                                } else {
+                                                    handleUpdateDayVehicleSelect(idx, veh._id);
+                                                }
                                             }}
-                                        >
-                                            <option value="">-- Select Vehicle --</option>
-                                            <optgroup label="Company Vehicles">
-                                                {allVehicles.map(veh => (
-                                                    <option key={veh._id} value={veh._id}>
-                                                        {veh.carNumber} ({veh.carType || veh.model || 'Cab'})
-                                                    </option>
-                                                ))}
-                                            </optgroup>
-                                            <option value="__custom__">+ Other / Outsourced Vehicle</option>
-                                        </select>
+                                            onSelectCustom={() => {
+                                                handleUpdateDayVehicleSelect(idx, '__custom__');
+                                            }}
+                                        />
 
                                         {isCustomVehicle && (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' }}>
@@ -908,7 +1217,8 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                         )}
                                     </div>
 
-                                    {/* 3. Time */}
+                                    {/* 3. Time & Stay */}
+                                    <div>
                                     <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                                         <input
                                             type="text"
@@ -948,6 +1258,47 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                         >
                                             APG
                                         </button>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '3px', marginTop: '6px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleUpdateDayField(idx, 'stayType', 'Same Day Return')}
+                                            title="Driver returns same day"
+                                            style={{
+                                                flex: 1,
+                                                padding: '3px 2px',
+                                                fontSize: '9.5px',
+                                                fontWeight: '900',
+                                                borderRadius: '5px',
+                                                border: (day.stayType || 'Same Day Return') === 'Same Day Return' ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (day.stayType || 'Same Day Return') === 'Same Day Return' ? 'rgba(16, 185, 129, 0.22)' : 'rgba(255,255,255,0.03)',
+                                                color: (day.stayType || 'Same Day Return') === 'Same Day Return' ? '#4ade80' : 'rgba(255,255,255,0.4)',
+                                                cursor: 'pointer',
+                                                whiteSpace: 'nowrap'
+                                            }}
+                                        >
+                                            🔄 Return
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleUpdateDayField(idx, 'stayType', 'Night Hold')}
+                                            title="Driver stays overnight (Night Hold)"
+                                            style={{
+                                                flex: 1,
+                                                padding: '3px 2px',
+                                                fontSize: '9.5px',
+                                                fontWeight: '900',
+                                                borderRadius: '5px',
+                                                border: day.stayType === 'Night Hold' ? '1px solid #f59e0b' : '1px solid rgba(255,255,255,0.1)',
+                                                background: day.stayType === 'Night Hold' ? 'rgba(245, 158, 11, 0.25)' : 'rgba(255,255,255,0.03)',
+                                                color: day.stayType === 'Night Hold' ? '#fbbf24' : 'rgba(255,255,255,0.4)',
+                                                cursor: 'pointer',
+                                                whiteSpace: 'nowrap'
+                                            }}
+                                        >
+                                            🌙 Hold
+                                        </button>
+                                    </div>
                                     </div>
 
                                     {/* 4. Guest Tour / Duty Details */}

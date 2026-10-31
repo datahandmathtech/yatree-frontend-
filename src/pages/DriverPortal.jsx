@@ -3290,6 +3290,33 @@ const DriverPortal = () => {
                                                                                 {duty.bookingId}
                                                                             </span>
                                                                         )}
+                                                                        {duty.stayType === 'Night Hold' ? (
+                                                                            <span style={{
+                                                                                fontSize: '8.5px',
+                                                                                fontWeight: '950',
+                                                                                background: 'rgba(245, 158, 11, 0.35)',
+                                                                                color: '#fef08a',
+                                                                                border: '1px solid rgba(245, 158, 11, 0.5)',
+                                                                                padding: '1px 5px',
+                                                                                borderRadius: '3px',
+                                                                                letterSpacing: '0.3px'
+                                                                            }}>
+                                                                                🌙 NIGHT HOLD
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span style={{
+                                                                                fontSize: '8.5px',
+                                                                                fontWeight: '950',
+                                                                                background: 'rgba(16, 185, 129, 0.25)',
+                                                                                color: '#86efac',
+                                                                                border: '1px solid rgba(16, 185, 129, 0.4)',
+                                                                                padding: '1px 5px',
+                                                                                borderRadius: '3px',
+                                                                                letterSpacing: '0.3px'
+                                                                            }}>
+                                                                                🔄 RETURN
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             </td>

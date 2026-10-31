@@ -146,6 +146,8 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
         ]
     };
     const [directForm, setDirectForm] = useState(initialDirectBookingForm);
+    const [showCustomSourceInput, setShowCustomSourceInput] = useState(false);
+    const [customSourceText, setCustomSourceText] = useState('');
 
     // Deduplicated Direct Booking Sources
     const directBookingSources = useMemo(() => {
@@ -177,10 +179,21 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
         (selectedCompany?.leadSources || []).forEach(s => {
             if (s && typeof s === 'string' && s.trim()) {
                 const trimmed = s.trim();
-                const key = trimmed.toLowerCase();
+                const lower = trimmed.toLowerCase();
+                const synonymMap = {
+                    'walk-in': 'Direct Walk-in / Call',
+                    'walk in': 'Direct Walk-in / Call',
+                    'direct walk-in': 'Direct Walk-in / Call',
+                    'b2b': 'Agent / B2B',
+                    'b2b/agent': 'Agent / B2B',
+                    'agent': 'Agent / B2B',
+                    'agent / b2b': 'Agent / B2B'
+                };
+                const canonical = synonymMap[lower] || trimmed;
+                const key = canonical.toLowerCase();
                 if (!seen.has(key) && !key.startsWith('live drs')) {
                     seen.add(key);
-                    list.push(trimmed);
+                    list.push(canonical);
                 }
             }
         });
@@ -2871,8 +2884,41 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                             whiteSpace: 'normal',
                                             lineHeight: 1.4
                                         }}>
-                                            <div style={{ color: '#f8fafc', fontSize: '12.5px', fontWeight: '700' }}>
-                                                {duty.duty || duty.itinerary || 'City Duty'}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                <span style={{ color: '#f8fafc', fontSize: '12.5px', fontWeight: '700' }}>
+                                                    {duty.duty || duty.itinerary || 'City Duty'}
+                                                </span>
+                                                {duty.stayType === 'Night Hold' ? (
+                                                    <span style={{
+                                                        fontSize: '9.5px',
+                                                        background: 'rgba(245, 158, 11, 0.2)',
+                                                        color: '#fbbf24',
+                                                        border: '1px solid rgba(245, 158, 11, 0.45)',
+                                                        padding: '1px 6px',
+                                                        borderRadius: '5px',
+                                                        fontWeight: '900',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '3px'
+                                                    }}>
+                                                        🌙 Night Hold
+                                                    </span>
+                                                ) : (
+                                                    <span style={{
+                                                        fontSize: '9.5px',
+                                                        background: 'rgba(16, 185, 129, 0.15)',
+                                                        color: '#4ade80',
+                                                        border: '1px solid rgba(16, 185, 129, 0.35)',
+                                                        padding: '1px 6px',
+                                                        borderRadius: '5px',
+                                                        fontWeight: '900',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '3px'
+                                                    }}>
+                                                        🔄 Return
+                                                    </span>
+                                                )}
                                             </div>
                                             {duty.bookingRef?.travelStartDate && duty.bookingRef?.travelEndDate && (
                                                 <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '2px', fontWeight: '600' }}>
@@ -3232,18 +3278,50 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
-                                            Booking Source *
-                                        </label>
-                                        <select
-                                            value={directForm.source || 'Direct Walk-in / Call'}
-                                            onChange={(e) => setDirectForm({ ...directForm, source: e.target.value })}
-                                            style={{ width: '100%', padding: '10px 14px', background: '#0b1120', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none', cursor: 'pointer' }}
-                                        >
-                                            {directBookingSources.map(s => (
-                                                <option key={s} value={s} style={{ background: '#0b1120', color: 'white' }}>{s}</option>
-                                            ))}
-                                        </select>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>
+                                                Booking Source *
+                                            </label>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowCustomSourceInput(!showCustomSourceInput)}
+                                                style={{ background: 'none', border: 'none', color: '#38bdf8', fontSize: '11px', fontWeight: '800', cursor: 'pointer', padding: '0 4px' }}
+                                                title="Add a custom booking source"
+                                            >
+                                                {showCustomSourceInput ? '← Select List' : '+ Add Source'}
+                                            </button>
+                                        </div>
+                                        {showCustomSourceInput ? (
+                                            <input
+                                                type="text"
+                                                required
+                                                autoFocus
+                                                placeholder="Type custom booking source..."
+                                                value={customSourceText}
+                                                onChange={(e) => {
+                                                    setCustomSourceText(e.target.value);
+                                                    setDirectForm({ ...directForm, source: e.target.value });
+                                                }}
+                                                style={{ width: '100%', padding: '10px 14px', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid #38bdf8', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
+                                            />
+                                        ) : (
+                                            <select
+                                                value={directForm.source || 'Direct Walk-in / Call'}
+                                                onChange={(e) => {
+                                                    if (e.target.value === '__add_custom__') {
+                                                        setShowCustomSourceInput(true);
+                                                    } else {
+                                                        setDirectForm({ ...directForm, source: e.target.value });
+                                                    }
+                                                }}
+                                                style={{ width: '100%', padding: '10px 14px', background: '#0b1120', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none', cursor: 'pointer' }}
+                                            >
+                                                {directBookingSources.map(s => (
+                                                    <option key={s} value={s} style={{ background: '#0b1120', color: 'white' }}>{s}</option>
+                                                ))}
+                                                <option value="__add_custom__" style={{ background: '#0b1120', color: '#38bdf8', fontWeight: 'bold' }}>+ Add Custom Source...</option>
+                                            </select>
+                                        )}
                                     </div>
                                 </div>
 

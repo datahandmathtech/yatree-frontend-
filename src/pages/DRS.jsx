@@ -734,8 +734,41 @@ export default function DRS() {
 
                                         {/* 6. Duty */}
                                         <td style={{ padding: '13px 16px' }}>
-                                            <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: '13px', fontWeight: '600' }}>
-                                                {duty.duty || duty.itinerary || '-'}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: '13px', fontWeight: '600' }}>
+                                                    {duty.duty || duty.itinerary || '-'}
+                                                </span>
+                                                {duty.stayType === 'Night Hold' ? (
+                                                    <span style={{
+                                                        fontSize: '9.5px',
+                                                        background: 'rgba(245, 158, 11, 0.2)',
+                                                        color: '#fbbf24',
+                                                        border: '1px solid rgba(245, 158, 11, 0.45)',
+                                                        padding: '1px 6px',
+                                                        borderRadius: '5px',
+                                                        fontWeight: '900',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '3px'
+                                                    }}>
+                                                        🌙 Night Hold
+                                                    </span>
+                                                ) : (
+                                                    <span style={{
+                                                        fontSize: '9.5px',
+                                                        background: 'rgba(16, 185, 129, 0.15)',
+                                                        color: '#4ade80',
+                                                        border: '1px solid rgba(16, 185, 129, 0.35)',
+                                                        padding: '1px 6px',
+                                                        borderRadius: '5px',
+                                                        fontWeight: '900',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '3px'
+                                                    }}>
+                                                        🔄 Return
+                                                    </span>
+                                                )}
                                             </div>
                                             {duty.bookingRef?.travelStartDate && duty.bookingRef?.travelEndDate && (
                                                 <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '2px', fontWeight: '600' }}>

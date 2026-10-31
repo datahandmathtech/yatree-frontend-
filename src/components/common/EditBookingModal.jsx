@@ -208,7 +208,17 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
             // Total and Itinerary initialization
             let itinSum = 0;
             if (Array.isArray(booking.itinerary) && booking.itinerary.length > 0) {
-                const mappedItin = booking.itinerary.map((d, i) => {
+                // Deduplicate any duplicate rows sharing same dayNo/date (protect against previous multi-car DRS push bug)
+                const seenDayKeys = new Set();
+                const cleanItinRaw = [];
+                for (const item of booking.itinerary) {
+                    const key = `${item.dayNo || 1}_${item.date ? String(item.date).slice(0, 10) : ''}`;
+                    if (!seenDayKeys.has(key)) {
+                        seenDayKeys.add(key);
+                        cleanItinRaw.push(item);
+                    }
+                }
+                const mappedItin = cleanItinRaw.map((d, i) => {
                     const q = Number(d.quantity || d.vehicleCount || booking.numberOfCars) || 1;
                     const rawRate = Number(d.rate) || 0;
                     const rawAmt = Number(d.amount) || 0;
