@@ -127,7 +127,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
         clientName: '',
         mobileNumber: '',
         hotel: '',
-        source: 'Walk-in',
+        source: 'Direct Walk-in / Call',
         date: todayIST(),
         endDate: '',
         time: '09:00 AM',
@@ -146,6 +146,47 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
         ]
     };
     const [directForm, setDirectForm] = useState(initialDirectBookingForm);
+
+    // Deduplicated Direct Booking Sources
+    const directBookingSources = useMemo(() => {
+        const standard = [
+            'Direct Walk-in / Call',
+            'Google Ads',
+            'Website',
+            'Yatree Ads',
+            'GGG Ads',
+            'Repeat Guest',
+            'Hotel',
+            'Referral',
+            'Agent / B2B',
+            'Corporate',
+            'Social Media',
+            'WhatsApp',
+            'Justdial',
+            'Other'
+        ];
+        const seen = new Set();
+        const list = [];
+        standard.forEach(s => {
+            const key = s.toLowerCase().trim();
+            if (!seen.has(key)) {
+                seen.add(key);
+                list.push(s);
+            }
+        });
+        (selectedCompany?.leadSources || []).forEach(s => {
+            if (s && typeof s === 'string' && s.trim()) {
+                const trimmed = s.trim();
+                const key = trimmed.toLowerCase();
+                if (!seen.has(key) && !key.startsWith('live drs')) {
+                    seen.add(key);
+                    list.push(trimmed);
+                }
+            }
+        });
+        return list;
+    }, [selectedCompany?.leadSources]);
+
 
     const handleAddDirectVehicle = () => {
         setDirectForm(prev => ({
@@ -1300,7 +1341,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                 clientName: directForm.clientName.trim(),
                 mobileNumber: directForm.mobileNumber.trim(),
                 hotel: directForm.hotel.trim(),
-                source: directForm.source || 'Walk-in',
+                source: directForm.source || 'Direct Walk-in / Call',
                 date: directForm.date,
                 time: directForm.time || '09:00 AM',
                 duty: directForm.duty.trim() || 'City Duty',
@@ -3100,7 +3141,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                             exit={{ scale: 0.95, opacity: 0 }}
                             style={{
                                 width: '100%',
-                                maxWidth: '650px',
+                                maxWidth: '700px',
                                 maxHeight: '90vh',
                                 overflowY: 'auto',
                                 background: '#0b1120',
@@ -3175,22 +3216,38 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                     </div>
                                 )}
 
-                                {/* Row 1b: Time */}
-                                <div>
-                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
-                                        Duty Time *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        placeholder="e.g. 09:00 AM, 11:00, APG"
-                                        value={directForm.time}
-                                        onChange={(e) => setDirectForm({ ...directForm, time: e.target.value })}
-                                        style={{ width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
-                                    />
+                                {/* Row 2: Duty Time & Booking Source */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
+                                            Duty Time *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            placeholder="e.g. 09:00 AM, 11:00, APG"
+                                            value={directForm.time}
+                                            onChange={(e) => setDirectForm({ ...directForm, time: e.target.value })}
+                                            style={{ width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
+                                            Booking Source *
+                                        </label>
+                                        <select
+                                            value={directForm.source || 'Direct Walk-in / Call'}
+                                            onChange={(e) => setDirectForm({ ...directForm, source: e.target.value })}
+                                            style={{ width: '100%', padding: '10px 14px', background: '#0b1120', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none', cursor: 'pointer' }}
+                                        >
+                                            {directBookingSources.map(s => (
+                                                <option key={s} value={s} style={{ background: '#0b1120', color: 'white' }}>{s}</option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 </div>
 
-                                {/* Row 2: Guest Name & Mobile */}
+                                {/* Row 3: Guest Name & Mobile */}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                                     <div>
                                         <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
@@ -3219,8 +3276,8 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                     </div>
                                 </div>
 
-                                {/* Row 3: Hotel & Booking Source */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                                {/* Row 4: Hotel Pickup & Duty Route Description */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: '14px' }}>
                                     <div>
                                         <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
                                             Hotel / Source Pickup
@@ -3235,47 +3292,17 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                     </div>
                                     <div>
                                         <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
-                                            Booking Source *
+                                            Duty / Route Description *
                                         </label>
-                                        <select
-                                            value={directForm.source || 'Walk-in'}
-                                            onChange={(e) => setDirectForm({ ...directForm, source: e.target.value })}
-                                            style={{ width: '100%', padding: '10px 14px', background: '#0b1120', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none', cursor: 'pointer' }}
-                                        >
-                                            <option value="Walk-in">Direct Walk-in / Call</option>
-                                            <option value="Google Ads">Google Ads</option>
-                                            <option value="Website">Website</option>
-                                            <option value="Yatree Ads">Yatree Ads</option>
-                                            <option value="GGG Ads">GGG Ads</option>
-                                            <option value="Repeat Guest">Repeat Guest</option>
-                                            <option value="Hotel">Hotel</option>
-                                            <option value="Referral">Referral</option>
-                                            <option value="Agent">Agent / B2B</option>
-                                            <option value="Corporate">Corporate</option>
-                                            <option value="Social Media">Social Media</option>
-                                            <option value="WhatsApp">WhatsApp</option>
-                                            <option value="Justdial">Justdial</option>
-                                            <option value="Other">Other</option>
-                                            {(selectedCompany?.leadSources || []).map(s => (
-                                                <option key={s} value={s}>{s}</option>
-                                            ))}
-                                        </select>
+                                        <input
+                                            type="text"
+                                            required
+                                            placeholder="e.g. Airport Drop / Sightseeing 8hr 80km"
+                                            value={directForm.duty}
+                                            onChange={(e) => setDirectForm({ ...directForm, duty: e.target.value })}
+                                            style={{ width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
+                                        />
                                     </div>
-                                </div>
-
-                                {/* Row 4: Duty / Route Description */}
-                                <div>
-                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
-                                        Duty / Route Description *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        placeholder="e.g. Airport Drop / Sightseeing 8hr 80km"
-                                        value={directForm.duty}
-                                        onChange={(e) => setDirectForm({ ...directForm, duty: e.target.value })}
-                                        style={{ width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
-                                    />
                                 </div>
 
                                 {/* Multi-Vehicle Assignment Section */}
