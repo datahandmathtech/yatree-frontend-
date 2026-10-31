@@ -2787,16 +2787,6 @@ export default function Leads() {
                             <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
                                 Source ↕
                             </th>
-                            <th 
-                                onClick={() => {
-                                    if (sortField === 'carType') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
-                                    else { setSortField('carType'); setSortOrder('asc'); }
-                                }}
-                                style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: sortField === 'carType' ? '#38bdf8' : 'rgba(255,255,255,0.7)', letterSpacing: '0.3px', cursor: 'pointer', userSelect: 'none' }}
-                                title="Click to sort by Vehicle Model"
-                            >
-                                Vehicle Model {sortField === 'carType' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
-                            </th>
                             <th style={{ padding: '16px 20px', fontWeight: '700', fontSize: '12px', color: 'rgba(255,255,255,0.7)', letterSpacing: '0.3px' }}>
                                 Travel Dates ↕
                             </th>
@@ -2821,7 +2811,7 @@ export default function Leads() {
                     <tbody>
                         {loading ? (
                             <tr>
-                                <td colSpan="9" style={{ textAlign: 'center', padding: '60px' }}>
+                                <td colSpan="8" style={{ textAlign: 'center', padding: '60px' }}>
                                     <div className="loader" style={{ margin: '0 auto' }}></div>
                                     <div style={{ marginTop: '12px', color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>Loading leads...</div>
                                 </td>
@@ -2864,13 +2854,35 @@ export default function Leads() {
                                                 <User size={15} color="#38bdf8" />
                                                 <span>{lead.clientCode || lead.leadId || 'N/A'}</span>
                                             </div>
-                                            {((lead.priority && lead.priority !== 'Unassigned') || leadLost) && (
-                                                <div style={{ marginTop: '4px', display: 'flex' }}>
+                                            <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                                                {((lead.priority && lead.priority !== 'Unassigned') || leadLost) && (
                                                     <div style={{ fontSize: '9px', fontWeight: '800', display: 'inline-block', padding: '2px 6px', borderRadius: '10px', background: leadLost ? 'rgba(239, 68, 68, 0.15)' : lead.priority === 'Hot' ? 'rgba(251, 191, 36, 0.15)' : lead.priority === 'Warm' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.15)', color: leadLost ? '#f87171' : lead.priority === 'Hot' ? '#fbbf24' : lead.priority === 'Warm' ? '#38bdf8' : '#94a3b8', border: leadLost ? '1px solid rgba(239, 68, 68, 0.35)' : lead.priority === 'Hot' ? '1px solid rgba(251, 191, 36, 0.3)' : lead.priority === 'Warm' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(148, 163, 184, 0.3)' }}>
                                                         {leadLost ? '❌ Lost' : lead.priority === 'Hot' ? '🔥 High' : lead.priority === 'Warm' ? '☀️ Avg' : '❄️ Low'}
                                                     </div>
-                                                </div>
-                                            )}
+                                                )}
+                                                {(() => {
+                                                    const carName = lead.carType || lead.vehicleModel || (lead.itinerary && lead.itinerary.find(i => i.vehicleType)?.vehicleType) || (lead.vehicleMatrices && lead.vehicleMatrices[0]?.carType);
+                                                    const count = Number(lead.numberOfCars) || 1;
+                                                    if (!carName) return null;
+                                                    return (
+                                                        <span style={{
+                                                            fontSize: '10px',
+                                                            fontWeight: '800',
+                                                            padding: '2px 6px',
+                                                            borderRadius: '6px',
+                                                            background: 'rgba(168, 85, 247, 0.18)',
+                                                            color: '#c084fc',
+                                                            border: '1px solid rgba(168, 85, 247, 0.4)',
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '3px',
+                                                            whiteSpace: 'nowrap'
+                                                        }}>
+                                                            🚗 {count > 1 ? `${count}x ` : ''}{carName}
+                                                        </span>
+                                                    );
+                                                })()}
+                                            </div>
 
                                             {/* Hover Tooltip matching Image 1 */}
                                             {hoveredLeadId === lead._id && (
@@ -2987,37 +2999,6 @@ export default function Leads() {
                                         {renderSourceIcon(lead.source)}
                                     </td>
 
-                                    {/* 4.5 Vehicle Model */}
-                                    <td style={{ padding: '16px 20px', verticalAlign: 'middle' }}>
-                                        {(() => {
-                                            const carName = lead.carType || lead.vehicleModel || (lead.itinerary && lead.itinerary.find(i => i.vehicleType)?.vehicleType) || (lead.vehicleMatrices && lead.vehicleMatrices[0]?.carType);
-                                            const count = Number(lead.numberOfCars) || 1;
-                                            if (!carName) {
-                                                return (
-                                                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
-                                                        —
-                                                    </span>
-                                                );
-                                            }
-                                            return (
-                                                <span style={{
-                                                    background: 'rgba(168, 85, 247, 0.14)',
-                                                    color: '#c084fc',
-                                                    border: '1px solid rgba(168, 85, 247, 0.35)',
-                                                    padding: '4px 10px',
-                                                    borderRadius: '8px',
-                                                    fontSize: '12px',
-                                                    fontWeight: '800',
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center',
-                                                    gap: '6px',
-                                                    whiteSpace: 'nowrap'
-                                                }}>
-                                                    🚗 {count > 1 ? `${count}x ` : ''}{carName}
-                                                </span>
-                                            );
-                                        })()}
-                                    </td>
 
                                     {/* 5. Travel Dates */}
                                     <td style={{ padding: '16px 20px' }}>
@@ -3058,7 +3039,11 @@ export default function Leads() {
                                                                 </span>
                                                             </>
                                                         ) : (
-                                                            <span>{totalStay} Days Tour • {travelInfo.month}</span>
+                                                            <span>{(() => {
+                                                                const carName = lead.carType || lead.vehicleModel || (lead.itinerary && lead.itinerary.find(i => i.vehicleType)?.vehicleType) || (lead.vehicleMatrices && lead.vehicleMatrices[0]?.carType);
+                                                                const count = Number(lead.numberOfCars) || 1;
+                                                                return carName ? `🚗 ${count > 1 ? count + 'x ' : ''}${carName} • ` : '';
+                                                            })()}{totalStay} Days Tour • {travelInfo.month}</span>
                                                         )}
                                                     </div>
                                                 </div>
