@@ -286,8 +286,6 @@ export default function Leads() {
         }
     }, [selectedCompany]);
     
-    const ALL_SOURCES = [...new Set([...LEAD_SOURCES, ...customSources])];
-    const ALL_VEHICLES = [...new Set([...VEHICLE_OPTIONS, ...customVehicles])];
 
     const [showModal, setShowModal] = useState(false);
     const [showDetailedItinerary, setShowDetailedItinerary] = useState(false);
@@ -434,6 +432,29 @@ export default function Leads() {
         extraCharges: [],
         totalAmount: 0
     });
+
+    const ALL_SOURCES = useMemo(() => {
+        const set = new Set([...LEAD_SOURCES, ...(selectedCompany?.leadSources || []), ...customSources]);
+        (leads || []).forEach(l => {
+            if (l.source?.trim()) set.add(l.source.trim());
+        });
+        if (formData?.source?.trim()) {
+            set.add(formData.source.trim());
+        }
+        return Array.from(set).filter(Boolean);
+    }, [customSources, leads, selectedCompany?.leadSources, formData?.source]);
+
+    const ALL_VEHICLES = useMemo(() => {
+        const set = new Set([...VEHICLE_OPTIONS, ...customVehicles]);
+        (leads || []).forEach(l => {
+            if (l.carType?.trim()) set.add(l.carType.trim());
+            if (l.vehicleModel?.trim()) set.add(l.vehicleModel.trim());
+        });
+        if (formData?.carType?.trim()) {
+            set.add(formData.carType.trim());
+        }
+        return Array.from(set).filter(Boolean);
+    }, [customVehicles, leads, formData?.carType]);
 
     // Generate all dates in range [travelStartDate, travelEndDate]
     const allTourDates = useMemo(() => {
