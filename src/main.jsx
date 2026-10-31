@@ -38,11 +38,9 @@ window.addEventListener('vite:preloadError', (event) => {
     }
 });
 
-// ⚡ Register Service Worker for PWA (Installability)
+// ⚡ Clean up Service Worker
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-            .then(reg => { /* Service Worker registered silently */ })
-            .catch(err => console.log('LogKaro PWA: Service Worker Failed', err));
-    });
+    navigator.serviceWorker.getRegistrations().then(regs => {
+        for (let r of regs) r.unregister();
+    }).catch(() => {});
 }
