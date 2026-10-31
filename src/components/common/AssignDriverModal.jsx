@@ -617,7 +617,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                 buyAmount: buyAmtVal,
                 amount: amtVal,
                 km: itinItem.km || 0,
-                stayType: drsItem?.stayType || itinItem?.stayType || 'Same Day Return'
+                stayType: (drsItem?.stayType || itinItem?.stayType) ? (drsItem?.stayType || itinItem?.stayType) : (String(dutyVal || '').toLowerCase().includes('local') || String(dutyVal || '').toLowerCase().includes('city') || String(dutyVal || '').toLowerCase().includes('airport') || totalDays === 1 ? 'Local' : 'Same Day Return')
             });
         }
 
@@ -1018,7 +1018,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                     {/* Column Headers */}
                     <div style={{
                         display: 'grid',
-                        gridTemplateColumns: '125px 1.15fr 1.15fr 130px 1.3fr 110px 145px',
+                        gridTemplateColumns: '120px 1.15fr 1.15fr 150px 1.25fr 105px 145px',
                         gap: '10px',
                         padding: '0 12px 8px 12px',
                         fontSize: '11px',
@@ -1067,7 +1067,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                         borderRadius: '10px',
                                         padding: '10px 12px',
                                         display: 'grid',
-                                        gridTemplateColumns: '125px 1.15fr 1.15fr 130px 1.3fr 110px 145px',
+                                        gridTemplateColumns: '120px 1.15fr 1.15fr 150px 1.25fr 105px 145px',
                                         gap: '10px',
                                         alignItems: 'start'
                                     }}
@@ -1262,17 +1262,36 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                     <div style={{ display: 'flex', gap: '3px', marginTop: '6px' }}>
                                         <button
                                             type="button"
-                                            onClick={() => handleUpdateDayField(idx, 'stayType', 'Same Day Return')}
-                                            title="Driver returns same day"
+                                            onClick={() => handleUpdateDayField(idx, 'stayType', 'Local')}
+                                            title="Local City Run / Duty"
                                             style={{
                                                 flex: 1,
-                                                padding: '3px 2px',
+                                                padding: '3px 1px',
                                                 fontSize: '9.5px',
                                                 fontWeight: '900',
                                                 borderRadius: '5px',
-                                                border: (day.stayType || 'Same Day Return') === 'Same Day Return' ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
-                                                background: (day.stayType || 'Same Day Return') === 'Same Day Return' ? 'rgba(16, 185, 129, 0.22)' : 'rgba(255,255,255,0.03)',
-                                                color: (day.stayType || 'Same Day Return') === 'Same Day Return' ? '#4ade80' : 'rgba(255,255,255,0.4)',
+                                                border: (day.stayType === 'Local') ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (day.stayType === 'Local') ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255,255,255,0.03)',
+                                                color: (day.stayType === 'Local') ? '#38bdf8' : 'rgba(255,255,255,0.4)',
+                                                cursor: 'pointer',
+                                                whiteSpace: 'nowrap'
+                                            }}
+                                        >
+                                            📍 Local
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleUpdateDayField(idx, 'stayType', 'Same Day Return')}
+                                            title="Outstation Same Day Return"
+                                            style={{
+                                                flex: 1,
+                                                padding: '3px 1px',
+                                                fontSize: '9.5px',
+                                                fontWeight: '900',
+                                                borderRadius: '5px',
+                                                border: (day.stayType === 'Same Day Return') ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                background: (day.stayType === 'Same Day Return') ? 'rgba(16, 185, 129, 0.22)' : 'rgba(255,255,255,0.03)',
+                                                color: (day.stayType === 'Same Day Return') ? '#4ade80' : 'rgba(255,255,255,0.4)',
                                                 cursor: 'pointer',
                                                 whiteSpace: 'nowrap'
                                             }}
@@ -1285,7 +1304,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                             title="Driver stays overnight (Night Hold)"
                                             style={{
                                                 flex: 1,
-                                                padding: '3px 2px',
+                                                padding: '3px 1px',
                                                 fontSize: '9.5px',
                                                 fontWeight: '900',
                                                 borderRadius: '5px',

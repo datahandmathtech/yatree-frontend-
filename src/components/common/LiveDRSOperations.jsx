@@ -2903,6 +2903,21 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                                     }}>
                                                         🌙 Night Hold
                                                     </span>
+                                                ) : duty.stayType === 'Local' ? (
+                                                    <span style={{
+                                                        fontSize: '9.5px',
+                                                        background: 'rgba(56, 189, 248, 0.15)',
+                                                        color: '#38bdf8',
+                                                        border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                        padding: '1px 6px',
+                                                        borderRadius: '5px',
+                                                        fontWeight: '900',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '3px'
+                                                    }}>
+                                                        📍 Local
+                                                    </span>
                                                 ) : (
                                                     <span style={{
                                                         fontSize: '9.5px',

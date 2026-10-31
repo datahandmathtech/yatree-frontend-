@@ -3303,6 +3303,19 @@ const DriverPortal = () => {
                                                                             }}>
                                                                                 🌙 NIGHT HOLD
                                                                             </span>
+                                                                        ) : duty.stayType === 'Local' ? (
+                                                                            <span style={{
+                                                                                fontSize: '8.5px',
+                                                                                fontWeight: '950',
+                                                                                background: 'rgba(56, 189, 248, 0.25)',
+                                                                                color: '#bae6fd',
+                                                                                border: '1px solid rgba(56, 189, 248, 0.45)',
+                                                                                padding: '1px 5px',
+                                                                                borderRadius: '3px',
+                                                                                letterSpacing: '0.3px'
+                                                                            }}>
+                                                                                📍 LOCAL
+                                                                            </span>
                                                                         ) : (
                                                                             <span style={{
                                                                                 fontSize: '8.5px',
