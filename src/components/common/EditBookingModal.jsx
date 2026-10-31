@@ -6,6 +6,7 @@ import {
     User, Phone, Mail, FileText, ChevronDown, CheckCircle, Clock
 } from 'lucide-react';
 import axios from '../../api/axios';
+import { useCompany } from '../../context/CompanyContext';
 
 const ALL_VEHICLES = [
     'Innova Crysta',
@@ -69,6 +70,39 @@ const addDaysToDateString = (dateStr, days) => {
 };
 
 export default function EditBookingModal({ booking, onClose, onSuccess }) {
+    const { selectedCompany } = useCompany();
+
+    const availableSources = useMemo(() => {
+        const standardList = [
+            'Website',
+            'Google Ads',
+            'Yatree Ads',
+            'GGG Ads',
+            'Repeat Guest',
+            'Hotel',
+            'Referral',
+            'Agent',
+            'Walk-in',
+            'Corporate',
+            'Social Media',
+            'WhatsApp',
+            'Justdial',
+            'Live DRS',
+            'Other'
+        ];
+        const set = new Set();
+        standardList.forEach(s => set.add(s));
+        (selectedCompany?.leadSources || []).forEach(s => {
+            if (s && typeof s === 'string' && s.trim()) set.add(s.trim());
+        });
+        if (booking?.source && typeof booking.source === 'string' && booking.source.trim()) {
+            set.add(booking.source.trim());
+        }
+        if (booking?.enquirySource && typeof booking.enquirySource === 'string' && booking.enquirySource.trim()) {
+            set.add(booking.enquirySource.trim());
+        }
+        return Array.from(set).filter(Boolean);
+    }, [selectedCompany?.leadSources, booking?.source, booking?.enquirySource]);
     // Basic & Client details
     const [bookingReference, setBookingReference] = useState('Direct');
     const [travelAgentName, setTravelAgentName] = useState('');
@@ -849,7 +883,7 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                                     onChange={e => setSource(e.target.value)}
                                     style={darkInputStyle}
                                 >
-                                    {ALL_SOURCES.map(s => (
+                                    {availableSources.map(s => (
                                         <option key={s} value={s} style={{ background: '#090f1d' }}>{s}</option>
                                     ))}
                                 </select>

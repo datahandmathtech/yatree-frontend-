@@ -210,6 +210,17 @@ const InlineRemarkEditor = ({ lead, fetchLeads, setViewingImage, customRemarks, 
     );
 };
 
+const normalizeSource = (src) => {
+    if (!src || typeof src !== 'string') return '';
+    const s = src.trim();
+    const lower = s.toLowerCase();
+    if (lower.startsWith('live drs')) return 'Live DRS';
+    if (lower === 'justdial') return 'Justdial';
+    if (lower === 'repeat client') return 'Repeat Guest';
+    if (lower === 'b2b/agent' || lower === 'yd agent') return 'Agent';
+    return s;
+};
+
 export default function Leads() {
     const { selectedCompany } = useCompany();
     const { theme } = useTheme();
@@ -434,15 +445,94 @@ export default function Leads() {
     });
 
     const ALL_SOURCES = useMemo(() => {
-        const set = new Set([...LEAD_SOURCES, ...(selectedCompany?.leadSources || []), ...customSources]);
+        const standard = [
+            'Website',
+            'Google Ads',
+            'Yatree Ads',
+            'GGG Ads',
+            'Repeat Guest',
+            'Hotel',
+            'Referral',
+            'Agent',
+            'Walk-in',
+            'Corporate',
+            'Social Media',
+            'WhatsApp',
+            'Justdial',
+            'Live DRS',
+            'Other'
+        ];
+        const set = new Set();
+        standard.forEach(s => set.add(s));
+        (selectedCompany?.leadSources || []).forEach(s => {
+            if (s && typeof s === 'string' && s.trim()) set.add(normalizeSource(s.trim()));
+        });
+        (customSources || []).forEach(s => {
+            if (s && typeof s === 'string' && s.trim()) set.add(normalizeSource(s.trim()));
+        });
         (leads || []).forEach(l => {
-            if (l.source?.trim()) set.add(l.source.trim());
+            if (l.source && typeof l.source === 'string' && l.source.trim()) {
+                const norm = normalizeSource(l.source.trim());
+                if (norm && !norm.toLowerCase().startsWith('live drs (')) {
+                    set.add(norm);
+                }
+            }
         });
         if (formData?.source?.trim()) {
             set.add(formData.source.trim());
         }
         return Array.from(set).filter(Boolean);
     }, [customSources, leads, selectedCompany?.leadSources, formData?.source]);
+
+    // Source Filter Dropdown Options with Active Leads Count
+    const sourceFilterStats = useMemo(() => {
+        const counts = {};
+        let totalCount = 0;
+        (basePeriodLeads || []).forEach(l => {
+            if (!l.source) return;
+            const norm = normalizeSource(l.source);
+            if (!norm) return;
+            counts[norm] = (counts[norm] || 0) + 1;
+            totalCount += 1;
+        });
+
+        const standard = [
+            'Website',
+            'Google Ads',
+            'Yatree Ads',
+            'GGG Ads',
+            'Repeat Guest',
+            'Hotel',
+            'Referral',
+            'Agent',
+            'Walk-in',
+            'Corporate',
+            'Social Media',
+            'WhatsApp',
+            'Justdial',
+            'Live DRS',
+            'Other'
+        ];
+
+        const allSources = new Set();
+        Object.keys(counts).forEach(s => allSources.add(s));
+        standard.forEach(s => allSources.add(s));
+
+        const list = Array.from(allSources).map(name => ({
+            name,
+            count: counts[name] || 0
+        }));
+
+        list.sort((a, b) => {
+            if (b.count !== a.count) return b.count - a.count;
+            return a.name.localeCompare(b.name);
+        });
+
+        return {
+            list,
+            total: (basePeriodLeads || []).length
+        };
+    }, [basePeriodLeads]);
 
     const ALL_VEHICLES = useMemo(() => {
         const set = new Set([...VEHICLE_OPTIONS, ...customVehicles]);
@@ -1640,7 +1730,10 @@ export default function Leads() {
         let soldAmount = 0;
 
         (basePeriodLeads || []).forEach(lead => {
-            if (sourceFilter !== 'All' && lead.source !== sourceFilter) return;
+            if (sourceFilter !== 'All') {
+                const norm = normalizeSource(lead.source);
+                if (norm !== sourceFilter && lead.source !== sourceFilter) return;
+            }
             if (salesPersonFilter !== 'All' && lead.salesPerson !== salesPersonFilter) return;
 
             if (searchTerm && searchTerm.trim()) {
@@ -1717,7 +1810,10 @@ export default function Leads() {
                 if (confirmedLead || lostLead) return false;
             }
 
-            if (sourceFilter !== 'All' && lead.source !== sourceFilter) return false;
+            if (sourceFilter !== 'All') {
+                const norm = normalizeSource(lead.source);
+                if (norm !== sourceFilter && lead.source !== sourceFilter) return false;
+            }
             if (salesPersonFilter !== 'All' && lead.salesPerson !== salesPersonFilter) return false;
 
             // Priority / Interest Level Filter:
@@ -2718,9 +2814,11 @@ export default function Leads() {
                                 cursor: 'pointer'
                             }}
                         >
-                            <option value="All" style={{ background: '#0f172a' }}>Filter by Source</option>
-                            {ALL_SOURCES.map(src => (
-                                <option key={src} value={src} style={{ background: '#0f172a' }}>{src}</option>
+                            <option value="All" style={{ background: '#0f172a' }}>Filter by Source ({sourceFilterStats.total})</option>
+                            {sourceFilterStats.list.map(item => (
+                                <option key={item.name} value={item.name} style={{ background: '#0f172a' }}>
+                                    {item.name} ({item.count})
+                                </option>
                             ))}
                         </select>
                     </div>
