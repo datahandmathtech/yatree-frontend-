@@ -66,6 +66,45 @@ export default function LiveDRSExcelView({
     // Mode: 'month' (Full Month Sheet), 'single' (Single Date Sheet), 'range' (Date Range Sheet)
     const [filterMode, setFilterMode] = useState('month');
 
+    // Helper to check if a vehicle is already assigned on a target date to another duty
+    const checkDutyVehicleConflict = (carNoOrId, targetDateStr, excludeDutyId) => {
+        if (!carNoOrId || !targetDateStr || !duties || duties.length === 0) return null;
+        const normPlate = (p) => String(p || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        const targetPlate = normPlate(carNoOrId);
+        if (!targetPlate) return null;
+
+        const normTargetDate = (dStr) => {
+            if (!dStr) return '';
+            const d = new Date(dStr);
+            if (isNaN(d.getTime())) return String(dStr).slice(0, 10);
+            return d.toISOString().split('T')[0];
+        };
+
+        const targetYMD = normTargetDate(targetDateStr);
+
+        const found = duties.find(d => {
+            if (excludeDutyId && String(d._id) === String(excludeDutyId)) return false;
+            const dYMD = normTargetDate(d.date);
+            if (dYMD !== targetYMD) return false;
+
+            const dutyPlate = normPlate(d.carNo || d.vehicleNumber || (d.vehicle && (d.vehicle.carNumber || d.vehicle.plateNumber)));
+            const dutyVehId = d.vehicle && (d.vehicle._id || d.vehicle.id);
+            if (dutyPlate && dutyPlate === targetPlate) return true;
+            if (dutyVehId && String(dutyVehId) === String(carNoOrId)) return true;
+            return false;
+        });
+
+        if (found) {
+            return {
+                carNumber: found.carNo || found.vehicleNumber || targetPlate,
+                date: found.date,
+                clientName: found.clientName || found.guestName || found.companyName || 'Another Guest',
+                duty: found.duty || found.route || 'Duty'
+            };
+        }
+        return null;
+    };
+
     // Known Unique Vendors list across outside vehicles and past duties
     const uniqueVendorsList = useMemo(() => {
         const set = new Set();
@@ -1126,6 +1165,12 @@ export default function LiveDRSExcelView({
                                                                                 vendorPayout: vObj?.buyAmount || '',
                                                                                 isOutsideCar: Boolean(vObj?.isOutsideCar)
                                                                             }));
+                                                                            if (vObj?.carNumber) {
+                                                                                const conf = checkDutyVehicleConflict(vObj.carNumber, duty.date, duty._id);
+                                                                                if (conf) {
+                                                                                    alert(`⚠️ Vehicle assigned already, please check master calendar:\nCab ${conf.carNumber} is already assigned on ${formatTripDate(conf.date)} to ${conf.clientName} (${conf.duty})!`);
+                                                                                }
+                                                                            }
                                                                         } else {
                                                                             setInlineFormData(prev => ({
                                                                                 ...prev,
@@ -1138,11 +1183,14 @@ export default function LiveDRSExcelView({
                                                                     style={{ width: '100%', padding: '4px 6px', background: '#0b1120', border: '1px solid #38bdf8', borderRadius: '5px', color: '#38bdf8', fontSize: '11px', fontWeight: '700', outline: 'none' }}
                                                                 >
                                                                     <option value="">-- Outside / Custom Car --</option>
-                                                                    {(vehicles || []).map(v => (
-                                                                        <option key={v._id} value={v._id}>
-                                                                            {v.carNumber} {v.model ? `(${v.model})` : ''}
-                                                                        </option>
-                                                                    ))}
+                                                                    {(vehicles || []).map(v => {
+                                                                        const busy = checkDutyVehicleConflict(v.carNumber, duty.date, duty._id);
+                                                                        return (
+                                                                            <option key={v._id} value={v._id} style={{ color: busy ? '#facc15' : 'white', background: '#0b1120' }}>
+                                                                                {busy ? '⚠️ [Busy] ' : ''}{v.carNumber} {v.model ? `(${v.model})` : ''}{busy ? ' (Booked: ' + busy.clientName + ')' : ''}
+                                                                            </option>
+                                                                        );
+                                                                    })}
                                                                 </select>
                                                                 {(!inlineFormData.vehicleId || !(vehicles || []).some(v => String(v._id) === String(inlineFormData.vehicleId))) && (
                                                                     <>

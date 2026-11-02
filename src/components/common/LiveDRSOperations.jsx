@@ -112,6 +112,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
     const [assignVendorPayout, setAssignVendorPayout] = useState('');
     const [savingAssign, setSavingAssign] = useState(false);
     const [savingEdit, setSavingEdit] = useState(false);
+    const [conflictWarning, setConflictWarning] = useState(null);
 
     // Payment Collection Form States
     const [collectAmount, setCollectAmount] = useState('');
@@ -1309,6 +1310,101 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
         color: 'white',
         outline: 'none',
         fontSize: '13px'
+    };
+
+    // Helper to check if a vehicle is already assigned on a date or date range in DRS
+    const checkVehicleConflict = (vehIdOrPlate, startDateStr, endDateStr = null, excludeDutyId = null) => {
+        if (!vehIdOrPlate || !startDateStr) return null;
+        const normPlate = (p) => String(p || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        const vehObj = (vehicles || []).find(v => String(v._id) === String(vehIdOrPlate));
+        const targetPlate = normPlate(vehObj?.carNumber || vehIdOrPlate);
+        if (!targetPlate) return null;
+
+        const normTargetDate = (dStr) => {
+            if (!dStr) return '';
+            const d = new Date(dStr);
+            if (isNaN(d.getTime())) return String(dStr).slice(0, 10);
+            return d.toISOString().split('T')[0];
+        };
+
+        const sYMD = normTargetDate(startDateStr);
+        const eYMD = endDateStr && endDateStr >= startDateStr ? normTargetDate(endDateStr) : sYMD;
+
+        // Check against current duties state
+        const found = (duties || []).find(d => {
+            if (excludeDutyId && String(d._id) === String(excludeDutyId)) return false;
+            const dYMD = normTargetDate(d.date);
+            if (!dYMD || dYMD < sYMD || dYMD > eYMD) return false;
+
+            const dutyPlate = normPlate(d.carNo || d.vehicleNumber || (d.vehicle && (d.vehicle.carNumber || d.vehicle.plateNumber)));
+            const dutyVehId = d.vehicle && (d.vehicle._id || d.vehicle.id || (typeof d.vehicle === 'string' ? d.vehicle : ''));
+            if (dutyPlate && targetPlate && dutyPlate === targetPlate) return true;
+            if (dutyVehId && String(dutyVehId) === String(vehIdOrPlate)) return true;
+            return false;
+        });
+
+        if (found) {
+            return {
+                carNumber: found.carNo || found.vehicleNumber || (found.vehicle && found.vehicle.carNumber) || targetPlate,
+                date: found.date,
+                clientName: found.clientName || found.guestName || found.companyName || 'Another Guest',
+                duty: found.duty || found.route || 'Duty',
+                bookingId: found.bookingId || ''
+            };
+        }
+        return null;
+    };
+
+    const triggerConflictWarning = (conflict) => {
+        if (!conflict) return;
+        setConflictWarning({
+            carNumber: conflict.carNumber,
+            date: conflict.date,
+            message: `Cab ${conflict.carNumber} is already assigned on ${formatTripDate(conflict.date)} to ${conflict.clientName || 'Another Guest'} (${conflict.duty}${conflict.bookingId ? ' • #' + conflict.bookingId : ''})! Please check master calendar.`
+        });
+    };
+
+    const checkAndTriggerConflict = async (vehIdOrPlate, startDateStr, endDateStr = null, excludeDutyId = null) => {
+        let conf = checkVehicleConflict(vehIdOrPlate, startDateStr, endDateStr, excludeDutyId);
+        if (conf) {
+            triggerConflictWarning(conf);
+            return conf;
+        }
+
+        if (selectedCompany?._id && startDateStr) {
+            try {
+                const sStr = String(startDateStr).split('T')[0];
+                const eStr = String(endDateStr || startDateStr).split('T')[0];
+                const res = await axios.get(`/api/drs/${selectedCompany._id}?from=${sStr}&to=${eStr}`);
+                const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+                const normPlate = (p) => String(p || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                const vehObj = (vehicles || []).find(v => String(v._id) === String(vehIdOrPlate));
+                const targetPlate = normPlate(vehObj?.carNumber || vehIdOrPlate);
+                const found = list.find(d => {
+                    if (excludeDutyId && String(d._id) === String(excludeDutyId)) return false;
+                    const dutyPlate = normPlate(d.carNo || d.vehicleNumber || (d.vehicle && (d.vehicle.carNumber || d.vehicle.plateNumber)));
+                    const dutyVehId = d.vehicle && (d.vehicle._id || d.vehicle.id || (typeof d.vehicle === 'string' ? d.vehicle : ''));
+                    if (dutyPlate && targetPlate && dutyPlate === targetPlate) return true;
+                    if (dutyVehId && String(dutyVehId) === String(vehIdOrPlate)) return true;
+                    return false;
+                });
+                if (found) {
+                    const c = {
+                        carNumber: found.carNo || found.vehicleNumber || (found.vehicle && found.vehicle.carNumber) || targetPlate,
+                        date: found.date,
+                        clientName: found.clientName || found.guestName || found.companyName || 'Another Guest',
+                        duty: found.duty || found.route || 'Duty',
+                        bookingId: found.bookingId || ''
+                    };
+                    triggerConflictWarning(c);
+                    return c;
+                }
+            } catch (err) {
+                console.warn('Conflict check query error:', err);
+            }
+        }
+        setConflictWarning(null);
+        return null;
     };
 
     // Direct Booking Submit Handler
@@ -3227,6 +3323,49 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                 </button>
                             </div>
 
+                            {conflictWarning && (
+                                <div style={{
+                                    background: 'rgba(234, 179, 8, 0.15)',
+                                    border: '1.5px solid #eab308',
+                                    borderRadius: '12px',
+                                    padding: '12px 14px',
+                                    marginBottom: '10px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '12px',
+                                    boxShadow: '0 4px 16px rgba(234, 179, 8, 0.25)'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <span style={{ fontSize: '22px' }}>⚠️</span>
+                                        <div>
+                                            <div style={{ color: '#facc15', fontWeight: '900', fontSize: '13px' }}>
+                                                Vehicle assigned already, please check master calendar
+                                            </div>
+                                            <div style={{ color: 'rgba(255,255,255,0.92)', fontSize: '12px', marginTop: '2px' }}>
+                                                {conflictWarning.message}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setConflictWarning(null)}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.12)',
+                                            border: 'none',
+                                            color: '#facc15',
+                                            borderRadius: '6px',
+                                            padding: '4px 10px',
+                                            cursor: 'pointer',
+                                            fontSize: '11px',
+                                            fontWeight: '800'
+                                        }}
+                                    >
+                                        Dismiss ✕
+                                    </button>
+                                </div>
+                            )}
+
                             <form onSubmit={handleDirectBookingSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                                 {/* Row 1: Date & Time */}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
@@ -3238,7 +3377,12 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                             type="date"
                                             required
                                             value={directForm.date}
-                                            onChange={(e) => setDirectForm({ ...directForm, date: e.target.value })}
+                                            onChange={(e) => {
+                                                const newD = e.target.value;
+                                                setDirectForm(prev => ({ ...prev, date: newD }));
+                                                const curV = (directForm.assignedVehicles && directForm.assignedVehicles[0]?.vehicle) || directForm.vehicle;
+                                                if (curV) checkAndTriggerConflict(curV, newD, directForm.endDate);
+                                            }}
                                             style={{ width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
                                         />
                                     </div>
@@ -3506,13 +3650,26 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                                     </label>
                                                     <select
                                                         value={vItem.vehicle || ''}
-                                                        onChange={(e) => handleUpdateDirectVehicleField(vIdx, 'vehicle', e.target.value)}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            handleUpdateDirectVehicleField(vIdx, 'vehicle', val);
+                                                            if (val) {
+                                                                checkAndTriggerConflict(val, directForm.date, directForm.endDate);
+                                                            } else {
+                                                                setConflictWarning(null);
+                                                            }
+                                                        }}
                                                         style={{ width: '100%', padding: '8px 10px', background: '#0b1120', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '12px', outline: 'none' }}
                                                     >
                                                         <option value="">-- Select Vehicle (Optional) --</option>
-                                                        {vehicles.map(v => (
-                                                            <option key={v._id} value={v._id}>{v.carNumber} - {v.model || v.type}</option>
-                                                        ))}
+                                                        {vehicles.map(v => {
+                                                            const busy = checkVehicleConflict(v._id, directForm.date, directForm.endDate);
+                                                            return (
+                                                                <option key={v._id} value={v._id} style={{ color: busy ? '#facc15' : 'white', background: '#0b1120' }}>
+                                                                    {busy ? '⚠️ [Busy] ' : ''}{v.carNumber} - {v.model || v.type}{busy ? ' (Booked: ' + busy.clientName + ')' : ''}
+                                                                </option>
+                                                            );
+                                                        })}
                                                     </select>
                                                 </div>
                                             </div>
@@ -3709,6 +3866,33 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                     <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '4px' }}>
                                         2. Select Vehicle / Car (Fleet)
                                     </label>
+                                    {conflictWarning && (
+                                        <div style={{
+                                            background: 'rgba(234, 179, 8, 0.15)',
+                                            border: '1.5px solid #eab308',
+                                            borderRadius: '8px',
+                                            padding: '8px 12px',
+                                            marginBottom: '10px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            gap: '8px'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <span style={{ fontSize: '16px' }}>⚠️</span>
+                                                <span style={{ color: '#facc15', fontWeight: '800', fontSize: '11.5px' }}>
+                                                    {conflictWarning.message}
+                                                </span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setConflictWarning(null)}
+                                                style={{ background: 'none', border: 'none', color: '#facc15', cursor: 'pointer', fontSize: '12px' }}
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    )}
                                     <select
                                         value={assignVehicleId}
                                         onChange={(e) => {
@@ -3722,14 +3906,22 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                                 if (vObj.driverName && !assignCustomDriverName && !assignDriverId) {
                                                     setAssignCustomDriverName(vObj.driverName);
                                                 }
+                                                checkAndTriggerConflict(vId, selectedDutyForAssign?.date, null, selectedDutyForAssign?._id);
+                                            } else {
+                                                setConflictWarning(null);
                                             }
                                         }}
                                         style={{ width: '100%', padding: '11px 12px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
                                     >
                                         <option value="">-- Select Fleet Car or Enter Below --</option>
-                                        {vehicles.map(v => (
-                                            <option key={v._id} value={v._id}>{v.carNumber} - {v.model || v.type}</option>
-                                        ))}
+                                        {vehicles.map(v => {
+                                            const busy = checkVehicleConflict(v._id, selectedDutyForAssign?.date, null, selectedDutyForAssign?._id);
+                                            return (
+                                                <option key={v._id} value={v._id} style={{ color: busy ? '#facc15' : 'white', background: '#0f172a' }}>
+                                                    {busy ? '⚠️ [Busy] ' : ''}{v.carNumber} - {v.model || v.type}{busy ? ' (Booked: ' + busy.clientName + ')' : ''}
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                     <input
                                         type="text"
@@ -4025,13 +4217,23 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                                     ...(vObj?.buyAmount ? { vendorPayout: vObj.buyAmount } : {}),
                                                     ...(vObj?.driverName && !prev.customDriverName ? { customDriverName: vObj.driverName } : {})
                                                 }));
+                                                if (vId) {
+                                                    checkAndTriggerConflict(vId, editForm.date || selectedDutyForEdit?.date, null, editForm._id || selectedDutyForEdit?._id);
+                                                } else {
+                                                    setConflictWarning(null);
+                                                }
                                             }}
                                             style={{ width: '100%', padding: '10px 12px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: 'white', fontSize: '13px', outline: 'none' }}
                                         >
                                             <option value="">-- No / Outside Vehicle --</option>
-                                            {vehicles.map(v => (
-                                                <option key={v._id} value={v._id}>{v.carNumber} - {v.model || v.type}</option>
-                                            ))}
+                                            {vehicles.map(v => {
+                                                const busy = checkVehicleConflict(v._id, editForm.date || selectedDutyForEdit?.date, null, editForm._id || selectedDutyForEdit?._id);
+                                                return (
+                                                    <option key={v._id} value={v._id} style={{ color: busy ? '#facc15' : 'white', background: '#0f172a' }}>
+                                                        {busy ? '⚠️ [Busy] ' : ''}{v.carNumber} - {v.model || v.type}{busy ? ' (Booked: ' + busy.clientName + ')' : ''}
+                                                    </option>
+                                                );
+                                            })}
                                         </select>
                                         <input
                                             type="text"
