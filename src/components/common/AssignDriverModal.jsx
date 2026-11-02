@@ -338,23 +338,33 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
             let dList = [];
             let vList = [];
             let outVList = [];
+            let freshBooking = booking;
+
+            const bookingPromise = (booking?._id && (!Array.isArray(booking.drsDuties) || booking.drsDuties.length === 0 || typeof booking.drsDuties[0] !== 'object'))
+                ? axios.get(`/api/bookings/single/${booking._id}`).catch(() => null)
+                : Promise.resolve(null);
+
             if (compId) {
-                const [dRes, vRes, outVRes] = await Promise.all([
+                const [dRes, vRes, outVRes, bRes] = await Promise.all([
                     axios.get(`/api/admin/drivers/${compId}?usePagination=false&status=active`).catch(() => ({ data: [] })),
                     axios.get(`/api/admin/vehicles/${compId}?usePagination=false`).catch(() => ({ data: [] })),
-                    axios.get(`/api/admin/vehicles/${compId}?usePagination=false&type=outside&includeBlocked=true`).catch(() => ({ data: [] }))
+                    axios.get(`/api/admin/vehicles/${compId}?usePagination=false&type=outside&includeBlocked=true`).catch(() => ({ data: [] })),
+                    bookingPromise
                 ]);
                 dList = Array.isArray(dRes.data) ? dRes.data : (dRes.data?.drivers || []);
                 vList = Array.isArray(vRes.data) ? vRes.data : (vRes.data?.vehicles || []);
                 outVList = Array.isArray(outVRes.data) ? outVRes.data : (outVRes.data?.vehicles || []);
+                if (bRes && bRes.data) {
+                    freshBooking = bRes.data;
+                }
                 setDriversList(dList);
                 setVehiclesList(vList);
                 setOutsideVehiclesList(outVList);
             }
-            initAssignmentItinerary(vList, dList);
+            initAssignmentItinerary(vList, dList, freshBooking);
         } catch (err) {
             console.error('Error fetching fleet data for driver assignment:', err);
-            initAssignmentItinerary([], []);
+            initAssignmentItinerary([], [], booking);
         }
     };
 
@@ -425,12 +435,13 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
         return null;
     };
 
-    const initAssignmentItinerary = (currentVehicles = vehiclesList, currentDrivers = driversList) => {
-        if (!booking) return;
+    const initAssignmentItinerary = (currentVehicles = vehiclesList, currentDrivers = driversList, activeBooking = booking) => {
+        const bkg = activeBooking || booking;
+        if (!bkg) return;
 
-        const sRaw = booking.travelStartDate ? new Date(booking.travelStartDate) : new Date();
+        const sRaw = bkg.travelStartDate ? new Date(bkg.travelStartDate) : new Date();
         const s = isNaN(sRaw.getTime()) ? new Date() : sRaw;
-        const eRaw = booking.travelEndDate ? new Date(booking.travelEndDate) : s;
+        const eRaw = bkg.travelEndDate ? new Date(bkg.travelEndDate) : s;
         const e = isNaN(eRaw.getTime()) || eRaw < s ? s : eRaw;
 
         const sMidnight = new Date(s.getFullYear(), s.getMonth(), s.getDate());
@@ -438,8 +449,8 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
         const dateRangeDays = Math.max(1, Math.round((eMidnight - sMidnight) / 86400000) + 1);
 
         const excludedSet = new Set(
-            Array.isArray(booking.excludedDates)
-                ? booking.excludedDates.map(d => String(d).slice(0, 10))
+            Array.isArray(bkg.excludedDates)
+                ? bkg.excludedDates.map(d => String(d).slice(0, 10))
                 : []
         );
 
@@ -456,11 +467,11 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
         const activeCalendarDates = allCalendarDates.filter(dStr => !excludedSet.has(dStr));
         const effectiveActiveDates = activeCalendarDates.length > 0 ? activeCalendarDates : allCalendarDates;
 
-        const existingItin = (Array.isArray(booking.itinerary) ? booking.itinerary : []).filter(
+        const existingItin = (Array.isArray(bkg.itinerary) ? bkg.itinerary : []).filter(
             it => !it.date || !excludedSet.has(String(it.date).slice(0, 10))
         );
-        const existingDrs = (Array.isArray(booking.drsDuties) ? booking.drsDuties : []).filter(
-            dr => !dr.date || !excludedSet.has(new Date(dr.date).toISOString().slice(0, 10))
+        const existingDrs = (Array.isArray(bkg.drsDuties) ? bkg.drsDuties : []).filter(
+            dr => typeof dr === 'object' && dr !== null && (!dr.date || !excludedSet.has(new Date(dr.date).toISOString().slice(0, 10)))
         );
 
         const usedDrsIds = new Set();
@@ -772,16 +783,19 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                 return;
             }
 
-            // Target day: replicate exact multi-car structure of sourceCars
+            // Target day: replicate exact multi-car structure of sourceCars, BUT ONLY COPY DRIVER & VEHICLE!
             sourceCars.forEach((srcCar, cIdx) => {
                 const existingCar = dayData.rows[cIdx] || dayData.rows[0] || {};
                 newItinerary.push({
                     dayNo: dayData.dayNo,
                     date: dayData.date,
-                    time: existingCar.time || srcCar.time || '09:00 AM',
-                    isApg: existingCar.isApg !== undefined ? existingCar.isApg : Boolean(srcCar.isApg),
-                    pickupPoint: existingCar.pickupPoint || srcCar.pickupPoint || '',
-                    duty: existingCar.duty || srcCar.duty || '',
+                    // Strictly PRESERVE target day's own time & APG - NEVER copy from Day 1 / srcCar!
+                    time: existingCar.time !== undefined && existingCar.time !== '' ? existingCar.time : (existingCar.isApg ? 'APG' : (dayData.dayNo === 1 ? '09:00 AM' : '10:00 AM')),
+                    isApg: existingCar.isApg !== undefined ? existingCar.isApg : false,
+                    // Strictly PRESERVE target day's own pickupPoint & duty - NEVER copy from Day 1 / srcCar!
+                    pickupPoint: existingCar.pickupPoint || '',
+                    duty: existingCar.duty || '',
+                    // ONLY copy Driver & Vehicle / Cab details:
                     vehicleType: srcCar.vehicleType || existingCar.vehicleType || 'Innova Crysta',
                     driverId: srcCar.driverId || '',
                     driverName: srcCar.driverName || '',
@@ -791,9 +805,10 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                     isOutsideCar: Boolean(srcCar.isOutsideCar),
                     ownerName: srcCar.ownerName || '',
                     buyAmount: srcCar.buyAmount || '',
-                    stayType: srcCar.stayType || 'Same Day Return',
-                    amount: existingCar.amount !== undefined ? existingCar.amount : (cIdx === 0 ? srcCar.amount : ''),
-                    km: existingCar.km || srcCar.km || 0,
+                    // Strictly PRESERVE target day's own stayType & rate:
+                    stayType: existingCar.stayType || 'Same Day Return',
+                    amount: existingCar.amount !== undefined ? existingCar.amount : '',
+                    km: existingCar.km || 0,
                     isAdditionalCar: cIdx > 0
                 });
             });
