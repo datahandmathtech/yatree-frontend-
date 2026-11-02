@@ -383,16 +383,25 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
 
                 // Fetch company DRS duties to check master calendar conflicts across trip dates
                 try {
-                    const startD = new Date(booking?.dates?.from || new Date());
-                    startD.setDate(startD.getDate() - 2);
-                    const endD = new Date(booking?.dates?.to || booking?.dates?.from || new Date());
-                    endD.setDate(endD.getDate() + 2);
-                    const fromStr = startD.toISOString().split('T')[0];
-                    const toStr = endD.toISOString().split('T')[0];
-                    const drsRes = await axios.get(`/api/drs/${compId}?from=${fromStr}&to=${toStr}`);
-                    if (drsRes.data?.success && Array.isArray(drsRes.data.data)) {
-                        setCompanyDrsDuties(drsRes.data.data);
+                    const rawFrom = booking?.travelStartDate || booking?.dates?.from || booking?.startDate || (Array.isArray(booking?.itinerary) && booking.itinerary[0]?.date) || (freshBooking?.travelStartDate || freshBooking?.itinerary?.[0]?.date);
+                    const rawTo = booking?.travelEndDate || booking?.dates?.to || booking?.endDate || (Array.isArray(booking?.itinerary) && booking.itinerary[booking.itinerary.length - 1]?.date) || (freshBooking?.travelEndDate || freshBooking?.itinerary?.[freshBooking?.itinerary?.length - 1]?.date) || rawFrom;
+
+                    let fromStr = '';
+                    let toStr = '';
+                    if (rawFrom) {
+                        const s = new Date(rawFrom);
+                        s.setDate(s.getDate() - 4);
+                        fromStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(s);
                     }
+                    if (rawTo) {
+                        const e = new Date(rawTo);
+                        e.setDate(e.getDate() + 4);
+                        toStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(e);
+                    }
+                    const dateQuery = (fromStr && toStr) ? `from=${fromStr}&to=${toStr}` : 'view=all';
+                    const drsRes = await axios.get(`/api/drs/${compId}?${dateQuery}`);
+                    const list = Array.isArray(drsRes.data) ? drsRes.data : (drsRes.data?.data || []);
+                    setCompanyDrsDuties(list);
                 } catch (dErr) {
                     console.warn('[AssignDriverModal] Failed to fetch DRS duties for conflict check:', dErr);
                 }
@@ -790,21 +799,31 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
         
         const normTargetDate = (dStr) => {
             if (!dStr) return '';
-            const d = new Date(dStr);
-            if (isNaN(d.getTime())) return String(dStr).split('T')[0];
-            return d.toISOString().split('T')[0];
+            if (typeof dStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dStr.trim())) return dStr.trim();
+            try {
+                const d = new Date(dStr);
+                if (isNaN(d.getTime())) return String(dStr).slice(0, 10);
+                return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+            } catch {
+                return String(dStr).slice(0, 10);
+            }
         };
 
         const targetYMD = normTargetDate(targetDateStr);
         const normPlate = (p) => String(p || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-        const targetClean = normPlate(carNoOrId);
+        const vehObj = (vehiclesList || []).find(v => String(v._id) === String(carNoOrId));
+        const targetClean = normPlate(vehObj?.carNumber || carNoOrId);
+        if (!targetClean) return null;
 
         // Find in DRS duties matching date & vehicle, excluding current booking
         const found = companyDrsDuties.find(d => {
             // Exclude current booking duties
             if (booking) {
                 if (booking.clientCode && d.bookingId && String(d.bookingId).trim() === String(booking.clientCode).trim()) return false;
-                if (booking._id && d.bookingRef && String(d.bookingRef) === String(booking._id)) return false;
+                if (booking._id && d.bookingRef) {
+                    const bRefId = typeof d.bookingRef === 'object' ? d.bookingRef._id : d.bookingRef;
+                    if (String(bRefId) === String(booking._id)) return false;
+                }
             }
             // Check date match
             const dYMD = normTargetDate(d.date);
@@ -812,7 +831,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
 
             // Check vehicle match
             const dutyVehNo = normPlate(d.carNo || d.vehicleNumber || (d.vehicle && (d.vehicle.carNumber || d.vehicle.plateNumber)));
-            const dutyVehId = d.vehicle && (d.vehicle._id || d.vehicle.id);
+            const dutyVehId = d.vehicle && (d.vehicle._id || d.vehicle.id || (typeof d.vehicle === 'string' ? d.vehicle : ''));
             if (targetClean && dutyVehNo && targetClean === dutyVehNo) return true;
             if (d.vehicleNumber && targetClean && normPlate(d.vehicleNumber) === targetClean) return true;
             if (dutyVehId && String(dutyVehId) === String(carNoOrId)) return true;
@@ -821,7 +840,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
 
         if (found) {
             return {
-                carNumber: found.carNo || found.vehicleNumber || (found.vehicle && found.vehicle.carNumber) || carNoOrId,
+                carNumber: found.carNo || found.vehicleNumber || (found.vehicle && found.vehicle.carNumber) || targetClean,
                 clientName: found.clientName || found.guestName || found.companyName || 'Another Guest',
                 duty: found.duty || found.route || 'Duty',
                 bookingId: found.bookingId || '',
@@ -839,6 +858,37 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
             message: `Cab ${carNumber} is already assigned on ${dateFormatted} to ${conf.clientName || 'Another Guest'} (${conf.duty}${conf.bookingId ? ' • #' + conf.bookingId : ''})! Please check Master Calendar.`
         });
     };
+
+    // Automatically scan itinerary days whenever companyDrsDuties or assignItinerary updates
+    useEffect(() => {
+        if (!companyDrsDuties || companyDrsDuties.length === 0 || !assignItinerary || assignItinerary.length === 0) return;
+        const conflictsFound = [];
+        assignItinerary.forEach(row => {
+            const carNo = row.vehicleNumber;
+            if (carNo) {
+                const conf = getVehicleConflict(carNo, row.date);
+                if (conf) {
+                    conflictsFound.push({
+                        date: row.date,
+                        carNumber: carNo,
+                        clientName: conf.clientName,
+                        duty: conf.duty,
+                        bookingId: conf.bookingId
+                    });
+                }
+            }
+        });
+
+        if (conflictsFound.length > 0) {
+            const firstConf = conflictsFound[0];
+            const dateFormatted = formatTripDate(firstConf.date);
+            setConflictWarning({
+                carNumber: firstConf.carNumber,
+                date: firstConf.date,
+                message: `Cab ${firstConf.carNumber} is already assigned on ${dateFormatted} to ${firstConf.clientName || 'Another Guest'} (${firstConf.duty}${firstConf.bookingId ? ' • #' + firstConf.bookingId : ''})! (${conflictsFound.length} conflict${conflictsFound.length > 1 ? 's' : ''} detected on Master Calendar).`
+            });
+        }
+    }, [companyDrsDuties, assignItinerary]);
 
     const handleCopyDayToAll = (sourceIdx = 0, mode = 'all') => {
         const src = assignItinerary[sourceIdx];
