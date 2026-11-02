@@ -153,15 +153,26 @@ export default function LiveDRSExcelView({
         return '';
     };
     
-    // Dynamic Month Selection
-    const [selectedYear, setSelectedYear] = useState(2026);
-    const [selectedMonth, setSelectedMonth] = useState(10); // 1 = Jan, 10 = Oct
-    const [selectedMonthTab, setSelectedMonthTab] = useState('Oct. 26');
+    // Dynamic Month Selection (Defaults to Current IST Month e.g. Nov 2026)
+    const currentISTDate = todayIST(); // 'YYYY-MM-DD'
+    const curISTParts = currentISTDate.split('-').map(Number);
+    const initISTYear = curISTParts[0] || new Date().getFullYear();
+    const initISTMonth = curISTParts[1] || (new Date().getMonth() + 1);
+
+    const [selectedYear, setSelectedYear] = useState(initISTYear);
+    const [selectedMonth, setSelectedMonth] = useState(initISTMonth);
+    const [selectedMonthTab, setSelectedMonthTab] = useState(() => {
+        const shortMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+        return `${shortMonths[initISTMonth - 1]}. ${String(initISTYear).slice(-2)}`;
+    });
 
     // Single Date & Range Selection
-    const [singleDate, setSingleDate] = useState(todayIST());
-    const [rangeFrom, setRangeFrom] = useState('2026-10-01');
-    const [rangeTo, setRangeTo] = useState('2026-10-31');
+    const [singleDate, setSingleDate] = useState(currentISTDate);
+    const [rangeFrom, setRangeFrom] = useState(`${currentISTDate.slice(0, 7)}-01`);
+    const [rangeTo, setRangeTo] = useState(() => {
+        const lastDay = new Date(initISTYear, initISTMonth, 0).getDate();
+        return `${currentISTDate.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`;
+    });
     const [jumpDate, setJumpDate] = useState('');
 
     const [searchFilter, setSearchFilter] = useState('');
@@ -179,7 +190,7 @@ export default function LiveDRSExcelView({
     ];
 
     const MONTH_TABS = [
-        'Oct. 26', 'Nov. 26', 'Dec. 26', 'Jan. 27', 'Feb. 27', 'Sept. 26', 'August 26', 'All Duties'
+        'Nov. 26', 'Dec. 26', 'Oct. 26', 'Jan. 27', 'Feb. 27', 'Sept. 26', 'August 26', 'All Duties'
     ];
 
     const handleSelectMonthTab = (tab) => {

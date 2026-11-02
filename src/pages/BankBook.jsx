@@ -819,6 +819,12 @@ const BankBook = ({ initialTab = 'bank' }) => {
     const formatParticulars = (tx) => {
         const rawDesc = String(tx?.description || '').trim();
         const cat = String(tx?.category || '').trim();
+        const gName = String(tx?.guestName || '').trim();
+
+        // 0. Deleted by system transactions
+        if (/delete by system/i.test(rawDesc) || /delete by system/i.test(gName) || tx?.isDeletedBySystem) {
+            return 'Delete by system';
+        }
 
         // 1. Driver Advance -> "Mr. Bharat"
         const drvMatch = rawDesc.match(/Advance\s+(?:given\s+)?to\s+Driver\s+([^(—\-]+?)(?:\s*\(.*|\s*[-—].*)?$/i);

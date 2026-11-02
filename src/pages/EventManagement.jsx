@@ -148,7 +148,7 @@ const DRS_SHORT_MONTH_NAMES = [
     'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'
 ];
 const DRS_MONTH_TABS = [
-    'Oct. 26', 'Nov. 26', 'Dec. 26', 'Jan. 27', 'Feb. 27', 'Sept. 26', 'August 26', 'All Duties'
+    'Nov. 26', 'Dec. 26', 'Oct. 26', 'Jan. 27', 'Feb. 27', 'Sept. 26', 'August 26', 'All Duties'
 ];
 
 const getToday = () => todayIST();
@@ -177,13 +177,22 @@ const EventManagement = () => {
     const [dutyDateFilter, setDutyDateFilter] = useState('All');
     
     // Event Live DRS states (Excel View by Date)
+    const curDateStr = getToday();
+    const curParts = curDateStr.split('-').map(Number);
+    const curY = curParts[0] || 2026;
+    const curM = curParts[1] || 11;
+    const shortNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+
     const [drsFilterMode, setDrsFilterMode] = useState('month'); // 'month', 'single', 'range'
-    const [drsSelectedYear, setDrsSelectedYear] = useState(2026);
-    const [drsSelectedMonth, setDrsSelectedMonth] = useState(10);
-    const [drsSelectedMonthTab, setDrsSelectedMonthTab] = useState('Oct. 26');
-    const [drsSingleDate, setDrsSingleDate] = useState(getToday());
-    const [drsRangeFrom, setDrsRangeFrom] = useState('2026-10-01');
-    const [drsRangeTo, setDrsRangeTo] = useState('2026-10-31');
+    const [drsSelectedYear, setDrsSelectedYear] = useState(curY);
+    const [drsSelectedMonth, setDrsSelectedMonth] = useState(curM);
+    const [drsSelectedMonthTab, setDrsSelectedMonthTab] = useState(`${shortNames[curM - 1]}. ${String(curY).slice(-2)}`);
+    const [drsSingleDate, setDrsSingleDate] = useState(curDateStr);
+    const [drsRangeFrom, setDrsRangeFrom] = useState(`${curDateStr.slice(0, 7)}-01`);
+    const [drsRangeTo, setDrsRangeTo] = useState(() => {
+        const lastDay = new Date(curY, curM, 0).getDate();
+        return `${curDateStr.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`;
+    });
     const [drsJumpDate, setDrsJumpDate] = useState('');
     const [drsEventFilter, setDrsEventFilter] = useState('All');
     const [drsSourceFilter, setDrsSourceFilter] = useState('All');
