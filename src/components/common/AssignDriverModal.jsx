@@ -159,7 +159,7 @@ function DriverSelectDropdown({ day, idx, driversList, onSelectDriver, onSelectC
 }
 
 // Searchable Vehicle Combobox
-function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, onSelectVehicle, onSelectCustom }) {
+function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, getVehicleConflict, onSelectVehicle, onSelectCustom }) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
     const wrapperRef = useRef(null);
@@ -248,22 +248,40 @@ function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, on
                                 <div style={{ fontSize: '9.5px', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', padding: '3px 8px', letterSpacing: '0.4px' }}>
                                     Company Fleet ({filteredCompany.length})
                                 </div>
-                                {filteredCompany.map(veh => (
-                                    <div
-                                        key={veh._id}
-                                        onClick={() => { onSelectVehicle(veh); setIsOpen(false); }}
-                                        style={{
-                                            padding: '6px 8px', borderRadius: '5px', cursor: 'pointer',
-                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                            background: day.vehicleId === veh._id ? 'rgba(56, 189, 248, 0.15)' : 'transparent'
-                                        }}
-                                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.2)'}
-                                        onMouseLeave={(e) => e.currentTarget.style.background = day.vehicleId === veh._id ? 'rgba(56, 189, 248, 0.15)' : 'transparent'}
-                                    >
-                                        <span style={{ fontWeight: '800', color: '#38bdf8', fontSize: '12px' }}>🚗 {veh.carNumber}</span>
-                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.55)' }}>{veh.carType || veh.model || 'Cab'}</span>
-                                    </div>
-                                ))}
+                                {filteredCompany.map(veh => {
+                                    const conflict = getVehicleConflict ? getVehicleConflict(veh.carNumber || veh._id, day.date) : null;
+                                    return (
+                                        <div
+                                            key={veh._id}
+                                            onClick={() => { onSelectVehicle(veh, conflict); setIsOpen(false); }}
+                                            style={{
+                                                padding: '6px 8px', borderRadius: '5px', cursor: 'pointer',
+                                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                                background: day.vehicleId === veh._id ? 'rgba(56, 189, 248, 0.15)' : (conflict ? 'rgba(234, 179, 8, 0.08)' : 'transparent')
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.2)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.background = day.vehicleId === veh._id ? 'rgba(56, 189, 248, 0.15)' : (conflict ? 'rgba(234, 179, 8, 0.08)' : 'transparent')}
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <span style={{ fontWeight: '800', color: '#38bdf8', fontSize: '12px' }}>🚗 {veh.carNumber}</span>
+                                                {conflict && (
+                                                    <span style={{
+                                                        fontSize: '8.5px',
+                                                        fontWeight: '900',
+                                                        color: '#facc15',
+                                                        background: 'rgba(234, 179, 8, 0.2)',
+                                                        border: '1px solid rgba(234, 179, 8, 0.45)',
+                                                        padding: '1px 5px',
+                                                        borderRadius: '4px'
+                                                    }} title={'Assigned to ' + (conflict.clientName || 'Another Guest') + ' on this date'}>
+                                                        ⚠️ Busy
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.55)' }}>{veh.carType || veh.model || 'Cab'}</span>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                         {filteredOutside.length > 0 && (
@@ -323,6 +341,8 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
     const [vehiclesList, setVehiclesList] = useState([]);
     const [outsideVehiclesList, setOutsideVehiclesList] = useState([]);
     const [assignItinerary, setAssignItinerary] = useState([]);
+    const [companyDrsDuties, setCompanyDrsDuties] = useState([]);
+    const [conflictWarning, setConflictWarning] = useState(null);
     const [copySuccessMsg, setCopySuccessMsg] = useState('');
     const [savingAssignment, setSavingAssignment] = useState(false);
 
@@ -360,6 +380,22 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                 setDriversList(dList);
                 setVehiclesList(vList);
                 setOutsideVehiclesList(outVList);
+
+                // Fetch company DRS duties to check master calendar conflicts across trip dates
+                try {
+                    const startD = new Date(booking?.dates?.from || new Date());
+                    startD.setDate(startD.getDate() - 2);
+                    const endD = new Date(booking?.dates?.to || booking?.dates?.from || new Date());
+                    endD.setDate(endD.getDate() + 2);
+                    const fromStr = startD.toISOString().split('T')[0];
+                    const toStr = endD.toISOString().split('T')[0];
+                    const drsRes = await axios.get(`/api/drs/${compId}?from=${fromStr}&to=${toStr}`);
+                    if (drsRes.data?.success && Array.isArray(drsRes.data.data)) {
+                        setCompanyDrsDuties(drsRes.data.data);
+                    }
+                } catch (dErr) {
+                    console.warn('[AssignDriverModal] Failed to fetch DRS duties for conflict check:', dErr);
+                }
             }
             initAssignmentItinerary(vList, dList, freshBooking);
         } catch (err) {
@@ -748,6 +784,62 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
         }));
     };
 
+    // Helper to find existing duty conflict for a vehicle on a given date (from Master Calendar / DRS)
+    const getVehicleConflict = (carNoOrId, targetDateStr) => {
+        if (!carNoOrId || !targetDateStr || !companyDrsDuties || companyDrsDuties.length === 0) return null;
+        
+        const normTargetDate = (dStr) => {
+            if (!dStr) return '';
+            const d = new Date(dStr);
+            if (isNaN(d.getTime())) return String(dStr).split('T')[0];
+            return d.toISOString().split('T')[0];
+        };
+
+        const targetYMD = normTargetDate(targetDateStr);
+        const normPlate = (p) => String(p || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        const targetClean = normPlate(carNoOrId);
+
+        // Find in DRS duties matching date & vehicle, excluding current booking
+        const found = companyDrsDuties.find(d => {
+            // Exclude current booking duties
+            if (booking) {
+                if (booking.clientCode && d.bookingId && String(d.bookingId).trim() === String(booking.clientCode).trim()) return false;
+                if (booking._id && d.bookingRef && String(d.bookingRef) === String(booking._id)) return false;
+            }
+            // Check date match
+            const dYMD = normTargetDate(d.date);
+            if (dYMD !== targetYMD) return false;
+
+            // Check vehicle match
+            const dutyVehNo = normPlate(d.carNo || d.vehicleNumber || (d.vehicle && (d.vehicle.carNumber || d.vehicle.plateNumber)));
+            const dutyVehId = d.vehicle && (d.vehicle._id || d.vehicle.id);
+            if (targetClean && dutyVehNo && targetClean === dutyVehNo) return true;
+            if (d.vehicleNumber && targetClean && normPlate(d.vehicleNumber) === targetClean) return true;
+            if (dutyVehId && String(dutyVehId) === String(carNoOrId)) return true;
+            return false;
+        });
+
+        if (found) {
+            return {
+                carNumber: found.carNo || found.vehicleNumber || (found.vehicle && found.vehicle.carNumber) || carNoOrId,
+                clientName: found.clientName || found.guestName || found.companyName || 'Another Guest',
+                duty: found.duty || found.route || 'Duty',
+                bookingId: found.bookingId || '',
+                date: targetDateStr
+            };
+        }
+        return null;
+    };
+
+    const triggerVehicleConflictWarning = (carNumber, dateStr, conf) => {
+        const dateFormatted = formatTripDate(dateStr);
+        setConflictWarning({
+            carNumber,
+            date: dateStr,
+            message: `Cab ${carNumber} is already assigned on ${dateFormatted} to ${conf.clientName || 'Another Guest'} (${conf.duty}${conf.bookingId ? ' • #' + conf.bookingId : ''})! Please check Master Calendar.`
+        });
+    };
+
     const handleCopyDayToAll = (sourceIdx = 0, mode = 'all') => {
         const src = assignItinerary[sourceIdx];
         if (!src) return;
@@ -820,6 +912,34 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
             showTemporaryCopyBanner(`Copied ${carCountText} from Day ${src.dayNo || (srcDayIndex + 1)} across all ${dayKeys.length} days! (Tours & Rates preserved)`);
         } else {
             showTemporaryCopyBanner(`Copied ${carCountText} from Day ${src.dayNo || (srcDayIndex + 1)} to days below!`);
+        }
+
+        // Check for conflicts across copied days
+        const conflictsFound = [];
+        newItinerary.forEach(row => {
+            const carNo = row.vehicleNumber;
+            if (carNo) {
+                const conf = getVehicleConflict(carNo, row.date);
+                if (conf) {
+                    conflictsFound.push({
+                        date: row.date,
+                        carNumber: carNo,
+                        clientName: conf.clientName,
+                        duty: conf.duty,
+                        bookingId: conf.bookingId
+                    });
+                }
+            }
+        });
+
+        if (conflictsFound.length > 0) {
+            const firstConf = conflictsFound[0];
+            const dateFormatted = formatTripDate(firstConf.date);
+            setConflictWarning({
+                carNumber: firstConf.carNumber,
+                date: firstConf.date,
+                message: `Vehicle assigned already, please check master calendar: Cab ${firstConf.carNumber} is already assigned on ${dateFormatted} to ${firstConf.clientName || 'Another Guest'} (${firstConf.bookingId ? '#' + firstConf.bookingId : ''})! (${conflictsFound.length} conflict${conflictsFound.length > 1 ? 's' : ''} detected on Master Calendar).`
+            });
         }
     };
 
@@ -1030,6 +1150,49 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                         </div>
                     )}
 
+                    {conflictWarning && (
+                        <div style={{
+                            background: 'rgba(234, 179, 8, 0.15)',
+                            border: '1.5px solid #eab308',
+                            borderRadius: '8px',
+                            padding: '10px 14px',
+                            marginBottom: '14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '12px',
+                            boxShadow: '0 4px 16px rgba(234, 179, 8, 0.2)'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ fontSize: '20px' }}>⚠️</span>
+                                <div>
+                                    <div style={{ color: '#facc15', fontWeight: '900', fontSize: '13px' }}>
+                                        Vehicle assigned already, please check master calendar
+                                    </div>
+                                    <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: '11.5px', marginTop: '2px' }}>
+                                        {conflictWarning.message}
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setConflictWarning(null)}
+                                style={{
+                                    background: 'rgba(255,255,255,0.12)',
+                                    border: 'none',
+                                    color: '#facc15',
+                                    borderRadius: '5px',
+                                    padding: '4px 10px',
+                                    cursor: 'pointer',
+                                    fontSize: '11px',
+                                    fontWeight: '800'
+                                }}
+                            >
+                                Dismiss ✕
+                            </button>
+                        </div>
+                    )}
+
                     {/* Column Headers */}
                     <div style={{
                         display: 'grid',
@@ -1160,7 +1323,14 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                             idx={idx}
                                             vehiclesList={allVehicles}
                                             outsideVehiclesList={outsideVehiclesList}
-                                            onSelectVehicle={(veh) => {
+                                            getVehicleConflict={getVehicleConflict}
+                                            onSelectVehicle={(veh, conflict) => {
+                                                if (conflict) {
+                                                    triggerVehicleConflictWarning(veh.carNumber, day.date, conflict);
+                                                } else {
+                                                    const conf = getVehicleConflict(veh.carNumber || veh._id, day.date);
+                                                    if (conf) triggerVehicleConflictWarning(veh.carNumber, day.date, conf);
+                                                }
                                                 if (veh._id === 'custom') {
                                                     handleUpdateDayField(idx, 'vehicleId', 'custom');
                                                     handleUpdateDayField(idx, 'vehicleNumber', veh.carNumber || '');
