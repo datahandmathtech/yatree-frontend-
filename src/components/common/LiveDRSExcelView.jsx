@@ -190,7 +190,7 @@ export default function LiveDRSExcelView({
     ];
 
     const MONTH_TABS = [
-        'Nov. 26', 'Dec. 26', 'Oct. 26', 'Jan. 27', 'Feb. 27', 'Sept. 26', 'August 26', 'All Duties'
+        'Oct. 26', 'Nov. 26', 'Dec. 26', 'Jan. 27', 'Feb. 27', 'Sept. 26', 'August 26', 'All Duties'
     ];
 
     const handleSelectMonthTab = (tab) => {
