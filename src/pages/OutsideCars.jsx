@@ -637,8 +637,14 @@ const OutsideCars = () => {
 
     const validOutsideVehicles = useMemo(() => {
         return vehicles.filter(v => {
-            const cleanCarNumber = normalizePlate(v.carNumber?.split('#')[0] || '');
-            return !fleetPlateSet.has(cleanCarNumber);
+            const rawPlate = (v.carNumber?.split('#')[0] || '').trim();
+            const cleanCarNumber = normalizePlate(rawPlate);
+            if (fleetPlateSet.has(cleanCarNumber)) return false;
+            // Ignore dummy OUTSIDE-CAR records with 0 payout
+            const isDummyPlate = !cleanCarNumber || cleanCarNumber === 'OUTSIDECAR';
+            const isZeroAmt = (Number(v.buyAmount || 0) === 0) && (Number(v.dutyAmount || 0) === 0);
+            if (isDummyPlate && isZeroAmt) return false;
+            return true;
         });
     }, [vehicles, fleetPlateSet]);
 
@@ -676,7 +682,7 @@ const OutsideCars = () => {
     });
 
     const totalPayable = filtered.reduce((sum, v) => sum + (v ? (Number((v.transactionType === 'Buy' && v.buyAmount) ? v.buyAmount : v.dutyAmount) || 0) : 0), 0);
-    const totalDutiesCount = filtered.reduce((sum, v) => sum + (v?.dutyType ? v.dutyType.split(' + ').filter(Boolean).length : 0), 0);
+    const totalDutiesCount = filtered.length;
 
     // ── VENDOR AGGREGATES FOR OUTSIDE VENDOR LEDGER (DUTIES + PAYMENTS) ──
     const vendorAggregates = useMemo(() => {
@@ -1210,7 +1216,7 @@ const OutsideCars = () => {
                                     <circle className="stat-circle-bg" cx="50" cy="50" r="45" />
                                     <motion.circle className="stat-circle-progress logs-glow" cx="50" cy="50" r="45" stroke="#10b981" initial={{ strokeDasharray: "283 283", strokeDashoffset: 283 }} animate={{ strokeDashoffset: -200 }} transition={{ duration: 1.8, ease: "easeOut" }} />
                                 </svg>
-                                <span style={{ fontSize: '7px', fontWeight: '950', color: '#10b981', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '2px', position: 'relative', zIndex: 1 }}>Vehicles</span>
+                                <span style={{ fontSize: '7px', fontWeight: '950', color: '#10b981', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '2px', position: 'relative', zIndex: 1 }}>Duties</span>
                                 <span style={{ color: 'white', fontSize: 'clamp(12px, 3vw, 16px)', fontWeight: '950', position: 'relative', zIndex: 1 }}>{totalDutiesCount}</span>
                             </motion.div>
                         </div>
