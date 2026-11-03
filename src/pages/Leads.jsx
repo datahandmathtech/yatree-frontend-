@@ -245,6 +245,7 @@ export default function Leads() {
     const [customSidebarMonth, setCustomSidebarMonth] = useState(null);
     const [expandedDailyDay, setExpandedDailyDay] = useState(null);
     const [hoveredDailyDay, setHoveredDailyDay] = useState(null);
+    const [quickPopupLead, setQuickPopupLead] = useState(null);
     const [selectedFy, setSelectedFy] = useState('FY 26-27');
     const [showFyDropdown, setShowFyDropdown] = useState(false);
     const [showMonthDropdown, setShowMonthDropdown] = useState(false);
@@ -3908,11 +3909,12 @@ export default function Leads() {
                                                                         key={ld._id || lIdx}
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
+                                                                            setQuickPopupLead(ld);
                                                                             if (ld.clientCode || ld.leadId) {
                                                                                 setSearchTerm(ld.clientCode || ld.leadId);
                                                                             }
                                                                         }}
-                                                                        title="Click to search in main leads list"
+                                                                        title="Click to view quick details popup"
                                                                         style={{
                                                                             background: 'rgba(255, 255, 255, 0.04)',
                                                                             border: '1px solid rgba(255, 255, 255, 0.08)',
@@ -4008,11 +4010,12 @@ export default function Leads() {
                                                                             key={cld._id || cIdx}
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
+                                                                                setQuickPopupLead(cld);
                                                                                 if (cld.clientCode || cld.leadId) {
                                                                                     setSearchTerm(cld.clientCode || cld.leadId);
                                                                                 }
                                                                             }}
-                                                                            title="Click to search in main leads list"
+                                                                            title="Click to view quick details popup"
                                                                             style={{
                                                                                 background: 'rgba(34, 197, 94, 0.08)',
                                                                                 border: '1px solid rgba(34, 197, 94, 0.2)',
@@ -4050,6 +4053,279 @@ export default function Leads() {
                             </div>
                         </motion.aside>
                     </>
+                )}
+            </AnimatePresence>
+
+            {/* ========================================================================= */}
+            {/* Quick Lead Details Popup Modal (Direct Preview without closing Drawer)   */}
+            {/* ========================================================================= */}
+            <AnimatePresence>
+                {quickPopupLead && (
+                    <div
+                        onClick={() => setQuickPopupLead(null)}
+                        style={{
+                            position: 'fixed',
+                            inset: 0,
+                            background: 'rgba(0, 0, 0, 0.72)',
+                            backdropFilter: 'blur(5px)',
+                            zIndex: 200050,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '16px'
+                        }}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0, y: 15 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.9, opacity: 0, y: 15 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                                width: '100%',
+                                maxWidth: '390px',
+                                background: 'linear-gradient(145deg, #0b1329, #080e1e)',
+                                border: '1px solid rgba(56, 189, 248, 0.35)',
+                                borderRadius: '18px',
+                                boxShadow: '0 20px 50px rgba(0, 0, 0, 0.85), 0 0 25px rgba(56, 189, 248, 0.15)',
+                                padding: '18px',
+                                color: 'white',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '12px'
+                            }}
+                        >
+                            {/* Popup Header */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    <span style={{
+                                        fontSize: '13px',
+                                        fontWeight: '900',
+                                        color: '#fbbf24',
+                                        background: 'rgba(251, 191, 36, 0.18)',
+                                        border: '1px solid rgba(251, 191, 36, 0.4)',
+                                        padding: '3px 8px',
+                                        borderRadius: '6px'
+                                    }}>
+                                        #{quickPopupLead.clientCode || quickPopupLead.leadId || 'N/A'}
+                                    </span>
+                                    <span style={{
+                                        fontSize: '11px',
+                                        fontWeight: '800',
+                                        padding: '3px 8px',
+                                        borderRadius: '6px',
+                                        background: (quickPopupLead.status === 'Confirmed' || quickPopupLead.status === 'Converted' || quickPopupLead.bookingId)
+                                            ? 'rgba(34, 197, 94, 0.2)'
+                                            : (quickPopupLead.status === 'Cancelled' || quickPopupLead.status === 'Lost')
+                                            ? 'rgba(239, 68, 68, 0.2)'
+                                            : 'rgba(56, 189, 248, 0.2)',
+                                        color: (quickPopupLead.status === 'Confirmed' || quickPopupLead.status === 'Converted' || quickPopupLead.bookingId)
+                                            ? '#4ade80'
+                                            : (quickPopupLead.status === 'Cancelled' || quickPopupLead.status === 'Lost')
+                                            ? '#f87171'
+                                            : '#38bdf8',
+                                        border: (quickPopupLead.status === 'Confirmed' || quickPopupLead.status === 'Converted' || quickPopupLead.bookingId)
+                                            ? '1px solid rgba(34, 197, 94, 0.4)'
+                                            : (quickPopupLead.status === 'Cancelled' || quickPopupLead.status === 'Lost')
+                                            ? '1px solid rgba(239, 68, 68, 0.4)'
+                                            : '1px solid rgba(56, 189, 248, 0.4)'
+                                    }}>
+                                        {(quickPopupLead.status === 'Confirmed' || quickPopupLead.status === 'Converted' || quickPopupLead.bookingId)
+                                            ? '● Confirmed'
+                                            : (quickPopupLead.status === 'Cancelled' || quickPopupLead.status === 'Lost')
+                                            ? '● Cancelled'
+                                            : (quickPopupLead.status || '● Open')}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={() => setQuickPopupLead(null)}
+                                    style={{
+                                        background: 'rgba(255, 255, 255, 0.08)',
+                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                        borderRadius: '8px',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        padding: '5px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+
+                            {/* Client Name & Total Fare */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                <div>
+                                    <div style={{ fontSize: '15px', fontWeight: '900', color: 'white' }}>
+                                        {quickPopupLead.clientName || 'Guest'}
+                                    </div>
+                                    {quickPopupLead.source && (
+                                        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                                            Source: <span style={{ color: '#38bdf8', fontWeight: '700' }}>{quickPopupLead.source}</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '17px', fontWeight: '900', color: '#34d399' }}>
+                                        ₹{(Number(quickPopupLead.totalAmount) || 0).toLocaleString('en-IN')}
+                                    </div>
+                                    {Number(quickPopupLead.advancePayment || quickPopupLead.advancePaid) > 0 && (
+                                        <div style={{ fontSize: '10.5px', color: '#fbbf24', fontWeight: '700' }}>
+                                            Adv: ₹{Number(quickPopupLead.advancePayment || quickPopupLead.advancePaid).toLocaleString('en-IN')}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Quick Details List */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
+                                {/* Mobile & Call / WA */}
+                                {quickPopupLead.mobileNumber && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(15, 23, 42, 0.6)', padding: '8px 10px', borderRadius: '8px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <Phone size={13} color="#4ade80" />
+                                            <span style={{ fontWeight: '700', color: '#f8fafc' }}>{quickPopupLead.mobileNumber}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                            <a
+                                                href={`tel:${quickPopupLead.mobileNumber}`}
+                                                style={{
+                                                    background: 'rgba(34, 197, 94, 0.2)',
+                                                    border: '1px solid rgba(34, 197, 94, 0.45)',
+                                                    color: '#4ade80',
+                                                    borderRadius: '6px',
+                                                    padding: '4px 8px',
+                                                    fontSize: '11px',
+                                                    fontWeight: '800',
+                                                    textDecoration: 'none',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px'
+                                                }}
+                                            >
+                                                📞 Call
+                                            </a>
+                                            <a
+                                                href={`https://wa.me/${String(quickPopupLead.mobileNumber).replace(/[^0-9]/g, '').startsWith('91') ? String(quickPopupLead.mobileNumber).replace(/[^0-9]/g, '') : '91' + String(quickPopupLead.mobileNumber).replace(/[^0-9]/g, '')}`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                style={{
+                                                    background: 'rgba(16, 185, 129, 0.2)',
+                                                    border: '1px solid rgba(16, 185, 129, 0.45)',
+                                                    color: '#34d399',
+                                                    borderRadius: '6px',
+                                                    padding: '4px 8px',
+                                                    fontSize: '11px',
+                                                    fontWeight: '800',
+                                                    textDecoration: 'none',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px'
+                                                }}
+                                            >
+                                                💬 WhatsApp
+                                            </a>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Vehicle */}
+                                {(quickPopupLead.carType || quickPopupLead.vehicleModel) && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#cbd5e1' }}>
+                                        <Car size={13} color="#c084fc" />
+                                        <span>Cab: <b style={{ color: '#c084fc' }}>{quickPopupLead.numberOfCars && quickPopupLead.numberOfCars > 1 ? `${quickPopupLead.numberOfCars}x ` : ''}{quickPopupLead.carType || quickPopupLead.vehicleModel}</b></span>
+                                    </div>
+                                )}
+
+                                {/* Travel Dates */}
+                                {quickPopupLead.travelStartDate && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#cbd5e1' }}>
+                                        <Calendar size={13} color="#38bdf8" />
+                                        <span>
+                                            Tour: <b style={{ color: '#38bdf8' }}>{formatTourDate(quickPopupLead.travelStartDate)}</b>
+                                            {quickPopupLead.travelEndDate && quickPopupLead.travelEndDate !== quickPopupLead.travelStartDate && (
+                                                <> to <b style={{ color: '#38bdf8' }}>{formatTourDate(quickPopupLead.travelEndDate)}</b></>
+                                            )}
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* Salesperson or Agent */}
+                                {(quickPopupLead.salesPerson || quickPopupLead.travelAgentName) && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8' }}>
+                                        <User size={13} color="#facc15" />
+                                        <span>
+                                            {quickPopupLead.travelAgentName ? `Agent: ${quickPopupLead.travelAgentName}` : `Sales: ${quickPopupLead.salesPerson}`}
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* Tour Route/Duty if itinerary exists */}
+                                {Array.isArray(quickPopupLead.itinerary) && quickPopupLead.itinerary.length > 0 && (
+                                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)', fontSize: '11px', color: '#94a3b8' }}>
+                                        <span style={{ color: '#fbbf24', fontWeight: '700' }}>Route: </span>
+                                        {quickPopupLead.itinerary.map(it => it.duty || it.description || it.route).filter(Boolean).slice(0, 3).join(' ➔ ') || 'Custom Sightseeing'}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Footer Action Buttons */}
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '6px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const fullLead = leads.find(l => String(l._id) === String(quickPopupLead._id) || (quickPopupLead.clientCode && l.clientCode === quickPopupLead.clientCode)) || quickPopupLead;
+                                        setQuickPopupLead(null);
+                                        setShowRightSidebar(false);
+                                        handleOpenModal(fullLead);
+                                    }}
+                                    style={{
+                                        flex: 1,
+                                        background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                                        border: 'none',
+                                        color: 'white',
+                                        padding: '9px 12px',
+                                        borderRadius: '8px',
+                                        fontWeight: '800',
+                                        fontSize: '12px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '6px'
+                                    }}
+                                >
+                                    <Edit size={13} /> Edit / Full View
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSearchTerm(quickPopupLead.clientCode || quickPopupLead.leadId);
+                                        setQuickPopupLead(null);
+                                        setShowRightSidebar(false);
+                                    }}
+                                    style={{
+                                        background: 'rgba(255,255,255,0.08)',
+                                        border: '1px solid rgba(255,255,255,0.15)',
+                                        color: '#cbd5e1',
+                                        padding: '9px 12px',
+                                        borderRadius: '8px',
+                                        fontWeight: '700',
+                                        fontSize: '12px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '5px'
+                                    }}
+                                >
+                                    <Eye size={13} /> In Table
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
 
