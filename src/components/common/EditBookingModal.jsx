@@ -13,6 +13,7 @@ const ALL_VEHICLES = [
     'Sedan',
     'SUV',
     'Swift Dzire',
+    'Mixed Vehicle',
     'Ciaz',
     'Etios',
     'Honda City',

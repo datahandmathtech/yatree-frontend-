@@ -36,6 +36,7 @@ const VEHICLE_OPTIONS = [
     'Innova Crysta',
     'Ertiga',
     'Swift Dzire',
+    'Mixed Vehicle',
     'Tempo Traveller (12 Seater)',
     'Tempo Traveller (17 Seater)',
     'Toyota Fortuner',
@@ -454,6 +455,7 @@ export default function Leads() {
             'Repeat Guest',
             'Hotel',
             'Referral',
+            'Travel Agent',
             'Agent',
             'Walk-in',
             'Corporate',
@@ -1725,6 +1727,10 @@ export default function Leads() {
         let warmAmount = 0;
         let cold = 0;
         let coldAmount = 0;
+        let travelAgent = 0;
+        let travelAgentAmount = 0;
+        let mixedVehicle = 0;
+        let mixedVehicleAmount = 0;
         let lost = 0;
         let lostAmount = 0;
         let sold = 0;
@@ -1774,6 +1780,12 @@ export default function Leads() {
                 } else if (lead.priority === 'Cold') {
                     cold += 1;
                     coldAmount += amt;
+                } else if (lead.priority === 'Travel Agent') {
+                    travelAgent += 1;
+                    travelAgentAmount += amt;
+                } else if (lead.priority === 'Mixed Vehicle') {
+                    mixedVehicle += 1;
+                    mixedVehicleAmount += amt;
                 }
             }
         });
@@ -1787,6 +1799,10 @@ export default function Leads() {
             warmAmount,
             Cold: cold,
             coldAmount,
+            TravelAgent: travelAgent,
+            travelAgentAmount,
+            MixedVehicle: mixedVehicle,
+            mixedVehicleAmount,
             Lost: lost,
             lostAmount,
             Sold: sold,
@@ -2833,6 +2849,8 @@ export default function Leads() {
                     { key: 'Hot', label: '🔥 Hot', count: priorityCounts.Hot, amount: priorityCounts.hotAmount, color: '#fbbf24', activeBg: 'rgba(251, 191, 36, 0.14)' },
                     { key: 'Warm', label: '☀️ Warm', count: priorityCounts.Warm, amount: priorityCounts.warmAmount, color: '#38bdf8', activeBg: 'rgba(56, 189, 248, 0.14)' },
                     { key: 'Cold', label: '❄️ Cold', count: priorityCounts.Cold, amount: priorityCounts.coldAmount, color: '#94a3b8', activeBg: 'rgba(148, 163, 184, 0.14)' },
+                    { key: 'Travel Agent', label: '🤝 Travel Agent', count: priorityCounts.TravelAgent, amount: priorityCounts.travelAgentAmount, color: '#c084fc', activeBg: 'rgba(192, 132, 252, 0.14)' },
+                    { key: 'Mixed Vehicle', label: '🚗 Mixed Vehicle', count: priorityCounts.MixedVehicle, amount: priorityCounts.mixedVehicleAmount, color: '#2dd4bf', activeBg: 'rgba(45, 212, 191, 0.14)' },
                     { key: 'Lost', label: '❌ Lost', count: priorityCounts.Lost, amount: priorityCounts.lostAmount, color: '#f87171', activeBg: 'rgba(239, 68, 68, 0.14)' },
                     { key: 'Sold', label: '✅ Sold', count: priorityCounts.Sold, amount: priorityCounts.soldAmount, color: '#34d399', activeBg: 'rgba(16, 185, 129, 0.14)' }
                 ].map(box => {
@@ -2976,8 +2994,8 @@ export default function Leads() {
                                             </div>
                                             <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
                                                 {((lead.priority && lead.priority !== 'Unassigned') || leadLost) && (
-                                                    <div style={{ fontSize: '9px', fontWeight: '800', display: 'inline-block', padding: '2px 6px', borderRadius: '10px', background: leadLost ? 'rgba(239, 68, 68, 0.15)' : lead.priority === 'Hot' ? 'rgba(251, 191, 36, 0.15)' : lead.priority === 'Warm' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.15)', color: leadLost ? '#f87171' : lead.priority === 'Hot' ? '#fbbf24' : lead.priority === 'Warm' ? '#38bdf8' : '#94a3b8', border: leadLost ? '1px solid rgba(239, 68, 68, 0.35)' : lead.priority === 'Hot' ? '1px solid rgba(251, 191, 36, 0.3)' : lead.priority === 'Warm' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(148, 163, 184, 0.3)' }}>
-                                                        {leadLost ? '❌ Lost' : lead.priority === 'Hot' ? '🔥 High' : lead.priority === 'Warm' ? '☀️ Avg' : '❄️ Low'}
+                                                    <div style={{ fontSize: '9px', fontWeight: '800', display: 'inline-block', padding: '2px 6px', borderRadius: '10px', background: leadLost ? 'rgba(239, 68, 68, 0.15)' : lead.priority === 'Hot' ? 'rgba(251, 191, 36, 0.15)' : lead.priority === 'Warm' ? 'rgba(56, 189, 248, 0.15)' : lead.priority === 'Cold' ? 'rgba(148, 163, 184, 0.15)' : lead.priority === 'Travel Agent' ? 'rgba(192, 132, 252, 0.18)' : lead.priority === 'Mixed Vehicle' ? 'rgba(45, 212, 191, 0.18)' : 'rgba(148, 163, 184, 0.15)', color: leadLost ? '#f87171' : lead.priority === 'Hot' ? '#fbbf24' : lead.priority === 'Warm' ? '#38bdf8' : lead.priority === 'Cold' ? '#94a3b8' : lead.priority === 'Travel Agent' ? '#c084fc' : lead.priority === 'Mixed Vehicle' ? '#2dd4bf' : '#94a3b8', border: leadLost ? '1px solid rgba(239, 68, 68, 0.35)' : lead.priority === 'Hot' ? '1px solid rgba(251, 191, 36, 0.3)' : lead.priority === 'Warm' ? '1px solid rgba(56, 189, 248, 0.3)' : lead.priority === 'Cold' ? '1px solid rgba(148, 163, 184, 0.3)' : lead.priority === 'Travel Agent' ? '1px solid rgba(192, 132, 252, 0.35)' : lead.priority === 'Mixed Vehicle' ? '1px solid rgba(45, 212, 191, 0.35)' : '1px solid rgba(148, 163, 184, 0.3)' }}>
+                                                        {leadLost ? '❌ Lost' : lead.priority === 'Hot' ? '🔥 High' : lead.priority === 'Warm' ? '☀️ Avg' : lead.priority === 'Cold' ? '❄️ Low' : lead.priority === 'Travel Agent' ? '🤝 Travel Agent' : lead.priority === 'Mixed Vehicle' ? '🚗 Mixed Vehicle' : lead.priority}
                                                     </div>
                                                 )}
                                                 {(() => {
@@ -5368,6 +5386,8 @@ export default function Leads() {
                                                 <option value="Hot" style={{ background: '#090f1d', color: '#fbbf24' }}>🔥 High (Hot)</option>
                                                 <option value="Warm" style={{ background: '#090f1d', color: '#38bdf8' }}>☀️ Average (Warm)</option>
                                                 <option value="Cold" style={{ background: '#090f1d', color: '#94a3b8' }}>❄️ Low (Cold)</option>
+                                                <option value="Travel Agent" style={{ background: '#090f1d', color: '#c084fc' }}>🤝 Travel Agent</option>
+                                                <option value="Mixed Vehicle" style={{ background: '#090f1d', color: '#2dd4bf' }}>🚗 Mixed Vehicle</option>
                                                 <option value="Lost" style={{ background: '#090f1d', color: '#f87171' }}>❌ Lost</option>
                                             </select>
                                         </div>
