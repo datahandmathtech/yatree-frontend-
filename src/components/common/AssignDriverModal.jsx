@@ -22,13 +22,14 @@ const extractDigits = (str) => {
 };
 const matchFleetVehicle = (vId, vNum, fleetList) => {
     if (!fleetList || fleetList.length === 0) return null;
-    if (vId && vId !== 'custom' && vId !== '__custom__') {
+    if (vId === 'custom' || vId === '__custom__') return null;
+    if (vId) {
         const byId = fleetList.find(v => String(v._id) === String(vId));
         if (byId) return byId;
     }
     if (!vNum) return null;
     const normTarget = normalizePlate(vNum);
-    if (!normTarget) return null;
+    if (!normTarget || normTarget === 'OUTSIDECAR') return null;
     const byNorm = fleetList.find(v => normalizePlate(v.carNumber) === normTarget);
     if (byNorm) return byNorm;
     const targetDigits = extractDigits(vNum);
@@ -215,7 +216,9 @@ function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, ge
                     {day.isOutsideCar
                         ? (day.vehicleNumber && day.vehicleNumber !== 'OUTSIDE-CAR'
                             ? `🏢 ${day.vehicleNumber}`
-                            : `🏢 Outside Car${day.buyAmount ? ` (₹${day.buyAmount})` : ''}`)
+                            : (day.ownerName && day.ownerName !== 'Outside Vendor'
+                                ? `🏢 ${day.ownerName}${day.buyAmount ? ` (₹${day.buyAmount})` : ''}`
+                                : `🏢 Outside Car${day.buyAmount ? ` (₹${day.buyAmount})` : ''}`))
                         : (isSelected ? `🚗 ${day.vehicleNumber}` : '-- Select Vehicle (Search) --')
                     }
                 </span>
@@ -728,10 +731,10 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
             return {
                 ...day,
                 vehicleId: vId,
-                vehicleNumber: isCustom ? (day.vehicleNumber || 'OUTSIDE-CAR') : vNum,
+                vehicleNumber: isCustom ? (day.isOutsideCar && day.vehicleNumber !== 'OUTSIDE-CAR' ? day.vehicleNumber : '') : vNum,
                 vehicleType: vType || day.vehicleType,
                 isOutsideCar: isCustom,
-                ownerName: isCustom ? (day.ownerName || 'Outside Vendor') : '',
+                ownerName: isCustom ? (day.isOutsideCar && day.ownerName !== 'Outside Vendor' ? day.ownerName : '') : '',
                 buyAmount: isCustom ? day.buyAmount : ''
             };
         }));
@@ -998,23 +1001,24 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
             const normalizedItinerary = assignItinerary.map((d, idx) => {
                 const dStr = d.date ? String(d.date).slice(0, 10) : '';
                 const dateDayNo = dStr && distinctDates.includes(dStr) ? (distinctDates.indexOf(dStr) + 1) : (d.dayNo || idx + 1);
-                const matched = matchFleetVehicle(d.vehicleId, d.vehicleNumber, companyVehicles);
-                const isCompany = Boolean(matched);
-                const isOutside = isCompany ? false : Boolean(
+                const isMarkedOutside = Boolean(
                     d.isOutsideCar ||
                     d.vehicleId === 'custom' ||
                     (d.buyAmount !== undefined && d.buyAmount !== '' && Number(d.buyAmount) > 0) ||
-                    (d.ownerName && d.ownerName.trim())
+                    (d.ownerName && d.ownerName.trim() && !/^company/i.test(d.ownerName))
                 );
+                const matched = isMarkedOutside ? null : matchFleetVehicle(d.vehicleId, d.vehicleNumber, companyVehicles);
+                const isCompany = !isMarkedOutside && Boolean(matched);
+                const isOutside = isMarkedOutside || !isCompany;
                 return {
                     ...d,
                     dayNo: dateDayNo,
                     duty: (d.duty || '').trim() || 'Local Sightseeing / Tour',
                     description: (d.duty || '').trim() || 'Local Sightseeing / Tour',
                     time: d.isApg ? 'APG' : (d.time || '09:00 AM'),
-                    vehicle: matched ? matched._id : (d.vehicleId === 'custom' ? undefined : (d.vehicleId || undefined)),
-                    vehicleId: matched ? matched._id : d.vehicleId,
-                    vehicleNumber: isCompany ? matched.carNumber : (d.vehicleNumber?.trim() || (isOutside ? 'OUTSIDE-CAR' : '')),
+                    vehicle: isCompany && matched ? matched._id : undefined,
+                    vehicleId: isCompany && matched ? matched._id : 'custom',
+                    vehicleNumber: isCompany && matched ? matched.carNumber : (d.vehicleNumber?.trim() || (isOutside ? 'OUTSIDE-CAR' : '')),
                     vehicleType: matched ? (matched.carType || matched.model || d.vehicleType) : d.vehicleType,
                     isOutsideCar: isOutside,
                     ownerName: isCompany ? '' : (d.ownerName?.trim() || (isOutside ? 'Outside Vendor' : '')),
@@ -1266,8 +1270,9 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                             const allVehicles = (vehiclesList || []).filter(v => !v.isOutsideCar);
                             const matchedFleetDriver = allDrivers.find(d => String(d._id) === String(day.driverId));
                             const isCustomDriver = day.driverId === 'custom' || (!matchedFleetDriver && Boolean(day.driverName));
-                            const matchedFleetVehicle = matchFleetVehicle(day.vehicleId, day.vehicleNumber, allVehicles);
-                            const isCustomVehicle = !matchedFleetVehicle && (day.vehicleId === 'custom' || Boolean(day.vehicleNumber) || Boolean(day.isOutsideCar));
+                            const isExplicitOutside = Boolean(day.isOutsideCar) || day.vehicleId === 'custom' || (day.buyAmount !== undefined && day.buyAmount !== '' && Number(day.buyAmount) > 0);
+                            const matchedFleetVehicle = isExplicitOutside ? null : matchFleetVehicle(day.vehicleId, day.vehicleNumber, allVehicles);
+                            const isCustomVehicle = isExplicitOutside || (!matchedFleetVehicle && (Boolean(day.vehicleNumber) || Boolean(day.ownerName)));
 
                             const dStr = day.date ? String(day.date).slice(0, 10) : '';
                             const sameDateItems = assignItinerary.filter(d => (d.date ? String(d.date).slice(0, 10) : '') === dStr);
@@ -1376,21 +1381,38 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                                     const conf = getVehicleConflict(veh.carNumber || veh._id, day.date);
                                                     if (conf) triggerVehicleConflictWarning(veh.carNumber, day.date, conf);
                                                 }
-                                                if (veh._id === 'custom') {
-                                                    handleUpdateDayField(idx, 'vehicleId', 'custom');
-                                                    handleUpdateDayField(idx, 'vehicleNumber', veh.carNumber || '');
-                                                    handleUpdateDayField(idx, 'vehicleType', veh.carType || day.vehicleType);
-                                                    handleUpdateDayField(idx, 'isOutsideCar', true);
-                                                    if (veh.ownerName) handleUpdateDayField(idx, 'ownerName', veh.ownerName);
-                                                    if (veh.buyAmount) handleUpdateDayField(idx, 'buyAmount', veh.buyAmount);
-                                                    if (veh.driverName && !day.driverName) handleUpdateDayField(idx, 'driverName', veh.driverName);
-                                                    if (veh.driverPhone && !day.driverPhone) handleUpdateDayField(idx, 'driverPhone', veh.driverPhone);
+                                                if (veh._id === 'custom' || veh.isOutsideCar) {
+                                                    setAssignItinerary(prev => prev.map((d, i) => {
+                                                        if (i !== idx) return d;
+                                                        return {
+                                                            ...d,
+                                                            vehicleId: 'custom',
+                                                            vehicleNumber: veh.carNumber || veh.plateNumber || '',
+                                                            vehicleType: veh.carType || veh.model || d.vehicleType,
+                                                            isOutsideCar: true,
+                                                            ownerName: veh.ownerName || veh.vendorName || d.ownerName || 'Outside Vendor',
+                                                            buyAmount: veh.buyAmount || veh.dailyRate || veh.payout || d.buyAmount || '',
+                                                            driverName: veh.driverName || d.driverName || '',
+                                                            driverPhone: veh.driverPhone || d.driverPhone || ''
+                                                        };
+                                                    }));
                                                 } else {
                                                     handleUpdateDayVehicleSelect(idx, veh._id);
                                                 }
                                             }}
                                             onSelectCustom={() => {
-                                                handleUpdateDayVehicleSelect(idx, '__custom__');
+                                                setAssignItinerary(prev => prev.map((d, i) => {
+                                                    if (i !== idx) return d;
+                                                    return {
+                                                        ...d,
+                                                        vehicleId: 'custom',
+                                                        vehicleNumber: d.isOutsideCar && d.vehicleNumber !== 'OUTSIDE-CAR' ? d.vehicleNumber : '',
+                                                        vehicleType: d.vehicleType || 'Cab',
+                                                        isOutsideCar: true,
+                                                        ownerName: d.isOutsideCar && d.ownerName !== 'Outside Vendor' ? d.ownerName : '',
+                                                        buyAmount: d.buyAmount || ''
+                                                    };
+                                                }));
                                             }}
                                         />
 
@@ -1404,22 +1426,33 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                                         const val = e.target.value.toUpperCase();
                                                         const matched = matchFleetVehicle(null, val, allVehicles);
                                                         if (matched) {
-                                                            handleUpdateDayField(idx, 'vehicleId', matched._id);
-                                                            handleUpdateDayField(idx, 'vehicleNumber', matched.carNumber);
-                                                            handleUpdateDayField(idx, 'vehicleType', matched.carType || matched.model || day.vehicleType);
-                                                            handleUpdateDayField(idx, 'isOutsideCar', false);
-                                                            handleUpdateDayField(idx, 'ownerName', '');
-                                                            handleUpdateDayField(idx, 'buyAmount', '');
+                                                            setAssignItinerary(prev => prev.map((d, i) => {
+                                                                if (i !== idx) return d;
+                                                                return {
+                                                                    ...d,
+                                                                    vehicleId: matched._id,
+                                                                    vehicleNumber: matched.carNumber,
+                                                                    vehicleType: matched.carType || matched.model || d.vehicleType,
+                                                                    isOutsideCar: false,
+                                                                    ownerName: '',
+                                                                    buyAmount: ''
+                                                                };
+                                                            }));
                                                         } else {
                                                             const matchOut = findMatchingOutsideVendor(val);
-                                                            handleUpdateDayField(idx, 'vehicleNumber', val);
-                                                            handleUpdateDayField(idx, 'isOutsideCar', true);
-                                                            if (matchOut) {
-                                                                if (matchOut.ownerName && !day.ownerName) handleUpdateDayField(idx, 'ownerName', matchOut.ownerName);
-                                                                if (matchOut.buyAmount && !day.buyAmount) handleUpdateDayField(idx, 'buyAmount', matchOut.buyAmount);
-                                                                if (matchOut.driverName && !day.driverName) handleUpdateDayField(idx, 'driverName', matchOut.driverName);
-                                                                if (matchOut.vehicleType && !day.vehicleType) handleUpdateDayField(idx, 'vehicleType', matchOut.vehicleType);
-                                                            }
+                                                            setAssignItinerary(prev => prev.map((d, i) => {
+                                                                if (i !== idx) return d;
+                                                                return {
+                                                                    ...d,
+                                                                    vehicleId: 'custom',
+                                                                    vehicleNumber: val,
+                                                                    isOutsideCar: true,
+                                                                    ownerName: matchOut?.ownerName || d.ownerName,
+                                                                    buyAmount: matchOut?.buyAmount || d.buyAmount,
+                                                                    driverName: matchOut?.driverName || d.driverName,
+                                                                    vehicleType: matchOut?.vehicleType || d.vehicleType
+                                                                };
+                                                            }));
                                                         }
                                                     }}
                                                     style={{ ...inputStyle, height: '30px', fontSize: '11px', fontWeight: '700', padding: '3px 8px' }}
