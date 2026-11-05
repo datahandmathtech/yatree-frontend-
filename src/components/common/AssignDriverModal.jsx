@@ -556,12 +556,13 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
 
             for (let cIdx = 0; cIdx < carsCountForDate; cIdx++) {
                 let drsItem = drsForThisDate[cIdx];
-                if (!drsItem) {
+                if (!drsItem && cIdx === 0) {
                     drsItem = existingDrs.find(dr => !usedDrsIds.has(String(dr._id)) && Number(dr.dayNo) === dayNo);
                 }
                 if (drsItem) usedDrsIds.add(String(drsItem._id));
 
-                const itinItem = itinForThisDate[cIdx] || itinForThisDate[0] || {};
+                // STRICT: Car 2, Car 3... should NEVER fall back to itinForThisDate[0] which causes copying Car 1's vehicle/driver!
+                const itinItem = itinForThisDate[cIdx] || (cIdx === 0 ? (itinForThisDate[0] || {}) : {});
 
                 const rawDrvId =
                     (drsItem && (drsItem.driver?._id || drsItem.driver)) ||
@@ -588,62 +589,62 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
 
                 const drvId = rawDrvId ? String(rawDrvId) : (drvName ? 'custom' : '');
 
-                const rawVehId =
-                    (drsItem && (drsItem.vehicle?._id || drsItem.vehicle)) ||
-                    itinItem.vehicleId ||
-                    itinItem.vehicle?._id ||
-                    itinItem.vehicle ||
-                    '';
+                const isOutside = Boolean(
+                    drsItem?.isOutsideCar ||
+                    itinItem.isOutsideCar ||
+                    drsItem?.vendorName ||
+                    itinItem.ownerName ||
+                    (drsItem?.vendorPayout > 0) ||
+                    (itinItem.buyAmount > 0) ||
+                    drsItem?.customCarNumber === 'OUTSIDE-CAR' ||
+                    itinItem.vehicleNumber === 'OUTSIDE-CAR' ||
+                    drsItem?.vehicleId === 'custom' ||
+                    itinItem.vehicleId === 'custom'
+                );
 
-                const vehNum =
-                    drsItem?.vehicle?.carNumber ||
-                    drsItem?.customCarNumber ||
-                    itinItem.vehicleNumber ||
-                    itinItem.vehicle?.carNumber ||
-                    itinItem.customCarNumber ||
-                    '';
+                let rawVehId = '';
+                let vehNum = '';
+                let effectiveVehId = '';
+                let effectiveVehNum = '';
+                let effectiveVehType = booking.vehicleType || 'Innova Crysta';
+                let ownerNameVal = '';
+                let buyAmtVal = '';
 
-                const vehType =
-                    drsItem?.vehicle?.carType ||
-                    drsItem?.vehicleType ||
-                    itinItem.vehicleType ||
-                    booking.vehicleType ||
-                    'Innova Crysta';
+                if (isOutside) {
+                    effectiveVehId = 'custom';
+                    const rawPlate = drsItem?.customCarNumber || itinItem.vehicleNumber || '';
+                    effectiveVehNum = (rawPlate === 'OUTSIDE-CAR') ? '' : rawPlate;
+                    effectiveVehType = drsItem?.carType || itinItem.vehicleType || booking.vehicleType || 'Innova Crysta';
+                    ownerNameVal = drsItem?.vendorName || itinItem.ownerName || itinItem.vendorName || '';
+                    if (ownerNameVal === 'Outside Vendor') ownerNameVal = '';
+                    buyAmtVal = (drsItem?.vendorPayout !== undefined && drsItem.vendorPayout !== 0) ? drsItem.vendorPayout : (itinItem.buyAmount || '');
+                } else {
+                    rawVehId = (drsItem && (drsItem.vehicle?._id || drsItem.vehicle)) || itinItem.vehicleId || itinItem.vehicle?._id || itinItem.vehicle || '';
+                    vehNum = drsItem?.vehicle?.carNumber || drsItem?.customCarNumber || itinItem.vehicleNumber || itinItem.vehicle?.carNumber || itinItem.customCarNumber || '';
+                    const matchedCompCar = matchFleetVehicle(rawVehId, vehNum, currentVehicles);
+                    effectiveVehId = matchedCompCar ? String(matchedCompCar._id) : (rawVehId ? String(rawVehId) : '');
+                    effectiveVehNum = matchedCompCar ? matchedCompCar.carNumber : vehNum;
+                    effectiveVehType = matchedCompCar ? (matchedCompCar.carType || matchedCompCar.model || booking.vehicleType || 'Innova Crysta') : (drsItem?.carType || itinItem.vehicleType || booking.vehicleType || 'Innova Crysta');
+                }
 
-                const timeVal = drsItem?.pickupTime || drsItem?.time || itinItem.time || (dayNo === 1 ? '09:00 AM' : '10:00 AM');
-                const isApgVal = drsItem?.isApg !== undefined ? Boolean(drsItem.isApg) : Boolean(itinItem.isApg || timeVal === 'APG');
-                const pickupVal = drsItem?.pickupPoint || drsItem?.hotel || drsItem?.hotelName || itinItem.pickupPoint || booking.pickupLocation || '';
+                const timeVal = drsItem?.pickupTime || drsItem?.time || itinItem.time || (itinForThisDate[0]?.time) || (dayNo === 1 ? '09:00 AM' : '10:00 AM');
+                const isApgVal = drsItem?.isApg !== undefined ? Boolean(drsItem.isApg) : Boolean(itinItem.isApg || (cIdx > 0 && itinForThisDate[0]?.isApg) || timeVal === 'APG');
+                const pickupVal = drsItem?.pickupPoint || drsItem?.hotel || drsItem?.hotelName || itinItem.pickupPoint || itinForThisDate[0]?.pickupPoint || booking.pickupLocation || '';
                 const dutyVal =
                     drsItem?.duty ||
                     drsItem?.sightseeing ||
                     drsItem?.route ||
                     itinItem.duty ||
                     itinItem.description ||
+                    itinForThisDate[0]?.duty ||
+                    itinForThisDate[0]?.description ||
                     (booking.tripDetails && finalDates.length === 1 ? booking.tripDetails : '') ||
                     '';
 
                 const amtVal =
                     (drsItem?.revenue !== undefined && Number(drsItem.revenue) > 0)
                         ? Number(drsItem.revenue)
-                        : (itinItem.amount !== undefined && Number(itinItem.amount) > 0 ? Number(itinItem.amount) : '');
-
-                const matchedCompCar = matchFleetVehicle(rawVehId, vehNum, currentVehicles);
-                const isCompanyCar = Boolean(matchedCompCar);
-
-                const effectiveVehId = matchedCompCar ? String(matchedCompCar._id) : (rawVehId ? String(rawVehId) : '');
-                const effectiveVehNum = matchedCompCar ? matchedCompCar.carNumber : vehNum;
-                const effectiveVehType = matchedCompCar ? (matchedCompCar.carType || matchedCompCar.model || vehType) : vehType;
-
-                const isOutside = !isCompanyCar && Boolean(
-                    drsItem?.isOutsideCar ||
-                    itinItem.isOutsideCar ||
-                    drsItem?.vendorName ||
-                    itinItem.ownerName ||
-                    (drsItem?.vendorPayout > 0) ||
-                    (itinItem.buyAmount > 0)
-                );
-                const ownerNameVal = isCompanyCar ? '' : (drsItem?.vendorName || itinItem.ownerName || itinItem.vendorName || (isOutside ? 'Outside Vendor' : ''));
-                const buyAmtVal = isCompanyCar ? '' : (drsItem?.vendorPayout !== undefined ? drsItem.vendorPayout : (itinItem.buyAmount || ''));
+                        : (itinItem.amount !== undefined && Number(itinItem.amount) > 0 ? Number(itinItem.amount) : (itinForThisDate[0]?.amount || ''));
 
                 days.push({
                     dayNo,
@@ -656,15 +657,15 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                     driverId: drvId,
                     driverName: drvName,
                     driverPhone: drvPhone,
-                    vehicleId: isOutside && !effectiveVehId ? 'custom' : effectiveVehId,
-                    vehicleNumber: isOutside && !effectiveVehNum ? 'OUTSIDE-CAR' : effectiveVehNum,
+                    vehicleId: effectiveVehId,
+                    vehicleNumber: effectiveVehNum,
                     isOutsideCar: isOutside,
                     ownerName: ownerNameVal,
                     buyAmount: buyAmtVal,
                     amount: amtVal,
-                    km: itinItem.km || 0,
+                    km: itinItem.km || itinForThisDate[0]?.km || 0,
                     isAdditionalCar: cIdx > 0,
-                    stayType: (drsItem?.stayType || itinItem?.stayType) ? (drsItem?.stayType || itinItem?.stayType) : (String(dutyVal || '').toLowerCase().includes('local') || String(dutyVal || '').toLowerCase().includes('city') || String(dutyVal || '').toLowerCase().includes('airport') || finalDates.length === 1 ? 'Local' : 'Same Day Return')
+                    stayType: (drsItem?.stayType || itinItem?.stayType || itinForThisDate[0]?.stayType) ? (drsItem?.stayType || itinItem?.stayType || itinForThisDate[0]?.stayType) : (String(dutyVal || '').toLowerCase().includes('local') || String(dutyVal || '').toLowerCase().includes('city') || String(dutyVal || '').toLowerCase().includes('airport') || finalDates.length === 1 ? 'Local' : 'Same Day Return')
                 });
             }
         });

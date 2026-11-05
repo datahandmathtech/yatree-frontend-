@@ -1641,14 +1641,46 @@ export default function Bookings() {
                                                            if (dr) allDriversSet.add(dr);
                                                        });
 
-                                                       const distinctVehicles = Array.from(allVehiclesSet);
+                                                       const distinctVehicles = Array.from(allVehiclesSet).filter(v => v !== 'OUTSIDE-CAR');
                                                        const distinctDrivers = Array.from(allDriversSet);
                                                        const hasMultipleCars = distinctVehicles.length > 1 || (Number(bkg.numberOfCars) > 1);
                                                        const hasMultipleDrivers = distinctDrivers.length > 1;
 
-                                                       const hasAnyAssignment = distinctVehicles.length > 0 || distinctDrivers.length > 0 || isLiveInDrs;
+                                                       // Calculate expected duties and pending count
+                                                       const bkgCarsCount = Math.max(1, Number(bkg.numberOfCars) || 1);
+                                                       const sDate = bkg.travelStartDate ? new Date(bkg.travelStartDate) : null;
+                                                       const eDate = bkg.travelEndDate ? new Date(bkg.travelEndDate) : sDate;
+                                                       let tourDaysCount = 1;
+                                                       if (sDate && eDate && !isNaN(sDate.getTime()) && !isNaN(eDate.getTime())) {
+                                                           const sMid = new Date(sDate.getFullYear(), sDate.getMonth(), sDate.getDate());
+                                                           const eMid = new Date(eDate.getFullYear(), eDate.getMonth(), eDate.getDate());
+                                                           tourDaysCount = Math.max(1, Math.round((eMid - sMid) / 86400000) + 1);
+                                                       }
+                                                       const excludedCount = Array.isArray(bkg.excludedDates) ? bkg.excludedDates.length : 0;
+                                                       const activeDaysCount = Math.max(1, tourDaysCount - excludedCount);
+                                                       const totalExpectedDuties = Math.max(drsArr.length, activeDaysCount * bkgCarsCount);
 
-                                                       if (hasAnyAssignment) {
+                                                       let pendingDutiesCount = 0;
+                                                       if (drsArr.length > 0) {
+                                                           drsArr.forEach(d => {
+                                                               const hasCar = Boolean((d.vehicle && (d.vehicle.carNumber || d.vehicle._id)) || (d.customCarNumber && d.customCarNumber !== 'OUTSIDE-CAR'));
+                                                               const hasDriver = Boolean((d.driver && (d.driver.name || d.driver._id)) || (d.customDriverName && d.customDriverName.trim()));
+                                                               const isOutsidePending = Boolean(d.isOutsideCar && (!d.customCarNumber || d.customCarNumber === 'OUTSIDE-CAR'));
+                                                               if (!hasCar || !hasDriver || isOutsidePending) {
+                                                                   pendingDutiesCount++;
+                                                               }
+                                                           });
+                                                           if (totalExpectedDuties > drsArr.length) {
+                                                               pendingDutiesCount += (totalExpectedDuties - drsArr.length);
+                                                           }
+                                                       } else {
+                                                           pendingDutiesCount = totalExpectedDuties;
+                                                       }
+
+                                                       const isFullyPending = pendingDutiesCount >= totalExpectedDuties && distinctVehicles.length === 0 && distinctDrivers.length === 0;
+
+                                                       if (!isFullyPending && (isLiveInDrs || distinctVehicles.length > 0 || distinctDrivers.length > 0)) {
+                                                           const hasPendingNotice = pendingDutiesCount > 0;
                                                            return (
                                                                <button
                                                                    type="button"
@@ -1658,11 +1690,13 @@ export default function Bookings() {
                                                                        borderRadius: '10px',
                                                                        fontSize: '11.5px',
                                                                        fontWeight: '800',
-                                                                       background: hasMultipleCars
-                                                                           ? 'linear-gradient(135deg, rgba(8, 145, 178, 0.4), rgba(14, 116, 144, 0.25))'
-                                                                           : 'linear-gradient(135deg, rgba(6, 95, 70, 0.55), rgba(4, 120, 87, 0.35))',
-                                                                       color: hasMultipleCars ? '#38bdf8' : '#34d399',
-                                                                       border: hasMultipleCars ? '1px solid rgba(56, 189, 248, 0.45)' : '1px solid rgba(52, 211, 153, 0.45)',
+                                                                       background: hasPendingNotice
+                                                                           ? 'linear-gradient(135deg, rgba(217, 119, 6, 0.35), rgba(180, 83, 9, 0.2))'
+                                                                           : (hasMultipleCars
+                                                                               ? 'linear-gradient(135deg, rgba(8, 145, 178, 0.4), rgba(14, 116, 144, 0.25))'
+                                                                               : 'linear-gradient(135deg, rgba(6, 95, 70, 0.55), rgba(4, 120, 87, 0.35))'),
+                                                                       color: hasPendingNotice ? '#fbbf24' : (hasMultipleCars ? '#38bdf8' : '#34d399'),
+                                                                       border: hasPendingNotice ? '1px solid rgba(245, 158, 11, 0.55)' : (hasMultipleCars ? '1px solid rgba(56, 189, 248, 0.45)' : '1px solid rgba(52, 211, 153, 0.45)'),
                                                                        display: 'flex',
                                                                        flexDirection: 'column',
                                                                        alignItems: 'flex-start',
@@ -1670,25 +1704,32 @@ export default function Bookings() {
                                                                        cursor: 'pointer',
                                                                        textAlign: 'left'
                                                                    }}
-                                                                   title={`Click to edit/view drivers & vehicles\nCars: ${distinctVehicles.join(', ') || 'Pending'}\nDrivers: ${distinctDrivers.join(', ') || 'Pending'}`}
+                                                                   title={`Click to edit/view drivers & vehicles\n${hasPendingNotice ? (pendingDutiesCount === 1 ? 'one duty assignment is pending' : `${pendingDutiesCount} duty assignments pending`) : 'All duties assigned'}\nCars: ${distinctVehicles.join(', ') || 'Pending'}\nDrivers: ${distinctDrivers.join(', ') || 'Pending'}`}
                                                                >
-                                                                   {hasMultipleCars ? (
+                                                                   {hasPendingNotice ? (
+                                                                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                           <span>⚠️ {pendingDutiesCount === 1 ? 'one duty assignment is pending' : `${pendingDutiesCount} duty assignments pending`}</span>
+                                                                           <Edit size={11} color="#fbbf24" />
+                                                                       </div>
+                                                                   ) : (hasMultipleCars ? (
                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                                            <span>🚗 Multiple Cars ({distinctVehicles.length || bkg.numberOfCars || 2})</span>
                                                                            <Edit size={11} color="#38bdf8" />
                                                                        </div>
                                                                    ) : (
                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                           <span>👤 {distinctDrivers[0] || 'Driver Pending'}</span>
+                                                                           <span>👤 {distinctDrivers[0] || 'Driver Assigned'}</span>
                                                                            <Edit size={11} color="#34d399" />
                                                                        </div>
-                                                                   )}
-                                                                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: hasMultipleCars ? '#bae6fd' : '#a7f3d0', fontWeight: '700' }}>
-                                                                       {hasMultipleCars ? (
+                                                                   ))}
+                                                                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', color: hasPendingNotice ? '#fde68a' : (hasMultipleCars ? '#bae6fd' : '#a7f3d0'), fontWeight: '700' }}>
+                                                                       {hasPendingNotice ? (
+                                                                           <span>{distinctVehicles.length > 0 ? `🚗 ${distinctVehicles.length} Car${distinctVehicles.length > 1 ? 's' : ''}` : 'Cab Pending'} • {distinctDrivers.length > 0 ? `👤 ${distinctDrivers.length} Driver${distinctDrivers.length > 1 ? 's' : ''}` : 'Driver Pending'}</span>
+                                                                       ) : (hasMultipleCars ? (
                                                                            <span>{hasMultipleDrivers ? `👥 Multiple Drivers (${distinctDrivers.length})` : (distinctDrivers[0] ? `👤 ${distinctDrivers[0]}` : 'Drivers Assigned')}</span>
                                                                        ) : (
-                                                                           distinctVehicles[0] && <span>🚗 {distinctVehicles[0]}</span>
-                                                                       )}
+                                                                           distinctVehicles[0] && <span>🚗 ${distinctVehicles[0]}</span>
+                                                                       ))}
                                                                    </div>
                                                                </button>
                                                            );
