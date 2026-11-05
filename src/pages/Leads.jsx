@@ -691,10 +691,17 @@ export default function Leads() {
             let sDate = field === 'travelStartDate' ? value : prev.travelStartDate;
             let eDate = field === 'travelEndDate' ? value : prev.travelEndDate;
 
-            if (field === 'travelStartDate' && (!eDate || eDate < value)) {
-                eDate = value;
-            } else if (field === 'travelEndDate' && (!sDate || value < sDate)) {
+            if (field === 'travelStartDate') {
                 sDate = value;
+                if (value && (!eDate || eDate < value)) {
+                    eDate = value;
+                }
+            } else if (field === 'travelEndDate') {
+                // Strictly NEVER overwrite travelStartDate when user changes or tabs into travelEndDate!
+                eDate = value;
+                if (value && sDate && value < sDate) {
+                    eDate = sDate;
+                }
             }
 
             const todayStr = toLocalDateString(new Date());
@@ -5473,6 +5480,7 @@ export default function Leads() {
                                                     id="travelEndDateInput"
                                                     required
                                                     type="date"
+                                                    min={toLocalDateString(formData.travelStartDate) || undefined}
                                                     value={toLocalDateString(formData.travelEndDate)}
                                                     onChange={e => handleTravelDateChange('travelEndDate', e.target.value)}
                                                     onClick={e => { try { if (e.target.showPicker) e.target.showPicker(); } catch(err){} }}

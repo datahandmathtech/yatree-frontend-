@@ -419,15 +419,16 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
 
         if (field === 'travelStartDate') {
             setTravelStartDate(value);
-            if (!eDate || eDate < value) {
+            if (value && (!eDate || eDate < value)) {
                 eDate = value;
                 setTravelEndDate(value);
             }
-        } else {
+        } else if (field === 'travelEndDate') {
+            // Strictly NEVER overwrite travelStartDate when user edits travelEndDate!
             setTravelEndDate(value);
-            if (!sDate || value < sDate) {
-                sDate = value;
-                setTravelStartDate(value);
+            if (value && sDate && value < sDate) {
+                eDate = sDate;
+                setTravelEndDate(sDate);
             }
         }
 
@@ -956,6 +957,7 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                                 <input
                                     required
                                     type="date"
+                                    min={travelStartDate || undefined}
                                     value={travelEndDate}
                                     onChange={e => handleTravelDateChange('travelEndDate', e.target.value)}
                                     style={{ ...darkInputStyle, colorScheme: 'dark' }}
