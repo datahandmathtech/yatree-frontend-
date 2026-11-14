@@ -1483,6 +1483,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
             setShowDirectBookingModal(false);
             setDirectForm(initialDirectBookingForm);
             fetchDuties();
+            fetchAllCompanyBookings();
         } catch (error) {
             console.error('Error creating direct booking in Live DRS:', error);
             alert(error.response?.data?.message || 'Failed to create booking');

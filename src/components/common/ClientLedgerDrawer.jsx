@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, FileText, Car, CheckCircle, Clock, Plus, Download, Fuel, Edit, Trash2, IndianRupee } from 'lucide-react';
+import { X, FileText, Car, CheckCircle, Clock, Plus, Download, Fuel, Edit, Trash2, IndianRupee, Eye, ExternalLink } from 'lucide-react';
+import AssignDriverModal from './AssignDriverModal';
 import axios from '../../api/axios';
 import { useCompany } from '../../context/CompanyContext';
 import { generateClientLedgerPDF } from '../../utils/clientLedgerPdf';
@@ -20,6 +21,110 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
     const [editReference, setEditReference] = useState('');
     const [savingEdit, setSavingEdit] = useState(false);
     const [deletingEdit, setDeletingEdit] = useState(false);
+
+    // Guest Trip Modal state
+    const [showTripModal, setShowTripModal] = useState(false);
+    const [showAssignDriverModal, setShowAssignDriverModal] = useState(false);
+    const [tripDuties, setTripDuties] = useState([]);
+    const [loadingTripDuties, setLoadingTripDuties] = useState(false);
+    const [selectedDutyRowIdx, setSelectedDutyRowIdx] = useState(null);
+
+    const formatDayMonth = (dStr) => {
+        if (!dStr) return '-';
+        try {
+            const d = new Date(dStr);
+            if (isNaN(d.getTime())) return String(dStr);
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            return `${day}-${month}`;
+        } catch {
+            return String(dStr);
+        }
+    };
+
+    const loadTripDuties = async () => {
+        if (!booking) return;
+        setLoadingTripDuties(true);
+        try {
+            let freshBooking = booking;
+            if (booking?._id && !String(booking._id).startsWith('bkg-mock')) {
+                try {
+                    const res = await axios.get(`/api/bookings/single/${booking._id}`);
+                    if (res.data) freshBooking = res.data;
+                } catch (err) {
+                    console.warn('Could not fetch single booking, using prop booking', err);
+                }
+            }
+
+            const totalPkgFare = Number(freshBooking.totalAmount || freshBooking.packagePrice || 0);
+            const existingItin = Array.isArray(freshBooking.itinerary) ? freshBooking.itinerary : [];
+            const existingDrs = Array.isArray(freshBooking.drsDuties) ? freshBooking.drsDuties : [];
+
+            const validDrs = existingDrs.filter(d => typeof d === 'object' && d !== null && (d.date || d._id));
+
+            if (validDrs.length > 0) {
+                const sorted = [...validDrs].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0) || (Number(a.dayNo) || 0) - (Number(b.dayNo) || 0));
+                const enriched = sorted.map((d, idx) => {
+                    const matchItin = existingItin.find(it => (d.dayNo && Number(it.dayNo) === Number(d.dayNo)) || (d.date && it.date && String(it.date).slice(0, 10) === new Date(d.date).toISOString().slice(0, 10)));
+                    return {
+                        ...d,
+                        dayNo: d.dayNo || matchItin?.dayNo || (idx + 1),
+                        hotel: d.hotel || matchItin?.hotel || matchItin?.pickupPoint || freshBooking.hotel || freshBooking.source || 'Direct',
+                        clientName: d.clientName || freshBooking.clientName || 'Guest',
+                        mobileNumber: d.mobileNumber || freshBooking.mobileNumber || '-',
+                        time: d.time || d.pickupTime || matchItin?.time || '10:00 AM',
+                        duty: d.duty || d.description || matchItin?.duty || matchItin?.description || 'Tour Duty',
+                        revenue: Number(d.revenue || d.totalAmount || 0) || (matchItin?.amount ? Number(matchItin.amount) : 0) || Math.round(totalPkgFare / (sorted.length || 1)),
+                        cOut: d.cOut || d.checkOut || (d.status === 'Completed' ? '✓' : '-')
+                    };
+                });
+                setTripDuties(enriched);
+            } else if (existingItin.length > 0) {
+                const mapped = existingItin.map((it, idx) => ({
+                    _id: it._id || `itin_${idx}`,
+                    date: it.date || freshBooking.travelStartDate,
+                    dayNo: it.dayNo || (idx + 1),
+                    hotel: it.hotel || it.pickupPoint || freshBooking.hotel || freshBooking.source || 'Direct',
+                    clientName: freshBooking.clientName || 'Guest',
+                    mobileNumber: freshBooking.mobileNumber || '-',
+                    time: it.time || '10:00 AM',
+                    duty: it.duty || it.description || 'Tour Day',
+                    revenue: Number(it.amount || 0) || Math.round(totalPkgFare / existingItin.length),
+                    status: 'Confirmed',
+                    cOut: '-',
+                    driver: { name: it.driverName || 'Not Assigned' },
+                    vehicle: { carNumber: it.vehicleNumber || freshBooking.vehicleType || '-' }
+                }));
+                setTripDuties(mapped);
+            } else {
+                setTripDuties([{
+                    _id: freshBooking._id || 'single_day',
+                    date: freshBooking.travelStartDate,
+                    dayNo: 1,
+                    hotel: freshBooking.hotel || freshBooking.source || 'Direct',
+                    clientName: freshBooking.clientName || 'Guest',
+                    mobileNumber: freshBooking.mobileNumber || '-',
+                    time: '10:00 AM',
+                    duty: `${freshBooking.vehicleType || 'Cab'} Tour`,
+                    revenue: totalPkgFare,
+                    status: 'Confirmed',
+                    cOut: '-',
+                    driver: { name: 'Not Assigned' },
+                    vehicle: { carNumber: freshBooking.vehicleType || '-' }
+                }]);
+            }
+        } catch (e) {
+            console.error('Error loading trip duties:', e);
+        } finally {
+            setLoadingTripDuties(false);
+        }
+    };
+
+    useEffect(() => {
+        if (showTripModal && booking) {
+            loadTripDuties();
+        }
+    }, [showTripModal, booking]);
 
     useEffect(() => {
         if (booking && booking.client) {
@@ -76,15 +181,107 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
             }
             const { data } = await axios.get(`/api/clients/${clientId}/ledger`);
 
-            const bkgIdStr = String(booking._id || '');
+            const bkgIdStr = String(booking._id || booking._realBookingId || '');
             const leadIdStr = String(typeof booking.lead === 'object' ? (booking.lead?._id || '') : (booking.lead || ''));
             const rawBkgId = String(booking.rawBookingId || booking.bookingId || '');
             const bkgCode = String(booking.bookingCode || booking.bookingId || '');
             const clientCode = String(booking.clientCode || '');
 
+            const drsDutyIds = new Set(
+                (Array.isArray(booking.drsDuties) ? booking.drsDuties : [])
+                    .map(d => String(typeof d === 'object' ? (d?._id || '') : d))
+                    .filter(Boolean)
+            );
+
+            const validCodes = [bkgCode, rawBkgId, clientCode]
+                .filter(Boolean)
+                .map(c => c.trim().toLowerCase());
+
+            const sDateObj = booking.travelStartDate ? new Date(booking.travelStartDate) : null;
+            const eDateObj = booking.travelEndDate ? new Date(booking.travelEndDate) : sDateObj;
+            const cDateObj = (booking.bookingDate || booking.createdAt) ? new Date(booking.bookingDate || booking.createdAt) : sDateObj;
+
+            // Strict per-booking date boundaries (10 days buffer) to prevent cross-booking contamination
+            const tripStartDate = sDateObj ? new Date(sDateObj) : (cDateObj ? new Date(cDateObj) : null);
+            const tripEndDate = eDateObj ? new Date(eDateObj) : tripStartDate;
+            const advanceExpectedDate = booking.advanceDate ? new Date(booking.advanceDate) : (cDateObj || tripStartDate);
+
+            const bkgCarPlate = (booking.vehicleNumber || booking.customCarNumber || '').replace(/[\s-]/g, '').toLowerCase();
+
             const bkgLedger = (data || []).filter(entry => {
                 if (entry.type === 'Bill') return false;
-                return true;
+
+                const refId = entry.referenceId ? String(entry.referenceId) : '';
+                const desc = (entry.description || '').toLowerCase();
+                const entryDate = entry.date ? new Date(entry.date) : null;
+
+                // 1. Explicit referenceId: If referenceId is present, it MUST match this booking or its duties
+                if (refId) {
+                    if (refId === bkgIdStr || (leadIdStr && refId === leadIdStr) || drsDutyIds.has(refId)) {
+                        return true;
+                    }
+                    // Has referenceId to another entity/booking -> reject!
+                    return false;
+                }
+
+                // 2. Booking code in description
+                const hasOurCode = validCodes.length > 0 && validCodes.some(code => code && desc.includes(code));
+
+                // Check if description mentions ANY booking code (e.g. Booking 11/19, Booking 9/28, etc.)
+                const codeMatch = desc.match(/(?:booking|bkg|lead|client)\s*(?:#|code|id)?\s*[:\-]?\s*([a-z0-9\/\-_]+)/i)
+                    || desc.match(/\b(\d{1,2}\/\d{1,4})\b/);
+
+                if (codeMatch) {
+                    const foundCode = codeMatch[1].trim().toLowerCase();
+                    if (validCodes.some(c => c && (c === foundCode || c.includes(foundCode) || foundCode.includes(c)))) {
+                        return true;
+                    }
+                    // It explicitly mentions a different booking code -> reject!
+                    return false;
+                }
+
+                if (hasOurCode) {
+                    return true;
+                }
+
+                // 3. Fuel entries: strictly check trip dates and car plate
+                if (entry.type === 'Fuel') {
+                    const carMatch = desc.match(/\(([a-z0-9\s-]+)\)/);
+                    if (carMatch) {
+                        const entryPlate = carMatch[1].replace(/[\s-]/g, '').toLowerCase();
+                        if (bkgCarPlate && entryPlate && !bkgCarPlate.includes(entryPlate) && !entryPlate.includes(bkgCarPlate)) {
+                            return false;
+                        }
+                    }
+                    if (entryDate && tripStartDate && tripEndDate) {
+                        const fuelMin = new Date(tripStartDate.getTime() - 2 * 86400000);
+                        const fuelMax = new Date(tripEndDate.getTime() + 2 * 86400000);
+                        return entryDate >= fuelMin && entryDate <= fuelMax;
+                    }
+                    return false;
+                }
+
+                // 4. Advance entries: match within 7 days of advanceDate or booking creation date
+                if (entry.type === 'Advance') {
+                    if (entryDate && advanceExpectedDate) {
+                        const advMin = new Date(advanceExpectedDate.getTime() - 7 * 86400000);
+                        const advMax = tripEndDate ? new Date(tripEndDate.getTime() + 5 * 86400000) : new Date(advanceExpectedDate.getTime() + 7 * 86400000);
+                        return entryDate >= advMin && entryDate <= advMax;
+                    }
+                    return false;
+                }
+
+                // 5. Payment entries: payments for this trip happen within [tripStartDate - 5 days, tripEndDate + 10 days]
+                if (entry.type === 'Payment') {
+                    if (entryDate && tripStartDate && tripEndDate) {
+                        const payMin = new Date(tripStartDate.getTime() - 5 * 86400000);
+                        const payMax = new Date(tripEndDate.getTime() + 10 * 86400000);
+                        return entryDate >= payMin && entryDate <= payMax;
+                    }
+                    return false;
+                }
+
+                return false;
             }).sort((a,b) => new Date(a.date) - new Date(b.date));
             setLedgerEntries(bkgLedger);
         } catch (err) {
@@ -266,6 +463,20 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
     const balanceDue = Math.max(0, totalFare - totalCredits);
     const isPaidFull = balanceDue <= 0;
 
+    // Auto-heal discrepancy between Client Ledger and Booking document in MongoDB
+    useEffect(() => {
+        if (!booking?._id || loading) return;
+        const dbBal = Number(booking.balanceDue);
+        if (!isNaN(dbBal) && (dbBal !== balanceDue || (isPaidFull && booking.paymentStatus !== 'Full Received'))) {
+            axios.put(`/api/bookings/single/${booking._id}`, {
+                balanceDue: balanceDue,
+                paymentStatus: isPaidFull ? 'Full Received' : (effectivePaid > 0 ? 'Partial' : 'Pending')
+            }).then(() => {
+                if (onEntryUpdated) onEntryUpdated();
+            }).catch(e => console.error('Silent booking ledger sync error:', e));
+        }
+    }, [booking?._id, balanceDue, isPaidFull, loading]);
+
     const createdDate = booking.createdAt ? new Date(booking.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
     const sDate = booking.tripStartFormatted || (booking.travelStartDate ? new Date(booking.travelStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
     const eDate = booking.tripEndFormatted || (booking.travelEndDate ? new Date(booking.travelEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
@@ -328,11 +539,11 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                                 <div style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '7px', borderRadius: '8px' }}><Car size={16} /></div>
                                 <div>
                                     <div style={{ color: 'white', fontWeight: '800', fontSize: '14px' }}>{booking.vehicleType || 'Standard Vehicle'}</div>
-                                    <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px' }}>Client Booking & Trip Details</div>
+                                    <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}><span>Client Booking & Trip Details</span><button type="button" onClick={() => setShowTripModal(true)} style={{ background: 'transparent', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: '0 2px', display: 'inline-flex', alignItems: 'center' }} title="View Guest Trip Itinerary"><Eye size={13} /></button></div>
                                 </div>
                             </div>
                             <div style={{ textAlign: 'right', fontSize: '13px', color: 'white', fontWeight: '700' }}>
-                                Client: <span style={{ color: '#60a5fa' }}>{booking.clientName}</span>
+                                Client: <span style={{ color: '#60a5fa' }}>{booking.clientName}</span><button type="button" onClick={() => setShowTripModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: '10px', padding: '4px 10px', borderRadius: '8px', background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.4)', color: '#38bdf8', fontSize: '12px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 2px 8px rgba(56, 189, 248, 0.2)', transition: 'all 0.15s ease' }} title="View Guest Trip Itinerary & Duty Schedule"><Eye size={14} /><span>View Trip</span></button>
                             </div>
                         </div>
 
@@ -693,6 +904,351 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                         </div>
                     )}
                 </AnimatePresence>
+                {/* GUEST TRIP BREAKDOWN MODAL MATCHING IMAGE 2 */}
+                <AnimatePresence>
+                    {showTripModal && (
+                        <motion.div
+                            key="guest-trip-modal-backdrop"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowTripModal(false)}
+                            style={{
+                                position: 'fixed',
+                                inset: 0,
+                                background: 'rgba(0, 0, 0, 0.75)',
+                                backdropFilter: 'blur(5px)',
+                                zIndex: 1000001,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '20px'
+                            }}
+                        >
+                            <motion.div
+                                key="guest-trip-modal-container"
+                                initial={{ scale: 0.95, opacity: 0, y: 15 }}
+                                animate={{ scale: 1, opacity: 1, y: 0 }}
+                                exit={{ scale: 0.95, opacity: 0, y: 15 }}
+                                transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                    background: '#0d131f',
+                                    border: '1px solid #334155',
+                                    borderRadius: '16px',
+                                    width: '100%',
+                                    maxWidth: '960px',
+                                    maxHeight: '90vh',
+                                    overflow: 'hidden',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    boxShadow: '0 25px 60px rgba(0, 0, 0, 0.7)'
+                                }}
+                            >
+                                {/* Modal Header */}
+                                <div style={{
+                                    padding: '16px 20px',
+                                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    background: 'rgba(255, 255, 255, 0.02)'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <div style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '8px', borderRadius: '10px' }}>
+                                            <Eye size={18} />
+                                        </div>
+                                        <div>
+                                            <h3 style={{ margin: 0, color: '#ffffff', fontSize: '16px', fontWeight: '800' }}>
+                                                Guest Trip Itinerary & Duty Schedule
+                                            </h3>
+                                            <div style={{ margin: '2px 0 0', color: '#94a3b8', fontSize: '12px' }}>
+                                                Guest: <strong style={{ color: '#ffffff' }}>{booking.clientName}</strong>
+                                                {booking.mobileNumber ? ` • 📞 ${booking.mobileNumber}` : ''}
+                                                {booking.bookingId || booking.bookingCode ? ` • Booking #${booking.bookingCode || booking.bookingId}` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowTripModal(false)}
+                                        style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '6px' }}
+                                    >
+                                        <X size={20} />
+                                    </button>
+                                </div>
+
+                                {/* Modal Body / Table */}
+                                <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+                                    {/* Top Package Details Banner */}
+                                    <div style={{
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        gap: '12px',
+                                        background: 'rgba(255, 255, 255, 0.04)',
+                                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                                        borderRadius: '12px',
+                                        padding: '12px 16px',
+                                        marginBottom: '16px'
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                                            <div>
+                                                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase' }}>Assigned Vehicle</div>
+                                                <div style={{ fontSize: '14px', fontWeight: '900', color: '#38bdf8' }}>
+                                                    🚗 {tripDuties[0]?.vehicle?.carNumber || tripDuties[0]?.customCarNumber || booking.vehicleType || 'Standard Vehicle'}
+                                                </div>
+                                            </div>
+                                            <div style={{ width: '1px', height: '26px', background: 'rgba(255, 255, 255, 0.1)' }} />
+                                            <div>
+                                                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase' }}>Assigned Driver</div>
+                                                <div style={{ fontSize: '14px', fontWeight: '900', color: '#fbbf24' }}>
+                                                    👨‍✈️ {tripDuties.find(d => d.driver?.name || d.customDriverName)?.driver?.name || tripDuties.find(d => d.customDriverName)?.customDriverName || 'To Be Assigned'}
+                                                </div>
+                                            </div>
+                                            {(booking.bookingId || booking.bookingCode) && (
+                                                <>
+                                                    <div style={{ width: '1px', height: '26px', background: 'rgba(255, 255, 255, 0.1)' }} />
+                                                    <div>
+                                                        <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase' }}>Booking ID</div>
+                                                        <div style={{ fontSize: '14px', fontWeight: '900', color: '#e2e8f0' }}>
+                                                            #{booking.bookingCode || booking.bookingId}
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                        <div style={{
+                                            background: 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)',
+                                            color: '#000000',
+                                            padding: '6px 14px',
+                                            borderRadius: '8px',
+                                            fontWeight: '950',
+                                            fontSize: '13px',
+                                            letterSpacing: '0.3px',
+                                            boxShadow: '0 4px 12px rgba(234, 179, 8, 0.3)'
+                                        }}>
+                                            PACKAGE ({tripDuties.length} DAYS • TOTAL ₹{totalFare.toLocaleString('en-IN')})
+                                        </div>
+                                    </div>
+
+                                    {/* Breakdown Table Matching Image 2 */}
+                                    <div style={{
+                                        overflowX: 'auto',
+                                        borderRadius: '10px',
+                                        border: '1px solid #4a5568',
+                                        background: '#0f172a'
+                                    }}>
+                                        <table style={{
+                                            width: '100%',
+                                            borderCollapse: 'collapse',
+                                            fontSize: '12.5px',
+                                            textAlign: 'left'
+                                        }}>
+                                            <thead>
+                                                <tr style={{ background: '#fef08a', color: '#000000', fontWeight: '900', borderBottom: '2px solid #ca8a04' }}>
+                                                    <th style={{ padding: '10px 12px', borderRight: '1px solid #d4d4d8', width: '70px', textAlign: 'center' }}>Date</th>
+                                                    <th style={{ padding: '10px 10px', borderRight: '1px solid #d4d4d8', width: '80px', textAlign: 'center' }}>So. No.</th>
+                                                    <th style={{ padding: '10px 12px', borderRight: '1px solid #d4d4d8' }}>Hotel</th>
+                                                    <th style={{ padding: '10px 12px', borderRight: '1px solid #d4d4d8' }}>Guest</th>
+                                                    <th style={{ padding: '10px 12px', borderRight: '1px solid #d4d4d8' }}>Guest Mob</th>
+                                                    <th style={{ padding: '10px 12px', borderRight: '1px solid #d4d4d8', textAlign: 'center' }}>Time</th>
+                                                    <th style={{ padding: '10px 14px', borderRight: '1px solid #d4d4d8' }}>Duty</th>
+                                                    <th style={{ padding: '10px 14px', borderRight: '1px solid #d4d4d8', textAlign: 'right', fontWeight: '950', color: '#000000' }}>
+                                                        ₹{totalFare.toLocaleString('en-IN')}
+                                                    </th>
+                                                    <th style={{ padding: '10px 12px', textAlign: 'center', width: '70px' }}>C/Out</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {loadingTripDuties ? (
+                                                    <tr>
+                                                        <td colSpan="9" style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
+                                                            Loading trip details...
+                                                        </td>
+                                                    </tr>
+                                                ) : tripDuties.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan="9" style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
+                                                            No trip duties found for this booking.
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    tripDuties.map((duty, idx) => {
+                                                        const isSelectedRow = selectedDutyRowIdx === idx;
+                                                        const dateDisplay = formatDayMonth(duty.date);
+                                                        const dayNumber = duty.dayNo || (idx + 1);
+                                                        const fare = Number(duty.revenue || duty.amount || duty.totalAmount || 0);
+                                                        const hotelName = duty.hotel || duty.pickupPoint || booking.hotel || booking.source || 'Direct';
+
+                                                        return (
+                                                            <tr
+                                                                key={duty._id || idx}
+                                                                onClick={() => setSelectedDutyRowIdx(isSelectedRow ? null : idx)}
+                                                                style={{
+                                                                    background: isSelectedRow ? 'rgba(56, 189, 248, 0.22)' : (idx % 2 === 0 ? '#1e293b' : '#172033'),
+                                                                    borderBottom: '1px solid #334155',
+                                                                    borderLeft: isSelectedRow ? '4px solid #38bdf8' : '4px solid transparent',
+                                                                    cursor: 'pointer',
+                                                                    transition: 'background 0.15s ease'
+                                                                }}
+                                                            >
+                                                                <td style={{ padding: '10px 12px', borderRight: '1px solid #334155', textAlign: 'center', fontWeight: '900', color: isSelectedRow ? '#38bdf8' : '#ffffff' }}>
+                                                                    {dateDisplay}
+                                                                </td>
+                                                                <td style={{ padding: '10px 10px', borderRight: '1px solid #334155', textAlign: 'center' }}>
+                                                                    <span style={{
+                                                                        padding: '2px 8px',
+                                                                        borderRadius: '4px',
+                                                                        background: isSelectedRow ? '#38bdf8' : 'rgba(255, 255, 255, 0.08)',
+                                                                        color: isSelectedRow ? '#000000' : '#cbd5e1',
+                                                                        fontWeight: '800',
+                                                                        fontSize: '11.5px'
+                                                                    }}>
+                                                                        Day {dayNumber}
+                                                                    </span>
+                                                                </td>
+                                                                <td style={{ padding: '10px 12px', borderRight: '1px solid #334155', color: '#cbd5e1' }}>
+                                                                    {hotelName}
+                                                                </td>
+                                                                <td style={{ padding: '10px 12px', borderRight: '1px solid #334155', fontWeight: '800', color: '#ffffff' }}>
+                                                                    {duty.clientName || booking.clientName || 'Guest'}
+                                                                </td>
+                                                                <td style={{ padding: '10px 12px', borderRight: '1px solid #334155', color: '#38bdf8', fontWeight: '700' }}>
+                                                                    {duty.mobileNumber || booking.mobileNumber || '-'}
+                                                                </td>
+                                                                <td style={{ padding: '10px 12px', borderRight: '1px solid #334155', textAlign: 'center' }}>
+                                                                    {duty.time || duty.pickupTime ? (
+                                                                        <span style={{
+                                                                            padding: '2px 6px',
+                                                                            borderRadius: '4px',
+                                                                            background: 'rgba(255, 255, 255, 0.06)',
+                                                                            color: '#fde047',
+                                                                            fontSize: '11px',
+                                                                            fontWeight: '700'
+                                                                        }}>
+                                                                            {duty.time || duty.pickupTime}
+                                                                        </span>
+                                                                    ) : '-'}
+                                                                </td>
+                                                                <td style={{ padding: '10px 14px', borderRight: '1px solid #334155', color: '#e2e8f0' }}>
+                                                                    {duty.duty || duty.description || duty.itinerary || 'Regular Duty'}
+                                                                </td>
+                                                                <td style={{ padding: '10px 14px', borderRight: '1px solid #334155', textAlign: 'right', fontWeight: '900', color: '#4ade80' }}>
+                                                                    ₹{fare.toLocaleString('en-IN')}
+                                                                </td>
+                                                                <td style={{ padding: '10px 12px', textAlign: 'center', color: '#94a3b8' }}>
+                                                                    {duty.cOut || duty.checkOut || (duty.status === 'Completed' ? '✓' : '-')}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                {/* Modal Footer */}
+                                <div style={{
+                                    padding: '14px 22px',
+                                    background: 'rgba(0, 0, 0, 0.25)',
+                                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                                    display: 'flex',
+                                    justifyContent: 'flex-end',
+                                    gap: '10px'
+                                }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowTripModal(false)}
+                                        style={{
+                                            padding: '8px 18px',
+                                            borderRadius: '10px',
+                                            background: 'rgba(255, 255, 255, 0.08)',
+                                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                                            color: '#ffffff',
+                                            fontWeight: '700',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        Close
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowTripModal(false);
+                                            setShowAssignDriverModal(true);
+                                        }}
+                                        style={{
+                                            padding: '8px 18px',
+                                            borderRadius: '10px',
+                                            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                            border: 'none',
+                                            color: '#000000',
+                                            fontWeight: '900',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)'
+                                        }}
+                                        title="Assign Driver & Vehicle directly"
+                                    >
+                                        <Car size={15} />
+                                        <span>Assignment</span>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const startDate = booking.travelStartDate ? new Date(booking.travelStartDate).toISOString().split('T')[0] : '';
+                                            const url = startDate ? `/admin/drs?date=${startDate}` : '/admin/drs';
+                                            window.location.href = url;
+                                        }}
+                                        style={{
+                                            padding: '8px 18px',
+                                            borderRadius: '10px',
+                                            background: '#38bdf8',
+                                            border: 'none',
+                                            color: '#000000',
+                                            fontWeight: '800',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            boxShadow: '0 4px 12px rgba(56, 189, 248, 0.3)'
+                                        }}
+                                    >
+                                        <ExternalLink size={14} />
+                                        <span>View in Live DRS</span>
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* ASSIGN DRIVER MODAL */}
+                {showAssignDriverModal && (
+                    <AssignDriverModal
+                        isOpen={showAssignDriverModal}
+                        onClose={() => {
+                            setShowAssignDriverModal(false);
+                            setShowTripModal(true);
+                        }}
+                        booking={booking}
+                        companyId={selectedCompany?._id || (typeof booking?.company === 'object' ? booking?.company?._id : booking?.company)}
+                        onSaved={() => {
+                            setShowAssignDriverModal(false);
+                            loadTripDuties();
+                            setShowTripModal(true);
+                            fetchLedger();
+                            if (onEntryUpdated) onEntryUpdated();
+                        }}
+                    />
+                )}
             </motion.aside>
         </AnimatePresence>
     );

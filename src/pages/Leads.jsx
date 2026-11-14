@@ -1977,12 +1977,19 @@ export default function Leads() {
             }
         }
 
-        // Also ensure direct bookings from companyBookings are included as conversions if not already linked
+        // Also ensure direct bookings from companyBookings are included in both Arrivals and Conversions if not already in leads
         const countedBookingCodes = new Set();
+        const countedArrivalCodes = new Set();
         for (let d = 1; d <= days; d++) {
             convLeadsByDay[d].forEach(item => {
                 if (item.bookingId) countedBookingCodes.add(String(item.bookingId));
                 if (item.clientCode) countedBookingCodes.add(String(item.clientCode));
+                if (item.leadId) countedBookingCodes.add(String(item.leadId));
+            });
+            dayLeadsByDay[d].forEach(item => {
+                if (item.bookingId) countedArrivalCodes.add(String(item.bookingId));
+                if (item.clientCode) countedArrivalCodes.add(String(item.clientCode));
+                if (item.leadId) countedArrivalCodes.add(String(item.leadId));
             });
         }
 
@@ -1991,27 +1998,53 @@ export default function Leads() {
                 const b = companyBookings[i];
                 if (!b || b.bookingStatus === 'Cancelled' || b.bookingStatus === 'Lost') continue;
                 const bCode = String(b.bookingId || b.clientCode || '');
-                if (bCode && countedBookingCodes.has(bCode)) continue;
 
-                const convDateRaw = b.advanceDate || b.bookingDate || b.travelStartDate || b.createdAt;
-                const dConv = parseLeadDateInfo(convDateRaw);
-                if (dConv && dConv.year === year && dConv.monthIdx === monthIdx && dConv.day >= 1 && dConv.day <= days) {
-                    const adaptedLead = {
-                        _id: b._id,
-                        leadId: b.bookingId || b.clientCode,
-                        clientCode: b.clientCode || b.bookingId,
-                        bookingId: b.bookingId || b.clientCode,
-                        clientName: b.clientName || 'Guest (TBA)',
-                        mobileNumber: b.mobileNumber || '',
-                        totalAmount: Number(b.totalAmount) || Number(b.packagePrice) || 0,
-                        advanceAmount: Number(b.advancePaid) || 0,
-                        advanceDate: convDateRaw,
-                        status: 'Confirmed',
-                        source: b.source || 'Live DRS Direct Booking',
-                        isDirectBooking: true
-                    };
-                    convLeadsByDay[dConv.day].push(adaptedLead);
-                    if (bCode) countedBookingCodes.add(bCode);
+                // Ensure Arrival count is represented
+                const arrivalDateRaw = b.bookingDate || b.leadDate || b.createdAt || b.travelStartDate;
+                const dArrival = parseLeadDateInfo(arrivalDateRaw);
+                if (dArrival && dArrival.year === year && dArrival.monthIdx === monthIdx && dArrival.day >= 1 && dArrival.day <= days) {
+                    if (!bCode || !countedArrivalCodes.has(bCode)) {
+                        const adaptedArrival = {
+                            _id: b._id,
+                            leadId: b.bookingId || b.clientCode,
+                            clientCode: b.clientCode || b.bookingId,
+                            bookingId: b.bookingId || b.clientCode,
+                            clientName: b.clientName || 'Guest (TBA)',
+                            mobileNumber: b.mobileNumber || '',
+                            totalAmount: Number(b.totalAmount) || Number(b.packagePrice) || 0,
+                            advanceAmount: Number(b.advancePaid) || 0,
+                            leadDate: arrivalDateRaw,
+                            status: 'Confirmed',
+                            source: b.source || 'Live DRS Direct Booking',
+                            isDirectBooking: true
+                        };
+                        dayLeadsByDay[dArrival.day].push(adaptedArrival);
+                        if (bCode) countedArrivalCodes.add(bCode);
+                    }
+                }
+
+                // Ensure Conversion count is represented
+                if (!bCode || !countedBookingCodes.has(bCode)) {
+                    const convDateRaw = b.advanceDate || b.bookingDate || b.travelStartDate || b.createdAt;
+                    const dConv = parseLeadDateInfo(convDateRaw);
+                    if (dConv && dConv.year === year && dConv.monthIdx === monthIdx && dConv.day >= 1 && dConv.day <= days) {
+                        const adaptedLead = {
+                            _id: b._id,
+                            leadId: b.bookingId || b.clientCode,
+                            clientCode: b.clientCode || b.bookingId,
+                            bookingId: b.bookingId || b.clientCode,
+                            clientName: b.clientName || 'Guest (TBA)',
+                            mobileNumber: b.mobileNumber || '',
+                            totalAmount: Number(b.totalAmount) || Number(b.packagePrice) || 0,
+                            advanceAmount: Number(b.advancePaid) || 0,
+                            advanceDate: convDateRaw,
+                            status: 'Confirmed',
+                            source: b.source || 'Live DRS Direct Booking',
+                            isDirectBooking: true
+                        };
+                        convLeadsByDay[dConv.day].push(adaptedLead);
+                        if (bCode) countedBookingCodes.add(bCode);
+                    }
                 }
             }
         }

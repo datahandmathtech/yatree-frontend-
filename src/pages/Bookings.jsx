@@ -1554,8 +1554,10 @@ export default function Bookings() {
                                         {/* 4. Received */}
                                         <td style={{ padding: '14px 16px', color: 'white', fontSize: '13px', fontWeight: '700' }}>
                                             {(() => {
+                                                const isFullPaid = bkg.paymentStatus === 'Full Received' || bkg.paymentStatus === 'Paid' || bkg.paymentStatus === 'Settled' || (bkg.balanceDue !== undefined && Number(bkg.balanceDue) <= 0);
                                                 const fuelAmt = (bkg.guestFuelFilled || Number(bkg.guestFuelAmount) > 0) ? (Number(bkg.guestFuelAmount) || 0) : 0;
-                                                const effRec = (Number(bkg.advancePaid) || 0) + fuelAmt;
+                                                const rawRec = (Number(bkg.advancePaid) || 0) + fuelAmt;
+                                                const effRec = isFullPaid ? Math.max(Number(bkg.totalAmount) || 0, rawRec) : rawRec;
                                                 return effRec.toLocaleString('en-IN');
                                             })()}
                                         </td>
@@ -1563,11 +1565,12 @@ export default function Bookings() {
                                         {/* 5. Balance */}
                                         <td style={{ padding: '14px 16px', color: 'white', fontSize: '13px', fontWeight: '700' }}>
                                             {(() => {
+                                                const isFullPaid = bkg.paymentStatus === 'Full Received' || bkg.paymentStatus === 'Paid' || bkg.paymentStatus === 'Settled' || (bkg.balanceDue !== undefined && Number(bkg.balanceDue) <= 0);
                                                 const fuelAmt = (bkg.guestFuelFilled || Number(bkg.guestFuelAmount) > 0) ? (Number(bkg.guestFuelAmount) || 0) : 0;
-                                                const effRec = (Number(bkg.advancePaid) || 0) + fuelAmt;
-                                                const effBal = bkg.balanceDue !== undefined 
+                                                const rawRec = (Number(bkg.advancePaid) || 0) + fuelAmt;
+                                                const effBal = isFullPaid ? 0 : (bkg.balanceDue !== undefined 
                                                     ? Math.max(0, Number(bkg.balanceDue)) 
-                                                    : Math.max(0, (Number(bkg.totalAmount) || 0) - effRec);
+                                                    : Math.max(0, (Number(bkg.totalAmount) || 0) - rawRec));
                                                 return (
                                                     <span style={{ color: effBal === 0 ? '#34d399' : '#fbbf24' }}>
                                                         {effBal.toLocaleString('en-IN')}
@@ -1728,7 +1731,7 @@ export default function Bookings() {
                                                                        ) : (hasMultipleCars ? (
                                                                            <span>{hasMultipleDrivers ? `👥 Multiple Drivers (${distinctDrivers.length})` : (distinctDrivers[0] ? `👤 ${distinctDrivers[0]}` : 'Drivers Assigned')}</span>
                                                                        ) : (
-                                                                           distinctVehicles[0] && <span>🚗 ${distinctVehicles[0]}</span>
+                                                                           distinctVehicles[0] && <span>🚗 {distinctVehicles[0]}</span>
                                                                        ))}
                                                                    </div>
                                                                </button>

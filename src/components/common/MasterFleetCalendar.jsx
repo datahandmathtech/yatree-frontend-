@@ -5,7 +5,7 @@ import {
     Car, CheckCircle2, AlertCircle, Info, ExternalLink, X, Plus, Filter, Search, User, Package
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { todayIST } from '../../utils/istUtils';
+import { todayIST, toISTDateString } from '../../utils/istUtils';
 import AssignDriverModal from './AssignDriverModal';
 
 const MASTER_FLEET_ORDER = [
@@ -283,10 +283,12 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
             });
         }
 
-        // Aggregate duties into rows
+        // Aggregate duties into rows using IST date strings
+        const dutyKeySet = new Set();
         duties.forEach(duty => {
             if (!duty.date) return;
-            const dutyDateStr = new Date(duty.date).toISOString().split('T')[0];
+            const dutyDateStr = toISTDateString(duty.date);
+            if (!dutyDateStr) return;
             const [y, m, d] = dutyDateStr.split('-').map(Number);
 
             if (y !== selectedYear || (m - 1) !== selectedMonth) return;
@@ -301,7 +303,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
             const last4 = carNumStr.slice(-4);
             const colIndex = colMap[last4];
 
-            const isCompanyCar = colIndex !== undefined && !duty.isOutsideCar;
+            const isCompanyCar = colIndex !== undefined;
 
             if (isCompanyCar) {
                 const slot = row.carSlots[colIndex];
@@ -309,11 +311,83 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                 slot.dutyCount += 1;
                 slot.duties.push(duty);
                 slot.isBooked = true;
+                const bkgId = duty.bookingId || duty.bookingRef?.bookingId || duty.bookingRef?.clientCode || (typeof duty.bookingRef === 'string' ? duty.bookingRef : duty.bookingRef?._id);
+                if (bkgId) {
+                    dutyKeySet.add(`${bkgId}_${last4}_${dutyDateStr}`);
+                    dutyKeySet.add(`${bkgId}_${dutyDateStr}`);
+                }
             } else {
                 // Outside / OS vehicle
                 row.osAmount += rev;
                 row.osDuties.push(duty);
             }
+        });
+
+        // Also plot active confirmed bookings from booking.itinerary if not already covered by a DRSDuty
+        bookings.forEach(bkg => {
+            if (bkg.bookingStatus === 'Cancelled') return;
+            const bkgId = bkg.bookingId || bkg.clientCode || String(bkg._id);
+            const itin = Array.isArray(bkg.itinerary) ? bkg.itinerary : [];
+
+            itin.forEach((it, itIdx) => {
+                if (!it.date) return;
+                const itDateStr = toISTDateString(it.date);
+                if (!itDateStr) return;
+                const [y, m, d] = itDateStr.split('-').map(Number);
+
+                if (y !== selectedYear || (m - 1) !== selectedMonth) return;
+                const rowIdx = d - 1;
+                if (rowIdx < 0 || rowIdx >= rows.length) return;
+
+                const row = rows[rowIdx];
+                const carNumStr = (it.vehicleNumber || it.customCarNumber || it.vehicle?.carNumber || '').replace(/[^0-9]/g, '');
+                let last4 = carNumStr.slice(-4);
+
+                let colIndex = colMap[last4];
+                if (colIndex === undefined && it.vehicleType) {
+                    const normType = String(it.vehicleType).toLowerCase();
+                    const matchedCol = fleetColumns.find(col => normType.includes(col.model.toLowerCase()));
+                    if (matchedCol) {
+                        colIndex = colMap[matchedCol.number];
+                        last4 = matchedCol.number;
+                    }
+                }
+
+                if (colIndex !== undefined) {
+                    const dedupKey = `${bkgId}_${last4}_${itDateStr}`;
+                    const generalKey = `${bkgId}_${itDateStr}`;
+
+                    if (!dutyKeySet.has(dedupKey) && !dutyKeySet.has(generalKey)) {
+                        const slot = row.carSlots[colIndex];
+                        const col = fleetColumns[colIndex];
+                        const rev = Number(it.amount || 0);
+                        const virtualDuty = {
+                            _id: it._id || `itin_${bkgId}_${itIdx}`,
+                            bookingId: bkg.bookingId || bkg.clientCode,
+                            bookingRef: bkg,
+                            clientName: bkg.clientName,
+                            mobileNumber: bkg.mobileNumber,
+                            hotel: it.hotel || it.pickupPoint || bkg.hotel || bkg.pickupLocation || 'Direct',
+                            date: it.date,
+                            time: it.time || '09:00 AM',
+                            duty: it.duty || it.description || 'Confirmed Tour',
+                            itinerary: it.duty || it.description || 'Confirmed Tour',
+                            dayNo: it.dayNo || (itIdx + 1),
+                            revenue: rev,
+                            driver: it.driverName ? { name: it.driverName } : col.currentDriver,
+                            customDriverName: it.driverName || col.currentDriver?.name || '',
+                            vehicle: { carNumber: it.vehicleNumber || col.fullReg },
+                            customCarNumber: it.vehicleNumber || col.fullReg,
+                            status: 'Confirmed'
+                        };
+                        slot.revenue += rev;
+                        slot.dutyCount += 1;
+                        slot.duties.push(virtualDuty);
+                        slot.isBooked = true;
+                        dutyKeySet.add(dedupKey);
+                    }
+                }
+            });
         });
 
         // Global color map to ensure the EXACT same color across all vehicles for any multi-day package / booking / guest
@@ -353,21 +427,48 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
 
                 // Detect if booking spans across month boundaries or vehicles
                 const primaryDuty = segmentDays[0]?.slot?.duties?.[0];
-                const primaryBkgId = primaryDuty?.bookingId;
-                const guestName = primaryDuty?.clientName;
-                const packageKey = primaryBkgId || primaryDuty?.bookingRef?.clientCode || (typeof primaryDuty?.bookingRef === 'string' ? primaryDuty?.bookingRef : primaryDuty?.bookingRef?._id) || guestName || currentSegmentKey;
+                const primaryBkgId = primaryDuty?.bookingId || primaryDuty?.bookingRef?.bookingId || primaryDuty?.bookingRef?.clientCode;
+                const primaryRefId = String(primaryDuty?.bookingRef?._id || primaryDuty?.bookingRef || '');
+                const guestName = (primaryDuty?.clientName || '').trim();
+                const packageKey = primaryBkgId || (primaryRefId ? `ref_${primaryRefId}` : null) || (primaryDuty?._id ? `duty_${primaryDuty._id}` : null) || guestName || currentSegmentKey;
                 const chosenTheme = getPackageTheme(packageKey);
 
-                const allMatchingDuties = primaryBkgId
-                    ? duties.filter(d => d.bookingId === primaryBkgId)
-                    : (guestName ? duties.filter(d => (d.clientName || '').toLowerCase() === guestName.toLowerCase()) : []);
-                const matchingBkg = primaryBkgId
-                    ? bookings.find(b => b.bookingId === primaryBkgId)
-                    : (guestName ? bookings.find(b => (b.clientName || '').toLowerCase() === guestName.toLowerCase()) : null);
+                const segStartStr = rows[segmentDays[0].rowIdx]?.dateStr;
+                const segEndStr = rows[segmentDays[segmentDays.length - 1].rowIdx]?.dateStr;
+
+                // STRICT ISOLATION: Only match duties of this exact booking or contiguous dates of current trip
+                const allMatchingDuties = duties.filter(d => {
+                    const dBkgId = d.bookingId || d.bookingRef?.bookingId || d.bookingRef?.clientCode;
+                    const dRefId = String(d.bookingRef?._id || d.bookingRef || '');
+                    if (primaryBkgId && dBkgId && dBkgId === primaryBkgId) return true;
+                    if (primaryRefId && dRefId && dRefId === primaryRefId) return true;
+                    if (!primaryBkgId && !dBkgId && guestName && (d.clientName || '').trim().toLowerCase() === guestName.toLowerCase()) {
+                        const dDateStr = toISTDateString(d.date);
+                        if (!dDateStr) return false;
+                        const dTime = new Date(dDateStr).getTime();
+                        const sTime = new Date(segStartStr).getTime();
+                        const eTime = new Date(segEndStr).getTime();
+                        return (dTime >= sTime - 2 * 86400000) && (dTime <= eTime + 2 * 86400000);
+                    }
+                    return false;
+                });
+
+                // STRICT ISOLATION: Find matching booking ONLY if booking ID matches or trip dates overlap with current segment
+                const matchingBkg = bookings.find(b => {
+                    const bId = b.bookingId || b.clientCode;
+                    if (primaryBkgId && bId && bId === primaryBkgId) return true;
+                    if (primaryRefId && String(b._id) === primaryRefId) return true;
+                    if (!primaryBkgId && guestName && (b.clientName || '').trim().toLowerCase() === guestName.toLowerCase()) {
+                        const bStart = toISTDateString(b.travelStartDate || b.createdAt);
+                        const bEnd = toISTDateString(b.travelEndDate || b.travelStartDate || b.createdAt);
+                        return bStart <= segEndStr && bEnd >= segStartStr;
+                    }
+                    return false;
+                });
 
                 const allDatesSet = new Set([
-                    ...allMatchingDuties.map(d => d.date ? new Date(d.date).toISOString().split('T')[0] : '').filter(Boolean),
-                    ...(matchingBkg?.itinerary || []).map(it => it.date ? String(it.date).slice(0, 10) : '').filter(Boolean),
+                    ...allMatchingDuties.map(d => toISTDateString(d.date)).filter(Boolean),
+                    ...(matchingBkg?.itinerary || []).map(it => toISTDateString(it.date)).filter(Boolean),
                     ...segmentDays.map(item => rows[item.rowIdx]?.dateStr).filter(Boolean)
                 ]);
                 const sortedPackageDates = [...allDatesSet].sort();
@@ -512,8 +613,8 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
 
             if (matchingBkg && Array.isArray(matchingBkg.itinerary) && matchingBkg.itinerary.length > 1) {
                 const combinedDays = matchingBkg.itinerary.map((it, idx) => {
-                    const itDateStr = it.date ? String(it.date).slice(0, 10) : '';
-                    const matchedDuty = matches.find(d => d.date && new Date(d.date).toISOString().slice(0, 10) === itDateStr)
+                    const itDateStr = it.date ? toISTDateString(it.date) : '';
+                    const matchedDuty = matches.find(d => d.date && toISTDateString(d.date) === itDateStr)
                         || matches.find(d => Number(d.dayNo) === (it.dayNo || idx + 1));
 
                     if (matchedDuty) return matchedDuty;
@@ -557,10 +658,16 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
         }
 
         // 3. By clientName if package (spans across multiple vehicles)
-        if (selectedCellData.slot?.isPackage && clientName) {
+        // STRICT ISOLATION: Restrict to current trip window (within 4 days) so past trips of repeat guests are never merged!
+        if (selectedCellData.slot?.isPackage && clientName && selectedCellData.dateStr) {
+            const cellTime = new Date(selectedCellData.dateStr).getTime();
             const matches = duties.filter(d => {
                 const sameClient = (d.clientName || '').trim().toLowerCase() === clientName;
-                return sameClient;
+                if (!sameClient) return false;
+                const dDateStr = toISTDateString(d.date);
+                if (!dDateStr) return false;
+                const dTime = new Date(dDateStr).getTime();
+                return Math.abs(dTime - cellTime) <= 4 * 86400000;
             });
             if (matches.length > 1) {
                 return [...matches].sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -1810,7 +1917,7 @@ export default function MasterFleetCalendar({ selectedCompany, theme = { primary
                                                 </thead>
                                                 <tbody>
                                                     {selectedPackageDuties.map((duty, idx) => {
-                                                        const dutyDateStr = duty.date ? new Date(duty.date).toISOString().split('T')[0] : '';
+                                                        const dutyDateStr = duty.date ? toISTDateString(duty.date) : '';
                                                         const isSelectedDay = dutyDateStr === selectedCellData.dateStr;
                                                         const dateDisplay = formatDayMonth(duty.date);
                                                         const dayNumber = duty.dayNo || (idx + 1);
