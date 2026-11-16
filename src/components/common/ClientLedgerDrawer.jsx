@@ -614,6 +614,54 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
 
     if (!booking) return null;
 
+    const resolveCarNumberForEntry = (entry) => {
+        if (entry?.vehicleNumber) return String(entry.vehicleNumber).split('#')[0].trim();
+        if (entry?.carNumber) return String(entry.carNumber).split('#')[0].trim();
+        if (entry?.vehicle?.carNumber) return String(entry.vehicle.carNumber).split('#')[0].trim();
+
+        const desc = entry?.description || '';
+        const plateMatch = desc.match(/\b([A-Z]{2}[-\s]?[0-9]{1,2}[-\s]?[A-Z]{1,3}[-\s]?[0-9]{4})\b/i);
+        if (plateMatch) return plateMatch[1].trim();
+
+        const entryDateStr = entry?.date ? new Date(entry.date).toISOString().split('T')[0] : '';
+        if (entryDateStr && Array.isArray(booking?.itinerary)) {
+            const itMatch = booking.itinerary.find(it => {
+                const itDate = it.date ? new Date(it.date).toISOString().split('T')[0] : '';
+                return itDate === entryDateStr && it.vehicleNumber;
+            });
+            if (itMatch?.vehicleNumber) return String(itMatch.vehicleNumber).split('#')[0].trim();
+        }
+
+        if (entryDateStr && Array.isArray(booking?.drsDuties)) {
+            const dMatch = booking.drsDuties.find(d => {
+                const dDate = d.date ? new Date(d.date).toISOString().split('T')[0] : '';
+                return dDate === entryDateStr && (d.vehicle?.carNumber || d.customCarNumber);
+            });
+            if (dMatch?.vehicle?.carNumber || dMatch?.customCarNumber) {
+                return String(dMatch.vehicle?.carNumber || dMatch.customCarNumber).split('#')[0].trim();
+            }
+        }
+
+        const bkgCar = (
+            booking?.vehicleNumber ||
+            booking?.carNumber ||
+            booking?._dutyForPayment?.customCarNumber ||
+            booking?._dutyForPayment?.vehicle?.carNumber ||
+            booking?.assignedVehicle?.carNumber ||
+            (Array.isArray(booking?.itinerary) ? (
+                booking.itinerary.slice().reverse().find(it => it.vehicleNumber)?.vehicleNumber
+            ) : '') ||
+            (Array.isArray(booking?.drsDuties) ? (
+                booking.drsDuties.slice().reverse().find(d => d.vehicle?.carNumber || d.customCarNumber)?.vehicle?.carNumber ||
+                booking.drsDuties.slice().reverse().find(d => d.customCarNumber)?.customCarNumber
+            ) : '') ||
+            ''
+        );
+        return bkgCar ? String(bkgCar).split('#')[0].trim() : '';
+    };
+
+    const bookingCarNumber = resolveCarNumberForEntry(null);
+
     const totalFare = Number(booking.totalAmount) || 0;
     const fuelAmt = booking.guestFuelFilled ? (Number(booking.guestFuelAmount) || 0) : 0;
 
@@ -653,7 +701,8 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
             date: booking.travelEndDate || booking.updatedAt || booking.createdAt || new Date(),
             type: 'Fuel',
             amount: fuelAmt,
-            description: 'Fuel Paid by Guest (Deducted)'
+            vehicleNumber: bookingCarNumber,
+            description: bookingCarNumber ? `Fuel Paid by Guest (${bookingCarNumber}) - Deducted` : 'Fuel Paid by Guest (Deducted)'
         });
     }
 
@@ -726,9 +775,10 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
             runBal -= amt;
             const isFuel = entry.type === 'Fuel';
             const isAdv = entry.type === 'Advance';
+            const entryCar = isFuel ? resolveCarNumberForEntry(entry) : '';
             pdfRows.push({
                 date: new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }),
-                particulars: isFuel ? 'Fuel Paid by Guest (Deducted)' : (isAdv ? 'Advance Payment Received' : 'Payment Received'),
+                particulars: isFuel ? `Fuel Paid by Guest${entryCar ? ` (${entryCar})` : ''} - Deducted` : (isAdv ? 'Advance Payment Received' : 'Payment Received'),
                 fare: null,
                 paid: amt,
                 balance: Math.max(0, runBal),
@@ -765,7 +815,7 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <div style={{ background: isEventBooking ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)', color: isEventBooking ? '#c084fc' : '#60a5fa', padding: '7px', borderRadius: '8px' }}><Car size={16} /></div>
                                 <div>
-                                    <div style={{ color: 'white', fontWeight: '800', fontSize: '14px' }}>{booking.vehicleType || 'Standard Vehicle'}{isEventBooking && booking.vehicleNumber ? ` (${booking.vehicleNumber})` : ''}</div>
+                                    <div style={{ color: 'white', fontWeight: '800', fontSize: '14px' }}>{booking.vehicleType || 'Standard Vehicle'}{bookingCarNumber ? ` (${bookingCarNumber})` : ''}</div>
                                     <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}><span>{isEventBooking ? `🎉 Event Duty • ${booking.eventName || 'Event'}` : 'Client Booking & Trip Details'}</span><button type="button" onClick={() => setShowTripModal(true)} style={{ background: 'transparent', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: '0 2px', display: 'inline-flex', alignItems: 'center' }} title={isEventBooking ? 'View Event Duty Details' : 'View Guest Trip Itinerary'}><Eye size={13} /></button></div>
                                 </div>
                             </div>
@@ -924,6 +974,7 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
                                         const isFuel = entry.type === 'Fuel';
                                         const isAdv = entry.type === 'Advance';
                                         const modeName = resolveEntryModeName(entry);
+                                        const entryCar = isFuel ? resolveCarNumberForEntry(entry) : '';
 
                                         return (
                                             <tr key={entry._id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: isFuel ? 'rgba(245, 158, 11, 0.04)' : 'transparent' }}>
@@ -933,23 +984,28 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
                                                 <td style={{ padding: '12px 10px' }}>
                                                     {isFuel ? (
                                                         <div>
-                                                            <div style={{ color: '#fbbf24', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                            <div style={{ color: '#fbbf24', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                                                 <Fuel size={13} color="#fbbf24" />
                                                                 <span>Fuel Paid by Guest</span>
+                                                                {entryCar && (
+                                                                    <span style={{
+                                                                        fontSize: '11px',
+                                                                        fontWeight: '800',
+                                                                        color: '#fbbf24',
+                                                                        background: 'rgba(245, 158, 11, 0.18)',
+                                                                        border: '1px solid rgba(245, 158, 11, 0.4)',
+                                                                        padding: '1px 6px',
+                                                                        borderRadius: '5px',
+                                                                        letterSpacing: '0.3px',
+                                                                        whiteSpace: 'nowrap'
+                                                                    }}>
+                                                                        {entryCar}
+                                                                    </span>
+                                                                )}
                                                             </div>
-                                                            {(() => {
-                                                                const rawDesc = entry.description || '';
-                                                                const cleanDesc = rawDesc
-                                                                    .replace(/^Fuel paid by guest\s*/i, '')
-                                                                    .replace(/deducted from booking balance/i, '')
-                                                                    .replace(/[()]/g, '')
-                                                                    .trim();
-                                                                return cleanDesc ? (
-                                                                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.55)', marginTop: '2px' }}>
-                                                                        {cleanDesc}
-                                                                    </div>
-                                                                ) : null;
-                                                            })()}
+                                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.55)', marginTop: '2px' }}>
+                                                                {entryCar ? `Car: ${entryCar} • Deducted from balance` : 'Deducted from booking balance'}
+                                                            </div>
                                                         </div>
                                                     ) : (
                                                         <div>
