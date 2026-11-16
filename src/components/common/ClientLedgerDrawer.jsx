@@ -627,18 +627,20 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
         if (entryDateStr && Array.isArray(booking?.itinerary)) {
             const itMatch = booking.itinerary.find(it => {
                 const itDate = it.date ? new Date(it.date).toISOString().split('T')[0] : '';
-                return itDate === entryDateStr && it.vehicleNumber;
+                return itDate === entryDateStr && (it.vehicleNumber || it.vehicle?.carNumber || it.customCarNumber);
             });
-            if (itMatch?.vehicleNumber) return String(itMatch.vehicleNumber).split('#')[0].trim();
+            if (itMatch?.vehicleNumber || itMatch?.vehicle?.carNumber || itMatch?.customCarNumber) {
+                return String(itMatch.vehicleNumber || itMatch.vehicle?.carNumber || itMatch.customCarNumber).split('#')[0].trim();
+            }
         }
 
         if (entryDateStr && Array.isArray(booking?.drsDuties)) {
             const dMatch = booking.drsDuties.find(d => {
                 const dDate = d.date ? new Date(d.date).toISOString().split('T')[0] : '';
-                return dDate === entryDateStr && (d.vehicle?.carNumber || d.customCarNumber);
+                return dDate === entryDateStr && (d.vehicle?.carNumber || d.customCarNumber || d.vehicleNumber);
             });
-            if (dMatch?.vehicle?.carNumber || dMatch?.customCarNumber) {
-                return String(dMatch.vehicle?.carNumber || dMatch.customCarNumber).split('#')[0].trim();
+            if (dMatch?.vehicle?.carNumber || dMatch?.customCarNumber || dMatch?.vehicleNumber) {
+                return String(dMatch.vehicle?.carNumber || dMatch.customCarNumber || dMatch.vehicleNumber).split('#')[0].trim();
             }
         }
 
@@ -649,11 +651,14 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
             booking?._dutyForPayment?.vehicle?.carNumber ||
             booking?.assignedVehicle?.carNumber ||
             (Array.isArray(booking?.itinerary) ? (
-                booking.itinerary.slice().reverse().find(it => it.vehicleNumber)?.vehicleNumber
+                booking.itinerary.slice().reverse().find(it => it.vehicleNumber || it.vehicle?.carNumber || it.customCarNumber)?.vehicleNumber ||
+                booking.itinerary.slice().reverse().find(it => it.vehicleNumber || it.vehicle?.carNumber || it.customCarNumber)?.vehicle?.carNumber ||
+                booking.itinerary.slice().reverse().find(it => it.vehicleNumber || it.vehicle?.carNumber || it.customCarNumber)?.customCarNumber
             ) : '') ||
             (Array.isArray(booking?.drsDuties) ? (
-                booking.drsDuties.slice().reverse().find(d => d.vehicle?.carNumber || d.customCarNumber)?.vehicle?.carNumber ||
-                booking.drsDuties.slice().reverse().find(d => d.customCarNumber)?.customCarNumber
+                booking.drsDuties.slice().reverse().find(d => d.vehicle?.carNumber || d.customCarNumber || d.vehicleNumber)?.vehicle?.carNumber ||
+                booking.drsDuties.slice().reverse().find(d => d.vehicle?.carNumber || d.customCarNumber || d.vehicleNumber)?.customCarNumber ||
+                booking.drsDuties.slice().reverse().find(d => d.vehicle?.carNumber || d.customCarNumber || d.vehicleNumber)?.vehicleNumber
             ) : '') ||
             ''
         );
@@ -775,7 +780,7 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
             runBal -= amt;
             const isFuel = entry.type === 'Fuel';
             const isAdv = entry.type === 'Advance';
-            const entryCar = isFuel ? resolveCarNumberForEntry(entry) : '';
+            const entryCar = isFuel ? (resolveCarNumberForEntry(entry) || bookingCarNumber) : '';
             pdfRows.push({
                 date: new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }),
                 particulars: isFuel ? `Fuel Paid by Guest${entryCar ? ` (${entryCar})` : ''} - Deducted` : (isAdv ? 'Advance Payment Received' : 'Payment Received'),
@@ -974,7 +979,7 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
                                         const isFuel = entry.type === 'Fuel';
                                         const isAdv = entry.type === 'Advance';
                                         const modeName = resolveEntryModeName(entry);
-                                        const entryCar = isFuel ? resolveCarNumberForEntry(entry) : '';
+                                        const entryCar = isFuel ? (resolveCarNumberForEntry(entry) || bookingCarNumber) : '';
 
                                         return (
                                             <tr key={entry._id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: isFuel ? 'rgba(245, 158, 11, 0.04)' : 'transparent' }}>

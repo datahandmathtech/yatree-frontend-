@@ -360,16 +360,23 @@ const BankBook = ({ initialTab = 'bank' }) => {
         }
     };
 
-    // Calculate running balance for each cash transaction based on chronological order
+    // Helper to get IST date string YYYY-MM-DD
+    const toISTDateString = (d) => {
+        if (!d) return '';
+        const dt = d instanceof Date ? d : new Date(d);
+        return new Date(dt.getTime() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
+    };
+
+    // Calculate running balance for each cash transaction based on chronological order (oldest to newest)
     const cashBalanceMap = useMemo(() => {
         const map = new Map();
         let running = Number(cashStats.openingBalance) || 0;
         const chronological = [...cashTransactions].sort((a, b) => {
-            const da = new Date(a.date).getTime();
-            const db = new Date(b.date).getTime();
-            if (da !== db) return da - db;
-            const ca = new Date(a.createdAt || 0).getTime();
-            const cb = new Date(b.createdAt || 0).getTime();
+            const dateA = toISTDateString(a.date);
+            const dateB = toISTDateString(b.date);
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            const ca = new Date(a.createdAt || a.date || 0).getTime();
+            const cb = new Date(b.createdAt || b.date || 0).getTime();
             return ca - cb;
         });
 
@@ -384,6 +391,30 @@ const BankBook = ({ initialTab = 'bank' }) => {
         }
         return map;
     }, [cashTransactions, cashStats.openingBalance]);
+
+    // Sorted Cash Transactions for display: Newest calendar date first, and within same day newest createdAt on TOP
+    const sortedCashTransactions = useMemo(() => {
+        return [...cashTransactions].sort((a, b) => {
+            const dateA = toISTDateString(a.date);
+            const dateB = toISTDateString(b.date);
+            if (dateA !== dateB) return dateB.localeCompare(dateA);
+            const ca = new Date(a.createdAt || a.date || 0).getTime();
+            const cb = new Date(b.createdAt || b.date || 0).getTime();
+            return cb - ca;
+        });
+    }, [cashTransactions]);
+
+    // Sorted Bank Transactions for display: Newest calendar date first, and within same day newest createdAt on TOP
+    const sortedBankTransactions = useMemo(() => {
+        return [...transactions].sort((a, b) => {
+            const dateA = toISTDateString(a.date);
+            const dateB = toISTDateString(b.date);
+            if (dateA !== dateB) return dateB.localeCompare(dateA);
+            const ca = new Date(a.createdAt || a.date || 0).getTime();
+            const cb = new Date(b.createdAt || b.date || 0).getTime();
+            return cb - ca;
+        });
+    }, [transactions]);
 
     useEffect(() => {
         if (selectedCompany?._id) {
@@ -1396,14 +1427,14 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                             Loading bank entries...
                                         </td>
                                     </tr>
-                                ) : transactions.filter(tx => typeFilter === 'ALL' ? true : tx.type === typeFilter).length === 0 ? (
+                                ) : sortedBankTransactions.filter(tx => typeFilter === 'ALL' ? true : tx.type === typeFilter).length === 0 ? (
                                     <tr>
                                         <td colSpan="10" style={{ padding: '50px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
                                             No bank transactions found for this filter. Click "+ Record Bank Entry" to log a credit or debit.
                                         </td>
                                     </tr>
                                 ) : (
-                                    transactions.filter(tx => typeFilter === 'ALL' ? true : tx.type === typeFilter).map(tx => {
+                                    sortedBankTransactions.filter(tx => typeFilter === 'ALL' ? true : tx.type === typeFilter).map(tx => {
                                         const isIn = tx.type === 'IN';
                                         return (
                                             <tr key={tx._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
@@ -2045,14 +2076,14 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                             Loading cash entries...
                                         </td>
                                     </tr>
-                                ) : cashTransactions.filter(tx => typeFilter === 'ALL' ? true : tx.type === typeFilter).length === 0 ? (
+                                ) : sortedCashTransactions.filter(tx => typeFilter === 'ALL' ? true : tx.type === typeFilter).length === 0 ? (
                                     <tr>
                                         <td colSpan="10" style={{ padding: '50px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>
                                             No cash transactions recorded for this filter. Click "+ Record Cash Entry" or "Deposit Cash to Bank" to log cash movement.
                                         </td>
                                     </tr>
                                 ) : (
-                                    cashTransactions.filter(tx => typeFilter === 'ALL' ? true : tx.type === typeFilter).map(tx => {
+                                    sortedCashTransactions.filter(tx => typeFilter === 'ALL' ? true : tx.type === typeFilter).map(tx => {
                                         const isIn = tx.type === 'IN';
                                         const rowBalance = cashBalanceMap.get(String(tx._id));
                                         return (
