@@ -314,13 +314,17 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
     }, [showTripModal, booking]);
 
     useEffect(() => {
-        if (booking && booking.client) {
-            fetchLedger();
+        if (booking) {
             fetchBankAccounts();
+            if (booking.client || isEventBooking || booking._dutyForPayment?._id || booking._vehicleId || booking._id) {
+                fetchLedger();
+            } else {
+                setLoading(false);
+            }
         } else {
             setLoading(false);
         }
-    }, [booking]);
+    }, [propBooking]);
 
     const fetchBankAccounts = async () => {
         try {
@@ -361,8 +365,15 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
 
     const fetchLedger = async () => {
         try {
-            const clientId = typeof booking.client === 'object' ? booking.client?._id : booking.client;
+            const clientId = typeof booking?.client === 'object' ? booking?.client?._id : booking?.client;
             if (!clientId) {
+                const lookupId = booking?._dutyForPayment?._id || booking?._vehicleId || booking?._id;
+                if (lookupId) {
+                    const { data } = await axios.get(`/api/drs/duty/${lookupId}/payments`);
+                    setLedgerEntries(Array.isArray(data?.payments) ? data.payments : []);
+                } else {
+                    setLedgerEntries([]);
+                }
                 setLoading(false);
                 return;
             }
