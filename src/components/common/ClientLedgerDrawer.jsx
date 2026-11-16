@@ -1,16 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, FileText, Car, CheckCircle, Clock, Plus, Download, Fuel, Edit, Trash2, IndianRupee, Eye, ExternalLink } from 'lucide-react';
+import { X, FileText, Car, CheckCircle, Clock, Plus, Download, Fuel, Edit, Trash2, IndianRupee, Eye, ExternalLink, User } from 'lucide-react';
 import AssignDriverModal from './AssignDriverModal';
+import EditBookingModal from './EditBookingModal';
 import axios from '../../api/axios';
 import { useCompany } from '../../context/CompanyContext';
 import { generateClientLedgerPDF } from '../../utils/clientLedgerPdf';
 
-export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEditBooking, onEntryUpdated }) {
+export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAddEntry, onEditBooking, onEntryUpdated }) {
     const { selectedCompany } = useCompany();
     const [ledgerEntries, setLedgerEntries] = useState([]);
     const [bankAccounts, setBankAccounts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [bookingOverrides, setBookingOverrides] = useState(null);
+
+    useEffect(() => {
+        setBookingOverrides(null);
+    }, [propBooking?._id, propBooking?._vehicleId, propBooking?._eventId]);
+
+    const booking = propBooking ? (bookingOverrides ? { ...propBooking, ...bookingOverrides } : propBooking) : null;
+    const isEventBooking = Boolean(booking?.isEvent || booking?._isEventDuty || booking?.eventId || booking?._eventId);
 
     // Edit entry modal state
     const [editingEntry, setEditingEntry] = useState(null);
@@ -20,6 +29,164 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
     const [editBankAccountId, setEditBankAccountId] = useState('');
     const [editReference, setEditReference] = useState('');
     const [savingEdit, setSavingEdit] = useState(false);
+    const [showFullEditModal, setShowFullEditModal] = useState(false);
+    const [bookingForFullEdit, setBookingForFullEdit] = useState(null);
+    const [loadingFullEdit, setLoadingFullEdit] = useState(false);
+
+    // Dedicated Event Duty Edit Modal states (keeps Event duties separated from Lead/Tour Booking form)
+    const [showEventEditModal, setShowEventEditModal] = useState(false);
+    const [eventEditForm, setEventEditForm] = useState(null);
+    const [savingEventEdit, setSavingEventEdit] = useState(false);
+
+    const handleOpenFullEditBooking = async () => {
+        if (isEventBooking) {
+            const vehId = booking._vehicleId || (booking._id && booking._id !== booking._eventId ? booking._id : '');
+            const rawPlate = booking.rawCarNumber || booking.carNumber || booking.vehicleNumber || '';
+            const cleanPlate = rawPlate.split('#')[0].trim();
+            setEventEditForm({
+                _id: vehId,
+                _eventId: booking._eventId || booking.eventId || '',
+                eventName: booking.eventName || 'Event',
+                vehicleSource: booking.vehicleSource || 'External',
+                carNumber: cleanPlate,
+                rawCarNumber: rawPlate,
+                model: booking.model || booking.vehicleType || 'Sedan',
+                guestName: booking.guestName || booking.clientName || '',
+                date: booking.dutyDate || (booking.travelStartDate ? String(booking.travelStartDate).slice(0, 10) : new Date().toISOString().split('T')[0]),
+                dutyTime: booking.dutyTime || booking.time || '09:00 AM',
+                dutyType: booking.dutyType || booking.pickupLocation || '',
+                dropLocation: booking.dropLocation || booking.hotel || '',
+                driverName: booking.driverName || '',
+                ownerName: booking.ownerName || '',
+                dutyAmount: booking.dutyAmount ?? booking.totalAmount ?? 0,
+                buyAmount: booking.buyAmount ?? 0,
+                remarks: booking.remarks || ''
+            });
+            setShowEventEditModal(true);
+            return;
+        }
+
+        const bkgId = booking?._id || booking?._realBookingId;
+        if (!bkgId) return;
+        try {
+            setLoadingFullEdit(true);
+            const res = await axios.get(`/api/bookings/single/${bkgId}`);
+            if (res.data) {
+                setBookingForFullEdit(res.data);
+                setShowFullEditModal(true);
+            } else {
+                setBookingForFullEdit(booking);
+                setShowFullEditModal(true);
+            }
+        } catch (err) {
+            console.error('Error fetching full booking for edit:', err);
+            setBookingForFullEdit(booking);
+            setShowFullEditModal(true);
+        } finally {
+            setLoadingFullEdit(false);
+        }
+    };
+
+    const handleSaveEventEdit = async (e) => {
+        e.preventDefault();
+        if (!eventEditForm) return;
+        try {
+            setSavingEventEdit(true);
+            const compId = selectedCompany?._id || (typeof booking?.company === 'object' ? booking?.company?._id : booking?.company);
+
+            if (eventEditForm._id) {
+                const parts = (eventEditForm.rawCarNumber || '').split('#');
+                const cleanPlate = (eventEditForm.carNumber || 'TBA').trim().toUpperCase();
+                let internalCarNumber = `${cleanPlate}#${eventEditForm.date}`;
+                if (cleanPlate === parts[0] && eventEditForm.date === parts[1] && parts[2]) {
+                    internalCarNumber += `#${parts[2]}`;
+                } else {
+                    internalCarNumber += `#${Math.random().toString(36).substring(2, 7)}`;
+                }
+
+                await axios.put(`/api/admin/vehicles/${eventEditForm._id}`, {
+                    carNumber: internalCarNumber,
+                    model: eventEditForm.model?.trim() || 'Sedan',
+                    property: eventEditForm.dropLocation?.trim() || '',
+                    dropLocation: eventEditForm.dropLocation?.trim() || '',
+                    dutyAmount: Number(eventEditForm.dutyAmount) || 0,
+                    ownerName: eventEditForm.ownerName?.trim() || '',
+                    buyAmount: Number(eventEditForm.buyAmount) || 0,
+                    eventId: eventEditForm._eventId || undefined,
+                    companyId: compId,
+                    isOutsideCar: true,
+                    transactionType: 'Buy',
+                    createdAt: eventEditForm.date,
+                    driverName: eventEditForm.driverName?.trim() || '',
+                    vehicleSource: eventEditForm.vehicleSource || 'External',
+                    dutyType: eventEditForm.dutyType?.trim() || '',
+                    dutyTime: eventEditForm.dutyTime?.trim() || '09:00 AM',
+                    remarks: eventEditForm.remarks || '',
+                    guestName: eventEditForm.guestName?.trim() || ''
+                });
+
+                const updatedAmt = Number(eventEditForm.dutyAmount) || 0;
+                const advAmt = Number(booking?.advancePaid) || 0;
+                setBookingOverrides({
+                    clientName: eventEditForm.guestName?.trim() || booking.clientName,
+                    guestName: eventEditForm.guestName?.trim() || '',
+                    carNumber: cleanPlate,
+                    vehicleNumber: cleanPlate,
+                    rawCarNumber: internalCarNumber,
+                    model: eventEditForm.model?.trim() || 'Sedan',
+                    vehicleType: eventEditForm.model?.trim() || 'Sedan',
+                    vehicleSource: eventEditForm.vehicleSource || 'External',
+                    driverName: eventEditForm.driverName?.trim() || '',
+                    ownerName: eventEditForm.ownerName?.trim() || '',
+                    buyAmount: Number(eventEditForm.buyAmount) || 0,
+                    dutyAmount: updatedAmt,
+                    totalAmount: updatedAmt,
+                    balanceDue: Math.max(0, updatedAmt - advAmt),
+                    dutyType: eventEditForm.dutyType?.trim() || '',
+                    pickupLocation: eventEditForm.dutyType?.trim() || '',
+                    dropLocation: eventEditForm.dropLocation?.trim() || '',
+                    hotel: eventEditForm.dropLocation?.trim() || '',
+                    dutyTime: eventEditForm.dutyTime?.trim() || '09:00 AM',
+                    dutyDate: eventEditForm.date,
+                    travelStartDate: eventEditForm.date,
+                    travelEndDate: eventEditForm.date,
+                    remarks: eventEditForm.remarks || ''
+                });
+            } else if (eventEditForm._eventId) {
+                await axios.put(`/api/admin/events/${eventEditForm._eventId}`, {
+                    client: eventEditForm.guestName?.trim() || '',
+                    date: eventEditForm.date,
+                    location: eventEditForm.dropLocation?.trim() || '',
+                    proformaAmount: Number(eventEditForm.dutyAmount) || 0
+                });
+
+                const updatedAmt = Number(eventEditForm.dutyAmount) || 0;
+                const advAmt = Number(booking?.advancePaid) || 0;
+                setBookingOverrides({
+                    clientName: eventEditForm.guestName?.trim() || booking.clientName,
+                    guestName: eventEditForm.guestName?.trim() || '',
+                    totalAmount: updatedAmt,
+                    dutyAmount: updatedAmt,
+                    balanceDue: Math.max(0, updatedAmt - advAmt),
+                    hotel: eventEditForm.dropLocation?.trim() || '',
+                    dropLocation: eventEditForm.dropLocation?.trim() || '',
+                    dutyDate: eventEditForm.date,
+                    travelStartDate: eventEditForm.date,
+                    travelEndDate: eventEditForm.date
+                });
+            }
+
+            setShowEventEditModal(false);
+            setEventEditForm(null);
+            await fetchLedger();
+            if (onEntryUpdated) onEntryUpdated();
+        } catch (err) {
+            console.error('Error updating event duty:', err);
+            alert(err.response?.data?.message || 'Failed to update event duty');
+        } finally {
+            setSavingEventEdit(false);
+        }
+    };
     const [deletingEdit, setDeletingEdit] = useState(false);
 
     // Guest Trip Modal state
@@ -46,6 +213,26 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
         if (!booking) return;
         setLoadingTripDuties(true);
         try {
+            if (isEventBooking) {
+                setTripDuties([{
+                    _id: booking._vehicleId || booking._id || 'event_duty',
+                    date: booking.dutyDate || booking.travelStartDate,
+                    dayNo: 1,
+                    hotel: booking.dropLocation || booking.hotel || booking.eventName || 'Event Venue',
+                    clientName: booking.guestName || booking.clientName || 'Event Guest',
+                    mobileNumber: booking.mobileNumber || '-',
+                    time: booking.dutyTime || booking.time || '09:00 AM',
+                    duty: booking.dutyType || booking.pickupLocation || `${booking.eventName || 'Event'} Duty`,
+                    revenue: Number(booking.dutyAmount || booking.totalAmount || 0),
+                    status: booking.status || 'Confirmed',
+                    cOut: '-',
+                    driver: { name: booking.driverName || 'Assigned' },
+                    vehicle: { carNumber: (booking.carNumber || booking.vehicleNumber || booking.vehicleType || '-').split('#')[0] }
+                }]);
+                setLoadingTripDuties(false);
+                return;
+            }
+
             let freshBooking = booking;
             if (booking?._id && !String(booking._id).startsWith('bkg-mock')) {
                 try {
@@ -216,7 +403,8 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                 const entryDate = entry.date ? new Date(entry.date) : null;
 
                 // 1. Explicit referenceId: If referenceId is present, it MUST match this booking or its duties
-                if (refId) {
+                // NOTE: For Fuel entries, referenceId points to Fuel record, so don't reject Fuel here!
+                if (refId && entry.type !== 'Fuel') {
                     if (refId === bkgIdStr || (leadIdStr && refId === leadIdStr) || drsDutyIds.has(refId)) {
                         return true;
                     }
@@ -458,6 +646,26 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
         });
     }
 
+    // Strict chronological sort: Date ascending, then createdAt / timestamp ascending
+    displayEntries.sort((a, b) => {
+        const da = new Date(a.date).getTime();
+        const db = new Date(b.date).getTime();
+        const dayA = new Date(a.date).setHours(0, 0, 0, 0);
+        const dayB = new Date(b.date).setHours(0, 0, 0, 0);
+        if (dayA !== dayB) return dayA - dayB;
+
+        if (da !== db && (da % 86400000 !== 0 || db % 86400000 !== 0)) {
+            return da - db;
+        }
+        const ca = new Date(a.createdAt || a.date).getTime();
+        const cb = new Date(b.createdAt || b.date).getTime();
+        if (ca !== cb) return ca - cb;
+
+        if (a.type === 'Advance' && b.type !== 'Advance') return -1;
+        if (b.type === 'Advance' && a.type !== 'Advance') return 1;
+        return 0;
+    });
+
     const totalCredits = displayEntries.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
     const effectivePaid = Math.max(totalAdvancePaid + fuelAmt, totalCredits);
     const balanceDue = Math.max(0, totalFare - totalCredits);
@@ -465,7 +673,7 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
 
     // Auto-heal discrepancy between Client Ledger and Booking document in MongoDB
     useEffect(() => {
-        if (!booking?._id || loading) return;
+        if (!booking?._id || loading || isEventBooking) return;
         const dbBal = Number(booking.balanceDue);
         if (!isNaN(dbBal) && (dbBal !== balanceDue || (isPaidFull && booking.paymentStatus !== 'Full Received'))) {
             axios.put(`/api/bookings/single/${booking._id}`, {
@@ -475,9 +683,15 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                 if (onEntryUpdated) onEntryUpdated();
             }).catch(e => console.error('Silent booking ledger sync error:', e));
         }
-    }, [booking?._id, balanceDue, isPaidFull, loading]);
+    }, [booking?._id, balanceDue, isPaidFull, loading, isEventBooking]);
 
-    const createdDate = booking.createdAt ? new Date(booking.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
+    const firstTxDate = displayEntries.length > 0 ? new Date(displayEntries[0].date) : null;
+    const bkgCreated = booking.createdAt ? new Date(booking.createdAt) : null;
+    const bkgDate = booking.bookingDate ? new Date(booking.bookingDate) : null;
+    const bkgAdv = booking.advanceDate ? new Date(booking.advanceDate) : null;
+    const candidateDates = [firstTxDate, bkgCreated, bkgDate, bkgAdv].filter(Boolean);
+    const earliestDate = candidateDates.length > 0 ? new Date(Math.min(...candidateDates.map(d => d.getTime()))) : new Date();
+    const createdDate = earliestDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
     const sDate = booking.tripStartFormatted || (booking.travelStartDate ? new Date(booking.travelStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
     const eDate = booking.tripEndFormatted || (booking.travelEndDate ? new Date(booking.travelEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '');
 
@@ -486,11 +700,13 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
         const pdfRows = [
             {
                 date: createdDate,
-                particulars: `Tour Package Booking Fare (${sDate} to ${eDate})`,
+                particulars: isEventBooking
+                    ? `Event Duty Fare (${booking.eventName || 'Event'})`
+                    : `Tour Package Booking Fare (${sDate} to ${eDate})`,
                 fare: totalFare,
                 paid: null,
                 balance: totalFare,
-                mode: 'Booking Confirmed'
+                mode: isEventBooking ? 'Event Duty' : 'Booking Confirmed'
             }
         ];
 
@@ -536,14 +752,37 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                     <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '18px', marginBottom: '24px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <div style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '7px', borderRadius: '8px' }}><Car size={16} /></div>
+                                <div style={{ background: isEventBooking ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)', color: isEventBooking ? '#c084fc' : '#60a5fa', padding: '7px', borderRadius: '8px' }}><Car size={16} /></div>
                                 <div>
-                                    <div style={{ color: 'white', fontWeight: '800', fontSize: '14px' }}>{booking.vehicleType || 'Standard Vehicle'}</div>
-                                    <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}><span>Client Booking & Trip Details</span><button type="button" onClick={() => setShowTripModal(true)} style={{ background: 'transparent', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: '0 2px', display: 'inline-flex', alignItems: 'center' }} title="View Guest Trip Itinerary"><Eye size={13} /></button></div>
+                                    <div style={{ color: 'white', fontWeight: '800', fontSize: '14px' }}>{booking.vehicleType || 'Standard Vehicle'}{isEventBooking && booking.vehicleNumber ? ` (${booking.vehicleNumber})` : ''}</div>
+                                    <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '5px' }}><span>{isEventBooking ? `🎉 Event Duty • ${booking.eventName || 'Event'}` : 'Client Booking & Trip Details'}</span><button type="button" onClick={() => setShowTripModal(true)} style={{ background: 'transparent', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: '0 2px', display: 'inline-flex', alignItems: 'center' }} title={isEventBooking ? 'View Event Duty Details' : 'View Guest Trip Itinerary'}><Eye size={13} /></button></div>
                                 </div>
                             </div>
                             <div style={{ textAlign: 'right', fontSize: '13px', color: 'white', fontWeight: '700' }}>
-                                Client: <span style={{ color: '#60a5fa' }}>{booking.clientName}</span><button type="button" onClick={() => setShowTripModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: '10px', padding: '4px 10px', borderRadius: '8px', background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.4)', color: '#38bdf8', fontSize: '12px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 2px 8px rgba(56, 189, 248, 0.2)', transition: 'all 0.15s ease' }} title="View Guest Trip Itinerary & Duty Schedule"><Eye size={14} /><span>View Trip</span></button>
+                                {isEventBooking ? 'Guest:' : 'Client:'} <span style={{ color: isEventBooking ? '#c084fc' : '#60a5fa' }}>{booking.clientName}</span>
+                                <button
+                                    type="button"
+                                    onClick={handleOpenFullEditBooking}
+                                    disabled={loadingFullEdit}
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        marginLeft: '8px',
+                                        padding: '4px 9px',
+                                        borderRadius: '8px',
+                                        background: isEventBooking ? 'rgba(168, 85, 247, 0.18)' : 'rgba(251, 191, 36, 0.15)',
+                                        border: isEventBooking ? '1px solid rgba(168, 85, 247, 0.45)' : '1px solid rgba(251, 191, 36, 0.4)',
+                                        color: isEventBooking ? '#d8b4fe' : '#fbbf24',
+                                        fontSize: '11.5px',
+                                        fontWeight: '700',
+                                        cursor: 'pointer'
+                                    }}
+                                    title={isEventBooking ? 'Edit Event Duty Details & Fare' : 'Edit Booking & Tour Package Details'}
+                                >
+                                    <span>{loadingFullEdit ? 'Loading...' : (isEventBooking ? 'Edit Event Duty' : 'Edit Guest')}</span>
+                                </button>
+                                <button type="button" onClick={() => setShowTripModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: '10px', padding: '4px 10px', borderRadius: '8px', background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.4)', color: '#38bdf8', fontSize: '12px', fontWeight: '800', cursor: 'pointer', boxShadow: '0 2px 8px rgba(56, 189, 248, 0.2)', transition: 'all 0.15s ease' }} title={isEventBooking ? 'View Event Duty Schedule' : 'View Guest Trip Itinerary & Duty Schedule'}><Eye size={14} /><span>{isEventBooking ? 'View Duty' : 'View Trip'}</span></button>
                             </div>
                         </div>
 
@@ -612,26 +851,27 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                                 </tr>
                             </thead>
                             <tbody>
-                                {/* Row 1: Tour Package Booking Fare */}
+                                {/* Row 1: Tour Package Booking Fare / Event Duty Fare */}
                                 <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.015)' }}>
                                     <td style={{ padding: '12px 10px', color: 'white', whiteSpace: 'nowrap' }}>{createdDate}</td>
                                     <td style={{ padding: '12px 10px' }}>
-                                        <div style={{ color: 'white', fontWeight: '700' }}>Tour Package Booking Fare</div>
+                                        <div style={{ color: 'white', fontWeight: '700' }}>
+                                            {isEventBooking ? `Event Duty Fare (${booking.eventName || 'Event'})` : 'Tour Package Booking Fare'}
+                                        </div>
                                     </td>
                                     <td style={{ padding: '12px 10px', color: 'white', fontWeight: '700', textAlign: 'right' }}>₹{totalFare.toLocaleString('en-IN')}</td>
                                     <td style={{ padding: '12px 10px', color: 'rgba(255,255,255,0.4)', textAlign: 'right' }}>—</td>
                                     <td style={{ padding: '12px 10px', color: 'white', fontWeight: '700', textAlign: 'right' }}>₹{totalFare.toLocaleString('en-IN')}</td>
                                     <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                                        <span style={{ padding: '3px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', fontSize: '11px', fontWeight: '700' }}>
-                                            Booking Confirmed
+                                        <span style={{ padding: '3px 8px', borderRadius: '6px', background: isEventBooking ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)', color: isEventBooking ? '#d8b4fe' : '#60a5fa', fontSize: '11px', fontWeight: '700' }}>
+                                            {isEventBooking ? 'Event Duty' : 'Booking Confirmed'}
                                         </span>
                                     </td>
                                     <td style={{ padding: '12px 10px', textAlign: 'center' }}>
-                                        {onEditBooking && (
-                                            <button
+                                        <button
                                                 type="button"
-                                                onClick={onEditBooking}
-                                                title="Edit Tour Package Booking Details & Fare"
+                                                onClick={isEventBooking ? handleOpenFullEditBooking : (onEditBooking || handleOpenFullEditBooking)}
+                                                title={isEventBooking ? 'Edit Event Duty Details & Fare' : 'Edit Tour Package Booking Details & Fare'}
                                                 style={{
                                                     padding: '4px 8px',
                                                     background: 'rgba(167, 139, 250, 0.15)',
@@ -649,7 +889,6 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                                                 <Edit size={12} />
                                                 <span>Edit</span>
                                             </button>
-                                        )}
                                     </td>
                                 </tr>
 
@@ -1248,6 +1487,264 @@ export default function ClientLedgerDrawer({ booking, onClose, onAddEntry, onEdi
                             if (onEntryUpdated) onEntryUpdated();
                         }}
                     />
+                )}
+                {/* Modal: Edit Guest Details (Only for normal bookings/leads) */}
+                {showFullEditModal && bookingForFullEdit && !isEventBooking && (
+                    <EditBookingModal
+                        key={`full-edit-${bookingForFullEdit._id}`}
+                        booking={bookingForFullEdit}
+                        onClose={() => {
+                            setShowFullEditModal(false);
+                            setBookingForFullEdit(null);
+                        }}
+                        onSuccess={() => {
+                            setShowFullEditModal(false);
+                            setBookingForFullEdit(null);
+                            fetchLedger();
+                            if (onEntryUpdated) onEntryUpdated();
+                        }}
+                    />
+                )}
+
+                {/* Modal: Dedicated Edit Event Duty Modal (for Event duties — does NOT navigate to Lead form) */}
+                {showEventEditModal && eventEditForm && (
+                    <div
+                        style={{
+                            position: 'fixed',
+                            inset: 0,
+                            background: 'rgba(0,0,0,0.8)',
+                            backdropFilter: 'blur(6px)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1000010,
+                            padding: '16px'
+                        }}
+                        onClick={() => setShowEventEditModal(false)}
+                    >
+                        <div
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                                width: '100%',
+                                maxWidth: '560px',
+                                maxHeight: '90vh',
+                                overflowY: 'auto',
+                                background: '#0b1120',
+                                border: '1px solid rgba(168, 85, 247, 0.35)',
+                                borderRadius: '18px',
+                                padding: '22px',
+                                boxShadow: '0 25px 60px rgba(0,0,0,0.75)'
+                            }}
+                        >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                                <div>
+                                    <div style={{ fontSize: '11px', color: '#c084fc', fontWeight: '800', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                                        🎉 {eventEditForm.eventName || 'Event Duty'}
+                                    </div>
+                                    <h3 style={{ margin: '2px 0 0', color: 'white', fontSize: '18px', fontWeight: '900' }}>
+                                        Edit Event Duty Details
+                                    </h3>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowEventEditModal(false)}
+                                    style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '10px', width: '32px', height: '32px', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleSaveEventEdit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                {eventEditForm._id && (
+                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                        {['Fleet', 'External'].map(src => (
+                                            <button
+                                                key={src}
+                                                type="button"
+                                                onClick={() => setEventEditForm(prev => ({ ...prev, vehicleSource: src }))}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '9px',
+                                                    borderRadius: '10px',
+                                                    border: eventEditForm.vehicleSource === src ? '1px solid #c084fc' : '1px solid rgba(255,255,255,0.1)',
+                                                    background: eventEditForm.vehicleSource === src ? 'rgba(168, 85, 247, 0.2)' : 'rgba(255,255,255,0.03)',
+                                                    color: eventEditForm.vehicleSource === src ? '#e9d5ff' : 'rgba(255,255,255,0.5)',
+                                                    fontWeight: '800',
+                                                    fontSize: '12px',
+                                                    cursor: 'pointer'
+                                                }}
+                                            >
+                                                {src === 'Fleet' ? '🏢 Own Fleet Car' : '🚕 Outside / External Car'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '700' }}>Guest Name *</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={eventEditForm.guestName}
+                                            onChange={e => setEventEditForm(prev => ({ ...prev, guestName: e.target.value }))}
+                                            style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', fontSize: '13px', outline: 'none' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '700' }}>Duty Fare / Amount (₹) *</label>
+                                        <input
+                                            type="number"
+                                            required
+                                            min="0"
+                                            value={eventEditForm.dutyAmount}
+                                            onChange={e => setEventEditForm(prev => ({ ...prev, dutyAmount: e.target.value }))}
+                                            style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: '#34d399', fontWeight: '800', fontSize: '13px', outline: 'none' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '700' }}>Duty Date *</label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={eventEditForm.date}
+                                            onChange={e => setEventEditForm(prev => ({ ...prev, date: e.target.value }))}
+                                            style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', fontSize: '13px', outline: 'none' }}
+                                        />
+                                    </div>
+                                    {eventEditForm._id && (
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '700' }}>Duty Time</label>
+                                            <input
+                                                type="text"
+                                                value={eventEditForm.dutyTime}
+                                                onChange={e => setEventEditForm(prev => ({ ...prev, dutyTime: e.target.value }))}
+                                                placeholder="e.g. 09:00 AM"
+                                                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', fontSize: '13px', outline: 'none' }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {eventEditForm._id && (
+                                    <>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                            <div>
+                                                <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '700' }}>Vehicle Number *</label>
+                                                <input
+                                                    type="text"
+                                                    required
+                                                    value={eventEditForm.carNumber}
+                                                    onChange={e => setEventEditForm(prev => ({ ...prev, carNumber: e.target.value.toUpperCase() }))}
+                                                    placeholder="e.g. RJ27TA1234"
+                                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', fontSize: '13px', outline: 'none' }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '700' }}>Car Model</label>
+                                                <input
+                                                    type="text"
+                                                    value={eventEditForm.model}
+                                                    onChange={e => setEventEditForm(prev => ({ ...prev, model: e.target.value }))}
+                                                    placeholder="e.g. Crysta / Dzire"
+                                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', fontSize: '13px', outline: 'none' }}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                            <div>
+                                                <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '700' }}>Driver Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={eventEditForm.driverName}
+                                                    onChange={e => setEventEditForm(prev => ({ ...prev, driverName: e.target.value }))}
+                                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', fontSize: '13px', outline: 'none' }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '700' }}>Duty Type / Route</label>
+                                                <input
+                                                    type="text"
+                                                    value={eventEditForm.dutyType}
+                                                    onChange={e => setEventEditForm(prev => ({ ...prev, dutyType: e.target.value }))}
+                                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', fontSize: '13px', outline: 'none' }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                <div style={{ display: 'grid', gridTemplateColumns: eventEditForm._id && eventEditForm.vehicleSource === 'External' ? '1fr 1fr' : '1fr', gap: '12px' }}>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '700' }}>Hotel / Venue / Drop Location</label>
+                                        <input
+                                            type="text"
+                                            value={eventEditForm.dropLocation}
+                                            onChange={e => setEventEditForm(prev => ({ ...prev, dropLocation: e.target.value }))}
+                                            style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', fontSize: '13px', outline: 'none' }}
+                                        />
+                                    </div>
+                                    {eventEditForm._id && eventEditForm.vehicleSource === 'External' && (
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '700' }}>Vendor / Owner Name</label>
+                                            <input
+                                                type="text"
+                                                value={eventEditForm.ownerName}
+                                                onChange={e => setEventEditForm(prev => ({ ...prev, ownerName: e.target.value }))}
+                                                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', fontSize: '13px', outline: 'none' }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {eventEditForm._id && eventEditForm.vehicleSource === 'External' && (
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '700' }}>Vendor Buy Cost (₹)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={eventEditForm.buyAmount}
+                                            onChange={e => setEventEditForm(prev => ({ ...prev, buyAmount: e.target.value }))}
+                                            style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: '#fbbf24', fontWeight: '700', fontSize: '13px', outline: 'none' }}
+                                        />
+                                    </div>
+                                )}
+
+                                {eventEditForm._id && (
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px', fontWeight: '700' }}>Remarks</label>
+                                        <textarea
+                                            rows={2}
+                                            value={eventEditForm.remarks}
+                                            onChange={e => setEventEditForm(prev => ({ ...prev, remarks: e.target.value }))}
+                                            style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', fontSize: '13px', outline: 'none', resize: 'vertical' }}
+                                        />
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowEventEditModal(false)}
+                                        style={{ padding: '10px 18px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', fontWeight: '700', fontSize: '13px', cursor: 'pointer' }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={savingEventEdit}
+                                        style={{ padding: '10px 22px', borderRadius: '10px', background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', border: 'none', color: 'white', fontWeight: '800', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(124, 58, 237, 0.35)' }}
+                                    >
+                                        {savingEventEdit ? 'Saving...' : 'Save Event Duty'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 )}
             </motion.aside>
         </AnimatePresence>

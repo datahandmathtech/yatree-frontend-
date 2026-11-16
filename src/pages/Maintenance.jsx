@@ -751,7 +751,8 @@ const Maintenance = () => {
         const types = (record.maintenanceType || '').split(', ').filter(Boolean);
         const isEligibleForReminder = types.some(t => 
             t === 'Regular Service' || 
-            (t === 'Tyres / Wheels' && (record.category || '').includes('Alignment & Balancing'))
+            (t === 'Tyres / Wheels' && (record.category || '').includes('Alignment & Balancing')) ||
+            t === 'Brake' || t === 'Brake System' || (record.category || '').includes('Brake')
         );
         setFormData({
             vehicleId: record.vehicle?._id || record.vehicle || '',
@@ -3404,7 +3405,8 @@ const Maintenance = () => {
                                             const selectedTypes = formData.maintenanceType.split(', ').filter(Boolean);
                                             const showReminderSection = selectedTypes.some(t => 
                                                 t === 'Regular Service' || 
-                                                (t === 'Tyres / Wheels' && (formData.category || '').includes('Alignment & Balancing'))
+                                                (t === 'Tyres / Wheels' && (formData.category || '').includes('Alignment & Balancing')) ||
+                                                t === 'Brake' || t === 'Brake System' || (formData.category || '').includes('Brake')
                                             );
                                             if (!showReminderSection) return null;
                                             return (

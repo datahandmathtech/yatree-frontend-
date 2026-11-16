@@ -16,23 +16,60 @@ const EditAttendanceModal = ({ item, onClose, onUpdate }) => {
         parkingAmount: item.punchOut?.tollParkingAmount || 0,
         punchInTime: toISTDateTimeString(item.punchIn?.time),
         punchOutTime: toISTDateTimeString(item.punchOut?.time),
-        tripType: item.outsideTrip?.tripType || (item.outsideTrip?.occurred ? 'Same Day Return' : 'City Local')
+        tripType: (Number(item.punchOut?.nightStayAmount) > 0 || String(item.outsideTrip?.tripType || '').toLowerCase().includes('night')) ? 'Night Hold' : ((Number(item.punchOut?.allowanceTA) > 0 || item.outsideTrip?.occurred) ? 'Same Day Return' : 'City Local')
     });
 
     const handleTypeChange = (newType) => {
-        let ta = formData.allowanceTA;
-        if (newType === 'City Local') ta = 0;
-        else if (newType === 'Same Day Return') ta = 100;
-        else if (newType === 'Night Hold') ta = 500;
+        let ta = 0;
+        let night = 0;
+        if (newType === 'City Local') {
+            ta = 0;
+            night = 0;
+        } else if (newType === 'Same Day Return') {
+            ta = 100;
+            night = 0;
+        } else if (newType === 'Night Hold') {
+            ta = 0;
+            night = 500;
+        }
         
-        setFormData({ ...formData, tripType: newType, allowanceTA: ta });
+        setFormData({ ...formData, tripType: newType, allowanceTA: ta, nightStayAmount: night });
+    };
+
+    const handleTAChange = (val) => {
+        const taNum = val === '' ? '' : Number(val);
+        const nightNum = Number(formData.nightStayAmount) || 0;
+        let newTripType = formData.tripType;
+        if (nightNum > 0) newTripType = 'Night Hold';
+        else if (Number(taNum) > 0) newTripType = 'Same Day Return';
+        else newTripType = 'City Local';
+
+        setFormData(prev => ({ ...prev, allowanceTA: val, tripType: newTripType }));
+    };
+
+    const handleNightChange = (val) => {
+        const nightNum = val === '' ? '' : Number(val);
+        const taNum = Number(formData.allowanceTA) || 0;
+        let newTripType = formData.tripType;
+        if (Number(nightNum) > 0) newTripType = 'Night Hold';
+        else if (taNum > 0) newTripType = 'Same Day Return';
+        else newTripType = 'City Local';
+
+        setFormData(prev => ({ ...prev, nightStayAmount: val, tripType: newTripType }));
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        const numTA = Number(formData.allowanceTA) || 0;
+        const numNight = Number(formData.nightStayAmount) || 0;
+        const computedType = numNight > 0 ? 'Night Hold' : (numTA > 0 ? 'Same Day Return' : 'City Local');
+
         const payload = {
             ...formData,
-            bonusAmount: Number(formData.allowanceTA || 0) + Number(formData.nightStayAmount || 0)
+            allowanceTA: numTA,
+            nightStayAmount: numNight,
+            tripType: computedType,
+            bonusAmount: numTA + numNight
         };
         onUpdate(item._id, payload);
     };
@@ -158,7 +195,7 @@ const EditAttendanceModal = ({ item, onClose, onUpdate }) => {
                                 type="number"
                                 className="input-field"
                                 value={formData.allowanceTA}
-                                onChange={(e) => setFormData({ ...formData, allowanceTA: e.target.value })}
+                                onChange={(e) => handleTAChange(e.target.value)}
                                 style={{ width: '100%', marginBottom: 0, height: '48px' }}
                                 placeholder="0"
                             />
@@ -169,7 +206,7 @@ const EditAttendanceModal = ({ item, onClose, onUpdate }) => {
                                 type="number"
                                 className="input-field"
                                 value={formData.nightStayAmount}
-                                onChange={(e) => setFormData({ ...formData, nightStayAmount: e.target.value })}
+                                onChange={(e) => handleNightChange(e.target.value)}
                                 style={{ width: '100%', marginBottom: 0, height: '48px' }}
                                 placeholder="0"
                             />

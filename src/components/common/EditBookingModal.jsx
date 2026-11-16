@@ -687,7 +687,7 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
             inset: 0,
             background: 'rgba(3, 7, 18, 0.85)',
             backdropFilter: 'blur(8px)',
-            zIndex: 99999,
+            zIndex: 1000000,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

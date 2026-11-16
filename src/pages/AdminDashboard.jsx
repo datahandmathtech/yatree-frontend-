@@ -6,7 +6,7 @@ import {
     Activity, Users, Car, CreditCard, AlertTriangle, ShieldAlert,
     TrendingUp, Wallet, ArrowUpRight, ArrowDownRight, Clock,
     ChevronLeft, ChevronRight, Filter, Search, MoreHorizontal,
-    Plus, Download, Wrench, Briefcase, Fuel, Calendar, X, IndianRupee, Camera, ShieldCheck, Shield, LogIn, Droplets, FileText, CalendarDays, CheckCircle
+    Plus, Download, Wrench, Briefcase, Fuel, Calendar, X, IndianRupee, Camera, ShieldCheck, Shield, LogIn, Droplets, FileText, CalendarDays, CheckCircle, ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCompany } from '../context/CompanyContext';
@@ -14,6 +14,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import SEO from '../components/SEO';
+import AssignDriverModal from '../components/common/AssignDriverModal';
 import { todayIST, formatDateIST, firstDayOfMonthIST, nowIST, toISTDateString } from '../utils/istUtils';
 
 const StatCard = ({ icon: Icon, label, value, color, loading, trend, onClick, subValue }) => (
@@ -126,7 +127,29 @@ const AdminDashboard = () => {
     const [stats, setStats] = useState(null);
     const [pendingLeaves, setPendingLeaves] = useState([]);
     const [pendingAllowances, setPendingAllowances] = useState([]);
+    const [unassignedDuties, setUnassignedDuties] = useState([]);
     const [activeAlertModal, setActiveAlertModal] = useState(null);
+    const [unassignedFilter, setUnassignedFilter] = useState('all');
+    const [selectedBookingForAssignment, setSelectedBookingForAssignment] = useState(null);
+    const [showAssignDriverModal, setShowAssignDriverModal] = useState(false);
+    const [loadingBookingId, setLoadingBookingId] = useState(null);
+
+    const handleOpenAssignModal = async (item) => {
+        try {
+            setLoadingBookingId(item._id);
+            const res = await axios.get(`/api/bookings/single/${item._id}`);
+            if (res.data) {
+                setSelectedBookingForAssignment(res.data);
+                setShowAssignDriverModal(true);
+            }
+        } catch (err) {
+            console.error('Error fetching booking details for assignment:', err);
+            setSelectedBookingForAssignment(item);
+            setShowAssignDriverModal(true);
+        } finally {
+            setLoadingBookingId(null);
+        }
+    };
     const [loading, setLoading] = useState(true);
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // 1-12
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -175,13 +198,16 @@ const AdminDashboard = () => {
             const headers = { Authorization: `Bearer ${userInfo.token}` };
             const shouldFetchPending = userRole === 'admin' || userRole === 'superadmin' || userRole === 'executive' || (user?.permissions?.driversService);
 
-            const [dashRes, leavesRes, allowancesRes] = await Promise.all([
+            const [dashRes, leavesRes, allowancesRes, unassignedRes] = await Promise.all([
                 axios.get(`/api/admin/dashboard/${selectedCompany._id}?${params}`, { headers }),
                 shouldFetchPending
                     ? axios.get(`/api/admin/leaves/pending/${selectedCompany._id}`, { headers }).catch(() => ({ data: [] }))
                     : Promise.resolve({ data: [] }),
                 shouldFetchPending
                     ? axios.get(`/api/admin/allowances/pending/${selectedCompany._id}`, { headers }).catch(() => ({ data: [] }))
+                    : Promise.resolve({ data: [] }),
+                shouldFetchPending
+                    ? axios.get(`/api/admin/unassigned-duties/${selectedCompany._id}`, { headers }).catch(() => ({ data: [] }))
                     : Promise.resolve({ data: [] })
             ]);
 
@@ -189,6 +215,7 @@ const AdminDashboard = () => {
             if (shouldFetchPending) {
                 setPendingLeaves(leavesRes.data || []);
                 setPendingAllowances(allowancesRes.data || []);
+                setUnassignedDuties(unassignedRes.data || []);
             }
         } catch (err) {
             console.error('Error fetching stats', err);
@@ -264,6 +291,9 @@ const AdminDashboard = () => {
         }
         if (category === 'PendingAllowances') {
             return pendingAllowances?.length || 0;
+        }
+        if (category === 'UnassignedFleet') {
+            return unassignedDuties?.length || 0;
         }
         return getFilteredAlerts(category).length;
     };
@@ -612,10 +642,11 @@ const AdminDashboard = () => {
                         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                             {[
                                 { id: 'VehicleDocuments', label: 'Vehicle Documents', color: '#38bdf8', icon: FileText, desc: 'RC, Ins, Permit, PUC, Fit' },
-                                { id: 'MaintenanceServices', label: 'Maintenance', color: '#f59e0b', icon: Wrench, desc: 'Align & Bal, Regular' },
+                                { id: 'MaintenanceServices', label: 'Maintenance', color: '#f59e0b', icon: Wrench, desc: 'Align & Bal, Regular, Brakes' },
                                 { id: 'PendingLeave', label: 'Pending Leave', color: '#8b5cf6', icon: Calendar, desc: 'Staff Approvals' },
                                 { id: 'EventManagement', label: 'Events', color: '#ec4899', icon: CalendarDays, desc: 'Upcoming Events' },
-                                { id: 'PendingAllowances', label: 'Duty Allowances', color: '#10b981', icon: Wallet, desc: 'Driver TA / Night' }
+                                { id: 'PendingAllowances', label: 'Duty Allowances', color: '#10b981', icon: Wallet, desc: 'Driver TA / Night' },
+                                { id: 'UnassignedFleet', label: 'Unassigned Bookings', color: '#f43f5e', icon: Car, desc: 'Vehicle / Driver Pending' }
                             ].map(btn => {
                                 const count = renderAlertCounts(btn.id);
                                 return (
@@ -623,7 +654,7 @@ const AdminDashboard = () => {
                                          onClick={() => count > 0 && setActiveAlertModal(btn.id)}
                                          className="glass-card-hover-effect"
                                          style={{
-                                             flex: '1 1 calc(20% - 12px)', minWidth: '200px',
+                                             flex: '1 1 calc(16.6% - 12px)', minWidth: '180px',
                                              background: `linear-gradient(145deg, ${btn.color}10, rgba(15,23,42,0.6))`,
                                              border: `1px solid ${count > 0 ? btn.color : 'rgba(255,255,255,0.05)'}`,
                                              borderRadius: '12px', padding: '12px 16px',
@@ -656,7 +687,38 @@ const AdminDashboard = () => {
                         </div>
                     </div>
 
-                    {/* ALERTS MODAL */}
+                    {/* ASSIGN DRIVER & VEHICLE DIRECT MODAL */}
+            {showAssignDriverModal && selectedBookingForAssignment && (
+                <AssignDriverModal
+                    key={`assign-driver-${selectedBookingForAssignment._id}`}
+                    isOpen={showAssignDriverModal}
+                    booking={selectedBookingForAssignment}
+                    companyId={selectedCompany?._id || selectedCompany}
+                    onClose={() => {
+                        setShowAssignDriverModal(false);
+                        setSelectedBookingForAssignment(null);
+                    }}
+                    onSaved={async () => {
+                        setShowAssignDriverModal(false);
+                        setSelectedBookingForAssignment(null);
+                        if (selectedCompany) {
+                            try {
+                                const userInfoRaw = localStorage.getItem('userInfo');
+                                const userInfo = userInfoRaw ? JSON.parse(userInfoRaw) : {};
+                                const res = await axios.get(`/api/admin/unassigned-duties/${selectedCompany._id}`, {
+                                    headers: { Authorization: `Bearer ${userInfo.token}` }
+                                });
+                                setUnassignedDuties(res.data || []);
+                            } catch (e) {
+                                console.error('Error refreshing unassigned duties:', e);
+                            }
+                        }
+                        fetchStats();
+                    }}
+                />
+            )}
+
+            {/* ALERTS MODAL */}
                     <AnimatePresence>
                         {activeAlertModal && (
                             <motion.div
@@ -699,12 +761,124 @@ const AdminDashboard = () => {
                                             {activeAlertModal === 'PendingLeave' && <><Calendar color="#8b5cf6" /> Pending Leave Approvals</>}
                                             {activeAlertModal === 'EventManagement' && <><CalendarDays color="#ec4899" /> Event Management Alerts</>}
                                             {activeAlertModal === 'PendingAllowances' && <><Wallet color="#10b981" /> Pending Duty Allowances</>}
+                                            {activeAlertModal === 'UnassignedFleet' && <><Car color="#f43f5e" /> Unassigned Bookings (Pending Fleet & Driver)</>}
                                         </h2>
                                         <button onClick={() => setActiveAlertModal(null)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s' }} className="hover:bg-white/20"><X size={20} /></button>
                                     </div>
                                     
                                     <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
-                                        {activeAlertModal === 'PendingLeave' ? (
+                                        {activeAlertModal === 'UnassignedFleet' ? (
+                                            <div>
+                                                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setUnassignedFilter('all')}
+                                                        style={{
+                                                            padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', border: 'none', cursor: 'pointer',
+                                                            background: unassignedFilter === 'all' ? '#f43f5e' : 'rgba(255,255,255,0.08)',
+                                                            color: 'white', transition: 'all 0.2s'
+                                                        }}
+                                                    >
+                                                        All ({unassignedDuties.length})
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setUnassignedFilter('vehicle')}
+                                                        style={{
+                                                            padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', border: 'none', cursor: 'pointer',
+                                                            background: unassignedFilter === 'vehicle' ? '#f43f5e' : 'rgba(255,255,255,0.08)',
+                                                            color: 'white', transition: 'all 0.2s'
+                                                        }}
+                                                    >
+                                                        🚗 Vehicle Pending ({unassignedDuties.filter(d => (d.carMissingCount || 0) > 0).length})
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setUnassignedFilter('driver')}
+                                                        style={{
+                                                            padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', border: 'none', cursor: 'pointer',
+                                                            background: unassignedFilter === 'driver' ? '#f43f5e' : 'rgba(255,255,255,0.08)',
+                                                            color: 'white', transition: 'all 0.2s'
+                                                        }}
+                                                    >
+                                                        👤 Driver Pending ({unassignedDuties.filter(d => (d.driverMissingCount || 0) > 0).length})
+                                                    </button>
+                                                </div>
+
+                                                <div className="expiry-alerts-grid">
+                                                    {unassignedDuties
+                                                        .filter(d => {
+                                                            if (unassignedFilter === 'vehicle') return (d.carMissingCount || 0) > 0;
+                                                            if (unassignedFilter === 'driver') return (d.driverMissingCount || 0) > 0;
+                                                            return true;
+                                                        })
+                                                        .map((item, index) => (
+                                                            <div
+                                                                key={index}
+                                                                className="alert-card glass-card-hover-effect"
+                                                                style={{
+                                                                    background: 'rgba(244, 63, 94, 0.08)',
+                                                                    border: '1px solid rgba(244, 63, 94, 0.35)',
+                                                                    position: 'relative',
+                                                                    overflow: 'hidden'
+                                                                }}
+                                                            >
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', gap: '8px' }}>
+                                                                    <span className="alert-identifier" style={{ color: 'rgba(255,255,255,0.95)', textTransform: 'uppercase', flex: 1, fontWeight: '800' }}>
+                                                                        👤 {item.clientName}
+                                                                    </span>
+                                                                    <span style={{ fontSize: '10px', padding: '3px 8px', borderRadius: '6px', background: 'rgba(251, 191, 36, 0.2)', color: '#fbbf24', border: '1px solid rgba(251, 191, 36, 0.4)', fontWeight: '800', flexShrink: 0 }}>
+                                                                        #{item.bookingId}
+                                                                    </span>
+                                                                </div>
+                                                                <div style={{ fontSize: '12px', color: '#f43f5e', fontWeight: '800', marginBottom: '6px' }}>
+                                                                    ⚠️ {item.pendingStatus}
+                                                                </div>
+                                                                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>
+                                                                    📅 {formatDateIST(item.travelStartDate)} to {formatDateIST(item.travelEndDate)}
+                                                                </div>
+                                                                <div style={{ fontSize: '11px', color: '#38bdf8', fontWeight: '700', marginBottom: '4px' }}>
+                                                                    🚗 {item.vehicleType} {item.numberOfCars > 1 ? `(${item.numberOfCars} Cars)` : ''}
+                                                                </div>
+                                                                {item.itinerary && (
+                                                                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginBottom: '12px' }}>
+                                                                        📍 {item.itinerary}
+                                                                    </div>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={loadingBookingId === item._id}
+                                                                    onClick={() => handleOpenAssignModal(item)}
+                                                                    style={{
+                                                                        width: '100%',
+                                                                        background: 'linear-gradient(135deg, #f43f5e, #e11d48)',
+                                                                        color: 'white',
+                                                                        border: 'none',
+                                                                        padding: '9px 14px',
+                                                                        borderRadius: '8px',
+                                                                        fontSize: '11px',
+                                                                        fontWeight: '800',
+                                                                        cursor: 'pointer',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                        gap: '6px',
+                                                                        boxShadow: '0 4px 12px rgba(244, 63, 94, 0.3)',
+                                                                        opacity: loadingBookingId === item._id ? 0.7 : 1
+                                                                    }}
+                                                                >
+                                                                    <span>
+                                                                        {loadingBookingId === item._id
+                                                                            ? 'OPENING...'
+                                                                            : ((item.carMissingCount || 0) > 0 ? 'ASSIGN CAR & DRIVER' : 'ASSIGN DRIVER')}
+                                                                    </span>
+                                                                    <ArrowRight size={13} />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                </div>
+                                            </div>
+                                        ) : activeAlertModal === 'PendingLeave' ? (
                                             <div className="expiry-alerts-grid">
                                                 {pendingLeaves.map((leave, index) => (
                                                     <div

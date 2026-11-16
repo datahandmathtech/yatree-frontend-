@@ -271,6 +271,8 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
     const [showBreakdownMonthDropdown, setShowBreakdownMonthDropdown] = useState(false);
     const [rideSettlementEdits, setRideSettlementEdits] = useState({});
     const [savingRideKey, setSavingRideKey] = useState(null);
+    const [allEventVehicles, setAllEventVehicles] = useState([]);
+    const [allCompanyEvents, setAllCompanyEvents] = useState([]);
 
     const openDailyBreakdownDrawer = (dateStr) => {
         const target = (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) ? dateStr : todayDateStr;
@@ -308,10 +310,17 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
     const fetchAllCompanyBookings = async () => {
         if (!selectedCompany?._id) return;
         try {
-            const { data } = await axios.get(`/api/bookings/${selectedCompany._id}`);
-            setAllCompanyBookings(Array.isArray(data) ? data : []);
+            const [bRes, eRes, evRes] = await Promise.all([
+                axios.get(`/api/bookings/${selectedCompany._id}`).catch(() => ({ data: [] })),
+                axios.get(`/api/admin/events/${selectedCompany._id}`).catch(() => ({ data: [] })),
+                axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false&type=event_all`).catch(() => ({ data: { vehicles: [] } }))
+            ]);
+            setAllCompanyBookings(Array.isArray(bRes.data) ? bRes.data : []);
+            setAllCompanyEvents(Array.isArray(eRes.data) ? eRes.data : []);
+            const evList = Array.isArray(evRes.data) ? evRes.data : (evRes.data?.vehicles || []);
+            setAllEventVehicles(evList);
         } catch (err) {
-            console.error('Error fetching bookings in Live DRS:', err);
+            console.error('Error fetching bookings/events in Live DRS:', err);
         }
     };
 
@@ -678,7 +687,20 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
             });
         });
 
-        // 2. Group remaining Live DRS Duties not already covered by allCompanyBookings
+        // Index event vehicles and DRS duties mapped to event vehicles to avoid double counting
+        const eventVehicleIdSet = new Set(
+            (allEventVehicles || []).map(ev => ev?._id ? String(ev._id) : '').filter(Boolean)
+        );
+        const drsByEventVehicleId = {};
+        (duties || []).forEach(d => {
+            if (!d || d.status === 'Cancelled') return;
+            const evRef = d.eventVehicleRef ? String(d.eventVehicleRef._id || d.eventVehicleRef) : (d.outsideVehicleRef ? String(d.outsideVehicleRef._id || d.outsideVehicleRef) : '');
+            if (evRef) {
+                drsByEventVehicleId[evRef] = d;
+            }
+        });
+
+        // 2. Group remaining Live DRS Duties not already covered by allCompanyBookings or allEventVehicles
         const standaloneGroups = {};
         (duties || []).forEach(d => {
             if (!d || d.status === 'Cancelled') return;
@@ -686,6 +708,9 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
             const code = (d.bookingId || '').trim();
             if (refId && coveredBookingIds.has(refId)) return;
             if (code && coveredBookingCodes.has(code)) return;
+
+            const evRef = d.eventVehicleRef ? String(d.eventVehicleRef._id || d.eventVehicleRef) : (d.outsideVehicleRef ? String(d.outsideVehicleRef._id || d.outsideVehicleRef) : '');
+            if (evRef && eventVehicleIdSet.has(evRef)) return;
 
             const gKey = refId ? `ref_${refId}` : (code && code !== 'DIRECT' && code !== 'N/A' ? `code_${code}` : `duty_${d._id}`);
             if (!standaloneGroups[gKey]) standaloneGroups[gKey] = [];
@@ -703,6 +728,8 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
             const editOverride = rideSettlementEdits[key] || {};
 
             const bRef = lastDuty.bookingRef && typeof lastDuty.bookingRef === 'object' ? lastDuty.bookingRef : null;
+            const isEvt = Boolean(lastDuty.eventId || lastDuty.eventVehicleRef);
+            const matchedEvt = isEvt ? (allCompanyEvents || []).find(e => String(e._id) === String(lastDuty.eventId?._id || lastDuty.eventId)) : null;
             const sumFare = sorted.reduce((s, item) => s + (Number(item.revenue) || 0), 0);
             const rawTotal = Number(bRef?.totalAmount) || sumFare;
             const rawAdvance = Number(bRef?.advancePaid ?? lastDuty.advancePaid ?? (lastDuty.paymentStatus === 'Full Received' ? rawTotal : 0)) || 0;
@@ -721,14 +748,30 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                 key,
                 bookingId: bRef?._id || null,
                 dutyId: lastDuty._id,
+                eventId: lastDuty.eventId ? String(lastDuty.eventId?._id || lastDuty.eventId) : null,
+                _vehicleId: lastDuty.eventVehicleRef ? String(lastDuty.eventVehicleRef?._id || lastDuty.eventVehicleRef) : (lastDuty.outsideVehicleRef ? String(lastDuty.outsideVehicleRef?._id || lastDuty.outsideVehicleRef) : null),
+                isEvent: isEvt,
+                eventName: matchedEvt?.name || matchedEvt?.eventName || 'Event',
                 bookingObj: {
                     ...(bRef || {}),
                     _id: bRef?._id || lastDuty._id,
-                    bookingCode: lastDuty.bookingId || bRef?.bookingCode || 'DRS',
+                    _vehicleId: lastDuty.eventVehicleRef ? String(lastDuty.eventVehicleRef?._id || lastDuty.eventVehicleRef) : (lastDuty.outsideVehicleRef ? String(lastDuty.outsideVehicleRef?._id || lastDuty.outsideVehicleRef) : null),
+                    _eventId: lastDuty.eventId ? String(lastDuty.eventId?._id || lastDuty.eventId) : null,
+                    isEvent: isEvt,
+                    _isEventDuty: isEvt,
+                    eventName: matchedEvt?.name || matchedEvt?.eventName || 'Event',
+                    bookingCode: lastDuty.bookingId || bRef?.bookingCode || (isEvt ? 'EVENT' : 'DRS'),
                     client: bRef?.client || lastDuty.client,
                     clientName: lastDuty.clientName || bRef?.clientName || 'Guest',
                     mobileNumber: lastDuty.mobileNumber || bRef?.mobileNumber || '',
                     vehicleType: lastDuty.carType || bRef?.vehicleType || 'Car',
+                    vehicleNumber: lastDuty.customCarNumber || lastDuty.vehicle?.carNumber || '',
+                    carNumber: lastDuty.customCarNumber || lastDuty.vehicle?.carNumber || '',
+                    driverName: lastDuty.customDriverName || lastDuty.driver?.name || '',
+                    dutyType: lastDuty.duty || '',
+                    dutyTime: lastDuty.time || '09:00 AM',
+                    dropLocation: lastDuty.hotel || '',
+                    dutyDate: normDate(lastDuty.date),
                     travelStartDate: bRef?.travelStartDate || firstDuty?.date,
                     travelEndDate: bRef?.travelEndDate || lastDuty?.date,
                     createdAt: bRef?.createdAt || firstDuty?.createdAt || firstDuty?.date,
@@ -739,7 +782,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                     balanceDue: netBalanceDue
                 },
                 dutyObj: lastDuty,
-                bookingCode: lastDuty.bookingId || bRef?.bookingCode || 'DRS',
+                bookingCode: lastDuty.bookingId || bRef?.bookingCode || (isEvt ? 'EVENT' : 'DRS'),
                 clientName: lastDuty.clientName || bRef?.clientName || 'Guest',
                 mobileNumber: lastDuty.mobileNumber || bRef?.mobileNumber || '',
                 vehicleType: lastDuty.carType || bRef?.vehicleType || 'Car',
@@ -760,8 +803,188 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
             });
         });
 
+        // 3. Add Event Duties to their respective duty date in Daily Breakdown
+        (allEventVehicles || []).forEach(ev => {
+            if (!ev) return;
+            const embeddedDate = (ev.carNumber && ev.carNumber.includes('#')) ? ev.carNumber.split('#')[1] : '';
+            const evDateStr = normDate(ev.dutyDate || ev.date || embeddedDate || ev.createdAt);
+            if (!evDateStr) return;
+
+            const evId = ev.eventId ? String(ev.eventId?._id || ev.eventId) : '';
+            const matchedEvent = (allCompanyEvents || []).find(e => String(e._id) === evId);
+            const eventName = matchedEvent?.name || matchedEvent?.eventName || matchedEvent?.client || 'Event';
+            const guestName = (ev.guestName && ev.guestName !== 'NA' ? ev.guestName : '') || ev.clientName || matchedEvent?.client || matchedEvent?.name || 'Event Guest';
+            const carPlate = ((ev.carNumber || '').split('#')[0] || ev.plateNumber || ev.customCarNumber || '').trim();
+            const driverName = ev.driverName || ev.customDriverName || '';
+            const linkedDrs = drsByEventVehicleId[String(ev._id)] || null;
+
+            const rawAmount = Number(ev.dutyAmount || ev.revenue || linkedDrs?.revenue || 0);
+            const rawAdvance = Number(linkedDrs?.advancePaid ?? ev.advancePaid ?? (linkedDrs?.paymentStatus === 'Full Received' ? rawAmount : 0)) || 0;
+
+            const key = `event_duty_${ev._id}`;
+            const editOverride = rideSettlementEdits[key] || {};
+            const totalAmount = editOverride.totalAmount !== undefined ? Number(editOverride.totalAmount) || 0 : rawAmount;
+            const advancePaid = editOverride.advancePaid !== undefined ? Number(editOverride.advancePaid) || 0 : rawAdvance;
+            const netBalanceDue = Math.max(0, totalAmount - advancePaid);
+
+            addRideToDate(evDateStr, {
+                key,
+                bookingId: null,
+                dutyId: linkedDrs?._id || ev._id,
+                _vehicleId: ev._id,
+                eventId: evId,
+                isEvent: true,
+                bookingCode: carPlate ? `${carPlate.replace(/[^a-zA-Z0-9]/g, '').slice(-4) || 'EVENT'}` : 'EVENT',
+                clientName: guestName,
+                eventName,
+                mobileNumber: ev.guestPhone || ev.mobileNumber || ev.driverMobile || matchedEvent?.clientPhone || '',
+                vehicleType: ev.model || ev.carType || 'Car',
+                carNumber: carPlate,
+                rawCarNumber: ev.carNumber || '',
+                vehicleSource: ev.vehicleSource || 'External',
+                ownerName: ev.ownerName || '',
+                buyAmount: Number(ev.buyAmount) || 0,
+                dutyAmount: totalAmount,
+                dutyType: ev.dutyType || ev.duty || `${eventName} Duty`,
+                dutyTime: ev.dutyTime || '09:00 AM',
+                dropLocation: ev.dropLocation || ev.property || matchedEvent?.location || '',
+                remarks: ev.remarks || '',
+                dutyDate: evDateStr,
+                driverName,
+                route: ev.dutyType || ev.duty || ev.itinerary || `${eventName} Duty`,
+                hotel: ev.dropLocation || ev.property || matchedEvent?.location || '',
+                startDateStr: evDateStr,
+                endDateStr: evDateStr,
+                totalDays: 1,
+                totalAmount,
+                advancePaid,
+                guestFuelFilled: false,
+                guestFuelAmount: 0,
+                netBalanceDue,
+                hasUnsavedEdits: Boolean(rideSettlementEdits[key]),
+                status: ev.status || 'Confirmed',
+                eventObj: matchedEvent,
+                vehicleObj: ev,
+                bookingObj: {
+                    _id: ev._id,
+                    _vehicleId: ev._id,
+                    _eventId: evId,
+                    bookingCode: carPlate ? `${carPlate.replace(/[^a-zA-Z0-9]/g, '').slice(-4) || 'EVENT'}` : 'EVENT',
+                    clientName: guestName,
+                    guestName: ev.guestName || guestName,
+                    mobileNumber: ev.guestPhone || ev.mobileNumber || ev.driverMobile || matchedEvent?.clientPhone || '',
+                    vehicleType: ev.model || ev.carType || 'Car',
+                    model: ev.model || ev.carType || 'Sedan',
+                    vehicleNumber: carPlate,
+                    carNumber: carPlate,
+                    rawCarNumber: ev.carNumber || '',
+                    vehicleSource: ev.vehicleSource || 'External',
+                    ownerName: ev.ownerName || '',
+                    buyAmount: Number(ev.buyAmount) || 0,
+                    dutyAmount: totalAmount,
+                    dutyType: ev.dutyType || ev.duty || `${eventName} Duty`,
+                    dutyTime: ev.dutyTime || '09:00 AM',
+                    dropLocation: ev.dropLocation || ev.property || matchedEvent?.location || '',
+                    remarks: ev.remarks || '',
+                    dutyDate: evDateStr,
+                    driverName,
+                    totalAmount,
+                    advancePaid,
+                    balanceDue: netBalanceDue,
+                    travelStartDate: evDateStr,
+                    travelEndDate: evDateStr,
+                    hotel: ev.dropLocation || ev.property || matchedEvent?.location || '',
+                    pickupLocation: ev.dutyType || ev.duty || ev.itinerary || `${eventName} Duty`,
+                    isEvent: true,
+                    _isEventDuty: true,
+                    eventName
+                },
+                dutyObj: linkedDrs || {
+                    _id: ev._id,
+                    clientName: guestName,
+                    revenue: totalAmount,
+                    advancePaid,
+                    date: evDateStr,
+                    eventId: evId,
+                    duty: ev.dutyType || ev.duty,
+                    vehicle: { carNumber: carPlate },
+                    driver: { name: driverName }
+                }
+            });
+        });
+
+        // 4. Also add Standalone Events that don't have individual vehicle entries yet
+        (allCompanyEvents || []).forEach(evt => {
+            if (!evt) return;
+            const evtId = String(evt._id);
+            const hasDuties = (allEventVehicles || []).some(ev => String(ev.eventId?._id || ev.eventId) === evtId);
+            if (!hasDuties) {
+                const evtDateStr = normDate(evt.date || evt.startDate);
+                if (evtDateStr) {
+                    const eventName = evt.name || evt.eventName || 'Event';
+                    const clientLabel = evt.client || evt.clientName || eventName;
+                    const rawAmt = Number(evt.totalAmount || evt.proformaAmount || evt.totalRevenue || 0);
+                    const rawAdv = Number(evt.advancePaid || evt.advanceAmount || evt.amountReceived || 0);
+                    const key = `event_master_${evtId}`;
+                    const editOverride = rideSettlementEdits[key] || {};
+                    const totalAmount = editOverride.totalAmount !== undefined ? Number(editOverride.totalAmount) || 0 : rawAmt;
+                    const advancePaid = editOverride.advancePaid !== undefined ? Number(editOverride.advancePaid) || 0 : rawAdv;
+                    const netBalanceDue = Math.max(0, totalAmount - advancePaid);
+
+                    addRideToDate(evtDateStr, {
+                        key,
+                        bookingId: null,
+                        dutyId: null,
+                        _vehicleId: null,
+                        eventId: evtId,
+                        isEvent: true,
+                        bookingCode: 'EVENT',
+                        clientName: clientLabel,
+                        eventName,
+                        mobileNumber: evt.clientPhone || '',
+                        vehicleType: 'Event Fleet',
+                        carNumber: '',
+                        driverName: '',
+                        route: eventName,
+                        hotel: evt.location || evt.hotel || '',
+                        startDateStr: evtDateStr,
+                        endDateStr: normDate(evt.endDate) || evtDateStr,
+                        totalDays: 1,
+                        totalAmount,
+                        advancePaid,
+                        guestFuelFilled: false,
+                        guestFuelAmount: 0,
+                        netBalanceDue,
+                        hasUnsavedEdits: Boolean(rideSettlementEdits[key]),
+                        status: evt.status || 'Upcoming',
+                        eventObj: evt,
+                        bookingObj: {
+                            _id: evtId,
+                            _eventId: evtId,
+                            _vehicleId: null,
+                            bookingCode: 'EVENT',
+                            clientName: clientLabel,
+                            mobileNumber: evt.clientPhone || '',
+                            totalAmount,
+                            advancePaid,
+                            balanceDue: netBalanceDue,
+                            travelStartDate: evtDateStr,
+                            travelEndDate: normDate(evt.endDate) || evtDateStr,
+                            hotel: evt.location || evt.hotel || '',
+                            pickupLocation: eventName,
+                            isEvent: true,
+                            _isEventDuty: true,
+                            eventName,
+                            dutyDate: evtDateStr
+                        },
+                        dutyObj: null
+                    });
+                }
+            }
+        });
+
         return byDate;
-    }, [allCompanyBookings, duties, rideSettlementEdits]);
+    }, [allCompanyBookings, allCompanyEvents, allEventVehicles, duties, rideSettlementEdits]);
 
     // Active Selected Date Settlement Summary (Left Side vs Right Side)
     const activeDateSettlement = useMemo(() => {
@@ -5088,6 +5311,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                                         }}
                                                     >
                                                         {row.rides.map((ride) => {
+                                                            const isEvent = Boolean(ride.isEvent);
                                                             return (
                                                                 <div
                                                                     key={ride.key}
@@ -5098,21 +5322,22 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                                                         gap: '8px',
                                                                         padding: '7px 10px',
                                                                         borderRadius: '7px',
-                                                                        background: 'rgba(255, 255, 255, 0.04)',
-                                                                        border: '1px solid rgba(255, 255, 255, 0.07)'
+                                                                        background: isEvent ? 'rgba(168, 85, 247, 0.08)' : 'rgba(255, 255, 255, 0.04)',
+                                                                        border: isEvent ? '1px solid rgba(168, 85, 247, 0.25)' : '1px solid rgba(255, 255, 255, 0.07)'
                                                                     }}
                                                                 >
-                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0, flex: 1 }}>
                                                                         <span style={{
                                                                             fontSize: '11px',
                                                                             fontWeight: '800',
-                                                                            color: '#fbbf24',
-                                                                            background: 'rgba(251, 191, 36, 0.15)',
+                                                                            color: isEvent ? '#d8b4fe' : '#fbbf24',
+                                                                            background: isEvent ? 'rgba(168, 85, 247, 0.2)' : 'rgba(251, 191, 36, 0.15)',
+                                                                            border: isEvent ? '1px solid rgba(168, 85, 247, 0.35)' : 'none',
                                                                             padding: '2px 6px',
                                                                             borderRadius: '4px',
                                                                             whiteSpace: 'nowrap'
                                                                         }}>
-                                                                            #{ride.bookingCode}
+                                                                            {isEvent ? (ride.eventName ? `🎉 ${ride.eventName.slice(0, 10)}` : '🎉 EVENT') : `#${ride.bookingCode}`}
                                                                         </span>
                                                                         <span style={{
                                                                             fontSize: '13px',
@@ -5121,13 +5346,22 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                                                             whiteSpace: 'nowrap',
                                                                             overflow: 'hidden',
                                                                             textOverflow: 'ellipsis'
-                                                                        }}>
+                                                                        }} title={ride.clientName}>
                                                                             {ride.clientName}
                                                                         </span>
+                                                                        {isEvent && ride.carNumber && (
+                                                                            <span style={{
+                                                                                fontSize: '10.5px',
+                                                                                color: 'rgba(255,255,255,0.45)',
+                                                                                whiteSpace: 'nowrap'
+                                                                            }}>
+                                                                                ({ride.carNumber})
+                                                                            </span>
+                                                                        )}
                                                                     </div>
 
                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', whiteSpace: 'nowrap', fontSize: '12.5px' }}>
-                                                                        <span title="Actual Package" style={{ color: '#94a3b8', fontWeight: '600' }}>
+                                                                        <span title="Total Package / Amount" style={{ color: '#94a3b8', fontWeight: '600' }}>
                                                                             ₹{ride.totalAmount.toLocaleString('en-IN')}
                                                                         </span>
                                                                         <span title="Balance Due" style={{ color: '#34d399', fontWeight: '900' }}>
@@ -5139,21 +5373,37 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                                                                 e.stopPropagation();
                                                                                 setLedgerModalBooking({
                                                                                     ...(ride.bookingObj || {}),
+                                                                                    _id: ride.bookingId || ride.dutyId || ride.eventId,
                                                                                     _realBookingId: ride.bookingId || null,
-                                                                                    _dutyForPayment: ride.dutyObj
+                                                                                    _dutyForPayment: ride.dutyObj,
+                                                                                    _vehicleId: ride._vehicleId || ride.vehicleObj?._id || ride.bookingObj?._vehicleId || null,
+                                                                                    _eventId: ride.eventId || ride.bookingObj?._eventId || null,
+                                                                                    clientName: ride.clientName,
+                                                                                    mobileNumber: ride.mobileNumber,
+                                                                                    totalAmount: ride.totalAmount,
+                                                                                    advancePaid: ride.advancePaid,
+                                                                                    balanceDue: ride.netBalanceDue,
+                                                                                    vehicleType: ride.vehicleType,
+                                                                                    vehicleNumber: ride.carNumber,
+                                                                                    driverName: ride.driverName,
+                                                                                    pickupLocation: ride.route,
+                                                                                    hotel: ride.hotel,
+                                                                                    isEvent: Boolean(ride.isEvent),
+                                                                                    _isEventDuty: Boolean(ride.isEvent),
+                                                                                    eventName: ride.eventName
                                                                                 });
                                                                             }}
                                                                             title="Open Guest Account & Ledger Statement"
                                                                             style={{
                                                                                 padding: '4px 10px',
                                                                                 borderRadius: '20px',
-                                                                                background: '#2563eb',
-                                                                                border: '1px solid rgba(59, 130, 246, 0.5)',
+                                                                                background: isEvent ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '#2563eb',
+                                                                                border: isEvent ? '1px solid rgba(168, 85, 247, 0.5)' : '1px solid rgba(59, 130, 246, 0.5)',
                                                                                 color: 'white',
                                                                                 fontSize: '11px',
                                                                                 fontWeight: '700',
                                                                                 cursor: 'pointer',
-                                                                                boxShadow: '0 2px 8px rgba(37, 99, 235, 0.35)'
+                                                                                boxShadow: isEvent ? '0 2px 8px rgba(124, 58, 237, 0.35)' : '0 2px 8px rgba(37, 99, 235, 0.35)'
                                                                             }}
                                                                         >
                                                                             Accounts
@@ -5194,6 +5444,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                         }
                     } : undefined}
                     onEntryUpdated={() => {
+                        fetchAllCompanyBookings();
                         fetchDuties();
                         fetchDropdowns();
                     }}

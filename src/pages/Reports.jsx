@@ -801,22 +801,28 @@ const Reports = ({ isSubComponent = false }) => {
                     </TD>
                     <TD><div><span style={{ color: '#10b981', fontWeight: '900', fontSize: '14px' }}>₹{rowSalaryTotal.toLocaleString()}</span>{!isOutside && bonus > 0 && <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', marginTop: '2px' }}>Base ₹{wage} + ₹{bonus} T/A</div>}{isOutside && <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', marginTop: '2px' }}>{r.transactionType || 'Duty'}</div>}</div></TD>
                     <TD noWrap>
-                        {isLogbook ? (
-                            <span style={{
-                                fontSize: '10px',
-                                fontWeight: '900',
-                                padding: '4px 10px',
-                                borderRadius: '8px',
-                                background: (r.punchOut?.nightStayAmount > 0 || String(r.outsideTrip?.tripType).toLowerCase().includes('night')) ? 'rgba(139, 92, 246, 0.12)' : (r.outsideTrip?.occurred ? 'rgba(56, 189, 248, 0.12)' : 'rgba(16, 185, 129, 0.12)'),
-                                color: (r.punchOut?.nightStayAmount > 0 || String(r.outsideTrip?.tripType).toLowerCase().includes('night')) ? '#10b981' : (r.outsideTrip?.occurred ? '#10b981' : '#10b981'),
-                                border: `1px solid ${(r.punchOut?.nightStayAmount > 0 || String(r.outsideTrip?.tripType).toLowerCase().includes('night')) ? 'rgba(139, 92, 246, 0.2)' : (r.outsideTrip?.occurred ? 'rgba(56, 189, 248, 0.2)' : 'rgba(16, 185, 129, 0.2)')}`,
-                                textTransform: 'uppercase'
-                            }}>
-                                {(r.punchOut?.nightStayAmount > 0 || String(r.outsideTrip?.tripType).toLowerCase().includes('night'))
-                                    ? 'NIGHT'
-                                    : (r.outsideTrip?.occurred ? 'SAME DAY' : 'CITY LOCAL')}
-                            </span>
-                        ) : (
+                        {isLogbook ? (() => {
+                            const isNight = Number(r.punchOut?.nightStayAmount) > 0;
+                            const isSameDay = !isNight && (Number(r.punchOut?.allowanceTA) > 0 || (r.outsideTrip?.occurred && !String(r.outsideTrip?.tripType || '').toLowerCase().includes('local')));
+                            const badgeLabel = isNight ? 'NIGHT' : (isSameDay ? 'SAME DAY' : 'CITY LOCAL');
+                            const badgeColor = isNight ? '#c084fc' : (isSameDay ? '#38bdf8' : '#10b981');
+                            const badgeBg = isNight ? 'rgba(192, 132, 252, 0.15)' : (isSameDay ? 'rgba(56, 189, 248, 0.15)' : 'rgba(16, 185, 129, 0.15)');
+                            const badgeBorder = isNight ? 'rgba(192, 132, 252, 0.3)' : (isSameDay ? 'rgba(56, 189, 248, 0.3)' : 'rgba(16, 185, 129, 0.3)');
+                            return (
+                                <span style={{
+                                    fontSize: '10px',
+                                    fontWeight: '900',
+                                    padding: '4px 10px',
+                                    borderRadius: '8px',
+                                    background: badgeBg,
+                                    color: badgeColor,
+                                    border: `1px solid ${badgeBorder}`,
+                                    textTransform: 'uppercase'
+                                }}>
+                                    {badgeLabel}
+                                </span>
+                            );
+                        })() : (
                             isOutside ? <StatusBadge ok={true} okLabel="✓ Partner" /> : (entryType.includes('attendance') ? <StatusBadge ok={isCompleted} okLabel="✓ Done" badLabel="⏳ Active" /> : <StatusBadge ok={true} okLabel="✓ Recorded" />)
                         )}
                     </TD>
