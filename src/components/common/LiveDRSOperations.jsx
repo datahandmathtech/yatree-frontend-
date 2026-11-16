@@ -5468,14 +5468,14 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                                                                         }} title={ride.clientName}>
                                                                             {ride.clientName}
                                                                         </span>
-                                                                        {ride.carNumber && (
+                                                                        {(isEvent || ride.isOutside) && ride.carNumber && (
                                                                             <span style={{
                                                                                 fontSize: '10px',
                                                                                 fontWeight: '700',
-                                                                                color: ride.isOutside && !isEvent ? '#fdba74' : 'rgba(255,255,255,0.6)',
-                                                                                background: ride.isOutside && !isEvent ? 'rgba(249, 115, 22, 0.14)' : 'rgba(255,255,255,0.06)',
-                                                                                border: ride.isOutside && !isEvent ? '1px solid rgba(249, 115, 22, 0.35)' : '1px solid rgba(255,255,255,0.12)',
-                                                                                padding: '1px 5px',
+                                                                                color: ride.isOutside && !isEvent ? '#fdba74' : 'rgba(255,255,255,0.5)',
+                                                                                background: ride.isOutside && !isEvent ? 'rgba(249, 115, 22, 0.14)' : 'transparent',
+                                                                                border: ride.isOutside && !isEvent ? '1px solid rgba(249, 115, 22, 0.35)' : 'none',
+                                                                                padding: ride.isOutside && !isEvent ? '1px 5px' : '0',
                                                                                 borderRadius: '4px',
                                                                                 whiteSpace: 'nowrap'
                                                                             }} title={ride.isOutside ? 'Outside Car Assigned' : 'Vehicle Number'}>

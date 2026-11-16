@@ -435,21 +435,68 @@ const CarUtility = () => {
         const logs = [];
         vehicles.forEach(v => {
             const act = getVehicleActivity(v._id);
-            act.items.fastag.forEach(x => logs.push({ ...x, type: 'fastag', typeLabel: 'Fastag', car: v.carNumber, carModel: v.model, color: '#38bdf8', icon: CreditCard, vehicleId: v._id }));
-            act.items.border.forEach(x => logs.push({ ...x, type: 'border', typeLabel: 'Border Tax', car: v.carNumber, carModel: v.model, color: '#fbbf24', icon: Shield, vehicleId: v._id }));
-            act.items.service.forEach(x => logs.push({ 
-                ...x, 
-                type: 'services', 
-                typeLabel: 'Other Expense', 
-                car: v.carNumber, 
-                carModel: v.model, 
-                color: '#10b981', 
-                icon: Droplets, 
-                vehicleId: v._id,
-                date: x.billDate || x.date,
-                remarks: x.remarks || x.description || '',
-                category: x.category || 'Other Misc'
-            }));
+            act.items.fastag.forEach(x => {
+                const isOther = x.paymentMode === 'Others' || x.method === 'Others' || x.paidBy === 'Others' || String(x.remarks || '').toLowerCase().includes('personal');
+                const detectedBank = x.bankName || (/hdfc/i.test(x.remarks || x.method || '') ? 'HDFC' : /icici/i.test(x.remarks || x.method || '') ? 'ICICI Bank' : /sbi/i.test(x.remarks || x.method || '') ? 'SBI' : /axis/i.test(x.remarks || x.method || '') ? 'Axis Bank' : (x.method && x.method !== 'Manual' && x.method !== 'Cash' ? x.method : null));
+                const isBank = !isOther && (Boolean(x.bankAccount) || Boolean(detectedBank) || x.paymentMode === 'UPI' || x.paymentMode === 'Bank Transfer' || x.method === 'UPI');
+                const resolvedMode = isOther ? 'Others' : (isBank ? (detectedBank || x.paymentMode || 'UPI') : (x.paymentMode || (x.method === 'Cash' ? 'Cash' : 'Cash')));
+
+                logs.push({
+                    ...x,
+                    type: 'fastag',
+                    typeLabel: 'Fastag',
+                    car: v.carNumber,
+                    carModel: v.model,
+                    color: '#38bdf8',
+                    icon: CreditCard,
+                    vehicleId: v._id,
+                    bankName: detectedBank || x.bankName || '',
+                    paymentMode: resolvedMode
+                });
+            });
+
+            act.items.border.forEach(x => {
+                const isOther = x.paymentMode === 'Others' || x.paidBy === 'Others' || String(x.remarks || '').toLowerCase().includes('personal');
+                const detectedBank = x.bankName || (/hdfc/i.test(x.remarks || x.paymentMode || '') ? 'HDFC' : /icici/i.test(x.remarks || x.paymentMode || '') ? 'ICICI Bank' : /sbi/i.test(x.remarks || x.paymentMode || '') ? 'SBI' : /axis/i.test(x.remarks || x.paymentMode || '') ? 'Axis Bank' : null);
+                const isBank = !isOther && (Boolean(x.bankAccount) || Boolean(detectedBank) || x.paymentMode === 'UPI' || x.paymentMode === 'Bank Transfer');
+                const resolvedMode = isOther ? 'Others' : (isBank ? (detectedBank || x.paymentMode || 'UPI') : (x.paymentMode || 'Cash'));
+
+                logs.push({
+                    ...x,
+                    type: 'border',
+                    typeLabel: 'Border Tax',
+                    car: v.carNumber,
+                    carModel: v.model,
+                    color: '#fbbf24',
+                    icon: Shield,
+                    vehicleId: v._id,
+                    bankName: detectedBank || x.bankName || '',
+                    paymentMode: resolvedMode
+                });
+            });
+
+            act.items.service.forEach(x => {
+                const isOther = x.paymentMode === 'Others' || x.paidBy === 'Others' || String(x.remarks || '').toLowerCase().includes('personal');
+                const detectedBank = x.bankName || (/hdfc/i.test(x.remarks || x.paymentMode || '') ? 'HDFC' : /icici/i.test(x.remarks || x.paymentMode || '') ? 'ICICI Bank' : /sbi/i.test(x.remarks || x.paymentMode || '') ? 'SBI' : /axis/i.test(x.remarks || x.paymentMode || '') ? 'Axis Bank' : null);
+                const isBank = !isOther && (Boolean(x.bankAccount) || Boolean(detectedBank) || x.paymentMode === 'UPI' || x.paymentMode === 'Bank Transfer');
+                const resolvedMode = isOther ? 'Others' : (isBank ? (detectedBank || x.paymentMode || 'UPI') : (x.paymentMode || 'Cash'));
+
+                logs.push({ 
+                    ...x, 
+                    type: 'services', 
+                    typeLabel: 'Other Expense', 
+                    car: v.carNumber, 
+                    carModel: v.model, 
+                    color: '#10b981', 
+                    icon: Droplets, 
+                    vehicleId: v._id,
+                    date: x.billDate || x.date,
+                    remarks: x.remarks || x.description || '',
+                    category: x.category || 'Other Misc',
+                    bankName: detectedBank || x.bankName || '',
+                    paymentMode: resolvedMode
+                });
+            });
         });
         // Sort newest first
         return logs.sort((a, b) => new Date(b.date || b.billDate) - new Date(a.date || a.billDate));
@@ -711,13 +758,31 @@ const CarUtility = () => {
                                                         {(!log.remarks && !log.borderName && !log.category) ? '-' : ''}
                                                     </td>
                                                     <td style={{ padding: '18px 25px', fontSize: '13px', color: 'rgba(255,255,255,0.8)', fontWeight: '700' }}>
-                                                        {(log.paymentMode === 'Others' || log.method === 'Others' || log.paidBy === 'Others') ? (
-                                                            <span style={{ color: '#c084fc', background: 'rgba(168, 85, 247, 0.12)', padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800', border: '1px solid rgba(168, 85, 247, 0.25)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                                💼 Others
-                                                            </span>
-                                                        ) : (
-                                                            log.paymentMode || 'Cash'
-                                                        )}
+                                                        {(() => {
+                                                            const isOther = log.paymentMode === 'Others' || log.method === 'Others' || log.paidBy === 'Others';
+                                                            if (isOther) {
+                                                                return (
+                                                                    <span style={{ color: '#c084fc', background: 'rgba(168, 85, 247, 0.12)', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '800', border: '1px solid rgba(168, 85, 247, 0.25)', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                                                        💼 Others
+                                                                    </span>
+                                                                );
+                                                            }
+                                                            const bName = log.bankName || (/hdfc/i.test(log.paymentMode || log.remarks || '') ? 'HDFC' : /icici/i.test(log.paymentMode || log.remarks || '') ? 'ICICI Bank' : /sbi/i.test(log.paymentMode || log.remarks || '') ? 'SBI' : /axis/i.test(log.paymentMode || log.remarks || '') ? 'Axis Bank' : null);
+                                                            const isBank = Boolean(log.bankAccount || bName || (log.paymentMode && log.paymentMode !== 'Cash' && log.paymentMode !== 'Manual'));
+                                                            if (isBank) {
+                                                                const displayBank = bName || (log.paymentMode && log.paymentMode !== 'Manual' ? log.paymentMode : 'Bank Transfer');
+                                                                return (
+                                                                    <span style={{ color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '800', border: '1px solid rgba(56, 189, 248, 0.25)', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                                                        🏦 {displayBank}
+                                                                    </span>
+                                                                );
+                                                            }
+                                                            return (
+                                                                <span style={{ color: '#10b981', background: 'rgba(16, 185, 129, 0.12)', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '800', border: '1px solid rgba(16, 185, 129, 0.25)', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                                                    💵 Cash
+                                                                </span>
+                                                            );
+                                                        })()}
                                                     </td>
                                                     <td style={{ padding: '18px 25px', textAlign: 'right', fontSize: '15px', fontWeight: '900', color: '#10b981' }}>
                                                         ₹{Number(log.amount).toLocaleString()}
@@ -1210,6 +1275,7 @@ const ManagerHub = ({ type, color, act, drivers, onAdd, onUpdate, onDelete, setV
                 const formData = new FormData();
                 formData.append('amount', form.amount);
                 formData.append('method', form.paymentMode || 'Cash');
+                formData.append('paymentMode', form.paymentMode || 'Cash');
                 formData.append('remarks', form.remarks || '');
                 formData.append('date', finalDate);
                 formData.append('paidBy', form.paidBy || (form.paymentMode === 'Others' ? 'Others' : 'Company'));

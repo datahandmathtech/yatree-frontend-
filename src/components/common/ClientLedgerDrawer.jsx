@@ -1008,9 +1008,6 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.55)', marginTop: '2px' }}>
-                                                                {entryCar ? `Car: ${entryCar} • Deducted from balance` : 'Deducted from booking balance'}
-                                                            </div>
                                                         </div>
                                                     ) : (
                                                         <div>
