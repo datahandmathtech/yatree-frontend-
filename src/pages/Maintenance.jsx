@@ -493,9 +493,13 @@ const Maintenance = () => {
                 });
             } else if (settleTarget.type === 'vendor') {
                 const vendor = settleTarget.vendor;
+                const dueBillIds = (vendor.bills || [])
+                    .filter(b => b.paymentStatus === 'Due' || (Number(b.dueAmount) > 0))
+                    .map(b => b._id);
                 await axios.post('/api/admin/maintenance/settle-vendor', {
                     companyId: selectedCompany._id,
                     vendorName: vendor.vendorName,
+                    billIds: dueBillIds.length > 0 ? dueBillIds : undefined,
                     amount: enteredAmount,
                     paymentMode: settleForm.paymentMode,
                     bankAccountId: (!isOthers && settleForm.paymentMode !== 'Cash') ? settleForm.bankAccountId : null,
