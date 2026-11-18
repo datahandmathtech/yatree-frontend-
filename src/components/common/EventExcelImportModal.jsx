@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     X, UploadCloud, FileSpreadsheet, Check, Filter, Search, Trash2,
     Calendar, Clock, User, Phone, Car, Plane, Train, MapPin, IndianRupee,
@@ -121,7 +121,8 @@ function getDefaultFare(model, travelMode, dutyType) {
     return 1100; // Sedan default
 }
 
-export default function EventExcelImportModal({ event, company, onClose, onSuccess }) {
+export default function EventExcelImportModal({ event, allEvents = [], company, onClose, onSuccess }) {
+    const [targetEvent, setTargetEvent] = useState(event);
     const [fileName, setFileName] = useState('');
     const [fileSheets, setFileSheets] = useState({});
     const [selectedSheets, setSelectedSheets] = useState([]);
@@ -150,18 +151,25 @@ export default function EventExcelImportModal({ event, company, onClose, onSucce
     const [fareStrategy, setFareStrategy] = useState('excel_or_default'); // 'excel_or_default' | 'ratecard' | 'flat_override'
     const [flatFareOverride, setFlatFareOverride] = useState('');
     // Filter 9: Default Hotel / Drop Property
-    const [defaultHotel, setDefaultHotel] = useState(event?.location || 'Hotel');
+    const [defaultHotel, setDefaultHotel] = useState(targetEvent?.location || 'Hotel');
     // Filter 10: Selected Duties / Row Checkboxes & Search
     const [selectedDutyKeys, setSelectedDutyKeys] = useState(new Set());
     const [searchQuery, setSearchQuery] = useState('');
 
+    useEffect(() => {
+        if (event) {
+            setTargetEvent(event);
+            setDefaultHotel(event.location || 'Hotel');
+        }
+    }, [event]);
+
     // Extract Event Year
     const eventYear = useMemo(() => {
-        if (event?.date) {
-            try { return new Date(event.date).getFullYear(); } catch (_) {}
+        if (targetEvent?.date) {
+            try { return new Date(targetEvent.date).getFullYear(); } catch (_) {}
         }
         return 2026;
-    }, [event]);
+    }, [targetEvent]);
 
     // Handle File Drop / Select
     const handleFileUpload = (e) => {
@@ -617,7 +625,12 @@ export default function EventExcelImportModal({ event, company, onClose, onSucce
             return;
         }
 
-        if (!window.confirm(`Are you sure you want to import ${dutiesToImport.length} duties into "${event.name}" and sync them to Live DRS?`)) {
+        if (!targetEvent?._id) {
+            alert('Please select a target event first.');
+            return;
+        }
+
+        if (!window.confirm(`Are you sure you want to import ${dutiesToImport.length} duties into "${targetEvent.name}" and sync them to Live DRS?`)) {
             return;
         }
 
@@ -633,8 +646,8 @@ export default function EventExcelImportModal({ event, company, onClose, onSucce
                 let amount = Number(d.dutyAmount) || 0;
                 if (fareStrategy === 'flat_override' && flatFareOverride) {
                     amount = Number(flatFareOverride) || amount;
-                } else if (fareStrategy === 'ratecard' && event?.rateCard?.length > 0) {
-                    const matchedRate = event.rateCard.find(r => r.vehicleModel?.toLowerCase() === d.model.toLowerCase() || r.vehicleType?.toLowerCase() === d.model.toLowerCase());
+                } else if (fareStrategy === 'ratecard' && targetEvent?.rateCard?.length > 0) {
+                    const matchedRate = targetEvent.rateCard.find(r => r.vehicleModel?.toLowerCase() === d.model.toLowerCase() || r.vehicleType?.toLowerCase() === d.model.toLowerCase());
                     if (matchedRate) amount = matchedRate.baseRate;
                 }
                 return {
@@ -653,7 +666,7 @@ export default function EventExcelImportModal({ event, company, onClose, onSucce
 
             for (let i = 0; i < finalDuties.length; i += CHUNK_SIZE) {
                 const chunk = finalDuties.slice(i, i + CHUNK_SIZE);
-                const chunkRes = await axios.post(`/api/admin/events/${event._id}/bulk-import-duties`, {
+                const chunkRes = await axios.post(`/api/admin/events/${targetEvent._id}/bulk-import-duties`, {
                     duties: chunk
                 }, {
                     ...config,
@@ -693,9 +706,41 @@ export default function EventExcelImportModal({ event, company, onClose, onSucce
                                     Live DRS Sync
                                 </span>
                             </div>
-                            <p style={{ margin: '2px 0 0 0', color: 'rgba(255,255,255,0.6)', fontSize: '12.5px' }}>
-                                Event: <strong style={{ color: '#f8fafc' }}>{event.name}</strong> • Auto-extract Bride & Groom arrivals/departures with multi-sheet filtering
-                            </p>
+                            <div style={{ margin: '4px 0 0 0', color: 'rgba(255,255,255,0.6)', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span>Target Event:</span>
+                                {allEvents.length > 1 ? (
+                                    <select
+                                        value={targetEvent?._id || ''}
+                                        onChange={(e) => {
+                                            const picked = allEvents.find(ev => String(ev._id) === e.target.value);
+                                            if (picked) {
+                                                setTargetEvent(picked);
+                                                if (picked.location) setDefaultHotel(picked.location);
+                                            }
+                                        }}
+                                        style={{
+                                            background: '#0f172a',
+                                            color: '#fbbf24',
+                                            border: '1px solid rgba(251,191,36,0.45)',
+                                            borderRadius: '8px',
+                                            padding: '4px 10px',
+                                            fontSize: '12.5px',
+                                            fontWeight: '700',
+                                            outline: 'none',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        {allEvents.map(ev => (
+                                            <option key={ev._id} value={ev._id} style={{ background: '#0f172a', color: '#f8fafc' }}>
+                                                {ev.name} ({ev.client || 'No Client'} • {ev.date ? new Date(ev.date).toLocaleDateString('en-IN') : ''})
+                                            </option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <strong style={{ color: '#f8fafc' }}>{targetEvent?.name}</strong>
+                                )}
+                                <span>• Auto-extract Bride & Groom arrivals/departures with multi-sheet filtering</span>
+                            </div>
                         </div>
                     </div>
                     <button onClick={onClose} style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>

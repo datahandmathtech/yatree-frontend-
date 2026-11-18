@@ -2020,7 +2020,10 @@ const EventManagement = () => {
                                 alert('Please create an event first before importing Excel.');
                                 return;
                             }
-                            handleOpenExcelImport(selectedEventDetails?.event || events[0] || allMasterEvents[0]);
+                            const latestByCreated = [...(events.length > 0 ? events : allMasterEvents)].sort(
+                                (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+                            );
+                            handleOpenExcelImport(selectedEventDetails?.event || latestByCreated[0] || events[0] || allMasterEvents[0]);
                         }}
                         style={{
                             height: '56px', padding: '0 20px', borderRadius: '18px',
@@ -2061,11 +2064,9 @@ const EventManagement = () => {
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: i * 0.05 }}
                         onClick={() => {
-                            if (ev.visualStatus !== 'Upcoming') {
-                                fetchEventDetails(ev._id);
-                            }
+                            fetchEventDetails(ev._id);
                         }}
-                        className={`event-row ${ev.visualStatus !== 'Upcoming' ? 'event-row-hover' : ''}`}
+                        className="event-row event-row-hover"
                         style={{
                             background: 'rgba(15, 23, 42, 0.4)',
                             border: '1px solid rgba(255,255,255,0.06)',
@@ -2125,27 +2126,28 @@ const EventManagement = () => {
 
                         {/* 3. Resource/Proforma Matrix */}
                         <div className="resource-matrix" style={{ display: 'flex', gap: '24px', alignItems: 'center', padding: '0 24px', borderLeft: '1px solid rgba(255,255,255,0.06)', borderRight: '1px solid rgba(255,255,255,0.06)', minWidth: '150px', justifyContent: 'center' }}>
-                            {statusTab === 'Start' ? (
+                            {statusTab === 'Start' && (
                                 <div style={{ textAlign: 'center' }}>
                                     <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>PROFORMA</div>
                                     <div style={{ color: '#10b981', fontSize: '16px', fontWeight: '950' }}>{ev.proformaAmount ? `₹${ev.proformaAmount.toLocaleString()}` : '-'}</div>
                                 </div>
-                                        ) : (
-                                            <>
-                                                <div style={{ textAlign: 'center' }}>
-                                                    <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>FLEET</div>
-                                                    <div style={{ color: '#38bdf8', fontSize: '16px', fontWeight: '950' }}>{ev.fleetCount || 0}</div>
-                                                </div>
-                                                <div style={{ textAlign: 'center' }}>
-                                                    <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>EXTERNAL</div>
-                                                    <div style={{ color: '#a855f7', fontSize: '16px', fontWeight: '950' }}>{ev.externalCount || 0}</div>
-                                                </div>
-                                            </>
-                                        )}
+                            )}
+                            {(statusTab !== 'Start' || (ev.fleetCount || 0) + (ev.externalCount || 0) > 0) && (
+                                <>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>FLEET</div>
+                                        <div style={{ color: '#38bdf8', fontSize: '16px', fontWeight: '950' }}>{ev.fleetCount || 0}</div>
                                     </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>EXTERNAL</div>
+                                        <div style={{ color: '#a855f7', fontSize: '16px', fontWeight: '950' }}>{ev.externalCount || 0}</div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
 
                                     {/* 4. Settlement Summary */}
-                                    {statusTab !== 'Start' && (
+                                    {(statusTab !== 'Start' || Number(ev.totalRevenue || 0) > 0 || (ev.fleetCount || 0) + (ev.externalCount || 0) > 0) && (
                                         <div className="settlement-summary" style={{
                                             background: 'rgba(16,185,129,0.05)', padding: '10px 16px', borderRadius: '14px',
                                             border: '1px solid rgba(16,185,129,0.1)', minWidth: '120px', textAlign: 'right'
@@ -2586,19 +2588,16 @@ const EventManagement = () => {
                                     >
                                         <UploadCloud size={16} /> IMPORT EXCEL (100-500 GUESTS)
                                     </button>
-                                    {selectedEventDetails.event?.status !== 'Upcoming' && (
-                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                            <button onClick={() => exportEventSpecificExcel(selectedEventDetails)} className="hide-mobile" style={{ height: '40px', padding: '0 15px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', fontWeight: '800', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><FileSpreadsheet size={16} /> EXCEL</button>
-                                            <button onClick={() => handleExportEventPDF('client')} style={{ height: '40px', padding: '0 15px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', color: '#10b981', fontWeight: '800', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><Download size={16} /> PDF</button>
-                                        </div>
-                                    )}
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        <button onClick={() => exportEventSpecificExcel(selectedEventDetails)} className="hide-mobile" style={{ height: '40px', padding: '0 15px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', fontWeight: '800', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><FileSpreadsheet size={16} /> EXCEL</button>
+                                        <button onClick={() => handleExportEventPDF('client')} style={{ height: '40px', padding: '0 15px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', color: '#10b981', fontWeight: '800', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><Download size={16} /> PDF</button>
+                                    </div>
                                     <button onClick={() => setShowDetailsModal(false)} style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', width: '40px', height: '40px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={24} /></button>
                                 </div>
                             </div>
 
                             <div style={{ padding: 'clamp(16px, 4vw, 32px)', overflowY: 'auto' }} className="premium-scroll">
                                 {/* Stats Summary */}
-                                {selectedEventDetails.event?.status !== 'Upcoming' && (
                                 <div className="stats-grid" style={{
                                     display: 'grid',
                                     gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
@@ -2631,7 +2630,6 @@ const EventManagement = () => {
                                         </div>
                                     ))}
                                 </div>
-                                )}
 
                                 {/* ═══ CONSOLIDATED DUTY LOG ═══ */}
                                 <div style={{
@@ -3879,6 +3877,7 @@ const EventManagement = () => {
                 {showExcelImportModal && excelImportTargetEvent && (
                     <EventExcelImportModal
                         event={excelImportTargetEvent}
+                        allEvents={allMasterEvents}
                         company={selectedCompany}
                         onClose={() => {
                             setShowExcelImportModal(false);
