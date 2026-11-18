@@ -3,7 +3,8 @@ import { useLocation } from 'react-router-dom';
 import axios from '../api/axios';
 import {
     Calendar, Plus, Search, Trash2, Edit, ChevronLeft, ChevronRight, Car, PlusCircle,
-    User, MapPin, Target, Briefcase, X, Save, FileSpreadsheet, Users, Building2, TruckIcon, Wallet, Navigation, Download, FileText, IndianRupee, ArrowRight, Check, Clock, Phone
+    User, MapPin, Target, Briefcase, X, Save, FileSpreadsheet, Users, Building2, TruckIcon, Wallet, Navigation, Download, FileText, IndianRupee, ArrowRight, Check, Clock, Phone,
+    UploadCloud, ArrowDownToLine
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -12,6 +13,7 @@ import { useCompany } from '../context/CompanyContext';
 import SEO from '../components/SEO';
 import * as XLSX from 'xlsx';
 import PremiumDateInput from '../components/common/PremiumDateInput';
+import EventExcelImportModal from '../components/common/EventExcelImportModal';
 import {
     todayIST,
     toISTDateString,
@@ -175,6 +177,32 @@ const EventManagement = () => {
     const [showDetailsModal, setShowDetailsModal] = useState(false);
         const [dutyFilter, setDutyFilter] = useState('All');
     const [dutyDateFilter, setDutyDateFilter] = useState('All');
+    
+    // Excel Smart Import State
+    const [showExcelImportModal, setShowExcelImportModal] = useState(false);
+    const [excelImportTargetEvent, setExcelImportTargetEvent] = useState(null);
+
+    const handleOpenExcelImport = (ev) => {
+        setExcelImportTargetEvent(ev);
+        setShowExcelImportModal(true);
+    };
+
+    const handleClearAllEventDuties = async (eventId) => {
+        if (!window.confirm('⚠️ Are you sure you want to delete ALL duties for this event from Event Management and Live DRS? This cannot be undone.')) return;
+        try {
+            const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+            await axios.post(`/api/admin/events/${eventId}/bulk-delete-duties`, { deleteAll: true }, {
+                headers: { Authorization: `Bearer ${userInfo.token}` }
+            });
+            alert('All event duties cleared successfully.');
+            fetchEventDetails(eventId);
+            fetchVehicles();
+            fetchEvents();
+        } catch (err) {
+            console.error('Error clearing event duties:', err);
+            alert('Error clearing duties: ' + (err.response?.data?.message || err.message));
+        }
+    };
     
     // Event Live DRS states (Excel View by Date)
     const curDateStr = getToday();
@@ -571,15 +599,16 @@ const EventManagement = () => {
     };
 
     const handleDeleteEvent = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this event? This will also remove associated external car duties.')) return;
+        if (!window.confirm('Are you sure you want to delete this event? This will also remove associated external car duties and Live DRS entries.')) return;
         try {
             const userInfo = JSON.parse(localStorage.getItem('userInfo'));
             await axios.delete(`/api/admin/events/${id}`, {
                 headers: { Authorization: `Bearer ${userInfo.token}` }
             });
             fetchEvents();
-            alert('Event deleted successfully');
-        } catch (err) { alert('Error deleting event'); }
+            fetchVehicles();
+            alert('Event and all associated duties deleted successfully');
+        } catch (err) { alert('Error deleting event: ' + (err.response?.data?.message || err.message)); }
     };
 
     // --- Rate Card Handlers ---
@@ -1985,6 +2014,27 @@ const EventManagement = () => {
                         </button>
                     )}
 
+                    <button
+                        onClick={() => {
+                            if (events.length === 0 && allMasterEvents.length === 0) {
+                                alert('Please create an event first before importing Excel.');
+                                return;
+                            }
+                            handleOpenExcelImport(selectedEventDetails?.event || events[0] || allMasterEvents[0]);
+                        }}
+                        style={{
+                            height: '56px', padding: '0 20px', borderRadius: '18px',
+                            border: '1px solid rgba(251,191,36,0.3)',
+                            background: 'linear-gradient(135deg, rgba(251,191,36,0.15), rgba(217,119,6,0.08))',
+                            color: '#fbbf24', fontSize: '13px', fontWeight: '950', display: 'flex', alignItems: 'center', gap: '10px',
+                            cursor: 'pointer', transition: '0.3s', letterSpacing: '0.5px', flex: 1, whiteSpace: 'nowrap',
+                            boxShadow: '0 4px 15px rgba(251,191,36,0.15)'
+                        }}
+                        title="Directly import Hotel Excel with Bride & Groom arrivals/departures into Live DRS"
+                    >
+                        <UploadCloud size={20} strokeWidth={2.5} /> Import Hotel Excel
+                    </button>
+
                 </div>
             </div>
 
@@ -2107,6 +2157,17 @@ const EventManagement = () => {
 
                                     {/* 5. Actions */}
                                     <div className="actions-block" style={{ display: 'flex', gap: '8px' }}>
+                                        <button onClick={(e) => { e.stopPropagation(); handleOpenExcelImport(ev); }}
+                                            style={{
+                                                width: '38px', height: '38px', borderRadius: '12px', background: 'rgba(251,191,36,0.1)',
+                                                border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24', cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s'
+                                            }}
+                                            className="action-btn-list"
+                                            title="Import Hotel Guest List Excel (Bride & Groom)"
+                                        >
+                                            <UploadCloud size={16} />
+                                        </button>
                                         <button onClick={(e) => { e.stopPropagation(); setSelectedEventForRates(ev); setShowRateCardModal(true); }}
                                             style={{
                                                 width: '38px', height: '38px', borderRadius: '12px', background: 'rgba(56, 189, 248, 0.1)',
@@ -2512,6 +2573,19 @@ const EventManagement = () => {
                                     </div>
                                 </div>
                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <button
+                                        onClick={() => handleOpenExcelImport(selectedEventDetails.event)}
+                                        style={{
+                                            height: '40px', padding: '0 16px', borderRadius: '10px',
+                                            background: 'linear-gradient(135deg, rgba(251,191,36,0.2), rgba(217,119,6,0.15))',
+                                            border: '1px solid rgba(251,191,36,0.4)', color: '#fbbf24',
+                                            fontWeight: '800', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px',
+                                            cursor: 'pointer', boxShadow: '0 2px 10px rgba(251,191,36,0.2)'
+                                        }}
+                                        title="Upload Hotel/Wedding Guest List Excel (Bride & Groom Arrivals/Departures)"
+                                    >
+                                        <UploadCloud size={16} /> IMPORT EXCEL (100-500 GUESTS)
+                                    </button>
                                     {selectedEventDetails.event?.status !== 'Upcoming' && (
                                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                             <button onClick={() => exportEventSpecificExcel(selectedEventDetails)} className="hide-mobile" style={{ height: '40px', padding: '0 15px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', fontWeight: '800', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><FileSpreadsheet size={16} /> EXCEL</button>
@@ -2577,7 +2651,34 @@ const EventManagement = () => {
                                             <Briefcase size={18} color="var(--primary)" />
                                             <h4 style={{ color: 'white', margin: 0, fontSize: '16px', fontWeight: '950' }}>OPERATIONAL LOGS</h4>
                                         </div>
-                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleOpenExcelImport(selectedEventDetails.event)}
+                                                style={{
+                                                    padding: '6px 12px', borderRadius: '8px',
+                                                    background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.3)',
+                                                    color: '#fbbf24', fontSize: '11px', fontWeight: '800', cursor: 'pointer',
+                                                    display: 'flex', alignItems: 'center', gap: '5px'
+                                                }}
+                                            >
+                                                <UploadCloud size={14} /> + Import Excel
+                                            </button>
+                                            {[...selectedEventDetails.fleetDuties, ...selectedEventDetails.externalDuties].length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleClearAllEventDuties(selectedEventDetails.event._id)}
+                                                    style={{
+                                                        padding: '6px 12px', borderRadius: '8px',
+                                                        background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.25)',
+                                                        color: '#f43f5e', fontSize: '11px', fontWeight: '800', cursor: 'pointer',
+                                                        display: 'flex', alignItems: 'center', gap: '5px'
+                                                    }}
+                                                    title="Delete all event duties from Event Management & Live DRS"
+                                                >
+                                                    <Trash2 size={13} /> Clear All
+                                                </button>
+                                            )}
                                             <select
                                                 value={dutyDateFilter}
                                                 onChange={(e) => setDutyDateFilter(e.target.value)}
@@ -2648,14 +2749,27 @@ const EventManagement = () => {
                                                                 </div>
                                                             </td>
                                                             <td style={{ padding: '16px 24px', textAlign: 'center' }}>
-                                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                                                    <div className="badge-duty" style={{ fontSize: '10px', display: 'inline-block' }}>{d.dutyType || 'General'}</div>
-                                                                    <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '10px', marginTop: '4px' }}>{d.dropLocation || '—'}</div>
-                                                                    {d.remarks && <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '10px', marginTop: '4px', fontStyle: 'italic' }}>{d.remarks}</div>}
+                                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                                                        <div className="badge-duty" style={{ fontSize: '10px', display: 'inline-block' }}>{d.dutyType || 'General'}</div>
+                                                                        {d.remarks?.includes('[Bride Side]') && (
+                                                                            <span style={{ fontSize: '9px', fontWeight: '800', background: 'rgba(244,114,182,0.2)', color: '#f472b6', border: '1px solid rgba(244,114,182,0.4)', padding: '1px 5px', borderRadius: '4px' }}>
+                                                                                👰 Bride
+                                                                            </span>
+                                                                        )}
+                                                                        {d.remarks?.includes('[Groom Side]') && (
+                                                                            <span style={{ fontSize: '9px', fontWeight: '800', background: 'rgba(56,189,248,0.2)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.4)', padding: '1px 5px', borderRadius: '4px' }}>
+                                                                                🤵 Groom
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px', marginTop: '2px' }}>{d.dropLocation || '—'}</div>
+                                                                    {d.remarks && <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '10px', fontStyle: 'italic', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.remarks}</div>}
                                                                 </div>
                                                             </td>
                                                             <td style={{ padding: '16px 24px', textAlign: 'center' }}>
-                                                                <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '12px', fontWeight: '700' }}>{d.guestName || '-'}</div>
+                                                                <div style={{ color: 'rgba(255,255,255,0.95)', fontSize: '13px', fontWeight: '800' }}>{d.guestName || '-'}</div>
+                                                                {d.guestCount > 1 && <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginTop: '2px' }}>{d.guestCount} Pax</div>}
                                                             </td>
                                                             <td style={{ padding: '16px 24px', textAlign: 'center' }}>
                                                                 <div style={{ color: '#10b981', fontWeight: '900', fontSize: '14px' }}>₹{Number(d.dutyAmount || 0).toLocaleString()}</div>
@@ -3757,6 +3871,27 @@ const EventManagement = () => {
                             </div>
                         </motion.div>
                     </div>
+                )}
+            </AnimatePresence>
+
+            {/* ═══ HOTEL EXCEL SMART IMPORT MODAL ═══ */}
+            <AnimatePresence>
+                {showExcelImportModal && excelImportTargetEvent && (
+                    <EventExcelImportModal
+                        event={excelImportTargetEvent}
+                        company={selectedCompany}
+                        onClose={() => {
+                            setShowExcelImportModal(false);
+                            setExcelImportTargetEvent(null);
+                        }}
+                        onSuccess={() => {
+                            fetchEvents();
+                            fetchVehicles();
+                            if (showDetailsModal && selectedEventDetails?.event?._id) {
+                                fetchEventDetails(selectedEventDetails.event._id);
+                            }
+                        }}
+                    />
                 )}
             </AnimatePresence>
 
