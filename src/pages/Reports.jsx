@@ -263,6 +263,7 @@ const Reports = ({ isSubComponent = false }) => {
     const [selectedDay, setSelectedDay] = useState(new Date(todayIST()).getDate().toString());
     const [fromDate, setFromDate] = useState(todayIST());
     const [toDate, setToDate] = useState(todayIST());
+    const [isRange, setIsRange] = useState(false);
 
     const [reportsData, setReportsData] = useState({
         attendance: [],
@@ -298,8 +299,14 @@ const Reports = ({ isSubComponent = false }) => {
         if (yearParam) setSelectedYear(Number(yearParam));
         if (dayParam) setSelectedDay(dayParam);
 
-        if (fromParam) setFromDate(fromParam);
-        if (toParam) setToDate(toParam);
+        if (fromParam) {
+            setFromDate(fromParam);
+            setIsRange(true);
+        }
+        if (toParam) {
+            setToDate(toParam);
+            setIsRange(true);
+        }
     }, [location.search]);
 
     // ── AUTO-RESET ON NAVIGATION ──
@@ -314,6 +321,7 @@ const Reports = ({ isSubComponent = false }) => {
         setSelectedMonth(istDate.getMonth());
         setSelectedYear(istDate.getFullYear());
         setSelectedDay(istDate.getDate().toString());
+        setIsRange(false);
     }, [location.pathname, location.key]);
 
     const tabList = useMemo(() => {
@@ -360,6 +368,7 @@ const Reports = ({ isSubComponent = false }) => {
     }, [tabList, location.pathname]);
 
     useEffect(() => {
+        if (isRange) return;
         if (selectedDay === 'All') {
             const start = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`;
             const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate();
@@ -371,7 +380,7 @@ const Reports = ({ isSubComponent = false }) => {
             setFromDate(d);
             setToDate(d);
         }
-    }, [selectedMonth, selectedYear, selectedDay]);
+    }, [selectedMonth, selectedYear, selectedDay, isRange]);
 
     const toggleTab = (id) => {
         if (location.pathname.includes('log-book')) {
@@ -622,7 +631,7 @@ const Reports = ({ isSubComponent = false }) => {
 
         if (sheetsAdded === 0) return alert('No data found for the selected categories.');
 
-        const dateSuffix = selectedDay === 'All' ? `${fromDate}_to_${toDate}` : fromDate;
+        const dateSuffix = isRange ? `${fromDate}_to_${toDate}` : (selectedDay === 'All' ? `${fromDate}_to_${toDate}` : fromDate);
         XLSX.writeFile(wb, `Reports_${dateSuffix}.xlsx`);
     };
 
@@ -639,11 +648,16 @@ const Reports = ({ isSubComponent = false }) => {
     const applySearch = (list) => {
         if (!searchTerm) return list;
         const t = searchTerm.toLowerCase();
-        return list.filter(r => (r.driver?.name || r.driverName || '').toLowerCase().includes(t) || (r.vehicle?.carNumber || '').toLowerCase().includes(t) || (r.driver?.mobile || '').includes(t));
+        return list.filter(r => 
+            (r.driver?.name || r.driverName || r.ownerName || '').toLowerCase().includes(t) || 
+            (r.vehicle?.carNumber || r.carNumber || '').toLowerCase().includes(t) || 
+            (r.driver?.mobile || '').includes(t)
+        );
     };
 
     /* navigate dates */
     const shiftDays = (n) => {
+        if (isRange) return;
         if (selectedDay === 'All') {
             // Shift Month
             let nm = selectedMonth + n;
@@ -1007,71 +1021,159 @@ const Reports = ({ isSubComponent = false }) => {
                             border: '1px solid rgba(255,255,255,0.08)',
                             backdropFilter: 'blur(10px)'
                         }}>
-                            {/* Date Input */}
-                            <div style={{ width: '150px' }}>
-                                <PremiumDateInput
-                                    value={selectedDay === 'All' 
-                                        ? `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01` 
-                                        : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`
-                                    }
-                                    onChange={v => {
-                                        const [y, m, d] = v.split('-');
-                                        setSelectedYear(parseInt(y));
-                                        setSelectedMonth(parseInt(m) - 1);
-                                        setSelectedDay(parseInt(d).toString());
-                                    }}
-                                />
-                            </div>
+                            {!isRange ? (
+                                <>
+                                    {/* Date Input */}
+                                    <div style={{ width: '150px' }}>
+                                        <PremiumDateInput
+                                            value={selectedDay === 'All' 
+                                                ? `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01` 
+                                                : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`
+                                            }
+                                            onChange={v => {
+                                                const [y, m, d] = v.split('-');
+                                                setSelectedYear(parseInt(y));
+                                                setSelectedMonth(parseInt(m) - 1);
+                                                setSelectedDay(parseInt(d).toString());
+                                            }}
+                                        />
+                                    </div>
 
-                            <div style={{ width: '1px', height: '30px', background: 'rgba(255,255,255,0.1)' }}></div>
+                                    <div style={{ width: '1px', height: '30px', background: 'rgba(255,255,255,0.1)' }}></div>
 
-                            {/* Search */}
-                            <div style={{ position: 'relative' }}>
-                                <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)' }} />
-                                <input
-                                    type="text"
-                                    placeholder="Search Logs..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="premium-compact-input"
-                                    style={{
-                                        height: '42px',
-                                        paddingLeft: '38px',
-                                        width: '180px',
-                                        borderRadius: '12px',
-                                        background: 'rgba(255,255,255,0.03)',
-                                        border: '1px solid rgba(255,255,255,0.05)',
-                                        color: 'white',
-                                        fontSize: '13px',
-                                        outline: 'none'
-                                    }}
-                                />
-                            </div>
+                                    {/* Search */}
+                                    <div style={{ position: 'relative' }}>
+                                        <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)' }} />
+                                        <input
+                                            type="text"
+                                            placeholder="Search Logs..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            className="premium-compact-input"
+                                            style={{
+                                                height: '42px',
+                                                paddingLeft: '38px',
+                                                width: '180px',
+                                                borderRadius: '12px',
+                                                background: 'rgba(255,255,255,0.03)',
+                                                border: '1px solid rgba(255,255,255,0.05)',
+                                                color: 'white',
+                                                fontSize: '13px',
+                                                outline: 'none'
+                                            }}
+                                        />
+                                    </div>
 
-                            <div style={{ width: '1px', height: '30px', background: 'rgba(255,255,255,0.1)' }}></div>
+                                    <div style={{ width: '1px', height: '30px', background: 'rgba(255,255,255,0.1)' }}></div>
 
-                            {/* Selectors */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', paddingRight: '5px' }}>
-                                <select
-                                    value={selectedMonth}
-                                    onChange={e => setSelectedMonth(parseInt(e.target.value))}
-                                    style={{ background: 'transparent', border: 'none', color: 'white', height: '38px', padding: '0 5px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', outline: 'none' }}
-                                >
-                                    {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((m, i) => <option key={m} value={i} style={{ background: '#0f172a' }}>{m}</option>)}
-                                </select>
-                                <select
-                                    value={selectedYear}
-                                    onChange={e => setSelectedYear(parseInt(e.target.value))}
-                                    style={{ background: 'transparent', border: 'none', color: 'white', height: '38px', padding: '0 5px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', outline: 'none' }}
-                                >
-                                    {[2024, 2025, 2026].map(y => <option key={y} value={y} style={{ background: '#0f172a' }}>{y}</option>)}
-                                </select>
-                            </div>
+                                    {/* Selectors */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', paddingRight: '5px' }}>
+                                        <select
+                                            value={selectedMonth}
+                                            onChange={e => setSelectedMonth(parseInt(e.target.value))}
+                                            style={{ background: 'transparent', border: 'none', color: 'white', height: '38px', padding: '0 5px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', outline: 'none' }}
+                                        >
+                                            {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((m, i) => <option key={m} value={i} style={{ background: '#0f172a' }}>{m}</option>)}
+                                        </select>
+                                        <select
+                                            value={selectedYear}
+                                            onChange={e => setSelectedYear(parseInt(e.target.value))}
+                                            style={{ background: 'transparent', border: 'none', color: 'white', height: '38px', padding: '0 5px', fontSize: '13px', fontWeight: '800', cursor: 'pointer', outline: 'none' }}
+                                        >
+                                            {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y} style={{ background: '#0f172a' }}>{y}</option>)}
+                                        </select>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    {/* Date Range: From */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '4px' }}>
+                                        <span style={{ fontSize: '10px', fontWeight: '900', color: 'var(--primary)', letterSpacing: '0.5px' }}>FROM</span>
+                                        <div style={{ width: '135px' }}>
+                                            <PremiumDateInput
+                                                value={fromDate}
+                                                onChange={v => setFromDate(v)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Date Range: To */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{ fontSize: '10px', fontWeight: '900', color: 'var(--primary)', letterSpacing: '0.5px' }}>TO</span>
+                                        <div style={{ width: '135px' }}>
+                                            <PremiumDateInput
+                                                value={toDate}
+                                                onChange={v => setToDate(v)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div style={{ width: '1px', height: '30px', background: 'rgba(255,255,255,0.1)' }}></div>
+
+                                    {/* Search */}
+                                    <div style={{ position: 'relative' }}>
+                                        <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)' }} />
+                                        <input
+                                            type="text"
+                                            placeholder="Search Logs..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            className="premium-compact-input"
+                                            style={{
+                                                height: '42px',
+                                                paddingLeft: '38px',
+                                                width: '180px',
+                                                borderRadius: '12px',
+                                                background: 'rgba(255,255,255,0.03)',
+                                                border: '1px solid rgba(255,255,255,0.05)',
+                                                color: 'white',
+                                                fontSize: '13px',
+                                                outline: 'none'
+                                            }}
+                                        />
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         {/* 2. Actions Group */}
                         <div style={{ display: 'flex', gap: '10px' }}>
-                            {selectedDay !== 'All' && (
+                            <motion.button
+                                whileHover={{ y: -2 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => {
+                                    if (isRange) {
+                                        setIsRange(false);
+                                        const d = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(selectedDay === 'All' ? '01' : selectedDay).padStart(2, '0')}`;
+                                        setFromDate(d);
+                                        setToDate(d);
+                                    } else {
+                                        setIsRange(true);
+                                    }
+                                }}
+                                style={{
+                                    height: '54px',
+                                    padding: '0 18px',
+                                    borderRadius: '18px',
+                                    background: isRange ? 'rgba(251, 191, 36, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                                    border: isRange ? '1px solid rgba(251, 191, 36, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
+                                    color: isRange ? 'var(--primary)' : 'rgba(255,255,255,0.7)',
+                                    fontSize: '11px',
+                                    fontWeight: '900',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '1px',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                <CalendarIcon size={14} color={isRange ? 'var(--primary)' : 'rgba(255,255,255,0.7)'} />
+                                {isRange ? 'Single Day' : 'Date Range'}
+                            </motion.button>
+
+                            {!isRange && selectedDay !== 'All' && (
                                 <motion.button
                                     whileHover={{ y: -2 }}
                                     onClick={() => setSelectedDay('All')}
@@ -1080,6 +1182,22 @@ const Reports = ({ isSubComponent = false }) => {
                                     <Calendar size={14} /> Full Month
                                 </motion.button>
                             )}
+
+                            {!isRange && selectedDay === 'All' && (
+                                <motion.button
+                                    whileHover={{ y: -2 }}
+                                    onClick={() => {
+                                        const today = new Date(todayIST());
+                                        setSelectedYear(today.getFullYear());
+                                        setSelectedMonth(today.getMonth());
+                                        setSelectedDay(today.getDate().toString());
+                                    }}
+                                    style={{ height: '54px', padding: '0 20px', borderRadius: '18px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', fontSize: '11px', fontWeight: '900', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}
+                                >
+                                    <Calendar size={14} /> Today
+                                </motion.button>
+                            )}
+
                             <motion.button
                                 whileHover={{ y: -2, background: 'rgba(16, 185, 129, 0.2)' }}
                                 whileTap={{ scale: 0.98 }}
