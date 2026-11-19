@@ -696,87 +696,6 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
             });
         });
 
-        // 1b. Lead/Booking guests who have an OUTSIDE car duty on a day other than their completion date
-        // (e.g. multi-day tour where today an outside vehicle is hired and operating)
-        const bookingById = {};
-        const bookingByCode = {};
-        (allCompanyBookings || []).forEach(b => {
-            if (!b || b.status === 'Cancelled') return;
-            if (b._id) bookingById[String(b._id)] = b;
-            const c1 = (b.bookingCode || '').trim();
-            const c2 = (b.bookingId || '').trim();
-            const c3 = (b.clientCode || '').trim();
-            if (c1) bookingByCode[c1] = b;
-            if (c2) bookingByCode[c2] = b;
-            if (c3) bookingByCode[c3] = b;
-        });
-
-        const coveredOutsideDutyIds = new Set();
-        drsSourceList.forEach(d => {
-            if (!d || d.status === 'Cancelled' || !d.isOutsideCar || d.eventId) return;
-            const refId = d.bookingRef?._id ? String(d.bookingRef._id) : (typeof d.bookingRef === 'string' ? d.bookingRef : (d.bookingRef ? String(d.bookingRef) : ''));
-            const code = (d.bookingId || '').trim();
-            const b = (refId ? bookingById[refId] : null) || (code && code !== 'DIRECT' && code !== 'N/A' ? bookingByCode[code] : null);
-            if (b && b.status === 'Cancelled') return;
-
-            const dutyDateStr = normDate(d.date);
-            const endDateStr = b ? (normDate(b.travelEndDate) || dutyDateStr) : '';
-            // If the booking already completes on this exact date, Step 1 already added the booking with its outside car badge!
-            if (b && dutyDateStr && dutyDateStr === endDateStr) return;
-            if (!dutyDateStr) return;
-
-            coveredOutsideDutyIds.add(String(d._id));
-            const bCode = (b?.bookingCode || b?.bookingId || b?.clientCode || code || 'OUTSIDE').trim();
-            const carNo = d.customCarNumber || d.vehicle?.carNumber || '';
-            const rawFare = Number(d.revenue) || 0;
-            const rawAdv = Number(d.advancePaid) || 0;
-            const rawFuelFilled = Boolean(d.guestFuelFilled);
-            const rawFuelAmount = Number(d.guestFuelAmount) || 0;
-
-            const key = `outduty_${d._id}`;
-            const editOverride = rideSettlementEdits[key] || {};
-            const totalAmount = editOverride.totalAmount !== undefined ? Number(editOverride.totalAmount) || 0 : rawFare;
-            const advancePaid = editOverride.advancePaid !== undefined ? Number(editOverride.advancePaid) || 0 : rawAdv;
-            const guestFuelFilled = editOverride.guestFuelFilled !== undefined ? Boolean(editOverride.guestFuelFilled) : rawFuelFilled;
-            const guestFuelAmount = guestFuelFilled
-                ? (editOverride.guestFuelAmount !== undefined ? Number(editOverride.guestFuelAmount) || 0 : rawFuelAmount)
-                : 0;
-            const netBalanceDue = Math.max(0, totalAmount - advancePaid - guestFuelAmount);
-
-            addRideToDate(dutyDateStr, {
-                key,
-                isOutside: true,
-                bookingId: b?._id || null,
-                dutyId: d._id,
-                bookingObj: b ? { ...b, balanceDue: Number(b.balanceDue) || 0 } : {
-                    _id: null,
-                    clientName: d.clientName,
-                    mobileNumber: d.mobileNumber,
-                    totalAmount,
-                    advancePaid,
-                    balanceDue: netBalanceDue
-                },
-                dutyObj: d,
-                bookingCode: bCode,
-                clientName: b?.clientName || d.clientName || 'Guest',
-                mobileNumber: b?.mobileNumber || d.mobileNumber || '',
-                vehicleType: d.carType || b?.vehicleType || 'Car',
-                carNumber: carNo,
-                driverName: d.customDriverName || d.driver?.name || b?.driverName || '',
-                route: d.duty || d.itinerary || b?.pickupLocation || 'Outside Car Duty',
-                hotel: d.hotel || b?.pickupLocation || '',
-                startDateStr: dutyDateStr,
-                endDateStr: dutyDateStr,
-                totalDays: 1,
-                totalAmount,
-                advancePaid,
-                guestFuelFilled,
-                guestFuelAmount,
-                netBalanceDue,
-                hasUnsavedEdits: Boolean(rideSettlementEdits[key]),
-                status: d.status || 'Assigned'
-            });
-        });
         const eventVehicleIdSet = new Set(
             (allEventVehicles || []).map(ev => ev?._id ? String(ev._id) : '').filter(Boolean)
         );
@@ -793,7 +712,6 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
         const standaloneGroups = {};
         drsSourceList.forEach(d => {
             if (!d || d.status === 'Cancelled') return;
-            if (coveredOutsideDutyIds.has(String(d._id))) return;
             const refId = d.bookingRef?._id ? String(d.bookingRef._id) : (typeof d.bookingRef === 'string' ? d.bookingRef : '');
             const code = (d.bookingId || '').trim();
             if (refId && coveredBookingIds.has(refId)) return;
