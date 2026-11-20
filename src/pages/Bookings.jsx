@@ -164,6 +164,7 @@ export default function Bookings() {
     const [cancelReason, setCancelReason] = useState('');
     const [refundAmount, setRefundAmount] = useState(0);
     const [refundMode, setRefundMode] = useState('Bank');
+    const [cancelBankAccountId, setCancelBankAccountId] = useState('');
     const [cancelling, setCancelling] = useState(false);
 
     // Assign Driver Modal State
@@ -651,14 +652,20 @@ export default function Bookings() {
             setCancelling(true);
             const reason = cancelReason.trim() || 'Date Passed & Guest did not call (No-Show)';
             if (selectedBooking._id && !String(selectedBooking._id).startsWith('bkg-mock')) {
-                await axios.post(`/api/bookings/${selectedBooking._id}/cancel`, { reason });
+                await axios.post(`/api/bookings/${selectedBooking._id}/cancel`, {
+                    reason,
+                    refundAmount: Number(refundAmount) || 0,
+                    refundMode,
+                    bankAccountId: refundMode === 'Bank' ? cancelBankAccountId : null
+                });
             }
             // Remove from active confirmed bookings
             setBookings(prev => prev.filter(b => b._id !== selectedBooking._id));
             setShowCancelModal(false);
             setCancelReason('');
-                                                                    setRefundAmount(0);
-                                                                    setRefundMode('Bank');
+            setRefundAmount(0);
+            setRefundMode('Bank');
+            setCancelBankAccountId('');
             alert(`Booking ${selectedBooking.bookingCode || selectedBooking.bookingId} cancelled and moved to Cancelled Bookings.`);
         } catch (err) {
             console.error('Error cancelling booking:', err);
@@ -2124,11 +2131,31 @@ export default function Bookings() {
                                                 onChange={e => setRefundMode(e.target.value)}
                                                 style={{ width: '100%', padding: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '4px' }}
                                             >
-                                                <option value="Bank">Bank</option>
-                                                <option value="Cash">Cash</option>
+                                                <option value="Bank">Bank Account</option>
+                                                <option value="Cash">Cash Ledger</option>
                                             </select>
                                         </div>
                                     </div>
+
+                                    {refundMode === 'Bank' && (
+                                        <div style={{ marginTop: '10px' }}>
+                                            <label style={{ display: 'block', color: 'rgba(255,255,255,0.7)', fontSize: '11px', marginBottom: '4px', fontWeight: '700' }}>
+                                                Select Bank Account (Refund Debit) *
+                                            </label>
+                                            <select
+                                                value={cancelBankAccountId}
+                                                onChange={e => setCancelBankAccountId(e.target.value)}
+                                                style={{ width: '100%', padding: '8px', background: '#09111e', border: '1px solid #38bdf8', color: 'white', borderRadius: '6px', fontSize: '12px', fontWeight: '700' }}
+                                            >
+                                                <option value="">-- Choose Bank Account --</option>
+                                                {(bankAccounts || []).map(b => (
+                                                    <option key={b._id} value={b._id}>
+                                                        {b.bankName} - {b.accountNumber ? '••••' + b.accountNumber.slice(-4) : (b.accountHolder || '')}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
                                     <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', marginTop: '8px' }}>
                                         {Number(refundAmount) === selectedBooking.advancePaid ? 
                                             "100% Refunded. Booking will move to Lost Leads." : 

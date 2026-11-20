@@ -230,9 +230,9 @@ function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, ge
 
             {isOpen && (
                 <div style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999999,
+                    position: 'absolute', top: '100%', left: 0, minWidth: '280px', zIndex: 999999,
                     background: '#0d1829', border: '1px solid #38bdf8', borderRadius: '8px',
-                    boxShadow: '0 12px 30px rgba(0,0,0,0.85)', marginTop: '4px', maxHeight: '250px',
+                    boxShadow: '0 12px 30px rgba(0,0,0,0.85)', marginTop: '4px', maxHeight: '270px',
                     display: 'flex', flexDirection: 'column', overflow: 'hidden'
                 }}>
                     <div style={{ padding: '6px', background: '#09111e', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -251,6 +251,66 @@ function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, ge
                         )}
                     </div>
                     <div style={{ overflowY: 'auto', flex: 1, padding: '4px' }}>
+                        {/* Outside Car Option on Top */}
+                        <div
+                            onClick={() => { onSelectCustom(); setIsOpen(false); }}
+                            style={{
+                                padding: '8px 10px',
+                                marginBottom: '4px',
+                                border: '1px solid rgba(245, 158, 11, 0.4)',
+                                background: 'rgba(245, 158, 11, 0.12)',
+                                cursor: 'pointer',
+                                color: '#fbbf24',
+                                fontSize: '12px',
+                                fontWeight: '900',
+                                textAlign: 'center',
+                                borderRadius: '6px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '6px'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(245, 158, 11, 0.25)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(245, 158, 11, 0.12)'}
+                        >
+                            <span>🏢 + Other / Outsourced Vehicle (Custom)</span>
+                        </div>
+
+                        {filteredOutside.length > 0 && (
+                            <div style={{ marginBottom: '6px' }}>
+                                <div style={{ fontSize: '9.5px', color: '#c084fc', fontWeight: '800', textTransform: 'uppercase', padding: '3px 8px', letterSpacing: '0.4px' }}>
+                                    Market / Outside Cars ({filteredOutside.length})
+                                </div>
+                                {filteredOutside.map(veh => (
+                                    <div
+                                        key={veh._id || veh.carNumber}
+                                        onClick={() => {
+                                            onSelectVehicle({
+                                                _id: 'custom',
+                                                carNumber: veh.carNumber || veh.plateNumber,
+                                                carType: veh.carType || veh.model,
+                                                isOutsideCar: true,
+                                                ownerName: veh.ownerName || veh.vendorName,
+                                                buyAmount: veh.buyAmount || veh.dailyRate || veh.payout || '',
+                                                driverName: veh.driverName || veh.driver?.name,
+                                                driverPhone: veh.driverPhone || veh.driver?.mobile
+                                            });
+                                            setIsOpen(false);
+                                        }}
+                                        style={{ padding: '6px 8px', borderRadius: '5px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(192, 132, 252, 0.2)'}
+                                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                    >
+                                        <div>
+                                            <span style={{ fontWeight: '800', color: '#c084fc', fontSize: '12px' }}>🏢 {veh.carNumber || veh.plateNumber}</span>
+                                            <span style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.6)', marginLeft: '6px' }}>{veh.ownerName || veh.vendorName}</span>
+                                        </div>
+                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>{veh.carType || veh.model}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
                         {filteredCompany.length > 0 && (
                             <div>
                                 <div style={{ fontSize: '9.5px', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', padding: '3px 8px', letterSpacing: '0.4px' }}>
@@ -292,51 +352,10 @@ function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, ge
                                 })}
                             </div>
                         )}
-                        {filteredOutside.length > 0 && (
-                            <div style={{ marginTop: '4px' }}>
-                                <div style={{ fontSize: '9.5px', color: '#c084fc', fontWeight: '800', textTransform: 'uppercase', padding: '3px 8px', letterSpacing: '0.4px' }}>
-                                    Market / Outside Cars ({filteredOutside.length})
-                                </div>
-                                {filteredOutside.map(veh => (
-                                    <div
-                                        key={veh._id || veh.carNumber}
-                                        onClick={() => {
-                                            onSelectVehicle({
-                                                _id: 'custom',
-                                                carNumber: veh.carNumber || veh.plateNumber,
-                                                carType: veh.carType || veh.model,
-                                                isOutsideCar: true,
-                                                ownerName: veh.ownerName || veh.vendorName,
-                                                buyAmount: veh.buyAmount || veh.dailyRate || veh.payout,
-                                                driverName: veh.driverName || veh.driver?.name,
-                                                driverPhone: veh.driverPhone || veh.driver?.mobile
-                                            });
-                                            setIsOpen(false);
-                                        }}
-                                        style={{ padding: '6px 8px', borderRadius: '5px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(192, 132, 252, 0.2)'}
-                                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                                    >
-                                        <div>
-                                            <span style={{ fontWeight: '800', color: '#c084fc', fontSize: '12px' }}>🏢 {veh.carNumber || veh.plateNumber}</span>
-                                            <span style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.6)', marginLeft: '6px' }}>{veh.ownerName || veh.vendorName}</span>
-                                        </div>
-                                        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>{veh.carType || veh.model}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+
                         {filteredCompany.length === 0 && filteredOutside.length === 0 && (
                             <div style={{ padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '11px' }}>No vehicles found for "{search}"</div>
                         )}
-                        <div
-                            onClick={() => { onSelectCustom(); setIsOpen(false); }}
-                            style={{ padding: '7px 8px', marginTop: '3px', borderTop: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', color: '#fbbf24', fontSize: '11.5px', fontWeight: '800', textAlign: 'center', borderRadius: '4px' }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(245, 158, 11, 0.15)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                        >
-                            + Other / Outsourced Vehicle (Custom)
-                        </div>
                     </div>
                 </div>
             )}
@@ -1408,8 +1427,8 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                                             vehicleNumber: veh.carNumber || veh.plateNumber || '',
                                                             vehicleType: veh.carType || veh.model || d.vehicleType,
                                                             isOutsideCar: true,
-                                                            ownerName: veh.ownerName || veh.vendorName || d.ownerName || 'Outside Vendor',
-                                                            buyAmount: veh.buyAmount || veh.dailyRate || veh.payout || d.buyAmount || '',
+                                                            ownerName: veh.ownerName || veh.vendorName || '',
+                                                            buyAmount: veh.buyAmount || veh.dailyRate || veh.payout || '',
                                                             driverName: veh.driverName || d.driverName || '',
                                                             driverPhone: veh.driverPhone || d.driverPhone || ''
                                                         };
@@ -1424,11 +1443,11 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                                     return {
                                                         ...d,
                                                         vehicleId: 'custom',
-                                                        vehicleNumber: d.isOutsideCar && d.vehicleNumber !== 'OUTSIDE-CAR' ? d.vehicleNumber : '',
+                                                        vehicleNumber: '',
                                                         vehicleType: d.vehicleType || 'Cab',
                                                         isOutsideCar: true,
-                                                        ownerName: d.isOutsideCar && d.ownerName !== 'Outside Vendor' ? d.ownerName : '',
-                                                        buyAmount: d.buyAmount || ''
+                                                        ownerName: '',
+                                                        buyAmount: ''
                                                     };
                                                 }));
                                             }}

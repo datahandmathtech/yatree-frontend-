@@ -431,7 +431,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
                 fetchCashTransactions();
             }
         }
-    }, [selectedCompany, activeTab, selectedBankId, periodType, cashPeriodType, filterDate, filterMonth, filterYear, searchTerm, cashCategoryFilter]);
+    }, [selectedCompany, activeTab, selectedBankId, periodType, cashPeriodType, filterDate, rangeStartDate, rangeEndDate, filterMonth, filterYear, searchTerm, cashCategoryFilter]);
 
     // ==========================================
     // HANDLERS: BANK BOOK
@@ -1224,7 +1224,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                 ₹{(bankStats.totalIn || 0).toLocaleString('en-IN')}
                             </div>
                             <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
-                                Bank Credit (Inflow) • {formatDateIST(filterDate)}
+                                Bank Credit (Inflow) • {periodType === 'daily' ? formatDateIST(filterDate) : (periodType === 'range' ? `${formatDateIST(rangeStartDate)} to ${formatDateIST(rangeEndDate)}` : `${MONTHS.find(m => m.val === filterMonth)?.label || filterMonth} ${filterYear}`)}
                             </div>
                         </div>
 
@@ -1239,7 +1239,7 @@ const BankBook = ({ initialTab = 'bank' }) => {
                                 ₹{(bankStats.totalOut || 0).toLocaleString('en-IN')}
                             </div>
                             <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
-                                Bank Debit (Outflow) • {formatDateIST(filterDate)}
+                                Bank Debit (Outflow) • {periodType === 'daily' ? formatDateIST(filterDate) : (periodType === 'range' ? `${formatDateIST(rangeStartDate)} to ${formatDateIST(rangeEndDate)}` : `${MONTHS.find(m => m.val === filterMonth)?.label || filterMonth} ${filterYear}`)}
                             </div>
                         </div>
                     </div>
