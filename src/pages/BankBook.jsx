@@ -44,6 +44,21 @@ const CASH_CATEGORIES = [
     'Other Expense'
 ];
 
+const MONTHS = [
+    { val: 1, label: 'Jan' },
+    { val: 2, label: 'Feb' },
+    { val: 3, label: 'Mar' },
+    { val: 4, label: 'Apr' },
+    { val: 5, label: 'May' },
+    { val: 6, label: 'Jun' },
+    { val: 7, label: 'Jul' },
+    { val: 8, label: 'Aug' },
+    { val: 9, label: 'Sep' },
+    { val: 10, label: 'Oct' },
+    { val: 11, label: 'Nov' },
+    { val: 12, label: 'Dec' }
+];
+
 const resolveReceiptUrl = (url) => {
     if (!url) return '';
     if (typeof url !== 'string') return '';
@@ -69,8 +84,14 @@ const BankBook = ({ initialTab = 'bank' }) => {
     const [bankStats, setBankStats] = useState({ totalIn: 0, totalOut: 0, periodBalance: 0, currentBalance: 0 });
     const [bankLoading, setBankLoading] = useState(true);
 
-    // Filters for Bank Book (Strictly 1-Day Book — No Carry-Forward)
+    // Filters for Bank Book (Daily / Date Range / Monthly)
     const [periodType, setPeriodType] = useState('daily');
+    const [rangeStartDate, setRangeStartDate] = useState(() => {
+        const d = new Date();
+        d.setDate(1);
+        return d.toISOString().split('T')[0];
+    });
+    const [rangeEndDate, setRangeEndDate] = useState(todayIST());
     const [cashPeriodType, setCashPeriodType] = useState('monthly'); // 'monthly' by default: "full month me sabse pehle dikhne chahiye"
     const [filterDate, setFilterDate] = useState(todayIST());
     const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
@@ -310,6 +331,8 @@ const BankBook = ({ initialTab = 'bank' }) => {
             let url = `/api/banks/transactions/company/${selectedCompany._id}?bankAccountId=${selectedBankId}`;
             if (periodType === 'daily') {
                 url += `&date=${filterDate}`;
+            } else if (periodType === 'range') {
+                url += `&startDate=${rangeStartDate}&endDate=${rangeEndDate}`;
             } else {
                 url += `&month=${filterMonth}&year=${filterYear}`;
             }
