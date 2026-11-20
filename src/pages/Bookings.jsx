@@ -1661,7 +1661,10 @@ export default function Bookings() {
                                                        }
                                                        const excludedCount = Array.isArray(bkg.excludedDates) ? bkg.excludedDates.length : 0;
                                                        const activeDaysCount = Math.max(1, tourDaysCount - excludedCount);
-                                                       const totalExpectedDuties = Math.max(drsArr.length, activeDaysCount * bkgCarsCount);
+                                                       const itinExpectedDuties = itinArr.length > 0
+                                                            ? itinArr.reduce((sum, it) => sum + Math.max(1, Number(it.quantity || it.vehicleCount) || 1), 0)
+                                                            : (activeDaysCount * bkgCarsCount);
+                                                        const totalExpectedDuties = Math.max(drsArr.length, itinExpectedDuties);
 
                                                        let pendingDutiesCount = 0;
                                                        if (drsArr.length > 0) {

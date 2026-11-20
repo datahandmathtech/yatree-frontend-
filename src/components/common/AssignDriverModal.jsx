@@ -551,8 +551,10 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                 return (itDateStr && itDateStr === defaultDateStr) || Number(it.dayNo) === dayNo;
             });
 
-            // How many cars should appear on this date
-            const carsCountForDate = Math.max(drsForThisDate.length, itinForThisDate.length, bkgCarsCount, 1);
+            // How many cars should appear on this date based on day-wise itinerary quantity
+            const dayItinCars = itinForThisDate.reduce((sum, it) => sum + Math.max(1, Number(it.quantity || it.vehicleCount) || 1), 0);
+            const dayExpectedCars = dayItinCars > 0 ? dayItinCars : bkgCarsCount;
+            const carsCountForDate = Math.max(drsForThisDate.length, dayExpectedCars, 1);
 
             for (let cIdx = 0; cIdx < carsCountForDate; cIdx++) {
                 let drsItem = drsForThisDate[cIdx];
@@ -641,10 +643,25 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                     (booking.tripDetails && finalDates.length === 1 ? booking.tripDetails : '') ||
                     '';
 
-                const amtVal =
-                    (drsItem?.revenue !== undefined && Number(drsItem.revenue) > 0)
-                        ? Number(drsItem.revenue)
-                        : (itinItem.amount !== undefined && Number(itinItem.amount) > 0 ? Number(itinItem.amount) : (itinForThisDate[0]?.amount || ''));
+                const dayRate = Number(itinItem.rate || itinForThisDate[0]?.rate) || 0;
+                const dayTotalAmt = Number(itinItem.amount || itinForThisDate[0]?.amount) || 0;
+                const dayCars = Math.max(1, Number(itinItem.quantity || itinItem.vehicleCount || itinForThisDate[0]?.quantity || itinForThisDate[0]?.vehicleCount) || carsCountForDate);
+                const perCarRate = dayRate > 0 ? dayRate : (dayTotalAmt > 0 ? Math.round(dayTotalAmt / dayCars) : 0);
+
+                let amtVal = '';
+                if (drsItem?.revenue !== undefined && Number(drsItem.revenue) > 0) {
+                    const existingRev = Number(drsItem.revenue);
+                    // If existing duty previously held the whole day's total amount and multiple cars are configured, normalize to per-car rate
+                    if (dayCars > 1 && dayTotalAmt > 0 && existingRev === dayTotalAmt && perCarRate > 0) {
+                        amtVal = perCarRate;
+                    } else {
+                        amtVal = existingRev;
+                    }
+                } else if (perCarRate > 0) {
+                    amtVal = perCarRate;
+                } else if (itinItem.amount !== undefined && Number(itinItem.amount) > 0) {
+                    amtVal = Number(itinItem.amount);
+                }
 
                 days.push({
                     dayNo,
@@ -1160,7 +1177,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                 }}
                                 title="Fill Day 1 and click here to copy same Driver & Vehicle across all days (Tours & Rates stay individual)"
                             >
-                                📋 Copy Driver & Cab to All {assignItinerary.length} Days
+                                📋 Copy Driver & Cab to All {assignItinerary.length} {assignItinerary.length === (new Set(assignItinerary.map(d => d.date)).size) ? 'Days' : 'Duties'}
                             </button>
                         )}
                         <button
