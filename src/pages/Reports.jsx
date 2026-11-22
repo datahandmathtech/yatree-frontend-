@@ -456,23 +456,13 @@ const Reports = ({ isSubComponent = false }) => {
 
     // ── AI AGENT: Summary Stats Helper ──
     const getColSummaries = (data) => {
-        if (!searchTerm || data.length === 0) return null;
-
-        const term = searchTerm.toLowerCase();
-        // Check if the search term matches any car number
-        const hasCarMatch = data.some(r => (r.vehicle?.carNumber || r.carNumber || '').toLowerCase().includes(term));
-        // Check if it matches any driver name
-        const hasDriverMatch = data.some(r => (r.driver?.name || r.driverName || '').toLowerCase().includes(term));
-
-        // Logic: Only show summaries if it's a vehicle search. 
-        // We assume it's a vehicle search if it matches a car number AND (either doesn't match a driver or has digits like a car plate)
-        if (!hasCarMatch || (hasDriverMatch && !/\d/.test(term) && term.length < 4)) return null;
+        if (!data || data.length === 0) return null;
 
         const tKM = data.reduce((s, r) => {
             const open = Number(r.punchIn?.km);
             const close = Number(r.punchOut?.km);
             const km = Number(r.totalKM) || ((open && close) ? (close - open) : 0);
-            return s + km;
+            return s + (isNaN(km) ? 0 : km);
         }, 0);
         
         const tFuel = data.reduce((s, r) => s + (Number(r.fuel?.amount) || 0), 0);
@@ -488,11 +478,43 @@ const Reports = ({ isSubComponent = false }) => {
         }, 0);
 
         return {
-            'Total KM': { value: tKM.toLocaleString() + ' KM', color: 'var(--primary)' },
-            'Fuel (₹)': { value: '₹' + tFuel.toLocaleString(), color: '#fbbf24' },
+            'Total KM': { value: tKM.toLocaleString() + ' KM', color: '#38bdf8' },
+            'Fuel (₹)': { value: '₹' + Math.round(tFuel).toLocaleString(), color: 'var(--primary)' },
             'Parking': { value: '₹' + tPark.toLocaleString(), color: '#818cf8' },
             'Salary': { value: '₹' + tSal.toLocaleString(), color: '#10b981' }
         };
+    };
+
+    const getSummaryChips = (data) => {
+        if (!data || data.length === 0) return null;
+        const tKM = data.reduce((s, r) => {
+            const open = Number(r.punchIn?.km);
+            const close = Number(r.punchOut?.km);
+            const km = Number(r.totalKM) || ((open && close) ? (close - open) : 0);
+            return s + (isNaN(km) ? 0 : km);
+        }, 0);
+        const tFuel = data.reduce((s, r) => s + (Number(r.fuel?.amount) || 0), 0);
+        const tPark = data.reduce((s, r) => {
+            const entryType = r.entryType || 'attendance';
+            return s + ((entryType === 'parking' ? Number(r.amount) : Number(r.punchOut?.tollParkingAmount)) || 0);
+        }, 0);
+        const tSal = data.reduce((s, r) => {
+            const isOutside = r.entryType === 'outsideCar';
+            const wage = Number(r.dailyWage) || 0;
+            const bonus = Math.max((Number(r.punchOut?.allowanceTA) || 0) + (Number(r.punchOut?.nightStayAmount) || 0), Number(r.outsideTrip?.bonusAmount) || 0);
+            return s + (isOutside ? (Number(r.dutyAmount) || 0) : (wage + bonus));
+        }, 0);
+        const netExpense = tFuel + tPark + tSal;
+
+        return (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <Chip label="Total KM Run" value={`${tKM.toLocaleString()} KM`} color="#38bdf8" />
+                <Chip label="Total Fuel" value={`₹${Math.round(tFuel).toLocaleString()}`} color="var(--primary)" />
+                <Chip label="Total Parking" value={`₹${tPark.toLocaleString()}`} color="#818cf8" />
+                <Chip label="Total Salary" value={`₹${tSal.toLocaleString()}`} color="#10b981" />
+                <Chip label="Net Expense" value={`₹${Math.round(netExpense).toLocaleString()}`} color="#f43f5e" />
+            </div>
+        );
     };
 
     const handleUpdateAttendance = async (id, updateData) => {
@@ -866,6 +888,7 @@ const Reports = ({ isSubComponent = false }) => {
                     <TableSection tabId="drivers" fromDate={fromDate} toDate={toDate}
                         headers={ATT_HEADERS}
                         rows={data.map((r, i) => <AttRow key={r._id || `staff-${i}`} r={r} idx={i} />)}
+                        chips={getSummaryChips(data)}
                         colSummaries={getColSummaries(data)}
                         empty="No staff driver records found."
                     />
@@ -879,6 +902,7 @@ const Reports = ({ isSubComponent = false }) => {
                     <TableSection tabId="freelancers" fromDate={fromDate} toDate={toDate}
                         headers={ATT_HEADERS}
                         rows={data.map((r, i) => <AttRow key={r._id || `freelance-${i}`} r={r} idx={i} showFreelancerCols />)}
+                        chips={getSummaryChips(data)}
                         colSummaries={getColSummaries(data)}
                         empty="No freelancer records found."
                     />
@@ -892,6 +916,7 @@ const Reports = ({ isSubComponent = false }) => {
                     <TableSection tabId="parking" fromDate={fromDate} toDate={toDate}
                         headers={ATT_HEADERS}
                         rows={data.map((r, i) => <AttRow key={r._id} r={r} idx={i} />)}
+                        chips={getSummaryChips(data)}
                         colSummaries={getColSummaries(data)}
                         empty="No standalone parking records found."
                     />
@@ -931,6 +956,7 @@ const Reports = ({ isSubComponent = false }) => {
                     <TableSection tabId="outsideCars" fromDate={fromDate} toDate={toDate}
                         headers={ATT_HEADERS}
                         rows={data.map((r, i) => <AttRow key={r._id || `outside-${i}`} r={r} idx={i} isOutside={true} />)}
+                        chips={getSummaryChips(data)}
                         colSummaries={getColSummaries(data)}
                         empty="No partner duty records found."
                     />
@@ -966,6 +992,7 @@ const Reports = ({ isSubComponent = false }) => {
                 <TableSection tabId="logbook" fromDate={fromDate} toDate={toDate}
                     headers={LOGBOOK_HEADERS}
                     rows={searchedData.map((r, i) => <AttRow key={r._id} r={r} idx={i} isLogbook />)}
+                    chips={getSummaryChips(searchedData)}
                     colSummaries={getColSummaries(searchedData)}
                     empty="No log book records found."
                 />

@@ -994,10 +994,22 @@ export default function Leads() {
             });
 
             // Populate Vehicle Matrix state from lead
-            if (lead.vehicleMatrices && Array.isArray(lead.vehicleMatrices) && lead.vehicleMatrices.length > 0) {
+            const hasLeadMatrix = (m) => m && (Number(m.totalKmRun) > 0 || Number(m.fuelCost) > 0 || Number(m.driverSalary) > 0 || Number(m.tollAndParking) > 0);
+            if (lead.vehicleMatrices && Array.isArray(lead.vehicleMatrices) && lead.vehicleMatrices.length > 0 && lead.vehicleMatrices.some(hasLeadMatrix)) {
                 setVehicleMatrices(lead.vehicleMatrices);
-            } else if (lead.vehicleMatrix && (lead.vehicleMatrix.totalKmRun || lead.vehicleMatrix.fuelCost)) {
+            } else if (hasLeadMatrix(lead.vehicleMatrix)) {
                 setVehicleMatrices([{
+                    ...createNewMatrixItem(0, lead.carType || 'Innova Crysta'),
+                    ...lead.vehicleMatrix,
+                    id: 'vm_1',
+                    title: `Option 1: ${lead.carType || 'Vehicle'}`,
+                    carType: lead.carType || 'Innova Crysta'
+                }]);
+            } else if (lead.vehicleMatrices && Array.isArray(lead.vehicleMatrices) && lead.vehicleMatrices.length > 0) {
+                setVehicleMatrices(lead.vehicleMatrices);
+            } else if (lead.vehicleMatrix && Object.keys(lead.vehicleMatrix).length > 0) {
+                setVehicleMatrices([{
+                    ...createNewMatrixItem(0, lead.carType || 'Innova Crysta'),
                     ...lead.vehicleMatrix,
                     id: 'vm_1',
                     title: `Option 1: ${lead.carType || 'Vehicle'}`,

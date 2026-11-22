@@ -791,7 +791,7 @@ export default function ClientLedgerDrawer({ booking: propBooking, onClose, onAd
             });
         });
 
-        generateClientLedgerPDF(booking, pdfRows, selectedCompany);
+        generateClientLedgerPDF({ ...booking, balanceDue, effectivePaid }, pdfRows, selectedCompany);
     };
 
     return (

@@ -140,8 +140,13 @@ export const generateClientLedgerPDF = (booking, ledgerRows, company = {}) => {
     const totalFare = Number(booking.totalAmount) || 0;
     const rowsPaidSum = (ledgerRows || []).reduce((acc, r) => acc + (Number(r.paid) || 0), 0);
     const fuelAmt = booking.guestFuelFilled ? (Number(booking.guestFuelAmount) || 0) : 0;
-    const totalPaid = Math.max((Number(booking.advancePaid) || 0) + fuelAmt, rowsPaidSum);
-    const balanceDue = booking.balanceDue !== undefined ? Number(booking.balanceDue) : Math.max(0, totalFare - totalPaid);
+    const lastRowBalance = (ledgerRows && ledgerRows.length > 0 && ledgerRows[ledgerRows.length - 1].balance !== undefined && !isNaN(ledgerRows[ledgerRows.length - 1].balance))
+        ? Number(ledgerRows[ledgerRows.length - 1].balance)
+        : undefined;
+    const balanceDue = lastRowBalance !== undefined
+        ? Math.max(0, lastRowBalance)
+        : Math.max(0, totalFare - (rowsPaidSum > 0 ? rowsPaidSum : ((Number(booking.advancePaid) || 0) + fuelAmt)));
+    const totalPaid = Math.max(0, totalFare - balanceDue);
 
     doc.setFillColor(241, 245, 249);
     doc.roundedRect(pageWidth - 95, finalY, 81, 32, 2, 2, 'F');

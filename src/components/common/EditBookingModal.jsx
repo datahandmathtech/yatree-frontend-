@@ -195,16 +195,49 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
             setGstRate(booking.gstRate || 5);
 
             // Populate Matrix
-            const matrix = booking.vehicleMatrix || {};
-            setFuelType(matrix.fuelType || 'Diesel');
-            setTotalKmRun(matrix.totalKmRun ? String(matrix.totalKmRun) : '');
-            setVehicleAverage(matrix.vehicleAverage ? String(matrix.vehicleAverage) : '');
-            setFuelRate(matrix.fuelRate ? String(matrix.fuelRate) : '');
-            setDriverSalary(matrix.driverSalary ? String(matrix.driverSalary) : '');
-            setNightHold(matrix.nightHold ? String(matrix.nightHold) : '');
-            setTollAndParking(matrix.tollAndParking ? String(matrix.tollAndParking) : '');
-            setMatrixGstAmount(matrix.gstAmount ? String(matrix.gstAmount) : '');
-            setTargetPerDay(matrix.targetPerDay ? String(matrix.targetPerDay) : '2500');
+            const hasMatrixData = (m) => m && (Number(m.totalKmRun) > 0 || Number(m.fuelCost) > 0 || Number(m.driverSalary) > 0 || Number(m.tollAndParking) > 0);
+            const valStr = (v) => (v !== undefined && v !== null && v !== '' && v !== 0 && v !== '0') ? String(v) : '';
+
+            const resolvedMatrix = hasMatrixData(booking.vehicleMatrix)
+                ? booking.vehicleMatrix
+                : (hasMatrixData(booking.lead?.vehicleMatrix)
+                    ? booking.lead.vehicleMatrix
+                    : ((Array.isArray(booking.lead?.vehicleMatrices) && booking.lead.vehicleMatrices.find(hasMatrixData))
+                        || (Array.isArray(booking.vehicleMatrices) && booking.vehicleMatrices.find(hasMatrixData))
+                        || booking.vehicleMatrix || {}));
+
+            setFuelType(resolvedMatrix.fuelType || 'Diesel');
+            setTotalKmRun(valStr(resolvedMatrix.totalKmRun));
+            setVehicleAverage(valStr(resolvedMatrix.vehicleAverage));
+            setFuelRate(valStr(resolvedMatrix.fuelRate));
+            setDriverSalary(valStr(resolvedMatrix.driverSalary));
+            setNightHold(valStr(resolvedMatrix.nightHold));
+            setTollAndParking(valStr(resolvedMatrix.tollAndParking));
+            setMatrixGstAmount(valStr(resolvedMatrix.gstAmount));
+            setTargetPerDay(resolvedMatrix.targetPerDay ? String(resolvedMatrix.targetPerDay) : '2500');
+
+            // If matrix still has no data and lead is linked, fetch lead to auto-heal
+            const leadRefId = booking.lead?._id || (typeof booking.lead === 'string' ? booking.lead : null);
+            if (!hasMatrixData(resolvedMatrix) && leadRefId) {
+                axios.get(`/api/leads/single/${leadRefId}`).then(res => {
+                    const lData = res.data;
+                    if (!lData) return;
+                    const lMatrix = hasMatrixData(lData.vehicleMatrix)
+                        ? lData.vehicleMatrix
+                        : (Array.isArray(lData.vehicleMatrices) && lData.vehicleMatrices.find(hasMatrixData));
+                    if (lMatrix) {
+                        setFuelType(prev => prev || lMatrix.fuelType || 'Diesel');
+                        setTotalKmRun(prev => prev || valStr(lMatrix.totalKmRun));
+                        setVehicleAverage(prev => prev || valStr(lMatrix.vehicleAverage));
+                        setFuelRate(prev => prev || valStr(lMatrix.fuelRate));
+                        setDriverSalary(prev => prev || valStr(lMatrix.driverSalary));
+                        setNightHold(prev => prev || valStr(lMatrix.nightHold));
+                        setTollAndParking(prev => prev || valStr(lMatrix.tollAndParking));
+                        setMatrixGstAmount(prev => prev || valStr(lMatrix.gstAmount));
+                        if (lMatrix.targetPerDay) setTargetPerDay(String(lMatrix.targetPerDay));
+                    }
+                }).catch(e => console.warn('Could not fetch lead matrix:', e));
+            }
 
             // Total and Itinerary initialization
             let itinSum = 0;
