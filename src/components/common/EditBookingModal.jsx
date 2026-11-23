@@ -60,7 +60,9 @@ const getDaysDifference = (s, e) => {
     const d1 = new Date(s);
     const d2 = new Date(e);
     if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return 1;
-    return Math.max(1, Math.round((d2 - d1) / (1000 * 60 * 60 * 24)) + 1);
+    const diffDays = Math.round((d2 - d1) / (1000 * 60 * 60 * 24)) + 1;
+    if (diffDays <= 0) return 1;
+    return Math.min(60, diffDays); // STRICT CAP: A tour booking is never more than 60 days
 };
 
 const addDaysToDateString = (dateStr, days) => {
@@ -447,58 +449,71 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
 
     // Travel Date Change handler
     const handleTravelDateChange = (field, value) => {
+        if (field === 'travelStartDate') {
+            setTravelStartDate(value);
+        } else if (field === 'travelEndDate') {
+            setTravelEndDate(value);
+        }
+
         let sDate = field === 'travelStartDate' ? value : travelStartDate;
         let eDate = field === 'travelEndDate' ? value : travelEndDate;
 
-        if (field === 'travelStartDate') {
-            setTravelStartDate(value);
-            if (value && (!eDate || eDate < value)) {
-                eDate = value;
-                setTravelEndDate(value);
-            }
-        } else if (field === 'travelEndDate') {
-            // Strictly NEVER overwrite travelStartDate when user edits travelEndDate!
-            setTravelEndDate(value);
-            if (value && sDate && value < sDate) {
+        // Validation: Must be complete YYYY-MM-DD and year must be reasonable (2020..2050)
+        const isValidDateStr = (str) => {
+            if (!str || typeof str !== 'string') return false;
+            const parts = str.split('-');
+            if (parts.length !== 3) return false;
+            const yr = parseInt(parts[0], 10);
+            const mo = parseInt(parts[1], 10);
+            const da = parseInt(parts[2], 10);
+            return yr >= 2020 && yr <= 2050 && mo >= 1 && mo <= 12 && da >= 1 && da <= 31;
+        };
+
+        if (!isValidDateStr(sDate) || !isValidDateStr(eDate)) {
+            return;
+        }
+
+        if (eDate < sDate) {
+            if (field === 'travelStartDate') {
                 eDate = sDate;
                 setTravelEndDate(sDate);
+            } else {
+                return; // Let user finish typing their desired end date
             }
         }
 
-        if (sDate && eDate) {
-            const daysCount = getDaysDifference(sDate, eDate);
-            const newItinerary = [];
-            for (let i = 0; i < daysCount; i++) {
-                const dateStr = addDaysToDateString(sDate, i);
-                if (excludedDates.includes(dateStr)) continue;
-                const existing = itinerary[newItinerary.length];
-                const isApg = existing ? existing.isApg : false;
-                const r = existing ? (Number(existing.rate) || 0) : 0;
-                const q = existing ? (Number(existing.quantity || existing.vehicleCount) || numberOfCars || 1) : (numberOfCars || 1);
+        const daysCount = Math.min(60, Math.max(1, getDaysDifference(sDate, eDate)));
+        const newItinerary = [];
+        for (let i = 0; i < daysCount; i++) {
+            const dateStr = addDaysToDateString(sDate, i);
+            if (excludedDates.includes(dateStr)) continue;
+            const existing = itinerary[newItinerary.length];
+            const isApg = existing ? existing.isApg : false;
+            const r = existing ? (Number(existing.rate) || 0) : 0;
+            const q = existing ? (Number(existing.quantity || existing.vehicleCount) || numberOfCars || 1) : (numberOfCars || 1);
 
-                newItinerary.push({
-                    dayNo: newItinerary.length + 1,
-                    date: dateStr,
-                    time: existing?.time || (isApg ? 'APG' : (newItinerary.length === 0 ? '09:00 AM' : '10:00 AM')),
-                    isApg: isApg,
-                    duty: existing?.duty || (newItinerary.length === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
-                    description: existing?.description || existing?.duty || (newItinerary.length === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
-                    vehicleType: existing?.vehicleType || vehicleType,
-                    vehicleCount: q,
-                    quantity: q,
-                    rate: r,
-                    amount: existing ? (Number(existing.amount) || (q * r)) : (q * r),
-                    pickupPoint: existing?.pickupPoint || '',
-                    vehicleNumber: existing?.vehicleNumber || '',
-                    driverName: existing?.driverName || '',
-                    driverPhone: existing?.driverPhone || ''
-                });
-            }
-            setItinerary(newItinerary);
-            const total = newItinerary.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
-            if (total > 0) {
-                setTotalAmount(total);
-            }
+            newItinerary.push({
+                dayNo: newItinerary.length + 1,
+                date: dateStr,
+                time: existing?.time || (isApg ? 'APG' : (newItinerary.length === 0 ? '09:00 AM' : '10:00 AM')),
+                isApg: isApg,
+                duty: existing?.duty || (newItinerary.length === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
+                description: existing?.description || existing?.duty || (newItinerary.length === 0 ? 'Airport Pickup & Local Sightseeing' : 'City Tour / Transfer'),
+                vehicleType: existing?.vehicleType || vehicleType,
+                vehicleCount: q,
+                quantity: q,
+                rate: r,
+                amount: existing ? (Number(existing.amount) || (q * r)) : (q * r),
+                pickupPoint: existing?.pickupPoint || '',
+                vehicleNumber: existing?.vehicleNumber || '',
+                driverName: existing?.driverName || '',
+                driverPhone: existing?.driverPhone || ''
+            });
+        }
+        setItinerary(newItinerary);
+        const total = newItinerary.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+        if (total > 0) {
+            setTotalAmount(total);
         }
     };
 
@@ -979,6 +994,8 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                                 <input
                                     required
                                     type="date"
+                                    min="2024-01-01"
+                                    max="2035-12-31"
                                     value={travelStartDate}
                                     onChange={e => handleTravelDateChange('travelStartDate', e.target.value)}
                                     style={{ ...darkInputStyle, colorScheme: 'dark' }}
@@ -990,7 +1007,8 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                                 <input
                                     required
                                     type="date"
-                                    min={travelStartDate || undefined}
+                                    min={travelStartDate || "2024-01-01"}
+                                    max="2035-12-31"
                                     value={travelEndDate}
                                     onChange={e => handleTravelDateChange('travelEndDate', e.target.value)}
                                     style={{ ...darkInputStyle, colorScheme: 'dark' }}

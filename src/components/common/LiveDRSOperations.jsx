@@ -318,7 +318,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
                 axios.get(`/api/admin/vehicles/${selectedCompany._id}?usePagination=false&type=event_all`).catch(() => ({ data: { vehicles: [] } })),
                 axios.get(`/api/drs/${selectedCompany._id}?view=all`).catch(() => ({ data: [] }))
             ]);
-            setAllCompanyBookings(Array.isArray(bRes.data) ? bRes.data : []);
+            setAllCompanyBookings(Array.isArray(bRes.data) ? bRes.data.filter(b => b && b.bookingStatus !== 'Cancelled' && b.status !== 'Cancelled') : []);
             setAllCompanyEvents(Array.isArray(eRes.data) ? eRes.data : []);
             const evList = Array.isArray(evRes.data) ? evRes.data : (evRes.data?.vehicles || []);
             setAllEventVehicles(evList.filter(v => Boolean(v?.eventId)));
@@ -538,6 +538,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
     const endingTodayBookings = useMemo(() => {
         const targetDate = todayDateStr;
         return (allCompanyBookings || []).filter(b => {
+            if (!b || b.bookingStatus === 'Cancelled' || b.status === 'Cancelled' || b.lead?.status === 'Lost' || b.lead?.status === 'Cancelled') return false;
             if (!b.travelEndDate) return false;
             const dStr = toISTDateString(b.travelEndDate);
             const rawStr = typeof b.travelEndDate === 'string' ? b.travelEndDate.split('T')[0] : '';
@@ -605,7 +606,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
         const dutiesByBkgId = {};
         const dutiesByCode = {};
         drsSourceList.forEach(d => {
-            if (!d || d.status === 'Cancelled') return;
+            if (!d || d.status === 'Cancelled' || d.bookingRef?.bookingStatus === 'Cancelled') return;
             const refId = d.bookingRef?._id ? String(d.bookingRef._id) : (typeof d.bookingRef === 'string' ? d.bookingRef : '');
             if (refId) {
                 if (!dutiesByBkgId[refId]) dutiesByBkgId[refId] = [];
@@ -620,7 +621,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
 
         // 1. Add all non-cancelled Confirmed Bookings on their completion date (travelEndDate or last active date)
         (allCompanyBookings || []).forEach(b => {
-            if (!b || b.status === 'Cancelled') return;
+            if (!b || b.bookingStatus === 'Cancelled' || b.status === 'Cancelled' || b.lead?.status === 'Lost' || b.lead?.status === 'Cancelled') return;
             const bId = String(b._id);
             const bCode = (b.bookingCode || b.bookingId || b.clientCode || '').trim();
             coveredBookingIds.add(bId);
@@ -701,7 +702,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
         );
         const drsByEventVehicleId = {};
         drsSourceList.forEach(d => {
-            if (!d || d.status === 'Cancelled') return;
+            if (!d || d.status === 'Cancelled' || d.bookingRef?.bookingStatus === 'Cancelled') return;
             const evRef = d.eventVehicleRef ? String(d.eventVehicleRef._id || d.eventVehicleRef) : (d.outsideVehicleRef ? String(d.outsideVehicleRef._id || d.outsideVehicleRef) : '');
             if (evRef) {
                 drsByEventVehicleId[evRef] = d;
@@ -711,7 +712,7 @@ export default function LiveDRSOperations({ selectedCompany, theme, onOpenCalend
         // 2. Group remaining Live DRS Duties not already covered by allCompanyBookings or allEventVehicles
         const standaloneGroups = {};
         drsSourceList.forEach(d => {
-            if (!d || d.status === 'Cancelled') return;
+            if (!d || d.status === 'Cancelled' || d.bookingRef?.bookingStatus === 'Cancelled') return;
             const refId = d.bookingRef?._id ? String(d.bookingRef._id) : (typeof d.bookingRef === 'string' ? d.bookingRef : '');
             const code = (d.bookingId || '').trim();
             if (refId && coveredBookingIds.has(refId)) return;
