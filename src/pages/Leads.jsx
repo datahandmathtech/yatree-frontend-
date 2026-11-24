@@ -1158,6 +1158,8 @@ export default function Leads() {
         try {
             await axios.put(`/api/leads/single/${lead._id}`, {
                 status: 'New',
+                bookingId: null,
+                bookingRef: null,
                 priority: lead.priority === 'Lost' ? 'Unassigned' : (lead.priority || 'Unassigned'),
                 notes: `${lead.notes ? lead.notes + ' | ' : ''}Reopened to Active enquiries`
             });
@@ -1565,8 +1567,8 @@ export default function Leads() {
     // Helper: check if lead is confirmed / advance arrived
     const isLeadConfirmed = (lead) => {
         if (!lead) return false;
-        if (lead.status === 'Cancelled' || lead.status === 'Lost' || lead.priority === 'Lost') return false;
-        return lead.status === 'Confirmed' || lead.status === 'Completed' || lead.status === 'Converted' || !!lead.bookingId || Number(lead.advancePayment) > 0;
+        if (lead.status === 'Cancelled' || lead.status === 'Lost' || lead.priority === 'Lost' || lead.status === 'New') return false;
+        return lead.status === 'Confirmed' || lead.status === 'Completed' || lead.status === 'Converted' || (!!lead.bookingId && lead.status !== 'New') || Number(lead.advancePayment) > 0;
     };
 
     // Helper: check if a confirmed lead's ride date has completed (travelEndDate < today)
