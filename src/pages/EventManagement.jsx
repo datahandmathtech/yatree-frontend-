@@ -4,7 +4,7 @@ import axios from '../api/axios';
 import {
     Calendar, Plus, Search, Trash2, Edit, ChevronLeft, ChevronRight, Car, PlusCircle,
     User, MapPin, Target, Briefcase, X, Save, FileSpreadsheet, Users, Building2, TruckIcon, Wallet, Navigation, Download, FileText, IndianRupee, ArrowRight, Check, Clock, Phone,
-    UploadCloud, ArrowDownToLine
+    UploadCloud, ArrowDownToLine, CheckCircle, XCircle, ShieldCheck
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -334,10 +334,145 @@ const EventManagement = () => {
 
     const [monthlyTarget, setMonthlyTarget] = useState(0);
     const [showEventModal, setShowEventModal] = useState(false);
+    const [showLeadModal, setShowLeadModal] = useState(false);
     const [showDutyModal, setShowDutyModal] = useState(false);
     const [isEditingEvent, setIsEditingEvent] = useState(false);
     const [isEditingDuty, setIsEditingDuty] = useState(false);
     const [selectedId, setSelectedId] = useState(null);
+
+    // Bank Accounts & Confirmation / Refund State
+    const [bankAccounts, setBankAccounts] = useState([]);
+    const [selectedBankId, setSelectedBankId] = useState('');
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [confirmingEvent, setConfirmingEvent] = useState(null);
+    const [advancePayment, setAdvancePayment] = useState('');
+    const [paymentMode, setPaymentMode] = useState('UPI / QR Code');
+    const [paymentRef, setPaymentRef] = useState('');
+    const [advancePaymentDate, setAdvancePaymentDate] = useState(todayIST());
+
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [cancellingEvent, setCancellingEvent] = useState(null);
+    const [cancelReason, setCancelReason] = useState('');
+    const [refundAmount, setRefundAmount] = useState('');
+    const [refundMode, setRefundMode] = useState('Bank Transfer / NEFT');
+    const [refundBankId, setRefundBankId] = useState('');
+
+    const [eventFormData, setEventFormData] = useState({
+        name: '',
+        client: '',
+        clientPhone: '',
+        clientEmail: '',
+        source: 'Website',
+        eventType: 'Wedding',
+        date: todayIST(),
+        startDate: todayIST(),
+        endDate: todayIST(),
+        location: '',
+        pickupLocation: '',
+        dropLocation: '',
+        itinerary: '',
+        reportingTime: '08:00 AM',
+        description: '',
+        proformaAmount: '',
+        status: 'Lead',
+        vehicleRequirements: [
+            { category: 'Sedan', model: 'Dzire', quantity: 2, rate: 2500, amount: 5000, remarks: '' }
+        ]
+    });
+
+    const [dutyFormData, setDutyFormData] = useState({
+        carNumber: '', model: '', dropLocation: '', date: '',
+        eventId: '', dutyAmount: '', ownerName: '', buyAmount: '', driverName: '', vehicleSource: 'Fleet',
+        dutyType: '', dutyTime: '', remarks: '', guestName: '', serviceId: ''
+    });
+
+    const fetchBankAccounts = async () => {
+        if (!selectedCompany?._id) return;
+        try {
+            const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+            const { data } = await axios.get(`/api/admin/bank-accounts/${selectedCompany._id}`, {
+                headers: { Authorization: `Bearer ${userInfo.token}` }
+            });
+            setBankAccounts(data || []);
+            if (data && data.length > 0) {
+                const def = data.find(b => b.isDefault) || data[0];
+                setSelectedBankId(def._id);
+                setRefundBankId(def._id);
+            }
+        } catch (err) {
+            console.error('Error fetching bank accounts:', err);
+        }
+    };
+
+    const addVehicleRow = () => {
+        setEventFormData(prev => ({
+            ...prev,
+            vehicleRequirements: [
+                ...(prev.vehicleRequirements || []),
+                { category: 'Innova Crysta', model: '', quantity: 1, rate: 4500, amount: 4500, remarks: '' }
+            ]
+        }));
+    };
+
+    const updateVehicleRow = (index, field, value) => {
+        setEventFormData(prev => {
+            const rows = [...(prev.vehicleRequirements || [])];
+            const row = { ...rows[index], [field]: value };
+            if (field === 'quantity' || field === 'rate') {
+                const q = field === 'quantity' ? Number(value) || 0 : Number(row.quantity) || 0;
+                const r = field === 'rate' ? Number(value) || 0 : Number(row.rate) || 0;
+                row.amount = q * r;
+            }
+            rows[index] = row;
+            const totalCalc = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+            return {
+                ...prev,
+                vehicleRequirements: rows,
+                proformaAmount: totalCalc > 0 ? totalCalc : prev.proformaAmount
+            };
+        });
+    };
+
+    const removeVehicleRow = (index) => {
+        setEventFormData(prev => {
+            const rows = (prev.vehicleRequirements || []).filter((_, i) => i !== index);
+            const totalCalc = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+            return {
+                ...prev,
+                vehicleRequirements: rows,
+                proformaAmount: totalCalc > 0 ? totalCalc : prev.proformaAmount
+            };
+        });
+    };
+
+    const handleOpenLeadModal = () => {
+        setIsEditingEvent(false);
+        setSelectedId(null);
+        const today = todayIST();
+        setEventFormData({
+            name: '',
+            client: '',
+            clientPhone: '',
+            clientEmail: '',
+            source: 'Website',
+            eventType: 'Wedding',
+            date: today,
+            startDate: today,
+            endDate: today,
+            location: '',
+            pickupLocation: '',
+            dropLocation: '',
+            itinerary: '',
+            reportingTime: '08:00 AM',
+            description: '',
+            proformaAmount: 5000,
+            status: 'Lead',
+            vehicleRequirements: [
+                { category: 'Sedan', model: 'Dzire', quantity: 2, rate: 2500, amount: 5000, remarks: '' }
+            ]
+        });
+        setShowLeadModal(true);
+    };
 
     const handleOpenDuty = () => {
         setIsEditingDuty(false);
@@ -372,11 +507,22 @@ const EventManagement = () => {
         setEventFormData({
             name: '',
             client: '',
+            clientPhone: '',
+            clientEmail: '',
+            source: 'Website',
+            eventType: 'Wedding',
             date: defaultDate,
+            startDate: defaultDate,
+            endDate: defaultDate,
             location: '',
+            pickupLocation: '',
+            dropLocation: '',
+            itinerary: '',
+            reportingTime: '08:00 AM',
             description: '',
             proformaAmount: '',
-            status: 'Upcoming'
+            status: 'Upcoming',
+            vehicleRequirements: []
         });
         setShowEventModal(true);
     };
@@ -384,16 +530,32 @@ const EventManagement = () => {
     const handleEditEvent = (ev) => {
         setIsEditingEvent(true);
         setSelectedId(ev._id);
+        const evDate = toISTDateString(new Date(ev.date || ev.startDate));
+        const evStart = ev.startDate ? toISTDateString(new Date(ev.startDate)) : evDate;
+        const evEnd = ev.endDate ? toISTDateString(new Date(ev.endDate)) : evDate;
         setEventFormData({
             name: ev.name,
-            client: ev.client,
-            date: toISTDateString(new Date(ev.date)),
+            client: ev.client || '',
+            clientPhone: ev.clientPhone || '',
+            clientEmail: ev.clientEmail || '',
+            source: ev.source || 'Website',
+            eventType: ev.eventType || 'Wedding',
+            date: evDate,
+            startDate: evStart,
+            endDate: evEnd,
             location: ev.location || '',
+            pickupLocation: ev.pickupLocation || '',
+            dropLocation: ev.dropLocation || '',
+            itinerary: ev.itinerary || '',
+            reportingTime: ev.reportingTime || '08:00 AM',
             description: ev.description || '',
             proformaAmount: ev.proformaAmount || '',
-            status: ev.status || 'Upcoming'
+            status: ev.status || 'Upcoming',
+            vehicleRequirements: (ev.vehicleRequirements && ev.vehicleRequirements.length > 0) ? ev.vehicleRequirements : [
+                { category: 'Sedan', model: '', quantity: 1, rate: 0, amount: 0, remarks: '' }
+            ]
         });
-        setShowEventModal(true);
+        setShowLeadModal(true);
     };
 
     const fetchEventDetails = async (eventId) => {
@@ -407,21 +569,105 @@ const EventManagement = () => {
         } catch (err) { alert('Error fetching details'); }
     };
 
-    const [eventFormData, setEventFormData] = useState({
-        name: '', client: '', date: '', location: '', description: '',
-        proformaAmount: '',
-        status: 'Upcoming'
-    });
-    const [dutyFormData, setDutyFormData] = useState({
-        carNumber: '', model: '', dropLocation: '', date: '',
-        eventId: '', dutyAmount: '', ownerName: '', buyAmount: '', driverName: '', vehicleSource: 'Fleet',
-        dutyType: '', dutyTime: '', remarks: '', guestName: '', serviceId: ''
-    });
+    const handleCreateEventLeadSubmit = async (e, forcedStatus) => {
+        if (e && e.preventDefault) e.preventDefault();
+        try {
+            const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+            const payload = {
+                ...eventFormData,
+                companyId: selectedCompany._id,
+                date: eventFormData.startDate || eventFormData.date || todayIST(),
+                status: forcedStatus || eventFormData.status || 'Lead'
+            };
+            if (isEditingEvent && selectedId) {
+                await axios.put(`/api/admin/events/${selectedId}`, payload, {
+                    headers: { Authorization: `Bearer ${userInfo.token}` }
+                });
+            } else {
+                await axios.post('/api/admin/events', payload, {
+                    headers: { Authorization: `Bearer ${userInfo.token}` }
+                });
+            }
+            setShowLeadModal(false);
+            setShowEventModal(false);
+            fetchEvents();
+            alert(`Event ${isEditingEvent ? 'updated' : 'saved'} successfully!`);
+        } catch (err) {
+            console.error(err);
+            alert('Error saving event: ' + (err.response?.data?.message || err.message));
+        }
+    };
+
+    const handleOpenConfirmModal = (ev) => {
+        setConfirmingEvent(ev);
+        setAdvancePayment('');
+        setPaymentMode('UPI / QR Code');
+        setPaymentRef('');
+        setAdvancePaymentDate(todayIST());
+        setShowConfirmModal(true);
+    };
+
+    const handleConfirmEventSubmit = async (e) => {
+        e.preventDefault();
+        if (!confirmingEvent) return;
+        try {
+            const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+            await axios.post(`/api/admin/events/${confirmingEvent._id}/confirm`, {
+                advanceAmount: Number(advancePayment) || 0,
+                paymentMode,
+                bankAccountId: selectedBankId,
+                paymentReference: paymentRef,
+                paymentDate: advancePaymentDate
+            }, {
+                headers: { Authorization: `Bearer ${userInfo.token}` }
+            });
+            setShowConfirmModal(false);
+            setConfirmingEvent(null);
+            fetchEvents();
+            alert('Event confirmed successfully! Recorded in Bank/Cash Book.');
+        } catch (err) {
+            console.error('Error confirming event:', err);
+            alert('Error confirming event: ' + (err.response?.data?.message || err.message));
+        }
+    };
+
+    const handleOpenCancelModal = (ev) => {
+        setCancellingEvent(ev);
+        setCancelReason('');
+        setRefundAmount(ev.advanceAmount ? String(ev.advanceAmount) : '');
+        setRefundMode('Bank Transfer / NEFT');
+        setShowCancelModal(true);
+    };
+
+    const handleCancelEventSubmit = async (e) => {
+        e.preventDefault();
+        if (!cancellingEvent) return;
+        try {
+            const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+            await axios.post(`/api/admin/events/${cancellingEvent._id}/cancel`, {
+                reason: cancelReason,
+                refundAmount: Number(refundAmount) || 0,
+                refundMode,
+                bankAccountId: refundBankId,
+                paymentReference: paymentRef
+            }, {
+                headers: { Authorization: `Bearer ${userInfo.token}` }
+            });
+            setShowCancelModal(false);
+            setCancellingEvent(null);
+            fetchEvents();
+            alert('Event moved to Lost / Cancelled. Refund recorded in Bank/Cash Book.');
+        } catch (err) {
+            console.error('Error cancelling event:', err);
+            alert('Error cancelling event: ' + (err.response?.data?.message || err.message));
+        }
+    };
 
     useEffect(() => {
         if (selectedCompany?._id) {
             const savedTarget = localStorage.getItem(`eventTarget_${selectedCompany._id}`);
             if (savedTarget) setMonthlyTarget(Number(savedTarget));
+            fetchBankAccounts();
             fetchEvents();
             fetchVehicles();
             fetchMasterVehicles();
@@ -456,10 +702,27 @@ const EventManagement = () => {
 
             const todayStr = todayIST();
             const allWithVisualStatus = (data || []).map(e => {
-                const evDate = toISTDateString(new Date(e.date));
+                const evStartStr = e.startDate ? toISTDateString(new Date(e.startDate)) : toISTDateString(new Date(e.date));
+                const evEndStr = e.endDate ? toISTDateString(new Date(e.endDate)) : evStartStr;
+
                 let visualStatus = e.status || 'Upcoming';
-                if (visualStatus === 'Upcoming' && evDate <= todayStr) visualStatus = 'Running';
-                return { ...e, visualStatus };
+                if (e.status === 'Lost' || e.status === 'Cancelled') {
+                    visualStatus = 'Lost';
+                } else if (e.status === 'Lead') {
+                    visualStatus = 'Lead';
+                } else if (e.status === 'Close' || e.status === 'Closed') {
+                    visualStatus = 'Closed';
+                } else {
+                    // Confirmed events dynamically classified by date
+                    if (evStartStr > todayStr) {
+                        visualStatus = 'Upcoming';
+                    } else if (evStartStr <= todayStr && evEndStr >= todayStr) {
+                        visualStatus = 'Running';
+                    } else if (evEndStr < todayStr) {
+                        visualStatus = 'Closed';
+                    }
+                }
+                return { ...e, visualStatus, evStartStr, evEndStr };
             });
             setAllMasterEvents(allWithVisualStatus);
         } catch (err) { console.error(err); }
@@ -467,13 +730,18 @@ const EventManagement = () => {
 
     const filteredMasterByDate = React.useMemo(() => {
         return allMasterEvents.filter(e => {
-            const evDate = toISTDateString(new Date(e.date));
+            if (statusTab === 'Lead' || statusTab === 'Lost') return true;
+            const evDate = toISTDateString(new Date(e.date || e.startDate));
             return evDate >= fromDate && evDate <= toDate;
         });
-    }, [allMasterEvents, fromDate, toDate]);
+    }, [allMasterEvents, fromDate, toDate, statusTab]);
 
     const currentTabEvents = React.useMemo(() => {
-        const currentTargetStatus = statusTab === 'Start' ? 'Upcoming' : statusTab === 'Close' ? 'Closed' : 'Running';
+        const currentTargetStatus = 
+            statusTab === 'Lead' ? 'Lead' :
+            statusTab === 'Start' ? 'Upcoming' :
+            statusTab === 'Close' ? 'Closed' :
+            statusTab === 'Lost' ? 'Lost' : 'Running';
         return filteredMasterByDate.filter(e => e.visualStatus === currentTargetStatus);
     }, [filteredMasterByDate, statusTab]);
 
@@ -1142,7 +1410,11 @@ const EventManagement = () => {
             const eventStatus = event?.status || '';
 
             // ONLY show duties belonging to events in the CURRENT status tab phase
-            const currentTabStatus = statusTab === 'Start' ? 'Upcoming' : statusTab === 'Close' ? 'Closed' : 'Running';
+            const currentTabStatus = 
+                statusTab === 'Lead' ? 'Lead' :
+                statusTab === 'Start' ? 'Upcoming' :
+                statusTab === 'Close' ? 'Closed' :
+                statusTab === 'Lost' ? 'Lost' : 'Running';
             if (v.eventId && eventStatus !== currentTabStatus) return false;
 
             const matchesSearch =
@@ -1886,35 +2158,37 @@ const EventManagement = () => {
                 flexWrap: 'wrap'
             }}>
                 {[
+                    { id: 'Lead', label: 'Leads', color: '#f59e0b', icon: <FileSpreadsheet size={20} />, count: allMasterEvents.filter(e => e.visualStatus === 'Lead').length },
                     { id: 'Start', label: 'Upcoming', color: '#10b981', icon: <Navigation size={20} />, count: filteredMasterByDate.filter(e => e.visualStatus === 'Upcoming').length },
                     { id: 'Running', label: 'Live Now', color: 'var(--primary)', icon: <Target size={20} />, count: filteredMasterByDate.filter(e => e.visualStatus === 'Running').length },
-                    { id: 'Close', label: 'Completed', color: '#f87171', icon: <FileSpreadsheet size={20} />, count: filteredMasterByDate.filter(e => e.visualStatus === 'Closed').length }
+                    { id: 'Close', label: 'Completed', color: '#818cf8', icon: <CheckCircle size={20} />, count: filteredMasterByDate.filter(e => e.visualStatus === 'Closed').length },
+                    { id: 'Lost', label: 'Lost', color: '#f87171', icon: <XCircle size={20} />, count: allMasterEvents.filter(e => e.visualStatus === 'Lost').length }
                 ].map((t) => (
                     <button
                         key={t.id}
                         onClick={() => setStatusTab(t.id)}
                         style={{
                             flex: 1,
-                            minWidth: 'clamp(140px, 30vw, 200px)',
-                            padding: 'clamp(12px, 3vw, 16px)',
+                            minWidth: 'clamp(120px, 18vw, 170px)',
+                            padding: 'clamp(10px, 2.5vw, 14px)',
                             borderRadius: 'clamp(14px, 3vw, 20px)',
                             border: 'none',
-                            background: statusTab === t.id ? 'rgba(255,255,255,0.05)' : 'transparent',
-                            color: statusTab === t.id ? 'white' : 'rgba(255,255,255,0.3)',
+                            background: statusTab === t.id ? 'rgba(255,255,255,0.06)' : 'transparent',
+                            color: statusTab === t.id ? 'white' : 'rgba(255,255,255,0.35)',
                             cursor: 'pointer',
                             transition: '0.4s cubic-bezier(0.4, 0, 0.2, 1)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: 'clamp(8px, 2vw, 12px)',
+                            gap: 'clamp(6px, 1.5vw, 10px)',
                             position: 'relative',
                             overflow: 'hidden'
                         }}
                     >
                         <div style={{
-                            width: 'clamp(36px, 10vw, 44px)',
-                            height: 'clamp(36px, 10vw, 44px)',
-                            borderRadius: 'clamp(10px, 3vw, 14px)',
+                            width: 'clamp(32px, 8vw, 40px)',
+                            height: 'clamp(32px, 8vw, 40px)',
+                            borderRadius: 'clamp(10px, 2.5vw, 12px)',
                             background: statusTab === t.id ? `${t.color}25` : 'rgba(255,255,255,0.03)',
                             display: 'flex',
                             alignItems: 'center',
@@ -1935,13 +2209,13 @@ const EventManagement = () => {
                             {t.icon}
                         </div>
                         <div style={{ textAlign: 'left' }}>
-                            <div style={{ fontSize: 'clamp(13px, 3vw, 15px)', fontWeight: '950', letterSpacing: '-0.2px' }}>{t.label}</div>
-                            <div style={{ fontSize: 'clamp(8px, 2vw, 10px)', color: 'rgba(255,255,255,0.25)', fontWeight: '800', marginTop: '2px', textTransform: 'uppercase' }}>
+                            <div style={{ fontSize: 'clamp(12px, 2.5vw, 14px)', fontWeight: '950', letterSpacing: '-0.2px' }}>{t.label}</div>
+                            <div style={{ fontSize: 'clamp(8px, 1.8vw, 10px)', color: 'rgba(255,255,255,0.3)', fontWeight: '800', marginTop: '1px', textTransform: 'uppercase' }}>
                                 {`${t.count} ${t.count === 1 ? 'Event' : 'Events'}`}
                             </div>
                         </div>
                         {statusTab === t.id && (
-                            <motion.div layoutId="tab-underline" style={{ position: 'absolute', bottom: '0', left: '20%', right: '20%', height: '3px', background: t.color, borderRadius: '3px 3px 0 0', boxShadow: `0 0 10px ${t.color}` }} />
+                            <motion.div layoutId="tab-underline" style={{ position: 'absolute', bottom: '0', left: '15%', right: '15%', height: '3px', background: t.color, borderRadius: '3px 3px 0 0', boxShadow: `0 0 10px ${t.color}` }} />
                         )}
                     </button>
                 ))}
@@ -1972,7 +2246,21 @@ const EventManagement = () => {
                 </div>
 
                 <div className="flex-resp" style={{ display: 'flex', gap: '12px', width: 'auto' }}>
-                    {statusTab !== 'Close' && (
+                    {/* + CREATE EVENT LEAD (Always available) */}
+                    <button onClick={handleOpenLeadModal}
+                        className="primary-btn-premium"
+                        style={{
+                            height: '56px', padding: '0 24px', borderRadius: '18px', border: 'none', cursor: 'pointer',
+                            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: 'black',
+                            fontSize: '13px', fontWeight: '950', display: 'flex', alignItems: 'center', gap: '10px',
+                            boxShadow: '0 10px 30px rgba(245,158,11,0.25)', transition: '0.3s', letterSpacing: '0.5px',
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        <PlusCircle size={20} strokeWidth={2.5} /> + CREATE EVENT LEAD
+                    </button>
+
+                    {statusTab !== 'Close' && statusTab !== 'Lost' && (
                         <button onClick={() => {
                             setIsEditingEvent(false);
                             setEventFormData({
@@ -1986,14 +2274,14 @@ const EventManagement = () => {
                         }}
                             className="primary-btn-premium"
                             style={{
-                                height: '56px', padding: '0 24px', borderRadius: '18px', border: 'none', cursor: 'pointer',
-                                background: 'linear-gradient(135deg, var(--primary) 0%, #d97706 100%)', color: 'black',
-                                fontSize: '13px', fontWeight: '950', display: 'flex', alignItems: 'center', gap: '10px',
-                                boxShadow: '0 10px 30px rgba(251,191,36,0.2)', transition: '0.3s', letterSpacing: '0.5px',
+                                height: '56px', padding: '0 20px', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.15)', cursor: 'pointer',
+                                background: 'rgba(255,255,255,0.04)', color: 'white',
+                                fontSize: '13px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px',
+                                transition: '0.3s', letterSpacing: '0.5px',
                                 flex: 1, whiteSpace: 'nowrap'
                             }}
                         >
-                            <PlusCircle size={20} strokeWidth={2.5} /> NEW MISSION
+                            <Target size={18} /> Quick Event
                         </button>
                     )}
                     {statusTab !== 'Start' && (
@@ -2084,81 +2372,159 @@ const EventManagement = () => {
                         }}
                     >
                         {/* 1. Date Block */}
-                        {statusTab !== 'Start' && (
-                            <div className="date-block" style={{
-                                width: 'clamp(60px, 15vw, 80px)', padding: '10px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)',
-                                border: '1px solid rgba(255,255,255,0.06)', textAlign: 'center', flexShrink: 0
-                            }}>
-                                <div style={{ fontSize: '9px', color: 'var(--primary)', fontWeight: '950', letterSpacing: '1px', textTransform: 'uppercase' }}>{new Date(ev.date).toLocaleDateString('en-IN', { month: '2-digit' }) === 'Invalid Date' ? '--' : new Date(ev.date).toLocaleDateString('en-IN', { month: 'short' })}</div>
-                                <div style={{ fontSize: 'clamp(20px, 5vw, 24px)', color: 'white', fontWeight: '950', lineHeight: 1 }}>{new Date(ev.date).getDate()}</div>
-                                <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', fontWeight: '800' }}>{new Date(ev.date).getFullYear()}</div>
+                        <div className="date-block" style={{
+                            width: 'clamp(60px, 15vw, 80px)', padding: '10px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)',
+                            border: '1px solid rgba(255,255,255,0.06)', textAlign: 'center', flexShrink: 0
+                        }}>
+                            <div style={{ fontSize: '9px', color: 'var(--primary)', fontWeight: '950', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                                {new Date(ev.startDate || ev.date).toLocaleDateString('en-IN', { month: '2-digit' }) === 'Invalid Date' ? '--' : new Date(ev.startDate || ev.date).toLocaleDateString('en-IN', { month: 'short' })}
                             </div>
-                        )}
+                            <div style={{ fontSize: 'clamp(20px, 5vw, 24px)', color: 'white', fontWeight: '950', lineHeight: 1 }}>
+                                {new Date(ev.startDate || ev.date).getDate() || '--'}
+                            </div>
+                            <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', fontWeight: '800' }}>
+                                {new Date(ev.startDate || ev.date).getFullYear() || ''}
+                            </div>
+                        </div>
 
                         {/* 2. Event Body */}
                         <div className="event-body" style={{ flex: 1 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
                                 <h3 style={{ color: 'white', fontSize: 'clamp(16px, 4vw, 18px)', fontWeight: '950', margin: 0, letterSpacing: '-0.3px' }}>{ev.name}</h3>
                                 <div className="status-badge" style={{
-                                    padding: '3px 10px', borderRadius: '8px', fontSize: '8px', fontWeight: '900',
-                                    background: ev.visualStatus === 'Running' ? 'rgba(251,191,36,0.1)' : ev.visualStatus === 'Upcoming' ? 'rgba(16,185,129,0.1)' : 'rgba(248,113,113,0.1)',
-                                    color: ev.visualStatus === 'Running' ? 'var(--primary)' : ev.visualStatus === 'Upcoming' ? '#10b981' : '#f87171',
-                                    border: `1px solid ${ev.visualStatus === 'Running' ? 'rgba(251,191,36,0.2)' : ev.visualStatus === 'Upcoming' ? 'rgba(16,185,129,0.2)' : 'rgba(248,113,113,0.2)'}`,
+                                    padding: '3px 10px', borderRadius: '8px', fontSize: '9px', fontWeight: '900',
+                                    background: ev.visualStatus === 'Running' ? 'rgba(251,191,36,0.1)' :
+                                                ev.visualStatus === 'Upcoming' ? 'rgba(16,185,129,0.1)' :
+                                                ev.visualStatus === 'Lead' ? 'rgba(245,158,11,0.15)' :
+                                                ev.visualStatus === 'Closed' ? 'rgba(129,140,248,0.1)' : 'rgba(248,113,113,0.15)',
+                                    color: ev.visualStatus === 'Running' ? 'var(--primary)' :
+                                           ev.visualStatus === 'Upcoming' ? '#10b981' :
+                                           ev.visualStatus === 'Lead' ? '#f59e0b' :
+                                           ev.visualStatus === 'Closed' ? '#818cf8' : '#f87171',
+                                    border: `1px solid ${
+                                        ev.visualStatus === 'Running' ? 'rgba(251,191,36,0.2)' :
+                                        ev.visualStatus === 'Upcoming' ? 'rgba(16,185,129,0.2)' :
+                                        ev.visualStatus === 'Lead' ? 'rgba(245,158,11,0.3)' :
+                                        ev.visualStatus === 'Closed' ? 'rgba(129,140,248,0.25)' : 'rgba(248,113,113,0.3)'
+                                    }`,
                                     textTransform: 'uppercase', letterSpacing: '0.5px'
                                 }}>
-                                    {ev.visualStatus === 'Running' ? 'LIVE NOW' : ev.visualStatus.toUpperCase()}
+                                    {ev.visualStatus === 'Running' ? 'LIVE NOW' : ev.visualStatus === 'Lead' ? 'LEAD / QUOTE' : ev.visualStatus.toUpperCase()}
                                 </div>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.6)', fontSize: '13px', fontWeight: '800' }}>
-                                    <Calendar size={14} color="#10b981" /> {formatDateIST(ev.date)}
+                                    <Calendar size={14} color="#10b981" /> {formatDateIST(ev.startDate || ev.date)}
+                                    {ev.endDate && toISTDateString(new Date(ev.endDate)) !== toISTDateString(new Date(ev.startDate || ev.date)) ? ` ➔ ${formatDateIST(ev.endDate)}` : ''}
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.4)', fontSize: '13px', fontWeight: '700' }}>
-                                    <Briefcase size={14} color="var(--primary)" /> {ev.client}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.6)', fontSize: '13px', fontWeight: '700' }}>
+                                    <Briefcase size={14} color="var(--primary)" /> {ev.client || 'Client'}
+                                    {ev.clientPhone && <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px' }}>({ev.clientPhone})</span>}
                                 </div>
-                                {ev.location && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.25)', fontSize: '13px', fontWeight: '600' }}>
-                                        <MapPin size={14} color="#f87171" /> {ev.location}
+                                {(ev.pickupLocation || ev.dropLocation || ev.location) && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'rgba(255,255,255,0.4)', fontSize: '13px', fontWeight: '600' }}>
+                                        <MapPin size={14} color="#f87171" />
+                                        {ev.pickupLocation ? `${ev.pickupLocation} ➔ ${ev.dropLocation || ev.location || ''}` : ev.location}
                                     </div>
+                                )}
+                            </div>
+
+                            {/* Additional Metadata Chips */}
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap' }}>
+                                {ev.vehicleRequirements && ev.vehicleRequirements.length > 0 && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800' }}>
+                                        <Car size={12} /> {ev.vehicleRequirements.reduce((sum, vr) => sum + (Number(vr.quantity) || 1), 0)} Cars ({ev.vehicleRequirements.map(v => `${v.quantity}x ${v.category}`).join(', ')})
+                                    </span>
+                                )}
+                                {ev.advanceAmount > 0 && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.3)', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800' }}>
+                                        <Wallet size={12} /> Advance: ₹{Number(ev.advanceAmount).toLocaleString()}
+                                    </span>
+                                )}
+                                {ev.visualStatus === 'Lost' && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(239, 68, 68, 0.12)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.25)', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800' }}>
+                                        <XCircle size={12} /> Reason: {ev.lostReason || 'Cancelled'} {ev.refundAmount > 0 ? `(Refunded ₹${ev.refundAmount})` : ''}
+                                    </span>
                                 )}
                             </div>
                         </div>
 
                         {/* 3. Resource/Proforma Matrix */}
-                        <div className="resource-matrix" style={{ display: 'flex', gap: '24px', alignItems: 'center', padding: '0 24px', borderLeft: '1px solid rgba(255,255,255,0.06)', borderRight: '1px solid rgba(255,255,255,0.06)', minWidth: '150px', justifyContent: 'center' }}>
-                            {statusTab === 'Start' && (
-                                <div style={{ textAlign: 'center' }}>
-                                    <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>PROFORMA</div>
-                                    <div style={{ color: '#10b981', fontSize: '16px', fontWeight: '950' }}>{ev.proformaAmount ? `₹${ev.proformaAmount.toLocaleString()}` : '-'}</div>
+                        <div className="resource-matrix" style={{ display: 'flex', gap: '20px', alignItems: 'center', padding: '0 20px', borderLeft: '1px solid rgba(255,255,255,0.06)', borderRight: '1px solid rgba(255,255,255,0.06)', minWidth: '150px', justifyContent: 'center' }}>
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>
+                                    {ev.visualStatus === 'Lead' ? 'QUOTATION' : 'PROFORMA'}
                                 </div>
-                            )}
-                            {(statusTab !== 'Start' || (ev.fleetCount || 0) + (ev.externalCount || 0) > 0) && (
+                                <div style={{ color: '#fbbf24', fontSize: '16px', fontWeight: '950' }}>{ev.proformaAmount ? `₹${Number(ev.proformaAmount).toLocaleString()}` : '-'}</div>
+                            </div>
+                            {(ev.fleetCount || 0) + (ev.externalCount || 0) > 0 && (
                                 <>
                                     <div style={{ textAlign: 'center' }}>
                                         <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>FLEET</div>
-                                        <div style={{ color: '#38bdf8', fontSize: '16px', fontWeight: '950' }}>{ev.fleetCount || 0}</div>
+                                        <div style={{ color: '#38bdf8', fontSize: '15px', fontWeight: '950' }}>{ev.fleetCount || 0}</div>
                                     </div>
                                     <div style={{ textAlign: 'center' }}>
                                         <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.2)', fontWeight: '900', marginBottom: '2px', letterSpacing: '0.5px' }}>EXTERNAL</div>
-                                        <div style={{ color: '#a855f7', fontSize: '16px', fontWeight: '950' }}>{ev.externalCount || 0}</div>
+                                        <div style={{ color: '#a855f7', fontSize: '15px', fontWeight: '950' }}>{ev.externalCount || 0}</div>
                                     </div>
                                 </>
                             )}
                         </div>
 
-                                    {/* 4. Settlement Summary */}
-                                    {(statusTab !== 'Start' || Number(ev.totalRevenue || 0) > 0 || (ev.fleetCount || 0) + (ev.externalCount || 0) > 0) && (
-                                        <div className="settlement-summary" style={{
-                                            background: 'rgba(16,185,129,0.05)', padding: '10px 16px', borderRadius: '14px',
-                                            border: '1px solid rgba(16,185,129,0.1)', minWidth: '120px', textAlign: 'right'
-                                        }}>
-                                            <div style={{ fontSize: '8px', color: 'rgba(16,185,129,0.5)', fontWeight: '900', marginBottom: '2px', textTransform: 'uppercase' }}>Duty Value</div>
-                                            <div style={{ color: '#10b981', fontSize: '16px', fontWeight: '950' }}>₹{Number(ev.totalRevenue || 0).toLocaleString()}</div>
-                                        </div>
-                                    )}
+                        {/* 4. Settlement Summary */}
+                        {Number(ev.totalRevenue || 0) > 0 && (
+                            <div className="settlement-summary" style={{
+                                background: 'rgba(16,185,129,0.05)', padding: '10px 16px', borderRadius: '14px',
+                                border: '1px solid rgba(16,185,129,0.1)', minWidth: '120px', textAlign: 'right'
+                            }}>
+                                <div style={{ fontSize: '8px', color: 'rgba(16,185,129,0.5)', fontWeight: '900', marginBottom: '2px', textTransform: 'uppercase' }}>Duty Value</div>
+                                <div style={{ color: '#10b981', fontSize: '16px', fontWeight: '950' }}>₹{Number(ev.totalRevenue || 0).toLocaleString()}</div>
+                            </div>
+                        )}
 
-                                    {/* 5. Actions */}
-                                    <div className="actions-block" style={{ display: 'flex', gap: '8px' }}>
+                        {/* 5. Actions */}
+                        <div className="actions-block" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            {/* Confirm Event Action for Leads */}
+                            {ev.visualStatus === 'Lead' && (
+                                <button onClick={(e) => { e.stopPropagation(); handleOpenConfirmModal(ev); }}
+                                    style={{
+                                        height: '38px', padding: '0 12px', borderRadius: '12px', background: 'rgba(34, 197, 94, 0.15)',
+                                        border: '1px solid rgba(34, 197, 94, 0.35)', color: '#4ade80', cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '900'
+                                    }}
+                                    title="Confirm Event & Record Advance into Bank/Cash Book"
+                                >
+                                    <CheckCircle size={15} /> Confirm Event
+                                </button>
+                            )}
+
+                            {/* Mark as Lost for Leads */}
+                            {ev.visualStatus === 'Lead' && (
+                                <button onClick={(e) => { e.stopPropagation(); handleOpenCancelModal(ev); }}
+                                    style={{
+                                        height: '38px', padding: '0 10px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.12)',
+                                        border: '1px solid rgba(239, 68, 68, 0.25)', color: '#f87171', cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: '800'
+                                    }}
+                                    title="Mark Event as Lost"
+                                >
+                                    <XCircle size={15} /> Lost
+                                </button>
+                            )}
+
+                            {/* Cancel / Refund for Upcoming / Running */}
+                            {(ev.visualStatus === 'Upcoming' || ev.visualStatus === 'Running') && (
+                                <button onClick={(e) => { e.stopPropagation(); handleOpenCancelModal(ev); }}
+                                    style={{
+                                        height: '38px', padding: '0 10px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.12)',
+                                        border: '1px solid rgba(239, 68, 68, 0.25)', color: '#f87171', cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: '800'
+                                    }}
+                                    title="Cancel Event & Process Refund (Deducts from Bank/Cash Book)"
+                                >
+                                    <XCircle size={15} /> Cancel / Refund
+                                </button>
+                            )}
                                         <button onClick={(e) => { e.stopPropagation(); handleOpenExcelImport(ev); }}
                                             style={{
                                                 width: '38px', height: '38px', borderRadius: '12px', background: 'rgba(251,191,36,0.1)',
@@ -2979,6 +3345,552 @@ const EventManagement = () => {
                                         flex: 2, height: '56px', borderRadius: '16px', background: 'linear-gradient(to right, var(--primary), var(--primary))',
                                         color: 'black', fontWeight: '900', fontSize: '15px', letterSpacing: '1px', border: 'none'
                                     }}>{isEditingEvent ? 'UPDATE' : 'SUBMIT'}</button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* ═══ CREATE EVENT LEAD & MULTI-VEHICLE QUOTATION MODAL ═══ */}
+            <AnimatePresence>
+                {showLeadModal && (
+                    <div className="modal-overlay" style={{ zIndex: 10020 }}>
+                        <motion.div
+                            initial={{ y: 50, opacity: 0, scale: 0.95 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            exit={{ y: 20, opacity: 0, scale: 0.98 }}
+                            className="premium-scroll"
+                            style={{
+                                width: 'min(95%, 960px)',
+                                maxHeight: '92vh',
+                                overflowY: 'auto',
+                                borderRadius: '28px',
+                                background: '#0a101f',
+                                border: '1px solid rgba(245, 158, 11, 0.3)',
+                                position: 'relative',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                boxShadow: '0 40px 100px rgba(0,0,0,0.8)'
+                            }}
+                        >
+                            {/* Header */}
+                            <div style={{
+                                background: 'linear-gradient(to right, rgba(245, 158, 11, 0.12), rgba(15, 23, 42, 0.6))',
+                                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                                padding: '24px 32px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                    <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}>
+                                        <FileSpreadsheet size={22} />
+                                    </div>
+                                    <div>
+                                        <h3 style={{ margin: 0, fontSize: '20px', fontWeight: '950', color: 'white', letterSpacing: '-0.3px' }}>
+                                            {isEditingEvent ? 'Edit Event Lead / Quotation' : 'Create Event Lead & Vehicle Quotation'}
+                                        </h3>
+                                        <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'rgba(255,255,255,0.45)', fontWeight: '600' }}>
+                                            Client details, multi-vehicle requirements sheet, and tour quotation
+                                        </p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowLeadModal(false)} className="close-btn" style={{
+                                    background: 'rgba(255,255,255,0.04)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)',
+                                    color: 'white', padding: '8px', cursor: 'pointer'
+                                }}><X size={18} /></button>
+                            </div>
+
+                            {/* Form Body */}
+                            <form onSubmit={(e) => handleCreateEventLeadSubmit(e)} style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                                
+                                {/* Step 1: Client & Source Details */}
+                                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '20px', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                    <div style={{ fontSize: '12px', fontWeight: '900', color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Building2 size={16} /> 1. Client & Event Details
+                                    </div>
+                                    
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '6px' }}>Event / Function Name *</label>
+                                            <input type="text" required placeholder="e.g. Royal Wedding / Corp Summit" value={eventFormData.name} onChange={e => setEventFormData({ ...eventFormData, name: e.target.value })} className="premium-compact-input" style={{ width: '100%', height: '46px' }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '6px' }}>Client / Host Name *</label>
+                                            <input type="text" required placeholder="e.g. Mr. Sharma / Infosys" value={eventFormData.client} onChange={e => setEventFormData({ ...eventFormData, client: e.target.value })} className="premium-compact-input" style={{ width: '100%', height: '46px' }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '6px' }}>Mobile Number</label>
+                                            <input type="text" placeholder="e.g. 9876543210" value={eventFormData.clientPhone} onChange={e => setEventFormData({ ...eventFormData, clientPhone: e.target.value })} className="premium-compact-input" style={{ width: '100%', height: '46px' }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '6px' }}>Email</label>
+                                            <input type="email" placeholder="e.g. client@example.com" value={eventFormData.clientEmail} onChange={e => setEventFormData({ ...eventFormData, clientEmail: e.target.value })} className="premium-compact-input" style={{ width: '100%', height: '46px' }} />
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginTop: '16px' }}>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '6px' }}>Event Type</label>
+                                            <select value={eventFormData.eventType} onChange={e => setEventFormData({ ...eventFormData, eventType: e.target.value })} className="premium-compact-input" style={{ width: '100%', height: '46px' }}>
+                                                <option value="Wedding">Wedding Event</option>
+                                                <option value="Corporate">Corporate Conference</option>
+                                                <option value="Tour">Group Tour / Sightseeing</option>
+                                                <option value="VIP">VIP / Delegation</option>
+                                                <option value="Private">Private Party / Function</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '6px' }}>Lead Source</label>
+                                            <select value={eventFormData.source} onChange={e => setEventFormData({ ...eventFormData, source: e.target.value })} className="premium-compact-input" style={{ width: '100%', height: '46px' }}>
+                                                <option value="Website">Website</option>
+                                                <option value="GGG Ads">GGG Ads</option>
+                                                <option value="Instagram">Instagram</option>
+                                                <option value="Travel Agent">Travel Agent</option>
+                                                <option value="Referral">Referral / Word of Mouth</option>
+                                                <option value="Direct Call">Direct Call</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '6px' }}>Start Date *</label>
+                                            <input type="date" value={eventFormData.startDate} onChange={e => setEventFormData({ ...eventFormData, startDate: e.target.value, date: e.target.value })} className="premium-compact-input" style={{ width: '100%', height: '46px', colorScheme: 'dark' }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '6px' }}>End Date *</label>
+                                            <input type="date" value={eventFormData.endDate} onChange={e => setEventFormData({ ...eventFormData, endDate: e.target.value })} className="premium-compact-input" style={{ width: '100%', height: '46px', colorScheme: 'dark' }} />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Step 2: Multi-Vehicle Requirements Table (Row & Column Sheet) */}
+                                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '20px', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                                        <div style={{ fontSize: '12px', fontWeight: '900', color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Car size={16} /> 2. Vehicle Requirements Grid (Multi-Car Sheet)
+                                        </div>
+                                        <button type="button" onClick={addVehicleRow} style={{
+                                            padding: '6px 14px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.15)',
+                                            border: '1px solid rgba(56, 189, 248, 0.35)', color: '#38bdf8', fontSize: '12px', fontWeight: '800',
+                                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                                        }}>
+                                            <Plus size={14} /> Add Vehicle Row
+                                        </button>
+                                    </div>
+
+                                    {/* Table */}
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                                            <thead>
+                                                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)', fontSize: '11px', textTransform: 'uppercase' }}>
+                                                    <th style={{ padding: '10px 8px' }}>#</th>
+                                                    <th style={{ padding: '10px 8px', minWidth: '180px' }}>Vehicle Category / Model</th>
+                                                    <th style={{ padding: '10px 8px', width: '80px' }}>Qty</th>
+                                                    <th style={{ padding: '10px 8px', width: '120px' }}>Rate/Car (₹)</th>
+                                                    <th style={{ padding: '10px 8px', width: '130px' }}>Total (₹)</th>
+                                                    <th style={{ padding: '10px 8px', minWidth: '160px' }}>Duty Remarks / Notes</th>
+                                                    <th style={{ padding: '10px 8px', width: '50px' }}></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(eventFormData.vehicleRequirements || []).map((row, idx) => (
+                                                    <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                                        <td style={{ padding: '10px 8px', color: 'rgba(255,255,255,0.4)', fontWeight: '800', fontSize: '12px' }}>{idx + 1}</td>
+                                                        <td style={{ padding: '8px' }}>
+                                                            <select
+                                                                value={row.category}
+                                                                onChange={e => updateVehicleRow(idx, 'category', e.target.value)}
+                                                                className="premium-compact-input"
+                                                                style={{ width: '100%', height: '38px', fontSize: '13px' }}
+                                                            >
+                                                                <option value="Sedan">Sedan (Dzire / Etios)</option>
+                                                                <option value="Ertiga">Ertiga</option>
+                                                                <option value="Innova Crysta">Innova Crysta</option>
+                                                                <option value="Innova Hycross">Innova Hycross</option>
+                                                                <option value="Fortuner">Fortuner</option>
+                                                                <option value="Tempo Traveller 12-Seater">Tempo Traveller 12s</option>
+                                                                <option value="Tempo Traveller 17-Seater">Tempo Traveller 17s</option>
+                                                                <option value="Tempo Traveller 20-Seater">Tempo Traveller 20s</option>
+                                                                <option value="Tempo Traveller 26-Seater">Tempo Traveller 26s</option>
+                                                                <option value="Mini Bus">Mini Bus (35s)</option>
+                                                                <option value="Luxury Bus">Luxury Bus (45-50s)</option>
+                                                                <option value="Other">Other Luxury Vehicle</option>
+                                                            </select>
+                                                        </td>
+                                                        <td style={{ padding: '8px' }}>
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                value={row.quantity}
+                                                                onChange={e => updateVehicleRow(idx, 'quantity', e.target.value)}
+                                                                className="premium-compact-input"
+                                                                style={{ width: '100%', height: '38px', textAlign: 'center', fontWeight: 'bold' }}
+                                                            />
+                                                        </td>
+                                                        <td style={{ padding: '8px' }}>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                value={row.rate}
+                                                                onChange={e => updateVehicleRow(idx, 'rate', e.target.value)}
+                                                                className="premium-compact-input"
+                                                                style={{ width: '100%', height: '38px', fontWeight: 'bold' }}
+                                                            />
+                                                        </td>
+                                                        <td style={{ padding: '8px' }}>
+                                                            <div style={{ height: '38px', display: 'flex', alignItems: 'center', padding: '0 10px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', color: '#fbbf24', fontWeight: '900', fontSize: '13px' }}>
+                                                                ₹{(Number(row.amount) || 0).toLocaleString('en-IN')}
+                                                            </div>
+                                                        </td>
+                                                        <td style={{ padding: '8px' }}>
+                                                            <input
+                                                                type="text"
+                                                                placeholder="e.g. Airport shuttle / VIP"
+                                                                value={row.remarks}
+                                                                onChange={e => updateVehicleRow(idx, 'remarks', e.target.value)}
+                                                                className="premium-compact-input"
+                                                                style={{ width: '100%', height: '38px', fontSize: '12px' }}
+                                                            />
+                                                        </td>
+                                                        <td style={{ padding: '8px', textAlign: 'center' }}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeVehicleRow(idx)}
+                                                                disabled={(eventFormData.vehicleRequirements || []).length <= 1}
+                                                                style={{
+                                                                    background: 'rgba(239, 68, 68, 0.1)',
+                                                                    border: 'none',
+                                                                    color: (eventFormData.vehicleRequirements || []).length <= 1 ? 'rgba(255,255,255,0.2)' : '#f87171',
+                                                                    cursor: (eventFormData.vehicleRequirements || []).length <= 1 ? 'not-allowed' : 'pointer',
+                                                                    padding: '8px',
+                                                                    borderRadius: '8px'
+                                                                }}
+                                                            >
+                                                                <Trash2 size={15} />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* Subtotal Banner */}
+                                    <div style={{ marginTop: '14px', padding: '12px 16px', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                        <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>
+                                            Total Vehicles: <strong style={{ color: '#38bdf8' }}>{(eventFormData.vehicleRequirements || []).reduce((s, r) => s + (Number(r.quantity) || 0), 0)} Cars</strong>
+                                        </span>
+                                        <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.85)', fontWeight: '700' }}>
+                                            Calculated Vehicles Quotation: <strong style={{ color: '#fbbf24', fontSize: '16px' }}>₹{(eventFormData.vehicleRequirements || []).reduce((s, r) => s + (Number(r.amount) || 0), 0).toLocaleString('en-IN')}</strong>
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Step 3: Trip, Route & Itinerary Details */}
+                                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '20px', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                    <div style={{ fontSize: '12px', fontWeight: '900', color: '#10b981', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Navigation size={16} /> 3. Trip & Route Details
+                                    </div>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '6px' }}>Pickup Location / Venue</label>
+                                            <input type="text" placeholder="e.g. Udaipur Airport / Station" value={eventFormData.pickupLocation} onChange={e => setEventFormData({ ...eventFormData, pickupLocation: e.target.value })} className="premium-compact-input" style={{ width: '100%', height: '46px' }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '6px' }}>Drop / Destinations / Route</label>
+                                            <input type="text" placeholder="e.g. Hotel Radisson, Delhi / Local" value={eventFormData.dropLocation} onChange={e => setEventFormData({ ...eventFormData, dropLocation: e.target.value })} className="premium-compact-input" style={{ width: '100%', height: '46px' }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '6px' }}>Reporting Time</label>
+                                            <input type="text" placeholder="e.g. 08:00 AM" value={eventFormData.reportingTime} onChange={e => setEventFormData({ ...eventFormData, reportingTime: e.target.value })} className="premium-compact-input" style={{ width: '100%', height: '46px' }} />
+                                        </div>
+                                    </div>
+
+                                    <div style={{ marginTop: '16px' }}>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: '700', display: 'block', marginBottom: '6px' }}>Tour Itinerary / Instructions</label>
+                                        <textarea
+                                            rows="2"
+                                            placeholder="e.g. Day 1: Airport pick up, Day 2: City tour, Day 3: Drop"
+                                            value={eventFormData.itinerary}
+                                            onChange={e => setEventFormData({ ...eventFormData, itinerary: e.target.value })}
+                                            className="premium-compact-input"
+                                            style={{ width: '100%', padding: '10px 14px', resize: 'vertical' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Step 4: Final Package Quote & Actions */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(251, 191, 36, 0.08)', padding: '16px 20px', borderRadius: '16px', border: '1px solid rgba(251, 191, 36, 0.25)', flexWrap: 'wrap', gap: '16px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', fontWeight: '800', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Final Package / Proforma Quote (₹)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={eventFormData.proformaAmount}
+                                            onChange={e => setEventFormData({ ...eventFormData, proformaAmount: e.target.value })}
+                                            className="premium-compact-input"
+                                            style={{ width: '200px', height: '44px', fontSize: '18px', fontWeight: '900', color: '#fbbf24' }}
+                                        />
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                        <button type="button" onClick={() => setShowLeadModal(false)} style={{
+                                            height: '48px', padding: '0 20px', borderRadius: '14px', background: 'rgba(255,255,255,0.04)',
+                                            border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', fontWeight: '800', cursor: 'pointer'
+                                        }}>Cancel</button>
+
+                                        <button type="button" onClick={(e) => handleCreateEventLeadSubmit(e, 'Lead')} style={{
+                                            height: '48px', padding: '0 22px', borderRadius: '14px', background: 'rgba(245, 158, 11, 0.15)',
+                                            border: '1px solid rgba(245, 158, 11, 0.4)', color: '#f59e0b', fontWeight: '900', cursor: 'pointer',
+                                            display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px'
+                                        }}>
+                                            <FileSpreadsheet size={16} /> Save as Event Lead
+                                        </button>
+
+                                        <button type="button" onClick={(e) => handleCreateEventLeadSubmit(e, 'Upcoming')} style={{
+                                            height: '48px', padding: '0 24px', borderRadius: '14px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                            border: 'none', color: 'white', fontWeight: '900', cursor: 'pointer',
+                                            display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', boxShadow: '0 10px 20px rgba(16,185,129,0.3)'
+                                        }}>
+                                            <Check size={16} strokeWidth={3} /> Save & Move to Upcoming
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* ═══ CONFIRM EVENT MODAL (RECORD ADVANCE & SYNC LEDGER) ═══ */}
+            <AnimatePresence>
+                {showConfirmModal && confirmingEvent && (
+                    <div className="modal-overlay" style={{ zIndex: 10030 }}>
+                        <motion.div
+                            initial={{ y: 50, opacity: 0, scale: 0.95 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            exit={{ y: 20, opacity: 0, scale: 0.98 }}
+                            style={{
+                                width: 'min(95%, 520px)',
+                                borderRadius: '28px',
+                                background: '#0a101f',
+                                border: '1px solid rgba(34, 197, 94, 0.35)',
+                                padding: '32px',
+                                position: 'relative',
+                                boxShadow: '0 40px 100px rgba(0,0,0,0.8)'
+                            }}
+                        >
+                            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                                <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.12)', color: '#4ade80', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px auto' }}>
+                                    <ShieldCheck size={28} />
+                                </div>
+                                <h2 style={{ color: 'white', margin: 0, fontSize: '20px', fontWeight: '950' }}>Confirm Event Booking</h2>
+                                <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', marginTop: '6px' }}>
+                                    Confirm <strong>{confirmingEvent.name}</strong> for <strong>{confirmingEvent.client}</strong> and record advance payment.
+                                </p>
+                            </div>
+
+                            <form onSubmit={handleConfirmEventSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px 16px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>Total Event Quotation:</span>
+                                    <span style={{ fontSize: '16px', fontWeight: '950', color: '#fbbf24' }}>
+                                        ₹{(Number(confirmingEvent.proformaAmount) || 0).toLocaleString('en-IN')}
+                                    </span>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '14px' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '6px', fontWeight: '700' }}>Advance Received (₹)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            required
+                                            placeholder="e.g. 10000"
+                                            value={advancePayment}
+                                            onChange={e => setAdvancePayment(e.target.value)}
+                                            className="premium-compact-input"
+                                            style={{ width: '100%', height: '46px', fontSize: '16px', fontWeight: '900', color: '#4ade80' }}
+                                        />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '6px', fontWeight: '700' }}>Received Date</label>
+                                        <input
+                                            type="date"
+                                            value={advancePaymentDate}
+                                            onChange={e => setAdvancePaymentDate(e.target.value)}
+                                            className="premium-compact-input"
+                                            style={{ width: '100%', height: '46px', colorScheme: 'dark' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '6px', fontWeight: '700' }}>Payment Mode</label>
+                                    <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} className="premium-compact-input" style={{ width: '100%', height: '44px' }}>
+                                        <option value="UPI / QR Code">UPI / QR Code</option>
+                                        <option value="Bank Transfer / NEFT">Bank Transfer / NEFT</option>
+                                        <option value="Cash">Cash to Company</option>
+                                    </select>
+                                </div>
+
+                                {paymentMode !== 'Cash' && (
+                                    <div>
+                                        <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '6px', fontWeight: '700' }}>Receiving Bank Account</label>
+                                        <select
+                                            value={selectedBankId}
+                                            onChange={e => setSelectedBankId(e.target.value)}
+                                            className="premium-compact-input"
+                                            style={{ width: '100%', height: '44px' }}
+                                        >
+                                            {bankAccounts.map(b => (
+                                                <option key={b._id} value={b._id}>
+                                                    {b.bankName} - {b.accountNumber ? `••••${b.accountNumber.slice(-4)}` : ''} (₹{(b.currentBalance || 0).toLocaleString('en-IN')})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '6px', fontWeight: '700' }}>UTR / Reference Number (Optional)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. UTR12345678"
+                                        value={paymentRef}
+                                        onChange={e => setPaymentRef(e.target.value)}
+                                        className="premium-compact-input"
+                                        style={{ width: '100%', height: '44px' }}
+                                    />
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                                    <button type="button" onClick={() => setShowConfirmModal(false)} style={{
+                                        flex: 1, height: '50px', borderRadius: '14px', background: 'rgba(255,255,255,0.04)',
+                                        border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', fontWeight: '800', cursor: 'pointer'
+                                    }}>Cancel</button>
+
+                                    <button type="submit" style={{
+                                        flex: 2, height: '50px', borderRadius: '14px', background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                                        border: 'none', color: 'black', fontWeight: '950', fontSize: '14px', cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 10px 25px rgba(34,197,94,0.3)'
+                                    }}>
+                                        <CheckCircle size={18} /> Confirm & Sync to Ledger
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* ═══ CANCEL EVENT / PROCESS REFUND MODAL ═══ */}
+            <AnimatePresence>
+                {showCancelModal && cancellingEvent && (
+                    <div className="modal-overlay" style={{ zIndex: 10030 }}>
+                        <motion.div
+                            initial={{ y: 50, opacity: 0, scale: 0.95 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            exit={{ y: 20, opacity: 0, scale: 0.98 }}
+                            style={{
+                                width: 'min(95%, 520px)',
+                                borderRadius: '28px',
+                                background: '#0a101f',
+                                border: '1px solid rgba(239, 68, 68, 0.35)',
+                                padding: '32px',
+                                position: 'relative',
+                                boxShadow: '0 40px 100px rgba(0,0,0,0.8)'
+                            }}
+                        >
+                            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                                <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.12)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px auto' }}>
+                                    <XCircle size={28} />
+                                </div>
+                                <h2 style={{ color: 'white', margin: 0, fontSize: '20px', fontWeight: '950' }}>Cancel Event / Mark Lost</h2>
+                                <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', marginTop: '6px' }}>
+                                    Cancel <strong>{cancellingEvent.name}</strong> and process refund if advance was paid.
+                                </p>
+                            </div>
+
+                            <form onSubmit={handleCancelEventSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                <div>
+                                    <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '6px', fontWeight: '700' }}>Reason for Cancellation / Lost *</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        placeholder="e.g. Client changed plans / Budget mismatch"
+                                        value={cancelReason}
+                                        onChange={e => setCancelReason(e.target.value)}
+                                        className="premium-compact-input"
+                                        style={{ width: '100%', height: '46px' }}
+                                    />
+                                </div>
+
+                                {cancellingEvent.advanceAmount > 0 && (
+                                    <>
+                                        <div style={{ background: 'rgba(239, 68, 68, 0.08)', padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>Advance Paid by Client:</span>
+                                            <span style={{ fontSize: '15px', fontWeight: '950', color: '#f87171' }}>
+                                                ₹{(Number(cancellingEvent.advanceAmount) || 0).toLocaleString('en-IN')}
+                                            </span>
+                                        </div>
+
+                                        <div style={{ display: 'flex', gap: '14px' }}>
+                                            <div style={{ flex: 1 }}>
+                                                <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '6px', fontWeight: '700' }}>Refund Amount (₹)</label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max={cancellingEvent.advanceAmount}
+                                                    placeholder="0"
+                                                    value={refundAmount}
+                                                    onChange={e => setRefundAmount(e.target.value)}
+                                                    className="premium-compact-input"
+                                                    style={{ width: '100%', height: '46px', fontSize: '16px', fontWeight: '900', color: '#f87171' }}
+                                                />
+                                            </div>
+                                            <div style={{ flex: 1 }}>
+                                                <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '6px', fontWeight: '700' }}>Refund Mode</label>
+                                                <select value={refundMode} onChange={e => setRefundMode(e.target.value)} className="premium-compact-input" style={{ width: '100%', height: '46px' }}>
+                                                    <option value="Bank Transfer / NEFT">Bank Transfer / NEFT</option>
+                                                    <option value="Cash">Cash Outflow</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {refundMode !== 'Cash' && Number(refundAmount) > 0 && (
+                                            <div>
+                                                <label style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', display: 'block', marginBottom: '6px', fontWeight: '700' }}>Refunding Bank Account</label>
+                                                <select
+                                                    value={refundBankId}
+                                                    onChange={e => setRefundBankId(e.target.value)}
+                                                    className="premium-compact-input"
+                                                    style={{ width: '100%', height: '44px' }}
+                                                >
+                                                    {bankAccounts.map(b => (
+                                                        <option key={b._id} value={b._id}>
+                                                            {b.bankName} - {b.accountNumber ? `••••${b.accountNumber.slice(-4)}` : ''} (₹{(b.currentBalance || 0).toLocaleString('en-IN')})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+
+                                <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                                    <button type="button" onClick={() => setShowCancelModal(false)} style={{
+                                        flex: 1, height: '50px', borderRadius: '14px', background: 'rgba(255,255,255,0.04)',
+                                        border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', fontWeight: '800', cursor: 'pointer'
+                                    }}>Cancel</button>
+
+                                    <button type="submit" style={{
+                                        flex: 2, height: '50px', borderRadius: '14px', background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+                                        border: 'none', color: 'white', fontWeight: '950', fontSize: '14px', cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 10px 25px rgba(239,68,68,0.3)'
+                                    }}>
+                                        <XCircle size={18} /> Confirm Cancellation
+                                    </button>
                                 </div>
                             </form>
                         </motion.div>
