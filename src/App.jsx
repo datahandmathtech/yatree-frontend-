@@ -39,6 +39,7 @@ const DriverSalaries = lazy(() => import('./pages/DriverSalaries'));
 const VehicleMonthlyDetails = lazy(() => import('./pages/VehicleMonthlyDetails'));
 const LiveFeed = lazy(() => import('./pages/LiveFeed'));
 const EventManagement = lazy(() => import('./pages/EventManagement'));
+const LiveEventExcel = lazy(() => import('./pages/LiveEventExcel'));
 const GPSMap = lazy(() => import('./pages/GPSMap'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Profile = lazy(() => import('./pages/Profile'));
@@ -187,6 +188,8 @@ const AdminRoutes = () => {
         <>
           <Route path="outside-cars" element={<OutsideCars />} />
           <Route path="event-management" element={<EventManagement />} />
+          <Route path="live-event-excel" element={<LiveEventExcel />} />
+          <Route path="live-event-excel/:eventId" element={<LiveEventExcel />} />
         </>
       )}
       {canAccess('vehiclesManagement') && (

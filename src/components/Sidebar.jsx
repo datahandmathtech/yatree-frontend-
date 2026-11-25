@@ -367,6 +367,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                     <NavGroup title="Buy/Sell" labelKey="buy_sell" icon={Briefcase} isOpen={openGroups.buysell} onToggle={() => toggleGroup('buysell')}>
                         {hasAccess('buySell', 'outsideCars') && <NavItem item={{ path: '/admin/outside-cars', label: 'Outside Cars', labelKey: 'outside_cars' }} onClick={onClose} isSubItem />}
                         {hasAccess('buySell', 'eventManagement') && <NavItem item={{ path: '/admin/event-management', label: 'Event Management', labelKey: 'event_management' }} onClick={onClose} isSubItem />}
+                        {hasAccess('buySell', 'eventManagement') && <NavItem item={{ path: '/admin/live-event-excel', label: 'Live Event Excel', labelKey: 'live_event_excel' }} onClick={onClose} isSubItem />}
                     </NavGroup>
                 )}
 

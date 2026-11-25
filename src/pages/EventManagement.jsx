@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from '../api/axios';
 import {
     Calendar, Plus, Search, Trash2, Edit, ChevronLeft, ChevronRight, Car, PlusCircle,
@@ -158,6 +158,7 @@ const getToday = () => todayIST();
 const EventManagement = () => {
     const { selectedCompany } = useCompany();
     const location = useLocation();
+    const navigate = useNavigate();
     const [events, setEvents] = useState([]); // This will store ONLY events for CURRENT tab for easier usage in existing map
     const [allMasterEvents, setAllMasterEvents] = useState([]); // This will store ALL events for counts
     const [vehicles, setVehicles] = useState([]);
@@ -730,7 +731,7 @@ const EventManagement = () => {
 
     const filteredMasterByDate = React.useMemo(() => {
         return allMasterEvents.filter(e => {
-            if (statusTab === 'Lead' || statusTab === 'Lost') return true;
+            if (statusTab === 'Lead' || statusTab === 'Lost' || statusTab === 'Start') return true;
             const evDate = toISTDateString(new Date(e.date || e.startDate));
             return evDate >= fromDate && evDate <= toDate;
         });
@@ -2246,6 +2247,20 @@ const EventManagement = () => {
                 </div>
 
                 <div className="flex-resp" style={{ display: 'flex', gap: '12px', width: 'auto' }}>
+                    {/* Live Event Excel Center */}
+                    <button onClick={() => navigate('/admin/live-event-excel')}
+                        className="primary-btn-premium"
+                        style={{
+                            height: '56px', padding: '0 20px', borderRadius: '18px', border: '1px solid rgba(16, 185, 129, 0.4)', cursor: 'pointer',
+                            background: 'rgba(16, 185, 129, 0.12)', color: '#34d399',
+                            fontSize: '13px', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '8px',
+                            boxShadow: '0 10px 25px rgba(16,185,129,0.15)', transition: '0.3s', letterSpacing: '0.5px',
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        <FileSpreadsheet size={19} color="#34d399" /> Live Event Excel
+                    </button>
+
                     {/* + CREATE EVENT LEAD (Always available) */}
                     <button onClick={handleOpenLeadModal}
                         className="primary-btn-premium"
