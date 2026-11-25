@@ -2160,7 +2160,7 @@ const EventManagement = () => {
             }}>
                 {[
                     { id: 'Lead', label: 'Leads', color: '#f59e0b', icon: <FileSpreadsheet size={20} />, count: allMasterEvents.filter(e => e.visualStatus === 'Lead').length },
-                    { id: 'Start', label: 'Upcoming', color: '#10b981', icon: <Navigation size={20} />, count: filteredMasterByDate.filter(e => e.visualStatus === 'Upcoming').length },
+                    { id: 'Start', label: 'Upcoming', color: '#10b981', icon: <Navigation size={20} />, count: allMasterEvents.filter(e => e.visualStatus === 'Upcoming').length },
                     { id: 'Running', label: 'Live Now', color: 'var(--primary)', icon: <Target size={20} />, count: filteredMasterByDate.filter(e => e.visualStatus === 'Running').length },
                     { id: 'Close', label: 'Completed', color: '#818cf8', icon: <CheckCircle size={20} />, count: filteredMasterByDate.filter(e => e.visualStatus === 'Closed').length },
                     { id: 'Lost', label: 'Lost', color: '#f87171', icon: <XCircle size={20} />, count: allMasterEvents.filter(e => e.visualStatus === 'Lost').length }
@@ -2540,6 +2540,17 @@ const EventManagement = () => {
                                     <XCircle size={15} /> Cancel / Refund
                                 </button>
                             )}
+                                        <button onClick={(e) => { e.stopPropagation(); navigate(`/admin/live-event-excel/${ev._id}`); }}
+                                            style={{
+                                                height: '38px', padding: '0 12px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.14)',
+                                                border: '1px solid rgba(16, 185, 129, 0.35)', color: '#34d399', cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', fontSize: '11.5px', fontWeight: '900', transition: '0.2s'
+                                            }}
+                                            className="action-btn-list"
+                                            title="Open Live Event Excel & Reconciliation Centre for this event"
+                                        >
+                                            <FileSpreadsheet size={15} /> Live Excel
+                                        </button>
                                         <button onClick={(e) => { e.stopPropagation(); handleOpenExcelImport(ev); }}
                                             style={{
                                                 width: '38px', height: '38px', borderRadius: '12px', background: 'rgba(251,191,36,0.1)',
