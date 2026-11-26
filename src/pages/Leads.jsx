@@ -352,6 +352,14 @@ export default function Leads() {
     const [expandedBreakdownDay, setExpandedBreakdownDay] = useState(null);
 
     // Vehicle Matrix State (Multi-Option Direct Operating Expenses & Live Margin Analysis)
+    const getDefaultTargetPerDay = (carName = '') => {
+        const c = String(carName).toLowerCase();
+        if (c.includes('tempo') || c.includes('bus') || c.includes('coach') || c.includes('urbania')) return '3500';
+        if (c.includes('ertiga') || c.includes('etios') || c.includes('hycross') || c.includes('suv')) return '1500';
+        if (c.includes('sedan') || c.includes('dzire') || c.includes('hatchback')) return '1000';
+        return '2500';
+    };
+
     const createNewMatrixItem = (idx = 0, carName = 'Innova Crysta') => ({
         id: 'vm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
         title: `Option ${idx + 1}: ${carName}`,
@@ -364,7 +372,7 @@ export default function Leads() {
         nightHold: '',
         tollAndParking: '',
         gstAmount: '',
-        targetPerDay: '2500',
+        targetPerDay: getDefaultTargetPerDay(carName),
         packageValue: '',
         simSalePrice: ''
     });
@@ -372,11 +380,14 @@ export default function Leads() {
     const [vehicleMatrices, setVehicleMatrices] = useState([createNewMatrixItem(0, 'Innova Crysta')]);
     const [activeMatrixIndex, setActiveMatrixIndex] = useState(0);
 
-    const updateActiveMatrix = (field, value) => {
+    const updateActiveMatrix = (fieldOrPatch, value) => {
         setVehicleMatrices(prev => {
             const copy = [...prev];
             const idx = (activeMatrixIndex >= 0 && activeMatrixIndex < copy.length) ? activeMatrixIndex : 0;
-            copy[idx] = { ...copy[idx], [field]: value };
+            const patch = (typeof fieldOrPatch === 'object' && fieldOrPatch !== null)
+                ? fieldOrPatch
+                : { [fieldOrPatch]: value };
+            copy[idx] = { ...copy[idx], ...patch };
             return copy;
         });
     };
@@ -544,7 +555,9 @@ export default function Leads() {
     const matrixNightHoldVal = parseFloat(matrixNightHold) || 0;
     const matrixTollVal = parseFloat(matrixTollAndParking) || 0;
     const matrixGstVal = parseFloat(matrixGstAmount) || 0;
-    const matrixPackageVal = parseFloat(activeMatrix.packageValue) || parseFloat(formData.totalAmount) || 0;
+    const matrixPackageVal = (activeMatrix.packageValue !== undefined && activeMatrix.packageValue !== '')
+        ? (parseFloat(activeMatrix.packageValue) || 0)
+        : (activeMatrixIndex === 0 ? (parseFloat(formData.totalAmount) || 0) : 0);
 
     const matrixDaysVal = activeCarDays;
     const matrixTargetPerDayVal = parseFloat(matrixTargetPerDay) || 0;
@@ -559,7 +572,9 @@ export default function Leads() {
     const matrixSimPerDay = matrixDaysVal > 0 ? (matrixSimProfit / matrixDaysVal) : 0;
 
     const handleAutoMatrixGST = () => {
-        const pkg = parseFloat(activeMatrix.packageValue) || parseFloat(formData.totalAmount) || 0;
+        const pkg = (activeMatrix.packageValue !== undefined && activeMatrix.packageValue !== '')
+            ? (parseFloat(activeMatrix.packageValue) || 0)
+            : (activeMatrixIndex === 0 ? (parseFloat(formData.totalAmount) || 0) : 0);
         if (pkg > 0) {
             const autoGst = Math.round(pkg - (pkg / 1.05));
             updateActiveMatrix('gstAmount', String(autoGst));
@@ -568,11 +583,13 @@ export default function Leads() {
 
     const applySimPriceToQuotation = (price) => {
         const val = Math.max(0, parseFloat(price) || 0);
-        updateActiveMatrix('packageValue', val);
-        setFormData(prev => ({
-            ...prev,
-            totalAmount: val
-        }));
+        updateActiveMatrix('packageValue', String(val));
+        if (activeMatrixIndex === 0) {
+            setFormData(prev => ({
+                ...prev,
+                totalAmount: val
+            }));
+        }
     };
 
     const fetchTravelAgents = async () => {
@@ -994,19 +1011,27 @@ export default function Leads() {
             });
 
             // Populate Vehicle Matrix state from lead
-            const hasLeadMatrix = (m) => m && (Number(m.totalKmRun) > 0 || Number(m.fuelCost) > 0 || Number(m.driverSalary) > 0 || Number(m.tollAndParking) > 0);
+            const normalizeLoadedMatrices = (arr) => arr.map((m, idx) => ({
+                ...createNewMatrixItem(idx, m.carType || lead.carType || 'Innova Crysta'),
+                ...m,
+                packageValue: (m.packageValue !== undefined && m.packageValue !== null && m.packageValue !== '')
+                    ? String(m.packageValue)
+                    : (idx === 0 && lead.totalAmount ? String(lead.totalAmount) : '')
+            }));
+            const hasLeadMatrix = (m) => m && (Number(m.totalKmRun) > 0 || Number(m.fuelCost) > 0 || Number(m.driverSalary) > 0 || Number(m.tollAndParking) > 0 || Number(m.packageValue) > 0);
             if (lead.vehicleMatrices && Array.isArray(lead.vehicleMatrices) && lead.vehicleMatrices.length > 0 && lead.vehicleMatrices.some(hasLeadMatrix)) {
-                setVehicleMatrices(lead.vehicleMatrices);
+                setVehicleMatrices(normalizeLoadedMatrices(lead.vehicleMatrices));
             } else if (hasLeadMatrix(lead.vehicleMatrix)) {
                 setVehicleMatrices([{
                     ...createNewMatrixItem(0, lead.carType || 'Innova Crysta'),
                     ...lead.vehicleMatrix,
+                    packageValue: lead.vehicleMatrix.packageValue ? String(lead.vehicleMatrix.packageValue) : (lead.totalAmount ? String(lead.totalAmount) : ''),
                     id: 'vm_1',
                     title: `Option 1: ${lead.carType || 'Vehicle'}`,
                     carType: lead.carType || 'Innova Crysta'
                 }]);
             } else if (lead.vehicleMatrices && Array.isArray(lead.vehicleMatrices) && lead.vehicleMatrices.length > 0) {
-                setVehicleMatrices(lead.vehicleMatrices);
+                setVehicleMatrices(normalizeLoadedMatrices(lead.vehicleMatrices));
             } else if (lead.vehicleMatrix && Object.keys(lead.vehicleMatrix).length > 0) {
                 setVehicleMatrices([{
                     ...createNewMatrixItem(0, lead.carType || 'Innova Crysta'),
@@ -1105,11 +1130,14 @@ export default function Leads() {
                 const mNight = parseFloat(m.nightHold) || 0;
                 const mToll = parseFloat(m.tollAndParking) || 0;
                 const mGst = parseFloat(m.gstAmount) || 0;
-                const mPkg = parseFloat(m.packageValue) || (idx === activeMatrixIndex ? matrixPackageVal : (parseFloat(formData.totalAmount) || 0));
+                const mPkg = (m.packageValue !== undefined && m.packageValue !== '')
+                    ? (parseFloat(m.packageValue) || 0)
+                    : (idx === 0 ? (parseFloat(formData.totalAmount) || 0) : 0);
                 const mTotCost = mFuelCost + mDrv + mNight + mToll + mGst;
                 const mProfit = mPkg - mTotCost;
                 return {
                     ...m,
+                    packageValue: mPkg,
                     fuelCost: Math.round(mFuelCost),
                     totalCost: Math.round(mTotCost),
                     totalProfit: Math.round(mProfit),
@@ -6054,10 +6082,11 @@ export default function Leads() {
                                                     value={activeMatrix.carType || formData.carType}
                                                     onChange={e => {
                                                         const newCar = e.target.value;
-                                                        updateActiveMatrix('carType', newCar);
+                                                        const patch = { carType: newCar };
                                                         if (!activeMatrix.title || activeMatrix.title.startsWith('Option')) {
-                                                            updateActiveMatrix('title', `Option ${activeMatrixIndex + 1}: ${newCar}`);
+                                                            patch.title = `Option ${activeMatrixIndex + 1}: ${newCar}`;
                                                         }
+                                                        updateActiveMatrix(patch);
                                                     }}
                                                     style={{ ...darkInputStyle, padding: '7px 10px', fontSize: '12.5px', cursor: 'pointer' }}
                                                 >
@@ -6067,23 +6096,43 @@ export default function Leads() {
                                                 </select>
                                             </div>
                                             <div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                                     <label style={{ ...labelStyle, color: '#fbbf24' }}>Quoted Package Fare for this Car (₹)</label>
-                                                    {formData.totalAmount > 0 && activeMatrix.packageValue && Number(activeMatrix.packageValue) !== Number(formData.totalAmount) && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => updateActiveMatrix('packageValue', '')}
-                                                            style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '10px', cursor: 'pointer', padding: 0 }}
-                                                        >
-                                                            Reset to Lead Fare
-                                                        </button>
-                                                    )}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        {formData.totalAmount > 0 && Number(activeMatrix.packageValue || 0) !== Number(formData.totalAmount) && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => updateActiveMatrix('packageValue', String(formData.totalAmount))}
+                                                                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '10px', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                                                            >
+                                                                Copy ₹{Number(formData.totalAmount).toLocaleString('en-IN')}
+                                                            </button>
+                                                        )}
+                                                        {activeMatrixIndex > 0 && Number(activeMatrix.packageValue) > 0 && Number(activeMatrix.packageValue) !== Number(formData.totalAmount) && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const qVal = Math.max(0, parseFloat(activeMatrix.packageValue) || 0);
+                                                                    setFormData(prev => ({
+                                                                        ...prev,
+                                                                        totalAmount: qVal,
+                                                                        carType: activeMatrix.carType || prev.carType
+                                                                    }));
+                                                                }}
+                                                                style={{ background: 'transparent', border: 'none', color: '#60a5fa', fontSize: '10px', fontWeight: '700', cursor: 'pointer', padding: 0 }}
+                                                            >
+                                                                Set as Lead Fare
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <input
                                                     type="number"
-                                                    value={activeMatrix.packageValue !== undefined && activeMatrix.packageValue !== '' ? activeMatrix.packageValue : (formData.totalAmount || '')}
+                                                    min="0"
+                                                    onWheel={e => e.target.blur()}
+                                                    value={activeMatrix.packageValue !== undefined && activeMatrix.packageValue !== null ? activeMatrix.packageValue : ''}
                                                     onChange={e => updateActiveMatrix('packageValue', e.target.value)}
-                                                    placeholder={String(formData.totalAmount || 'e.g. 35000')}
+                                                    placeholder={activeMatrixIndex === 0 && formData.totalAmount ? `Lead Fare: ₹${formData.totalAmount}` : 'Enter car quote (e.g. 23000)'}
                                                     style={{ ...darkInputStyle, padding: '7px 10px', fontSize: '13px', fontWeight: '800', color: '#fbbf24', borderColor: '#f59e0b' }}
                                                 />
                                             </div>
@@ -6442,7 +6491,9 @@ export default function Leads() {
                                                         const mNight = parseFloat(m.nightHold) || 0;
                                                         const mToll = parseFloat(m.tollAndParking) || 0;
                                                         const mGst = parseFloat(m.gstAmount) || 0;
-                                                        const mPkg = parseFloat(m.packageValue) || (idx === activeMatrixIndex ? matrixPackageVal : (parseFloat(formData.totalAmount) || 0));
+                                                        const mPkg = (m.packageValue !== undefined && m.packageValue !== '')
+                                                            ? (parseFloat(m.packageValue) || 0)
+                                                            : (idx === 0 ? (parseFloat(formData.totalAmount) || 0) : 0);
                                                         const mCost = mFuelCost + mDrv + mNight + mToll + mGst;
                                                         const mProfit = mPkg - mCost;
                                                         const mPerDay = matrixDaysVal > 0 ? Math.round(mProfit / matrixDaysVal) : 0;
