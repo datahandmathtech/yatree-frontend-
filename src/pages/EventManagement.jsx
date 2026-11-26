@@ -41,6 +41,31 @@ const VEHICLE_SUB_CATEGORIES = {
     Bus: ['Bus 35 Seater', 'Bus 45 Seater', 'Bus 50 Seater']
 };
 
+const EVENT_RATE_PRESET_CARS = [
+    { name: 'SEDAN', subtitle: 'Etios, Dzire' },
+    { name: 'PREMIUM SEDAN', subtitle: 'Verna / Ciaz' },
+    { name: 'INNOVA', subtitle: '6-7 Seater' },
+    { name: 'INNOVA CRYSTA', subtitle: '6-7 Seater' },
+    { name: 'INNOVA HYCROSS', subtitle: '6-7 Seater' },
+    { name: 'TRAVELLER', subtitle: '12-17 Seater' },
+    { name: 'LUXURY URBANIA', subtitle: '12-17 Seater' },
+    { name: 'FORTUNER', subtitle: '6-7 Seater' },
+    { name: 'LUXURY', subtitle: 'BMW / Mercedes' }
+];
+
+const EVENT_RATE_PRESET_SERVICES = [
+    'Udaipur to Airport Drop',
+    'Airport Pickup to Udaipur Drop',
+    '04 Hrs. 40 Km City Tour',
+    '08 Hrs. 80 Km City Tour',
+    '12 Hrs. 120 Km City Tour',
+    'Udaipur to Monsoon Palace (Sajjan Garh)',
+    'Udaipur to Nathdwara Ekling Ji (5 Hrs)',
+    'Udaipur to Nathdwara, Ekling Ji & Haldighati',
+    'Railway Station Pickup & Drop',
+    'Outstation Package'
+];
+
 const isPDService = (serviceName) => {
     if (!serviceName) return false;
     const name = serviceName.toLowerCase();
@@ -376,10 +401,15 @@ const EventManagement = () => {
         description: '',
         proformaAmount: '',
         status: 'Lead',
-        vehicleRequirements: [
-            { category: 'Sedan', model: 'Dzire', quantity: 2, rate: 2500, amount: 5000, remarks: '' }
-        ]
+        selectedCars: [],
+        serviceRequirements: [],
+        rateMatrix: [],
+        vehicleRequirements: []
     });
+
+    const [customCarInput, setCustomCarInput] = useState('');
+    const [customCarSubtitle, setCustomCarSubtitle] = useState('');
+    const [customServiceInput, setCustomServiceInput] = useState('');
 
     const [dutyFormData, setDutyFormData] = useState({
         carNumber: '', model: '', dropLocation: '', date: '',
@@ -405,43 +435,139 @@ const EventManagement = () => {
         }
     };
 
-    const addVehicleRow = () => {
-        setEventFormData(prev => ({
-            ...prev,
-            vehicleRequirements: [
-                ...(prev.vehicleRequirements || []),
-                { category: 'Innova Crysta', model: '', quantity: 1, rate: 4500, amount: 4500, remarks: '' }
-            ]
-        }));
-    };
-
-    const updateVehicleRow = (index, field, value) => {
-        setEventFormData(prev => {
-            const rows = [...(prev.vehicleRequirements || [])];
-            const row = { ...rows[index], [field]: value };
-            if (field === 'quantity' || field === 'rate') {
-                const q = field === 'quantity' ? Number(value) || 0 : Number(row.quantity) || 0;
-                const r = field === 'rate' ? Number(value) || 0 : Number(row.rate) || 0;
-                row.amount = q * r;
-            }
-            rows[index] = row;
-            const totalCalc = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const syncMatrixRowsWithServices = (services, prevMatrix) => {
+        const lookup = new Map(
+            (prevMatrix || []).map(r => [String(r.serviceName || '').trim().toLowerCase(), r])
+        );
+        return (services || []).map(serviceName => {
+            const existing = lookup.get(serviceName.trim().toLowerCase());
             return {
-                ...prev,
-                vehicleRequirements: rows,
-                proformaAmount: totalCalc > 0 ? totalCalc : prev.proformaAmount
+                serviceName,
+                rates: existing?.rates ? { ...existing.rates } : {}
             };
         });
     };
 
-    const removeVehicleRow = (index) => {
+    const toggleMatrixCar = (carObj) => {
+        const targetName = String(carObj?.name || '').trim();
+        if (!targetName) return;
         setEventFormData(prev => {
-            const rows = (prev.vehicleRequirements || []).filter((_, i) => i !== index);
-            const totalCalc = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+            const existing = prev.selectedCars || [];
+            const exists = existing.some(c => c.name.toLowerCase() === targetName.toLowerCase());
+            const updatedCars = exists
+                ? existing.filter(c => c.name.toLowerCase() !== targetName.toLowerCase())
+                : [...existing, { name: targetName, subtitle: carObj.subtitle || '' }];
+            return { ...prev, selectedCars: updatedCars };
+        });
+    };
+
+    const addCustomMatrixCar = () => {
+        const trimmed = customCarInput.trim();
+        if (!trimmed) return;
+        const formattedName = trimmed.toUpperCase();
+        setEventFormData(prev => {
+            const existing = prev.selectedCars || [];
+            if (existing.some(c => c.name.toLowerCase() === formattedName.toLowerCase())) {
+                return prev;
+            }
             return {
                 ...prev,
-                vehicleRequirements: rows,
-                proformaAmount: totalCalc > 0 ? totalCalc : prev.proformaAmount
+                selectedCars: [...existing, { name: formattedName, subtitle: customCarSubtitle.trim() }]
+            };
+        });
+        setCustomCarInput('');
+        setCustomCarSubtitle('');
+    };
+
+    const toggleMatrixService = (serviceTitle) => {
+        const trimmed = String(serviceTitle || '').trim();
+        if (!trimmed) return;
+        setEventFormData(prev => {
+            const existing = prev.serviceRequirements || [];
+            const exists = existing.some(s => s.toLowerCase() === trimmed.toLowerCase());
+            const updatedServices = exists
+                ? existing.filter(s => s.toLowerCase() !== trimmed.toLowerCase())
+                : [...existing, trimmed];
+            return {
+                ...prev,
+                serviceRequirements: updatedServices,
+                rateMatrix: syncMatrixRowsWithServices(updatedServices, prev.rateMatrix)
+            };
+        });
+    };
+
+    const addCustomMatrixService = () => {
+        const trimmed = customServiceInput.trim();
+        if (!trimmed) return;
+        setEventFormData(prev => {
+            const existing = prev.serviceRequirements || [];
+            if (existing.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
+                return prev;
+            }
+            const updatedServices = [...existing, trimmed];
+            return {
+                ...prev,
+                serviceRequirements: updatedServices,
+                rateMatrix: syncMatrixRowsWithServices(updatedServices, prev.rateMatrix)
+            };
+        });
+        setCustomServiceInput('');
+    };
+
+    const renameMatrixServiceRow = (idx, newName) => {
+        setEventFormData(prev => {
+            const updatedServices = [...(prev.serviceRequirements || [])];
+            updatedServices[idx] = newName;
+            const updatedMatrix = [...(prev.rateMatrix || [])];
+            if (updatedMatrix[idx]) {
+                updatedMatrix[idx] = { ...updatedMatrix[idx], serviceName: newName };
+            }
+            return {
+                ...prev,
+                serviceRequirements: updatedServices,
+                rateMatrix: updatedMatrix
+            };
+        });
+    };
+
+    const updateRateMatrixCell = (serviceIdx, carName, rawValue) => {
+        setEventFormData(prev => {
+            const services = prev.serviceRequirements || [];
+            const matrix = syncMatrixRowsWithServices(services, prev.rateMatrix);
+            if (!matrix[serviceIdx]) return prev;
+            const currentRates = { ...(matrix[serviceIdx].rates || {}) };
+            if (rawValue === '' || rawValue === null || rawValue === undefined) {
+                delete currentRates[carName];
+            } else {
+                currentRates[carName] = rawValue;
+            }
+            matrix[serviceIdx] = { ...matrix[serviceIdx], rates: currentRates };
+            return { ...prev, rateMatrix: matrix };
+        });
+    };
+
+    const applyStandardMatrixTemplate = () => {
+        const defaultServices = EVENT_RATE_PRESET_SERVICES.slice(0, 8);
+        setEventFormData(prev => {
+            const prevCars = prev.selectedCars || [];
+            const mergedCars = [...prevCars];
+            EVENT_RATE_PRESET_CARS.forEach(pc => {
+                if (!mergedCars.some(c => c.name.toLowerCase() === pc.name.toLowerCase())) {
+                    mergedCars.push({ ...pc });
+                }
+            });
+            const prevServices = prev.serviceRequirements || [];
+            const mergedServices = [...prevServices];
+            defaultServices.forEach(ds => {
+                if (!mergedServices.some(s => s.toLowerCase() === ds.toLowerCase())) {
+                    mergedServices.push(ds);
+                }
+            });
+            return {
+                ...prev,
+                selectedCars: mergedCars,
+                serviceRequirements: mergedServices,
+                rateMatrix: syncMatrixRowsWithServices(mergedServices, prev.rateMatrix)
             };
         });
     };
@@ -449,6 +575,9 @@ const EventManagement = () => {
     const handleOpenLeadModal = () => {
         setIsEditingEvent(false);
         setSelectedId(null);
+        setCustomCarInput('');
+        setCustomCarSubtitle('');
+        setCustomServiceInput('');
         const today = todayIST();
         setEventFormData({
             name: '',
@@ -466,11 +595,12 @@ const EventManagement = () => {
             itinerary: '',
             reportingTime: '08:00 AM',
             description: '',
-            proformaAmount: 5000,
+            proformaAmount: '',
             status: 'Lead',
-            vehicleRequirements: [
-                { category: 'Sedan', model: 'Dzire', quantity: 2, rate: 2500, amount: 5000, remarks: '' }
-            ]
+            selectedCars: [],
+            serviceRequirements: [],
+            rateMatrix: [],
+            vehicleRequirements: []
         });
         setShowLeadModal(true);
     };
@@ -523,17 +653,76 @@ const EventManagement = () => {
             description: '',
             proformaAmount: '',
             status: 'Upcoming',
+            selectedCars: [],
+            serviceRequirements: [],
+            rateMatrix: [],
             vehicleRequirements: []
         });
         setShowEventModal(true);
     };
 
+    const hydrateMatrixFromEvent = (ev) => {
+        if ((ev.selectedCars && ev.selectedCars.length > 0) || (ev.serviceRequirements && ev.serviceRequirements.length > 0) || (ev.rateMatrix && ev.rateMatrix.length > 0)) {
+            const cars = (ev.selectedCars || []).map(c => typeof c === 'string' ? { name: c, subtitle: '' } : { name: c.name, subtitle: c.subtitle || '' });
+            const services = (ev.serviceRequirements && ev.serviceRequirements.length > 0)
+                ? ev.serviceRequirements
+                : (ev.rateMatrix || []).map(r => r.serviceName).filter(Boolean);
+            const matrix = syncMatrixRowsWithServices(services, ev.rateMatrix || []);
+            return { selectedCars: cars, serviceRequirements: services, rateMatrix: matrix };
+        }
+        if (ev.rateCard && ev.rateCard.length > 0) {
+            const carMap = new Map();
+            const serviceList = [];
+            ev.rateCard.forEach(rc => {
+                const cName = (rc.vehicleType || rc.vehicleModel || 'Standard').trim();
+                let subtitle = '';
+                if (rc.vehicleModel && rc.vehicleModel.includes('(') && rc.vehicleModel.endsWith(')')) {
+                    const m = rc.vehicleModel.match(/\(([^)]+)\)$/);
+                    if (m) subtitle = m[1];
+                }
+                if (!carMap.has(cName.toLowerCase())) {
+                    carMap.set(cName.toLowerCase(), { name: cName, subtitle });
+                }
+                if (rc.serviceName && !serviceList.includes(rc.serviceName)) {
+                    serviceList.push(rc.serviceName);
+                }
+            });
+            const cars = Array.from(carMap.values());
+            const matrix = serviceList.map(sName => {
+                const rates = {};
+                cars.forEach(c => {
+                    const match = ev.rateCard.find(r => r.serviceName === sName && (r.vehicleType === c.name || r.vehicleModel === c.name));
+                    if (match && match.baseRate !== undefined && match.baseRate !== null) {
+                        rates[c.name] = match.baseRate;
+                    }
+                });
+                return { serviceName: sName, rates };
+            });
+            return { selectedCars: cars, serviceRequirements: serviceList, rateMatrix: matrix };
+        }
+        if (ev.vehicleRequirements && ev.vehicleRequirements.length > 0) {
+            const cars = [];
+            ev.vehicleRequirements.forEach(vr => {
+                const label = (vr.category || vr.model || '').trim();
+                if (label && !cars.some(c => c.name.toLowerCase() === label.toLowerCase())) {
+                    cars.push({ name: label, subtitle: vr.model && vr.model !== label ? vr.model : '' });
+                }
+            });
+            return { selectedCars: cars, serviceRequirements: [], rateMatrix: [] };
+        }
+        return { selectedCars: [], serviceRequirements: [], rateMatrix: [] };
+    };
+
     const handleEditEvent = (ev) => {
         setIsEditingEvent(true);
         setSelectedId(ev._id);
+        setCustomCarInput('');
+        setCustomCarSubtitle('');
+        setCustomServiceInput('');
         const evDate = toISTDateString(new Date(ev.date || ev.startDate));
         const evStart = ev.startDate ? toISTDateString(new Date(ev.startDate)) : evDate;
         const evEnd = ev.endDate ? toISTDateString(new Date(ev.endDate)) : evDate;
+        const hydrated = hydrateMatrixFromEvent(ev);
         setEventFormData({
             name: ev.name,
             client: ev.client || '',
@@ -552,9 +741,10 @@ const EventManagement = () => {
             description: ev.description || '',
             proformaAmount: ev.proformaAmount || '',
             status: ev.status || 'Upcoming',
-            vehicleRequirements: (ev.vehicleRequirements && ev.vehicleRequirements.length > 0) ? ev.vehicleRequirements : [
-                { category: 'Sedan', model: '', quantity: 1, rate: 0, amount: 0, remarks: '' }
-            ]
+            selectedCars: hydrated.selectedCars,
+            serviceRequirements: hydrated.serviceRequirements,
+            rateMatrix: hydrated.rateMatrix,
+            vehicleRequirements: ev.vehicleRequirements || []
         });
         setShowLeadModal(true);
     };
@@ -570,28 +760,323 @@ const EventManagement = () => {
         } catch (err) { alert('Error fetching details'); }
     };
 
-    const handleCreateEventLeadSubmit = async (e, forcedStatus) => {
+    const generateClientRateSheetPDF = async (sourceObj) => {
+        const target = sourceObj || eventFormData;
+        const hydrated = (target.selectedCars?.length || target.serviceRequirements?.length || target.rateMatrix?.length)
+            ? {
+                selectedCars: target.selectedCars || [],
+                serviceRequirements: (target.serviceRequirements && target.serviceRequirements.length > 0)
+                    ? target.serviceRequirements
+                    : (target.rateMatrix || []).map(r => r.serviceName).filter(Boolean),
+                rateMatrix: syncMatrixRowsWithServices(
+                    (target.serviceRequirements && target.serviceRequirements.length > 0)
+                        ? target.serviceRequirements
+                        : (target.rateMatrix || []).map(r => r.serviceName).filter(Boolean),
+                    target.rateMatrix || []
+                )
+            }
+            : hydrateMatrixFromEvent(target);
+
+        const cars = hydrated.selectedCars || [];
+        const rows = hydrated.rateMatrix || [];
+
+        if (cars.length === 0 || rows.length === 0) {
+            alert('Please select at least 1 Car Name and 1 Service Requirement before downloading the Rate Sheet.');
+            return;
+        }
+
+        const loadImage = (url) => {
+            return new Promise((resolve) => {
+                if (!url) return resolve(null);
+                const img = new Image();
+                img.crossOrigin = 'Anonymous';
+                const finalUrl = url.startsWith('/') ? (axios.defaults.baseURL || '') + url : url;
+                img.onload = () => resolve(img);
+                img.onerror = () => resolve(null);
+                if (finalUrl.startsWith('http')) {
+                    img.src = "/api/admin/proxy-image?url=" + encodeURIComponent(finalUrl);
+                } else {
+                    img.src = finalUrl;
+                }
+            });
+        };
+
+        const orientation = cars.length > 4 ? 'landscape' : 'portrait';
+        const doc = new jsPDF(orientation);
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+
+        // 1. Header Banner
+        doc.setFillColor(15, 23, 42);
+        doc.rect(0, 0, pageWidth, 42, 'F');
+        doc.setFillColor(234, 120, 23); // Signature warm orange accent bar
+        doc.rect(0, 42, pageWidth, 2.5, 'F');
+
+        let logoOffset = 14;
+        try {
+            const logoSrc = selectedCompany?.logoUrl || '/logos/logo.png';
+            const logoImg = await loadImage(logoSrc);
+            if (logoImg) {
+                doc.setFillColor(255, 255, 255);
+                doc.roundedRect(12, 7, 28, 28, 3, 3, 'F');
+                doc.addImage(logoImg, 'PNG', 14, 9, 24, 24);
+                logoOffset = 46;
+
+                doc.setGState(new doc.GState({ opacity: 0.04 }));
+                const wmSize = orientation === 'portrait' ? 110 : 140;
+                doc.addImage(logoImg, 'PNG', (pageWidth - wmSize) / 2, (pageHeight - wmSize) / 2, wmSize, wmSize);
+                doc.setGState(new doc.GState({ opacity: 1.0 }));
+            }
+        } catch (e) {}
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'bold');
+        doc.text((selectedCompany?.name || 'YATREE DESTINATION').toUpperCase(), logoOffset, 19);
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(203, 213, 225);
+        doc.text('Premium Fleet & Event Transportation Rate List', logoOffset, 26);
+        doc.setTextColor(245, 158, 11);
+        doc.text(selectedCompany?.website || 'www.yatreedestination.com', logoOffset, 33);
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('CLIENT RATE SHEET', pageWidth - 14, 19, { align: 'right' });
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(226, 232, 240);
+        doc.text(`DATE: ${new Date().toLocaleDateString('en-IN')}`, pageWidth - 14, 27, { align: 'right' });
+
+        // 2. Client & Event Details Strip
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(12, 49, pageWidth - 24, 20, 3, 3, 'F');
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.4);
+        doc.roundedRect(12, 49, pageWidth - 24, 20, 3, 3, 'S');
+
+        const startDisp = target.startDate || target.date ? formatDateDDMMYYYY(toISTDateString(new Date(target.startDate || target.date))) : 'TBA';
+        const endDisp = target.endDate ? formatDateDDMMYYYY(toISTDateString(new Date(target.endDate))) : startDisp;
+        const dateRangeText = endDisp && endDisp !== startDisp ? `${startDisp} to ${endDisp}` : startDisp;
+
+        doc.setFontSize(7.5);
+        doc.setTextColor(100, 116, 139);
+        doc.setFont('helvetica', 'bold');
+        doc.text('EVENT / FUNCTION', 17, 55.5);
+        doc.text('CLIENT / HOST', pageWidth * 0.36, 55.5);
+        doc.text('EVENT DATES', pageWidth * 0.64, 55.5);
+        doc.text('CONTACT', pageWidth - 17, 55.5, { align: 'right' });
+
+        doc.setFontSize(9.5);
+        doc.setTextColor(15, 23, 42);
+        doc.text((target.name || 'EVENT QUOTATION').toUpperCase().slice(0, 28), 17, 63);
+        doc.text((target.client || 'VALUED CLIENT').toUpperCase().slice(0, 24), pageWidth * 0.36, 63);
+        doc.text(dateRangeText, pageWidth * 0.64, 63);
+        doc.text(target.clientPhone || '-', pageWidth - 17, 63, { align: 'right' });
+
+        // 3. Matrix Rate Table (Orange Banner Header + Alternating Rows like Reference Sheet)
+        const headRow = [
+            'S.NO.',
+            'PARTICULARS RATE LIST',
+            ...cars.map(c => (c.subtitle ? `${c.name.toUpperCase()}\n${c.subtitle}` : c.name.toUpperCase()))
+        ];
+
+        const bodyRows = rows.map((row, idx) => {
+            const cells = [
+                `${idx + 1}.`,
+                (row.serviceName || '').toUpperCase(),
+                ...cars.map(c => {
+                    const val = row.rates ? row.rates[c.name] : undefined;
+                    if (val === '' || val === null || val === undefined || isNaN(Number(val))) return '-';
+                    return Number(val).toLocaleString('en-IN');
+                })
+            ];
+            return cells;
+        });
+
+        const colFontSize = cars.length > 7 ? 7.5 : cars.length > 5 ? 8.2 : 9;
+
+        autoTable(doc, {
+            startY: 74,
+            margin: { left: 12, right: 12 },
+            head: [headRow],
+            body: bodyRows,
+            theme: 'grid',
+            styles: {
+                font: 'helvetica',
+                fontSize: colFontSize,
+                cellPadding: { top: 4.5, bottom: 4.5, left: 3, right: 3 },
+                lineColor: [226, 232, 240],
+                lineWidth: 0.4,
+                valign: 'middle',
+                halign: 'center',
+                overflow: 'linebreak'
+            },
+            headStyles: {
+                fillColor: [234, 120, 23],
+                textColor: [255, 255, 255],
+                fontStyle: 'bold',
+                fontSize: Math.max(7, colFontSize - 0.5),
+                halign: 'center',
+                valign: 'middle',
+                minCellHeight: 14
+            },
+            bodyStyles: {
+                textColor: [30, 41, 59],
+                fontStyle: 'bold'
+            },
+            columnStyles: {
+                0: { halign: 'center', cellWidth: 13, fontStyle: 'bold' },
+                1: { halign: 'left', fontStyle: 'bold', cellWidth: orientation === 'landscape' ? 54 : 52 }
+            },
+            alternateRowStyles: {
+                fillColor: [244, 245, 247]
+            },
+            didParseCell: function (data) {
+                if (data.section === 'body' && data.column.index > 1) {
+                    if (data.cell.raw === '-') {
+                        data.cell.styles.textColor = [156, 163, 175];
+                        data.cell.styles.fontStyle = 'normal';
+                    } else {
+                        data.cell.styles.textColor = [15, 23, 42];
+                    }
+                }
+            }
+        });
+
+        // 4. Terms & Footer
+        let finalY = (doc.lastAutoTable?.finalY || 140) + 12;
+        if (finalY > pageHeight - 45) {
+            doc.addPage();
+            finalY = 20;
+        }
+
+        const activeTerms = (pdfTerms && pdfTerms.length > 0) ? pdfTerms : savedPdfTermsList;
+        if (activeTerms && activeTerms.length > 0) {
+            doc.setFontSize(9.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 23, 42);
+            doc.text('Terms & Conditions:', 12, finalY);
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(71, 85, 105);
+            let termY = finalY + 5;
+            activeTerms.forEach((term, idx) => {
+                const lines = doc.splitTextToSize(`${idx + 1}. ${term}`, pageWidth - 80);
+                doc.text(lines, 12, termY);
+                termY += (lines.length * 3.8) + 1;
+            });
+        }
+
+        try {
+            const sigSrc = selectedCompany?.ownerSignatureUrl || '/logos/signature.png';
+            const sigImg = await loadImage(sigSrc);
+            if (sigImg) {
+                doc.addImage(sigImg, 'PNG', pageWidth - 54, finalY - 2, 38, 18);
+            }
+        } catch (e) {}
+
+        doc.setDrawColor(203, 213, 225);
+        doc.setLineWidth(0.5);
+        doc.line(pageWidth - 58, finalY + 18, pageWidth - 14, finalY + 18);
+        doc.setFontSize(8.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 23, 42);
+        doc.text('AUTHORIZED SIGNATORY', pageWidth - 36, finalY + 23, { align: 'center' });
+
+        doc.setFillColor(248, 250, 252);
+        doc.rect(0, pageHeight - 15, pageWidth, 15, 'F');
+        doc.setDrawColor(226, 232, 240);
+        doc.line(0, pageHeight - 15, pageWidth, pageHeight - 15);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 116, 139);
+        doc.text(selectedCompany?.email || 'info@yatreedestination.com', 12, pageHeight - 6);
+        doc.text('Thank you for your business!', pageWidth / 2, pageHeight - 6, { align: 'center' });
+        doc.text(selectedCompany?.phone || '+91 99999 99999', pageWidth - 12, pageHeight - 6, { align: 'right' });
+
+        const fileBase = (target.name || 'Event_Rate_Sheet').replace(/[^a-zA-Z0-9_-]+/g, '_');
+        doc.save(`${fileBase}_Rate_Sheet.pdf`);
+    };
+
+    const handleDownloadRateSheetExcel = (sourceObj) => {
+        const target = sourceObj || eventFormData;
+        const cars = target.selectedCars || [];
+        const rows = syncMatrixRowsWithServices(target.serviceRequirements || [], target.rateMatrix || []);
+        if (cars.length === 0 || rows.length === 0) {
+            alert('Please select at least 1 Car Name and 1 Service Requirement before exporting.');
+            return;
+        }
+        const sheetRows = rows.map((r, idx) => {
+            const obj = {
+                'S.NO.': idx + 1,
+                'PARTICULARS RATE LIST': r.serviceName
+            };
+            cars.forEach(c => {
+                const header = c.subtitle ? `${c.name} (${c.subtitle})` : c.name;
+                const val = r.rates?.[c.name];
+                obj[header] = (val !== undefined && val !== '' && !isNaN(Number(val))) ? Number(val) : '';
+            });
+            return obj;
+        });
+        const ws = XLSX.utils.json_to_sheet(sheetRows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Rate Sheet');
+        const fileBase = (target.name || 'Event_Rate_Sheet').replace(/[^a-zA-Z0-9_-]+/g, '_');
+        XLSX.writeFile(wb, `${fileBase}_Rate_Sheet.xlsx`);
+    };
+
+    const handleCreateEventLeadSubmit = async (e, forcedStatus, shouldDownloadPDF = false) => {
         if (e && e.preventDefault) e.preventDefault();
+        if (!eventFormData.name?.trim() || !eventFormData.client?.trim()) {
+            alert('Please fill Event / Function Name and Client / Host Name.');
+            return;
+        }
         try {
             const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+            const cleanServices = (eventFormData.serviceRequirements || []).map(s => String(s || '').trim()).filter(Boolean);
+            const cleanMatrix = syncMatrixRowsWithServices(cleanServices, eventFormData.rateMatrix).map(row => {
+                const numericRates = {};
+                (eventFormData.selectedCars || []).forEach(c => {
+                    const val = row.rates?.[c.name];
+                    if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+                        numericRates[c.name] = Number(val);
+                    }
+                });
+                return { serviceName: row.serviceName, rates: numericRates };
+            });
+
             const payload = {
                 ...eventFormData,
                 companyId: selectedCompany._id,
                 date: eventFormData.startDate || eventFormData.date || todayIST(),
-                status: forcedStatus || eventFormData.status || 'Lead'
+                status: forcedStatus || eventFormData.status || 'Lead',
+                proformaAmount: Number(eventFormData.proformaAmount) || 0,
+                selectedCars: eventFormData.selectedCars || [],
+                serviceRequirements: cleanServices,
+                rateMatrix: cleanMatrix
             };
+
+            let savedEventData;
             if (isEditingEvent && selectedId) {
-                await axios.put(`/api/admin/events/${selectedId}`, payload, {
+                const { data } = await axios.put(`/api/admin/events/${selectedId}`, payload, {
                     headers: { Authorization: `Bearer ${userInfo.token}` }
                 });
+                savedEventData = data;
             } else {
-                await axios.post('/api/admin/events', payload, {
+                const { data } = await axios.post('/api/admin/events', payload, {
                     headers: { Authorization: `Bearer ${userInfo.token}` }
                 });
+                savedEventData = data;
             }
             setShowLeadModal(false);
             setShowEventModal(false);
             fetchEvents();
+            if (shouldDownloadPDF) {
+                await generateClientRateSheetPDF(savedEventData || payload);
+            }
             alert(`Event ${isEditingEvent ? 'updated' : 'saved'} successfully!`);
         } catch (err) {
             console.error(err);
@@ -2446,7 +2931,17 @@ const EventManagement = () => {
 
                             {/* Additional Metadata Chips */}
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap' }}>
-                                {ev.vehicleRequirements && ev.vehicleRequirements.length > 0 && (
+                                {ev.selectedCars && ev.selectedCars.length > 0 && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800' }}>
+                                        <Car size={12} /> {ev.selectedCars.length} Cars: {ev.selectedCars.map(c => c.name || c).join(', ')}
+                                    </span>
+                                )}
+                                {ev.rateMatrix && ev.rateMatrix.length > 0 && (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(245, 158, 11, 0.12)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.28)', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800' }}>
+                                        <FileText size={12} /> {ev.rateMatrix.length} Service Rates
+                                    </span>
+                                )}
+                                {(!ev.selectedCars || ev.selectedCars.length === 0) && ev.vehicleRequirements && ev.vehicleRequirements.length > 0 && (
                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '800' }}>
                                         <Car size={12} /> {ev.vehicleRequirements.reduce((sum, vr) => sum + (Number(vr.quantity) || 1), 0)} Cars ({ev.vehicleRequirements.map(v => `${v.quantity}x ${v.category}`).join(', ')})
                                     </span>
@@ -2562,6 +3057,19 @@ const EventManagement = () => {
                                         >
                                             <UploadCloud size={16} />
                                         </button>
+                                        {((ev.rateMatrix && ev.rateMatrix.length > 0) || (ev.rateCard && ev.rateCard.length > 0)) && (
+                                            <button onClick={(e) => { e.stopPropagation(); generateClientRateSheetPDF(ev); }}
+                                                style={{
+                                                    height: '38px', padding: '0 12px', borderRadius: '12px', background: 'rgba(234, 120, 23, 0.15)',
+                                                    border: '1px solid rgba(234, 120, 23, 0.4)', color: '#fb923c', cursor: 'pointer',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '11.5px', fontWeight: '900', transition: '0.2s'
+                                                }}
+                                                className="action-btn-list"
+                                                title="Download Client Rate Sheet (PDF)"
+                                            >
+                                                <Download size={14} /> Rate Sheet
+                                            </button>
+                                        )}
                                         <button onClick={(e) => { e.stopPropagation(); setSelectedEventForRates(ev); setShowRateCardModal(true); }}
                                             style={{
                                                 width: '38px', height: '38px', borderRadius: '12px', background: 'rgba(56, 189, 248, 0.1)',
@@ -3388,7 +3896,7 @@ const EventManagement = () => {
                             exit={{ y: 20, opacity: 0, scale: 0.98 }}
                             className="premium-scroll"
                             style={{
-                                width: 'min(95%, 960px)',
+                                width: 'min(96vw, 1240px)',
                                 maxHeight: '92vh',
                                 overflowY: 'auto',
                                 borderRadius: '28px',
@@ -3489,126 +3997,391 @@ const EventManagement = () => {
                                     </div>
                                 </div>
 
-                                {/* Step 2: Multi-Vehicle Requirements Table (Row & Column Sheet) */}
-                                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '20px', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                                        <div style={{ fontSize: '12px', fontWeight: '900', color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <Car size={16} /> 2. Vehicle Requirements Grid (Multi-Car Sheet)
+                                {/* Step 2: Car Selection, Service Requirements & Dynamic Rate Matrix Sheet */}
+                                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '20px', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                        <div>
+                                            <div style={{ fontSize: '12px', fontWeight: '900', color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <Car size={16} /> 2. Car Selection, Service Requirements & Rate Sheet
+                                            </div>
+                                            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'rgba(255,255,255,0.45)', fontWeight: '600' }}>
+                                                Select Car Names first, choose Service Requirements below them, then fill rates in the generated matrix grid.
+                                            </p>
                                         </div>
-                                        <button type="button" onClick={addVehicleRow} style={{
-                                            padding: '6px 14px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.15)',
-                                            border: '1px solid rgba(56, 189, 248, 0.35)', color: '#38bdf8', fontSize: '12px', fontWeight: '800',
-                                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-                                        }}>
-                                            <Plus size={14} /> Add Vehicle Row
+                                        <button
+                                            type="button"
+                                            onClick={applyStandardMatrixTemplate}
+                                            style={{
+                                                padding: '8px 14px', borderRadius: '10px', background: 'rgba(234, 120, 23, 0.16)',
+                                                border: '1px solid rgba(234, 120, 23, 0.4)', color: '#fb923c', fontSize: '12px', fontWeight: '800',
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                                            }}
+                                        >
+                                            <FileSpreadsheet size={14} /> Load Standard Preset Sheet
                                         </button>
                                     </div>
 
-                                    {/* Table */}
-                                    <div style={{ overflowX: 'auto' }}>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                                            <thead>
-                                                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)', fontSize: '11px', textTransform: 'uppercase' }}>
-                                                    <th style={{ padding: '10px 8px' }}>#</th>
-                                                    <th style={{ padding: '10px 8px', minWidth: '180px' }}>Vehicle Category / Model</th>
-                                                    <th style={{ padding: '10px 8px', width: '80px' }}>Qty</th>
-                                                    <th style={{ padding: '10px 8px', width: '120px' }}>Rate/Car (₹)</th>
-                                                    <th style={{ padding: '10px 8px', width: '130px' }}>Total (₹)</th>
-                                                    <th style={{ padding: '10px 8px', minWidth: '160px' }}>Duty Remarks / Notes</th>
-                                                    <th style={{ padding: '10px 8px', width: '50px' }}></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {(eventFormData.vehicleRequirements || []).map((row, idx) => (
-                                                    <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                                        <td style={{ padding: '10px 8px', color: 'rgba(255,255,255,0.4)', fontWeight: '800', fontSize: '12px' }}>{idx + 1}</td>
-                                                        <td style={{ padding: '8px' }}>
-                                                            <select
-                                                                value={row.category}
-                                                                onChange={e => updateVehicleRow(idx, 'category', e.target.value)}
-                                                                className="premium-compact-input"
-                                                                style={{ width: '100%', height: '38px', fontSize: '13px' }}
-                                                            >
-                                                                <option value="Sedan">Sedan (Dzire / Etios)</option>
-                                                                <option value="Ertiga">Ertiga</option>
-                                                                <option value="Innova Crysta">Innova Crysta</option>
-                                                                <option value="Innova Hycross">Innova Hycross</option>
-                                                                <option value="Fortuner">Fortuner</option>
-                                                                <option value="Tempo Traveller 12-Seater">Tempo Traveller 12s</option>
-                                                                <option value="Tempo Traveller 17-Seater">Tempo Traveller 17s</option>
-                                                                <option value="Tempo Traveller 20-Seater">Tempo Traveller 20s</option>
-                                                                <option value="Tempo Traveller 26-Seater">Tempo Traveller 26s</option>
-                                                                <option value="Mini Bus">Mini Bus (35s)</option>
-                                                                <option value="Luxury Bus">Luxury Bus (45-50s)</option>
-                                                                <option value="Other">Other Luxury Vehicle</option>
-                                                            </select>
-                                                        </td>
-                                                        <td style={{ padding: '8px' }}>
-                                                            <input
-                                                                type="number"
-                                                                min="1"
-                                                                value={row.quantity}
-                                                                onChange={e => updateVehicleRow(idx, 'quantity', e.target.value)}
-                                                                className="premium-compact-input"
-                                                                style={{ width: '100%', height: '38px', textAlign: 'center', fontWeight: 'bold' }}
-                                                            />
-                                                        </td>
-                                                        <td style={{ padding: '8px' }}>
-                                                            <input
-                                                                type="number"
-                                                                min="0"
-                                                                value={row.rate}
-                                                                onChange={e => updateVehicleRow(idx, 'rate', e.target.value)}
-                                                                className="premium-compact-input"
-                                                                style={{ width: '100%', height: '38px', fontWeight: 'bold' }}
-                                                            />
-                                                        </td>
-                                                        <td style={{ padding: '8px' }}>
-                                                            <div style={{ height: '38px', display: 'flex', alignItems: 'center', padding: '0 10px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', color: '#fbbf24', fontWeight: '900', fontSize: '13px' }}>
-                                                                ₹{(Number(row.amount) || 0).toLocaleString('en-IN')}
-                                                            </div>
-                                                        </td>
-                                                        <td style={{ padding: '8px' }}>
-                                                            <input
-                                                                type="text"
-                                                                placeholder="e.g. Airport shuttle / VIP"
-                                                                value={row.remarks}
-                                                                onChange={e => updateVehicleRow(idx, 'remarks', e.target.value)}
-                                                                className="premium-compact-input"
-                                                                style={{ width: '100%', height: '38px', fontSize: '12px' }}
-                                                            />
-                                                        </td>
-                                                        <td style={{ padding: '8px', textAlign: 'center' }}>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => removeVehicleRow(idx)}
-                                                                disabled={(eventFormData.vehicleRequirements || []).length <= 1}
-                                                                style={{
-                                                                    background: 'rgba(239, 68, 68, 0.1)',
-                                                                    border: 'none',
-                                                                    color: (eventFormData.vehicleRequirements || []).length <= 1 ? 'rgba(255,255,255,0.2)' : '#f87171',
-                                                                    cursor: (eventFormData.vehicleRequirements || []).length <= 1 ? 'not-allowed' : 'pointer',
-                                                                    padding: '8px',
-                                                                    borderRadius: '8px'
-                                                                }}
-                                                            >
-                                                                <Trash2 size={15} />
-                                                            </button>
-                                                        </td>
-                                                    </tr>
+                                    {/* 2A: Car Selection (Car Names Only - No Qty / No Rate) */}
+                                    <div style={{ background: 'rgba(15, 23, 42, 0.55)', padding: '14px 16px', borderRadius: '14px', border: '1px solid rgba(56, 189, 248, 0.18)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                                            <span style={{ fontSize: '11px', fontWeight: '900', color: '#7dd3fc', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                                                A. Car Selection (Select Cars for Columns — {(eventFormData.selectedCars || []).length} Selected)
+                                            </span>
+                                            {(eventFormData.selectedCars || []).length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEventFormData(prev => ({ ...prev, selectedCars: [] }))}
+                                                    style={{ background: 'transparent', border: 'none', color: '#f87171', fontSize: '11px', fontWeight: '800', cursor: 'pointer' }}
+                                                >
+                                                    Clear Cars
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                                            {EVENT_RATE_PRESET_CARS.map((carObj) => {
+                                                const isSelected = (eventFormData.selectedCars || []).some(c => c.name.toLowerCase() === carObj.name.toLowerCase());
+                                                return (
+                                                    <button
+                                                        key={carObj.name}
+                                                        type="button"
+                                                        onClick={() => toggleMatrixCar(carObj)}
+                                                        style={{
+                                                            padding: '7px 12px',
+                                                            borderRadius: '10px',
+                                                            border: isSelected ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                                            background: isSelected ? 'rgba(56, 189, 248, 0.18)' : 'rgba(255,255,255,0.03)',
+                                                            color: isSelected ? '#ffffff' : 'rgba(255,255,255,0.65)',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '7px',
+                                                            transition: '0.15s',
+                                                            textAlign: 'left'
+                                                        }}
+                                                    >
+                                                        <span style={{
+                                                            width: '16px', height: '16px', borderRadius: '5px',
+                                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                                            background: isSelected ? '#38bdf8' : 'rgba(255,255,255,0.08)',
+                                                            color: isSelected ? '#0f172a' : 'transparent',
+                                                            fontSize: '11px', fontWeight: '900'
+                                                        }}>
+                                                            <Check size={11} strokeWidth={3} />
+                                                        </span>
+                                                        <div>
+                                                            <div style={{ fontSize: '12px', fontWeight: '900', lineHeight: 1.1 }}>{carObj.name}</div>
+                                                            {carObj.subtitle && (
+                                                                <div style={{ fontSize: '10px', color: isSelected ? '#bae6fd' : 'rgba(255,255,255,0.4)', fontWeight: '600', marginTop: '2px' }}>{carObj.subtitle}</div>
+                                                            )}
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                            {/* Custom added cars outside presets */}
+                                            {(eventFormData.selectedCars || [])
+                                                .filter(sc => !EVENT_RATE_PRESET_CARS.some(pc => pc.name.toLowerCase() === sc.name.toLowerCase()))
+                                                .map(customCar => (
+                                                    <button
+                                                        key={customCar.name}
+                                                        type="button"
+                                                        onClick={() => toggleMatrixCar(customCar)}
+                                                        style={{
+                                                            padding: '7px 12px', borderRadius: '10px', border: '1px solid #f59e0b',
+                                                            background: 'rgba(245, 158, 11, 0.16)', color: 'white', cursor: 'pointer',
+                                                            display: 'flex', alignItems: 'center', gap: '7px', textAlign: 'left'
+                                                        }}
+                                                    >
+                                                        <Check size={13} color="#fbbf24" strokeWidth={3} />
+                                                        <div>
+                                                            <div style={{ fontSize: '12px', fontWeight: '900', lineHeight: 1.1 }}>{customCar.name}</div>
+                                                            {customCar.subtitle && <div style={{ fontSize: '10px', color: '#fde68a', fontWeight: '600', marginTop: '2px' }}>{customCar.subtitle}</div>}
+                                                        </div>
+                                                        <X size={13} color="#fca5a5" />
+                                                    </button>
                                                 ))}
-                                            </tbody>
-                                        </table>
+                                        </div>
+
+                                        {/* Add Custom Car Name */}
+                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                            <input
+                                                type="text"
+                                                placeholder="Custom Car Name (e.g. ERTIGA / BUS 45s)"
+                                                value={customCarInput}
+                                                onChange={e => setCustomCarInput(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomMatrixCar(); } }}
+                                                className="premium-compact-input"
+                                                style={{ flex: '1 1 200px', height: '38px', fontSize: '12.5px' }}
+                                            />
+                                            <input
+                                                type="text"
+                                                placeholder="Seater / Models (optional, e.g. 6-7 Seater)"
+                                                value={customCarSubtitle}
+                                                onChange={e => setCustomCarSubtitle(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomMatrixCar(); } }}
+                                                className="premium-compact-input"
+                                                style={{ flex: '1 1 180px', height: '38px', fontSize: '12.5px' }}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={addCustomMatrixCar}
+                                                style={{
+                                                    height: '38px', padding: '0 14px', borderRadius: '10px',
+                                                    background: 'rgba(56, 189, 248, 0.18)', border: '1px solid rgba(56, 189, 248, 0.35)',
+                                                    color: '#7dd3fc', fontSize: '12px', fontWeight: '800', cursor: 'pointer',
+                                                    display: 'flex', alignItems: 'center', gap: '5px'
+                                                }}
+                                            >
+                                                <Plus size={14} /> Add Car
+                                            </button>
+                                        </div>
                                     </div>
 
-                                    {/* Subtotal Banner */}
-                                    <div style={{ marginTop: '14px', padding: '12px 16px', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                                        <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', fontWeight: '700' }}>
-                                            Total Vehicles: <strong style={{ color: '#38bdf8' }}>{(eventFormData.vehicleRequirements || []).reduce((s, r) => s + (Number(r.quantity) || 0), 0)} Cars</strong>
-                                        </span>
-                                        <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.85)', fontWeight: '700' }}>
-                                            Calculated Vehicles Quotation: <strong style={{ color: '#fbbf24', fontSize: '16px' }}>₹{(eventFormData.vehicleRequirements || []).reduce((s, r) => s + (Number(r.amount) || 0), 0).toLocaleString('en-IN')}</strong>
-                                        </span>
+                                    {/* 2B: Service Requirements Selection (Right below Car Selection) */}
+                                    <div style={{ background: 'rgba(15, 23, 42, 0.55)', padding: '14px 16px', borderRadius: '14px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                                            <span style={{ fontSize: '11px', fontWeight: '900', color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                                                B. Service Requirements (Select Particulars / Routes — {(eventFormData.serviceRequirements || []).length} Selected)
+                                            </span>
+                                            {(eventFormData.serviceRequirements || []).length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEventFormData(prev => ({ ...prev, serviceRequirements: [], rateMatrix: [] }))}
+                                                    style={{ background: 'transparent', border: 'none', color: '#f87171', fontSize: '11px', fontWeight: '800', cursor: 'pointer' }}
+                                                >
+                                                    Clear Services
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                                            {EVENT_RATE_PRESET_SERVICES.map((srv) => {
+                                                const isSelected = (eventFormData.serviceRequirements || []).some(s => s.toLowerCase() === srv.toLowerCase());
+                                                return (
+                                                    <button
+                                                        key={srv}
+                                                        type="button"
+                                                        onClick={() => toggleMatrixService(srv)}
+                                                        style={{
+                                                            padding: '7px 12px',
+                                                            borderRadius: '10px',
+                                                            border: isSelected ? '1px solid #f59e0b' : '1px solid rgba(255,255,255,0.1)',
+                                                            background: isSelected ? 'rgba(245, 158, 11, 0.18)' : 'rgba(255,255,255,0.03)',
+                                                            color: isSelected ? '#ffffff' : 'rgba(255,255,255,0.65)',
+                                                            fontSize: '12px',
+                                                            fontWeight: isSelected ? '800' : '600',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '6px',
+                                                            transition: '0.15s'
+                                                        }}
+                                                    >
+                                                        <span style={{
+                                                            width: '15px', height: '15px', borderRadius: '4px',
+                                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                                            background: isSelected ? '#f59e0b' : 'rgba(255,255,255,0.08)',
+                                                            color: isSelected ? '#0f172a' : 'transparent'
+                                                        }}>
+                                                            <Check size={11} strokeWidth={3} />
+                                                        </span>
+                                                        {srv}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Add Custom Service Requirement */}
+                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                            <input
+                                                type="text"
+                                                placeholder="Add Custom Service / Route (e.g. Udaipur to Kumbhalgarh Day Tour)"
+                                                value={customServiceInput}
+                                                onChange={e => setCustomServiceInput(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomMatrixService(); } }}
+                                                className="premium-compact-input"
+                                                style={{ flex: '1 1 280px', height: '38px', fontSize: '12.5px' }}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={addCustomMatrixService}
+                                                style={{
+                                                    height: '38px', padding: '0 14px', borderRadius: '10px',
+                                                    background: 'rgba(245, 158, 11, 0.18)', border: '1px solid rgba(245, 158, 11, 0.4)',
+                                                    color: '#fbbf24', fontSize: '12px', fontWeight: '800', cursor: 'pointer',
+                                                    display: 'flex', alignItems: 'center', gap: '5px'
+                                                }}
+                                            >
+                                                <Plus size={14} /> Add Service Requirement
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* 2C: Auto-Generated Matrix Rate List Table (Cars as Columns × Services as Rows) */}
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                                            <span style={{ fontSize: '11px', fontWeight: '900', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                                                C. Particulars Rate List Matrix (Fill Rates Per Car & Service)
+                                            </span>
+                                            {(eventFormData.selectedCars || []).length > 0 && (eventFormData.serviceRequirements || []).length > 0 && (
+                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => generateClientRateSheetPDF(eventFormData)}
+                                                        style={{
+                                                            padding: '6px 12px', borderRadius: '9px',
+                                                            background: 'rgba(234, 120, 23, 0.2)', border: '1px solid rgba(234, 120, 23, 0.45)',
+                                                            color: '#fb923c', fontSize: '11.5px', fontWeight: '900', cursor: 'pointer',
+                                                            display: 'flex', alignItems: 'center', gap: '6px'
+                                                        }}
+                                                    >
+                                                        <Download size={13} /> Download Rate Sheet PDF
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDownloadRateSheetExcel(eventFormData)}
+                                                        style={{
+                                                            padding: '6px 12px', borderRadius: '9px',
+                                                            background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.35)',
+                                                            color: '#34d399', fontSize: '11.5px', fontWeight: '800', cursor: 'pointer',
+                                                            display: 'flex', alignItems: 'center', gap: '6px'
+                                                        }}
+                                                    >
+                                                        <FileSpreadsheet size={13} /> Excel
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {(eventFormData.selectedCars || []).length === 0 || (eventFormData.serviceRequirements || []).length === 0 ? (
+                                            <div style={{
+                                                padding: '24px 16px',
+                                                borderRadius: '14px',
+                                                border: '1px dashed rgba(255,255,255,0.16)',
+                                                background: 'rgba(0,0,0,0.22)',
+                                                textAlign: 'center',
+                                                color: 'rgba(255,255,255,0.55)',
+                                                fontSize: '13px',
+                                                fontWeight: '600'
+                                            }}>
+                                                Select at least <strong style={{ color: '#38bdf8' }}>1 Car Name</strong> above and <strong style={{ color: '#fbbf24' }}>1 Service Requirement</strong> to generate the Rate Entry Sheet automatically.
+                                            </div>
+                                        ) : (
+                                            <div style={{ overflowX: 'auto', borderRadius: '14px', border: '1px solid rgba(234, 120, 23, 0.35)', background: 'rgba(15, 23, 42, 0.85)' }}>
+                                                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: `${360 + (eventFormData.selectedCars || []).length * 120}px` }}>
+                                                    <thead>
+                                                        <tr style={{ background: 'linear-gradient(135deg, #ea7817 0%, #d97706 100%)', color: 'white' }}>
+                                                            <th style={{ padding: '12px 10px', fontSize: '11px', fontWeight: '900', textAlign: 'center', width: '54px', borderRight: '1px solid rgba(255,255,255,0.2)' }}>
+                                                                S.NO.
+                                                            </th>
+                                                            <th style={{ padding: '12px 12px', fontSize: '11px', fontWeight: '900', textAlign: 'left', minWidth: '210px', borderRight: '1px solid rgba(255,255,255,0.2)' }}>
+                                                                PARTICULARS RATE LIST
+                                                            </th>
+                                                            {(eventFormData.selectedCars || []).map((carObj) => (
+                                                                <th
+                                                                    key={carObj.name}
+                                                                    style={{
+                                                                        padding: '10px 8px',
+                                                                        fontSize: '11px',
+                                                                        fontWeight: '900',
+                                                                        textAlign: 'center',
+                                                                        minWidth: '118px',
+                                                                        borderRight: '1px solid rgba(255,255,255,0.2)',
+                                                                        position: 'relative'
+                                                                    }}
+                                                                >
+                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                                                        <span>{carObj.name.toUpperCase()}</span>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => toggleMatrixCar(carObj)}
+                                                                            title={`Remove ${carObj.name}`}
+                                                                            style={{
+                                                                                background: 'rgba(0,0,0,0.25)', border: 'none', color: 'white',
+                                                                                borderRadius: '4px', width: '16px', height: '16px',
+                                                                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '10px'
+                                                                            }}
+                                                                        >
+                                                                            ×
+                                                                        </button>
+                                                                    </div>
+                                                                    {carObj.subtitle && (
+                                                                        <div style={{ fontSize: '9.5px', fontWeight: '700', opacity: 0.9, marginTop: '2px' }}>
+                                                                            {carObj.subtitle}
+                                                                        </div>
+                                                                    )}
+                                                                </th>
+                                                            ))}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {(eventFormData.serviceRequirements || []).map((serviceTitle, sIdx) => {
+                                                            const matrixRow = (eventFormData.rateMatrix || []).find(
+                                                                r => String(r.serviceName || '').trim().toLowerCase() === serviceTitle.trim().toLowerCase()
+                                                            ) || { serviceName: serviceTitle, rates: {} };
+                                                            return (
+                                                                <tr
+                                                                    key={`${sIdx}_${serviceTitle}`}
+                                                                    style={{
+                                                                        background: sIdx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.045)',
+                                                                        borderBottom: '1px solid rgba(255,255,255,0.06)'
+                                                                    }}
+                                                                >
+                                                                    <td style={{ padding: '10px', textAlign: 'center', color: 'rgba(255,255,255,0.55)', fontWeight: '800', fontSize: '12px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
+                                                                        {sIdx + 1}.
+                                                                    </td>
+                                                                    <td style={{ padding: '8px 10px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                            <input
+                                                                                type="text"
+                                                                                value={serviceTitle}
+                                                                                onChange={e => renameMatrixServiceRow(sIdx, e.target.value)}
+                                                                                className="premium-compact-input"
+                                                                                style={{ width: '100%', height: '36px', fontSize: '12px', fontWeight: '700', background: 'rgba(255,255,255,0.04)' }}
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => toggleMatrixService(serviceTitle)}
+                                                                                title="Remove Service Row"
+                                                                                style={{
+                                                                                    background: 'rgba(239, 68, 68, 0.14)', border: 'none', color: '#f87171',
+                                                                                    borderRadius: '7px', padding: '7px', cursor: 'pointer', flexShrink: 0
+                                                                                }}
+                                                                            >
+                                                                                <Trash2 size={13} />
+                                                                            </button>
+                                                                        </div>
+                                                                    </td>
+                                                                    {(eventFormData.selectedCars || []).map((carObj) => {
+                                                                        const cellVal = matrixRow.rates?.[carObj.name];
+                                                                        return (
+                                                                            <td key={carObj.name} style={{ padding: '8px', borderRight: '1px solid rgba(255,255,255,0.06)' }}>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    min="0"
+                                                                                    placeholder="₹ Rate"
+                                                                                    value={cellVal === undefined || cellVal === null ? '' : cellVal}
+                                                                                    onChange={e => updateRateMatrixCell(sIdx, carObj.name, e.target.value)}
+                                                                                    className="premium-compact-input"
+                                                                                    style={{
+                                                                                        width: '100%',
+                                                                                        height: '36px',
+                                                                                        textAlign: 'center',
+                                                                                        fontWeight: '800',
+                                                                                        fontSize: '13px',
+                                                                                        color: cellVal !== undefined && cellVal !== '' ? '#34d399' : 'white'
+                                                                                    }}
+                                                                                />
+                                                                            </td>
+                                                                        );
+                                                                    })}
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -3646,36 +4419,45 @@ const EventManagement = () => {
                                     </div>
                                 </div>
 
-                                {/* Step 4: Final Package Quote & Actions */}
+                                {/* Step 4: Final Package Quote & Save / Download Actions */}
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(251, 191, 36, 0.08)', padding: '16px 20px', borderRadius: '16px', border: '1px solid rgba(251, 191, 36, 0.25)', flexWrap: 'wrap', gap: '16px' }}>
                                     <div>
-                                        <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', fontWeight: '800', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Final Package / Proforma Quote (₹)</label>
+                                        <label style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', fontWeight: '800', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>Estimated Package / Proforma Quote (₹ Optional)</label>
                                         <input
                                             type="number"
                                             min="0"
+                                            placeholder="Optional estimate"
                                             value={eventFormData.proformaAmount}
                                             onChange={e => setEventFormData({ ...eventFormData, proformaAmount: e.target.value })}
                                             className="premium-compact-input"
-                                            style={{ width: '200px', height: '44px', fontSize: '18px', fontWeight: '900', color: '#fbbf24' }}
+                                            style={{ width: '210px', height: '44px', fontSize: '16px', fontWeight: '900', color: '#fbbf24' }}
                                         />
                                     </div>
 
-                                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                                         <button type="button" onClick={() => setShowLeadModal(false)} style={{
-                                            height: '48px', padding: '0 20px', borderRadius: '14px', background: 'rgba(255,255,255,0.04)',
+                                            height: '46px', padding: '0 18px', borderRadius: '12px', background: 'rgba(255,255,255,0.04)',
                                             border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', fontWeight: '800', cursor: 'pointer'
                                         }}>Cancel</button>
 
-                                        <button type="button" onClick={(e) => handleCreateEventLeadSubmit(e, 'Lead')} style={{
-                                            height: '48px', padding: '0 22px', borderRadius: '14px', background: 'rgba(245, 158, 11, 0.15)',
-                                            border: '1px solid rgba(245, 158, 11, 0.4)', color: '#f59e0b', fontWeight: '900', cursor: 'pointer',
+                                        <button type="button" onClick={(e) => handleCreateEventLeadSubmit(e, 'Lead', false)} style={{
+                                            height: '46px', padding: '0 18px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.15)',
+                                            border: '1px solid rgba(245, 158, 11, 0.45)', color: '#fbbf24', fontWeight: '900', cursor: 'pointer',
                                             display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px'
                                         }}>
-                                            <FileSpreadsheet size={16} /> Save as Event Lead
+                                            <Save size={15} /> {isEditingEvent ? 'Save Lead Rates' : 'Create Lead'}
                                         </button>
 
-                                        <button type="button" onClick={(e) => handleCreateEventLeadSubmit(e, 'Upcoming')} style={{
-                                            height: '48px', padding: '0 24px', borderRadius: '14px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                        <button type="button" onClick={(e) => handleCreateEventLeadSubmit(e, 'Lead', true)} style={{
+                                            height: '46px', padding: '0 18px', borderRadius: '12px', background: 'linear-gradient(135deg, #ea7817 0%, #d97706 100%)',
+                                            border: 'none', color: 'white', fontWeight: '900', cursor: 'pointer',
+                                            display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', boxShadow: '0 8px 18px rgba(234, 120, 23, 0.35)'
+                                        }}>
+                                            <Download size={15} /> Save & Download Rate Sheet
+                                        </button>
+
+                                        <button type="button" onClick={(e) => handleCreateEventLeadSubmit(e, 'Upcoming', false)} style={{
+                                            height: '46px', padding: '0 20px', borderRadius: '12px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                                             border: 'none', color: 'white', fontWeight: '900', cursor: 'pointer',
                                             display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', boxShadow: '0 10px 20px rgba(16,185,129,0.3)'
                                         }}>
