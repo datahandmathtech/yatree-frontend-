@@ -934,8 +934,7 @@ export default function Leads() {
         setPhoneCheckResult(null);
         if (lead) {
             setEditingLead(lead);
-            const hasCustomItin = Array.isArray(lead.itinerary) && lead.itinerary.length > 0 && lead.itinerary.some(day => (Number(day.rate) > 0 || Number(day.amount) > 0 || (day.route && day.route.trim())));
-            setShowDetailedItinerary(hasCustomItin);
+            setShowDetailedItinerary(false);
             setPreviewClientCode(lead.clientCode || lead.leadId || '');
             const sDate = toLocalDateString(lead.travelStartDate);
             const eDate = toLocalDateString(lead.travelEndDate);
@@ -6594,7 +6593,9 @@ export default function Leads() {
                                                 fontWeight: '700',
                                                 border: '1px solid rgba(255, 255, 255, 0.08)'
                                             }}>
-                                                {showDetailedItinerary ? `${formData.itinerary?.length || 0} Days Visible` : 'Hidden (Click to Open)'}
+                                                {showDetailedItinerary
+                                                    ? `${formData.itinerary?.length || 0} Days Visible`
+                                                    : (formData.itinerary?.length > 0 ? `Closed (${formData.itinerary.length} Days Saved — Click to Open)` : 'Hidden (Click to Open)')}
                                             </span>
                                         </div>
 

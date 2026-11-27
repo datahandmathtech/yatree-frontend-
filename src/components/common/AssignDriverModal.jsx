@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Car, CheckCircle, Plus, Trash2, Copy, Save, Search, Moon, RotateCcw } from 'lucide-react';
+import { X, Car, CheckCircle, Plus, Trash2, Copy, Save, Search, Moon, RotateCcw, Check, AlertTriangle } from 'lucide-react';
 import axios from '../../api/axios';
 
 const inputStyle = {
@@ -49,7 +49,7 @@ const matchFleetVehicle = (vId, vNum, fleetList) => {
 };
 
 // Searchable Driver Combobox
-function DriverSelectDropdown({ day, idx, driversList, onSelectDriver, onSelectCustom }) {
+function DriverSelectDropdown({ day, idx, driversList, onSelectDriver, onSelectCustom, onClearDriver }) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
     const wrapperRef = useRef(null);
@@ -72,7 +72,7 @@ function DriverSelectDropdown({ day, idx, driversList, onSelectDriver, onSelectC
         return name.includes(q) || mob.includes(q);
     });
 
-    const isSelected = Boolean(day.driverName);
+    const isSelected = Boolean(day.driverName) || day.driverId === 'custom';
 
     return (
         <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
@@ -88,16 +88,47 @@ function DriverSelectDropdown({ day, idx, driversList, onSelectDriver, onSelectC
                     color: isSelected ? '#34d399' : 'rgba(255,255,255,0.7)',
                     border: isSelected ? '1px solid rgba(52, 211, 153, 0.45)' : '1px solid rgba(255,255,255,0.15)',
                     fontWeight: isSelected ? '800' : '600',
-                    background: isSelected ? 'rgba(52, 211, 153, 0.08)' : '#070d18'
+                    background: isSelected ? 'rgba(52, 211, 153, 0.08)' : '#070d18',
+                    gap: '4px'
                 }}
                 title={day.driverName ? `${day.driverName} (${day.driverPhone || ''})` : 'Search & Select Driver'}
             >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11.5px' }}>
-                    {isSelected ? `👤 ${day.driverName}` : '-- Select Driver (Search) --'}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11.5px', flex: 1 }}>
+                    {day.driverName ? `👤 ${day.driverName}` : (day.driverId === 'custom' ? '👤 Custom Driver' : '-- Select Driver (Search) --')}
                 </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '3px', opacity: 0.65, flexShrink: 0 }}>
-                    <Search size={12} />
-                    <span style={{ fontSize: '8px' }}>▼</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                    {isSelected && onClearDriver && (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onClearDriver();
+                                setIsOpen(false);
+                            }}
+                            title="Remove / Clear Driver from this row"
+                            style={{
+                                background: 'rgba(239, 68, 68, 0.22)',
+                                border: '1px solid rgba(239, 68, 68, 0.45)',
+                                color: '#fca5a5',
+                                borderRadius: '4px',
+                                width: '18px',
+                                height: '18px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                fontSize: '10px',
+                                fontWeight: '900',
+                                padding: 0
+                            }}
+                        >
+                            ✕
+                        </button>
+                    )}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '3px', opacity: 0.65 }}>
+                        <Search size={12} />
+                        <span style={{ fontSize: '8px' }}>▼</span>
+                    </span>
                 </span>
             </div>
 
@@ -124,6 +155,25 @@ function DriverSelectDropdown({ day, idx, driversList, onSelectDriver, onSelectC
                         )}
                     </div>
                     <div style={{ overflowY: 'auto', flex: 1, padding: '4px' }}>
+                        {isSelected && onClearDriver && (
+                            <div
+                                onClick={() => { onClearDriver(); setIsOpen(false); }}
+                                style={{
+                                    padding: '6px 8px',
+                                    marginBottom: '4px',
+                                    borderRadius: '5px',
+                                    cursor: 'pointer',
+                                    background: 'rgba(239, 68, 68, 0.14)',
+                                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                                    color: '#fca5a5',
+                                    fontSize: '11px',
+                                    fontWeight: '800',
+                                    textAlign: 'center'
+                                }}
+                            >
+                                🚫 Remove / Clear Driver
+                            </div>
+                        )}
                         {filteredDrivers.length > 0 ? (
                             filteredDrivers.map(drv => (
                                 <div
@@ -160,7 +210,7 @@ function DriverSelectDropdown({ day, idx, driversList, onSelectDriver, onSelectC
 }
 
 // Searchable Vehicle Combobox
-function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, getVehicleConflict, onSelectVehicle, onSelectCustom }) {
+function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, getVehicleConflict, onSelectVehicle, onSelectCustom, onClearVehicle }) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
     const wrapperRef = useRef(null);
@@ -192,7 +242,7 @@ function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, ge
         return num.includes(q) || owner.includes(q) || model.includes(q);
     });
 
-    const isSelected = Boolean(day.vehicleNumber);
+    const isSelected = Boolean(day.vehicleNumber) || Boolean(day.isOutsideCar);
 
     return (
         <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
@@ -208,11 +258,12 @@ function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, ge
                     color: isSelected ? '#38bdf8' : 'rgba(255,255,255,0.7)',
                     border: isSelected ? '1px solid rgba(56, 189, 248, 0.45)' : '1px solid rgba(255,255,255,0.15)',
                     fontWeight: isSelected ? '800' : '600',
-                    background: isSelected ? 'rgba(56, 189, 248, 0.08)' : '#070d18'
+                    background: isSelected ? 'rgba(56, 189, 248, 0.08)' : '#070d18',
+                    gap: '4px'
                 }}
                 title={day.vehicleNumber ? `${day.vehicleNumber} (${day.vehicleType || 'Cab'})` : 'Search & Select Vehicle'}
             >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11.5px' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11.5px', flex: 1 }}>
                     {day.isOutsideCar
                         ? (day.vehicleNumber && day.vehicleNumber !== 'OUTSIDE-CAR'
                             ? `🏢 ${day.vehicleNumber}`
@@ -222,9 +273,39 @@ function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, ge
                         : (isSelected ? `🚗 ${day.vehicleNumber}` : '-- Select Vehicle (Search) --')
                     }
                 </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '3px', opacity: 0.65, flexShrink: 0 }}>
-                    <Search size={12} />
-                    <span style={{ fontSize: '8px' }}>▼</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                    {isSelected && onClearVehicle && (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onClearVehicle();
+                                setIsOpen(false);
+                            }}
+                            title="Remove / Clear Vehicle from this row"
+                            style={{
+                                background: 'rgba(239, 68, 68, 0.22)',
+                                border: '1px solid rgba(239, 68, 68, 0.45)',
+                                color: '#fca5a5',
+                                borderRadius: '4px',
+                                width: '18px',
+                                height: '18px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                fontSize: '10px',
+                                fontWeight: '900',
+                                padding: 0
+                            }}
+                        >
+                            ✕
+                        </button>
+                    )}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '3px', opacity: 0.65 }}>
+                        <Search size={12} />
+                        <span style={{ fontSize: '8px' }}>▼</span>
+                    </span>
                 </span>
             </div>
 
@@ -251,6 +332,25 @@ function VehicleSelectDropdown({ day, idx, vehiclesList, outsideVehiclesList, ge
                         )}
                     </div>
                     <div style={{ overflowY: 'auto', flex: 1, padding: '4px' }}>
+                        {isSelected && onClearVehicle && (
+                            <div
+                                onClick={() => { onClearVehicle(); setIsOpen(false); }}
+                                style={{
+                                    padding: '6px 10px',
+                                    marginBottom: '4px',
+                                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                                    background: 'rgba(239, 68, 68, 0.14)',
+                                    cursor: 'pointer',
+                                    color: '#fca5a5',
+                                    fontSize: '11.5px',
+                                    fontWeight: '800',
+                                    textAlign: 'center',
+                                    borderRadius: '6px'
+                                }}
+                            >
+                                🚫 Remove / Clear Vehicle
+                            </div>
+                        )}
                         {/* Outside Car Option on Top */}
                         <div
                             onClick={() => { onSelectCustom(); setIsOpen(false); }}
@@ -372,6 +472,9 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
     const [conflictWarning, setConflictWarning] = useState(null);
     const [copySuccessMsg, setCopySuccessMsg] = useState('');
     const [savingAssignment, setSavingAssignment] = useState(false);
+    const [selectedIndices, setSelectedIndices] = useState([]);
+    const [lastEditedRowIdx, setLastEditedRowIdx] = useState(null);
+    const [bulkAmountInput, setBulkAmountInput] = useState('');
 
     useEffect(() => {
         if (isOpen && booking) {
@@ -707,9 +810,168 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
         });
 
         setAssignItinerary(days);
+        setSelectedIndices([]);
+        setLastEditedRowIdx(null);
+        setBulkAmountInput('');
+    };
+
+    const toggleRowSelect = (idx) => {
+        setSelectedIndices(prev => (prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx].sort((a, b) => a - b)));
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIndices.length === assignItinerary.length) {
+            setSelectedIndices([]);
+        } else {
+            setSelectedIndices(assignItinerary.map((_, i) => i));
+        }
+    };
+
+    const handleClearDayDriver = (dayIdx) => {
+        setLastEditedRowIdx(dayIdx);
+        setAssignItinerary(prev => prev.map((day, idx) => (idx !== dayIdx ? day : {
+            ...day,
+            driverId: '',
+            driverName: '',
+            driverPhone: ''
+        })));
+    };
+
+    const handleClearDayVehicle = (dayIdx) => {
+        setLastEditedRowIdx(dayIdx);
+        setAssignItinerary(prev => prev.map((day, idx) => (idx !== dayIdx ? day : {
+            ...day,
+            vehicleId: '',
+            vehicleNumber: '',
+            isOutsideCar: false,
+            ownerName: '',
+            buyAmount: ''
+        })));
+    };
+
+    const handleClearDayDriverAndVehicle = (dayIdx) => {
+        setLastEditedRowIdx(dayIdx);
+        setAssignItinerary(prev => prev.map((day, idx) => (idx !== dayIdx ? day : {
+            ...day,
+            driverId: '',
+            driverName: '',
+            driverPhone: '',
+            vehicleId: '',
+            vehicleNumber: '',
+            isOutsideCar: false,
+            ownerName: '',
+            buyAmount: ''
+        })));
+        showTemporaryCopyBanner(`Removed Driver & Vehicle from Row ${dayIdx + 1}`);
+    };
+
+    const handleClearSelectedDriversAndCars = () => {
+        if (selectedIndices.length === 0) return;
+        const targetSet = new Set(selectedIndices);
+        setAssignItinerary(prev => prev.map((day, idx) => (targetSet.has(idx) ? {
+            ...day,
+            driverId: '',
+            driverName: '',
+            driverPhone: '',
+            vehicleId: '',
+            vehicleNumber: '',
+            isOutsideCar: false,
+            ownerName: '',
+            buyAmount: ''
+        } : day)));
+        showTemporaryCopyBanner(`Removed Driver & Vehicle from ${selectedIndices.length} selected row(s)!`);
+    };
+
+    const handleCopyRowToSelected = (sourceIdx, mode = 'cab_only') => {
+        if (sourceIdx === null || sourceIdx === undefined || !assignItinerary[sourceIdx]) return;
+        if (selectedIndices.length === 0) {
+            alert('Please check at least 1 target row to copy into.');
+            return;
+        }
+        const targets = selectedIndices.filter(i => i !== sourceIdx);
+        if (targets.length === 0) {
+            alert('Please check the other target rows where you want to copy this entry.');
+            return;
+        }
+        const src = assignItinerary[sourceIdx];
+        const targetSet = new Set(targets);
+
+        const nextList = assignItinerary.map((day, idx) => {
+            if (!targetSet.has(idx)) return day;
+            if (mode === 'full') {
+                return {
+                    ...day,
+                    driverId: src.driverId || '',
+                    driverName: src.driverName || '',
+                    driverPhone: src.driverPhone || '',
+                    vehicleType: src.vehicleType || day.vehicleType,
+                    vehicleId: src.vehicleId || '',
+                    vehicleNumber: src.vehicleNumber || '',
+                    isOutsideCar: Boolean(src.isOutsideCar),
+                    ownerName: src.ownerName || '',
+                    buyAmount: src.buyAmount || '',
+                    time: src.time || day.time,
+                    isApg: Boolean(src.isApg),
+                    stayType: src.stayType || day.stayType,
+                    duty: src.duty !== undefined && src.duty !== '' ? src.duty : day.duty,
+                    pickupPoint: src.pickupPoint || day.pickupPoint,
+                    amount: (src.amount !== undefined && src.amount !== '' && Number(src.amount) > 0) ? src.amount : day.amount
+                };
+            }
+            return {
+                ...day,
+                driverId: src.driverId || '',
+                driverName: src.driverName || '',
+                driverPhone: src.driverPhone || '',
+                vehicleType: src.vehicleType || day.vehicleType,
+                vehicleId: src.vehicleId || '',
+                vehicleNumber: src.vehicleNumber || '',
+                isOutsideCar: Boolean(src.isOutsideCar),
+                ownerName: src.ownerName || '',
+                buyAmount: src.buyAmount || ''
+            };
+        });
+
+        setAssignItinerary(nextList);
+        showTemporaryCopyBanner(
+            mode === 'full'
+                ? `Copied full entry (Driver, Vehicle, Tour & Amount) from Day ${src.dayNo || (sourceIdx + 1)} to ${targets.length} selected row(s)!`
+                : `Copied Driver & Vehicle from Day ${src.dayNo || (sourceIdx + 1)} to ${targets.length} selected row(s)!`
+        );
+
+        const conflictsFound = [];
+        nextList.forEach((row, idx) => {
+            if (targetSet.has(idx) && row.vehicleNumber) {
+                const conf = getVehicleConflict(row.vehicleNumber, row.date);
+                if (conf) {
+                    conflictsFound.push({ date: row.date, carNumber: row.vehicleNumber, clientName: conf.clientName, duty: conf.duty, bookingId: conf.bookingId });
+                }
+            }
+        });
+        if (conflictsFound.length > 0) {
+            const c0 = conflictsFound[0];
+            setConflictWarning({
+                carNumber: c0.carNumber,
+                date: c0.date,
+                message: `Cab ${c0.carNumber} is already assigned on ${formatTripDate(c0.date)} to ${c0.clientName || 'Another Guest'} (${conflictsFound.length} conflict${conflictsFound.length > 1 ? 's' : ''} detected on Master Calendar).`
+            });
+        }
+    };
+
+    const handleApplyBulkAmountToSelected = (amtVal) => {
+        if (selectedIndices.length === 0) return;
+        const num = Number(amtVal);
+        if (!Number.isFinite(num) || num <= 0) {
+            alert('Please enter a valid Amount (> 0) to apply.');
+            return;
+        }
+        const targetSet = new Set(selectedIndices);
+        setAssignItinerary(prev => prev.map((day, idx) => (targetSet.has(idx) ? { ...day, amount: num } : day)));
+        showTemporaryCopyBanner(`Applied ₹${num.toLocaleString('en-IN')} to ${selectedIndices.length} selected row(s)!`);
     };
 
     const handleUpdateDayDriver = (dayIdx, driverVal) => {
+        setLastEditedRowIdx(dayIdx);
         const allDrivers = driversList || [];
         let drvId = '';
         let drvName = '';
@@ -746,6 +1008,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
     };
 
     const handleUpdateDayVehicleSelect = (dayIdx, vehVal) => {
+        setLastEditedRowIdx(dayIdx);
         const companyVehicles = (vehiclesList || []).filter(v => !v.isOutsideCar);
         let vId = '';
         let vNum = '';
@@ -806,13 +1069,18 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
             next.splice(idx + 1, 0, newRow);
             return next;
         });
+        setSelectedIndices([]);
+        setLastEditedRowIdx(null);
     };
 
     const handleRemoveCarRow = (idx) => {
         setAssignItinerary(prev => prev.filter((_, i) => i !== idx));
+        setSelectedIndices([]);
+        setLastEditedRowIdx(null);
     };
 
     const handleUpdateDayField = (dayIdx, field, val) => {
+        setLastEditedRowIdx(dayIdx);
         setAssignItinerary(prev => prev.map((day, idx) => {
             if (idx !== dayIdx) return day;
             return {
@@ -1022,8 +1290,20 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
         }
     };
 
+    const missingAmountRows = useMemo(() => {
+        return (assignItinerary || [])
+            .map((d, idx) => ({ idx, dayNo: d.dayNo || (idx + 1), date: d.date }))
+            .filter((_, i) => !(Number(assignItinerary[i]?.amount) > 0));
+    }, [assignItinerary]);
+
     const handleSaveDriverAssignments = async (e) => {
         if (e && e.preventDefault) e.preventDefault();
+        if (missingAmountRows.length > 0) {
+            const labels = missingAmountRows.slice(0, 6).map(r => `Day ${r.dayNo}`).join(', ');
+            const extra = missingAmountRows.length > 6 ? ` (+${missingAmountRows.length - 6} more)` : '';
+            alert(`Amount (₹) fill karna zaroori hai! ${missingAmountRows.length} row(s) me Amount missing hai: ${labels}${extra}.\nHar ek row me Amount (> 0) daalein tabhi Save & Sync to DRS hoga.`);
+            return;
+        }
         try {
             setSavingAssignment(true);
             const distinctDates = [];
@@ -1046,20 +1326,27 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                 );
                 const matched = isMarkedOutside ? null : matchFleetVehicle(d.vehicleId, d.vehicleNumber, companyVehicles);
                 const isCompany = !isMarkedOutside && Boolean(matched);
-                const isOutside = isMarkedOutside || !isCompany;
+                const hasCustomPlate = Boolean(d.vehicleNumber?.trim() && d.vehicleNumber.trim() !== 'OUTSIDE-CAR');
+                const isOutside = isMarkedOutside || (!isCompany && hasCustomPlate);
+                const hasDriver = Boolean(d.driverName?.trim() || (d.driverId && d.driverId !== 'custom'));
+
                 return {
                     ...d,
                     dayNo: dateDayNo,
                     duty: (d.duty || '').trim() || 'Local Sightseeing / Tour',
                     description: (d.duty || '').trim() || 'Local Sightseeing / Tour',
                     time: d.isApg ? 'APG' : (d.time || '09:00 AM'),
-                    vehicle: isCompany && matched ? matched._id : undefined,
-                    vehicleId: isCompany && matched ? matched._id : 'custom',
-                    vehicleNumber: isCompany && matched ? matched.carNumber : (d.vehicleNumber?.trim() || (isOutside ? 'OUTSIDE-CAR' : '')),
+                    driver: hasDriver && d.driverId && d.driverId !== 'custom' ? d.driverId : null,
+                    driverId: hasDriver ? (d.driverId || '') : '',
+                    driverName: hasDriver ? (d.driverName || '') : '',
+                    driverPhone: hasDriver ? (d.driverPhone || '') : '',
+                    vehicle: isCompany && matched ? matched._id : null,
+                    vehicleId: isCompany && matched ? matched._id : (isOutside ? 'custom' : ''),
+                    vehicleNumber: isCompany && matched ? matched.carNumber : (isOutside ? (d.vehicleNumber?.trim() || 'OUTSIDE-CAR') : ''),
                     vehicleType: matched ? (matched.carType || matched.model || d.vehicleType) : d.vehicleType,
                     isOutsideCar: isOutside,
-                    ownerName: isCompany ? '' : (d.ownerName?.trim() || (isOutside ? 'Outside Vendor' : '')),
-                    buyAmount: isCompany ? '' : (d.buyAmount || ''),
+                    ownerName: isOutside ? (d.ownerName?.trim() || 'Outside Vendor') : '',
+                    buyAmount: isOutside ? (d.buyAmount || '') : '',
                     stayType: d.stayType || 'Same Day Return'
                 };
             });
@@ -1084,6 +1371,10 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
 
     const bkgCode = booking.bookingCode || booking.bookingId || booking.rawBookingId;
     const clientName = booking.clientName || booking.guestName || 'Valued Guest';
+    const effectiveBulkSourceIdx = (lastEditedRowIdx !== null && assignItinerary[lastEditedRowIdx])
+        ? lastEditedRowIdx
+        : Math.max(0, assignItinerary.findIndex(d => d.driverName || d.vehicleNumber));
+    const effectiveBulkSourceDay = assignItinerary[effectiveBulkSourceIdx];
 
     return (
         <div style={{
@@ -1103,7 +1394,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                 exit={{ y: 15, opacity: 0 }}
                 style={{
                     width: '100%',
-                    maxWidth: '1060px',
+                    maxWidth: '1180px',
                     maxHeight: '90vh',
                     display: 'flex',
                     flexDirection: 'column',
@@ -1279,10 +1570,170 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                         </div>
                     )}
 
+                    {/* Bulk Selection & Quick Helper Bar */}
+                    {assignItinerary.length > 0 && (
+                        <div style={{
+                            background: selectedIndices.length > 0 ? 'rgba(245, 158, 11, 0.12)' : 'rgba(255,255,255,0.03)',
+                            border: selectedIndices.length > 0 ? '1px solid rgba(245, 158, 11, 0.45)' : '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: '10px',
+                            padding: '8px 12px',
+                            marginBottom: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '8px'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '11.5px', fontWeight: '800', color: 'white' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={assignItinerary.length > 0 && selectedIndices.length === assignItinerary.length}
+                                        onChange={toggleSelectAll}
+                                        style={{ width: '15px', height: '15px', accentColor: '#f59e0b', cursor: 'pointer' }}
+                                    />
+                                    Select All ({assignItinerary.length})
+                                </label>
+                                {missingAmountRows.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedIndices(missingAmountRows.map(r => r.idx))}
+                                        style={{
+                                            padding: '4px 9px',
+                                            background: 'rgba(239, 68, 68, 0.14)',
+                                            border: '1px solid rgba(239, 68, 68, 0.4)',
+                                            color: '#fca5a5',
+                                            borderRadius: '6px',
+                                            fontSize: '11px',
+                                            fontWeight: '800',
+                                            cursor: 'pointer'
+                                        }}
+                                        title="Select all rows where Amount is empty"
+                                    >
+                                        Select Empty Amount Rows ({missingAmountRows.length})
+                                    </button>
+                                )}
+                                {selectedIndices.length > 0 && (
+                                    <>
+                                        <span style={{
+                                            background: 'rgba(245, 158, 11, 0.25)',
+                                            color: '#fbbf24',
+                                            padding: '2px 8px',
+                                            borderRadius: '6px',
+                                            fontSize: '11px',
+                                            fontWeight: '900'
+                                        }}>
+                                            {selectedIndices.length} Selected
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedIndices([])}
+                                            style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.55)', fontSize: '11px', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}
+                                        >
+                                            Clear Sel
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+
+                            {selectedIndices.length > 0 ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}>
+                                    <button
+                                        type="button"
+                                        onClick={handleClearSelectedDriversAndCars}
+                                        style={{
+                                            padding: '5px 10px',
+                                            background: 'rgba(239, 68, 68, 0.18)',
+                                            border: '1px solid rgba(239, 68, 68, 0.45)',
+                                            color: '#fca5a5',
+                                            borderRadius: '7px',
+                                            fontSize: '11px',
+                                            fontWeight: '900',
+                                            cursor: 'pointer'
+                                        }}
+                                        title="Remove Driver & Vehicle from all selected rows (e.g. driver on leave)"
+                                    >
+                                        🚫 Remove Driver & Cab ({selectedIndices.length})
+                                    </button>
+
+                                    {effectiveBulkSourceDay && (
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleCopyRowToSelected(effectiveBulkSourceIdx, 'cab_only')}
+                                                style={{
+                                                    padding: '5px 10px',
+                                                    background: 'rgba(56, 189, 248, 0.18)',
+                                                    border: '1px solid rgba(56, 189, 248, 0.45)',
+                                                    color: '#7dd3fc',
+                                                    borderRadius: '7px',
+                                                    fontSize: '11px',
+                                                    fontWeight: '900',
+                                                    cursor: 'pointer'
+                                                }}
+                                                title={`Copy Day ${effectiveBulkSourceDay.dayNo || effectiveBulkSourceIdx + 1} Driver & Vehicle to selected rows`}
+                                            >
+                                                📋 Copy Day {effectiveBulkSourceDay.dayNo || effectiveBulkSourceIdx + 1} Driver & Cab → Sel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleCopyRowToSelected(effectiveBulkSourceIdx, 'full')}
+                                                style={{
+                                                    padding: '5px 10px',
+                                                    background: 'rgba(245, 158, 11, 0.22)',
+                                                    border: '1px solid rgba(245, 158, 11, 0.5)',
+                                                    color: '#fbbf24',
+                                                    borderRadius: '7px',
+                                                    fontSize: '11px',
+                                                    fontWeight: '900',
+                                                    cursor: 'pointer'
+                                                }}
+                                                title={`Copy Day ${effectiveBulkSourceDay.dayNo || effectiveBulkSourceIdx + 1} Driver, Vehicle, Tour, Time & Amount to selected rows`}
+                                            >
+                                                ⚡ Copy Full Row → Sel
+                                            </button>
+                                        </>
+                                    )}
+
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(0,0,0,0.35)', padding: '2px 5px', borderRadius: '7px', border: '1px solid rgba(74, 222, 128, 0.3)' }}>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            placeholder="₹ Amt"
+                                            value={bulkAmountInput}
+                                            onChange={e => setBulkAmountInput(e.target.value)}
+                                            style={{ width: '74px', background: 'transparent', border: 'none', color: '#4ade80', fontSize: '11px', fontWeight: '800', outline: 'none' }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => handleApplyBulkAmountToSelected(bulkAmountInput)}
+                                            style={{
+                                                padding: '3px 7px',
+                                                background: 'rgba(74, 222, 128, 0.2)',
+                                                border: '1px solid rgba(74, 222, 128, 0.45)',
+                                                color: '#4ade80',
+                                                borderRadius: '5px',
+                                                fontSize: '10.5px',
+                                                fontWeight: '900',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Apply ₹
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', fontWeight: '600' }}>
+                                    Tip: Check rows to bulk-remove Driver/Cab (e.g. leave dates), copy an edited row to selected days, or fill Amount quickly.
+                                </span>
+                            )}
+                        </div>
+                    )}
+
                     {/* Column Headers */}
                     <div style={{
                         display: 'grid',
-                        gridTemplateColumns: '120px 1.15fr 1.15fr 150px 1.25fr 105px 145px',
+                        gridTemplateColumns: '132px 1.15fr 1.15fr 145px 1.15fr 112px 175px',
                         gap: '10px',
                         padding: '0 12px 8px 12px',
                         fontSize: '11px',
@@ -1291,12 +1742,12 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                         textTransform: 'uppercase',
                         letterSpacing: '0.4px'
                     }}>
-                        <div>Day & Date</div>
+                        <div>Select / Date</div>
                         <div style={{ color: '#34d399' }}>1. Assign Driver</div>
                         <div style={{ color: '#38bdf8' }}>2. Assign Vehicle</div>
                         <div style={{ color: '#fbbf24' }}>3. Time & Stay</div>
                         <div style={{ color: '#c084fc' }}>4. Guest Tour / Duty Details</div>
-                        <div style={{ color: '#4ade80' }}>5. Amount (₹)</div>
+                        <div style={{ color: '#4ade80' }}>5. Amount (₹) *</div>
                         <div style={{ textAlign: 'right' }}>Action</div>
                     </div>
 
@@ -1322,27 +1773,40 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                 if (ds && !distinctDates.includes(ds)) distinctDates.push(ds);
                             });
                             const dayNumber = dStr && distinctDates.includes(dStr) ? (distinctDates.indexOf(dStr) + 1) : (day.dayNo || idx + 1);
+                            const isRowSelected = selectedIndices.includes(idx);
+                            const isMissingAmt = !(Number(day.amount) > 0);
+                            const hasAssignedDriverOrCar = Boolean(day.driverName || day.vehicleNumber || day.isOutsideCar || day.driverId === 'custom');
+                            const otherSelectedCount = selectedIndices.filter(i => i !== idx).length;
 
                             return (
                                 <div
                                     key={idx}
                                     style={{
-                                        background: 'rgba(15, 23, 42, 0.75)',
-                                        border: (day.driverName && day.vehicleNumber) ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(255,255,255,0.1)',
+                                        background: isRowSelected ? 'rgba(245, 158, 11, 0.08)' : 'rgba(15, 23, 42, 0.75)',
+                                        border: isRowSelected
+                                            ? '1.5px solid rgba(245, 158, 11, 0.6)'
+                                            : ((day.driverName && day.vehicleNumber) ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(255,255,255,0.1)'),
                                         borderRadius: '10px',
                                         padding: '10px 12px',
                                         display: 'grid',
-                                        gridTemplateColumns: '120px 1.15fr 1.15fr 150px 1.25fr 105px 145px',
+                                        gridTemplateColumns: '132px 1.15fr 1.15fr 145px 1.15fr 112px 175px',
                                         gap: '10px',
                                         alignItems: 'start'
                                     }}
                                 >
-                                    {/* Day & Date */}
+                                    {/* Select + Day & Date */}
                                     <div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={isRowSelected}
+                                                onChange={() => toggleRowSelect(idx)}
+                                                title="Select row for bulk clear or copy"
+                                                style={{ width: '15px', height: '15px', accentColor: '#f59e0b', cursor: 'pointer', margin: 0 }}
+                                            />
                                             <span style={{
-                                                background: '#1e3a8a',
-                                                color: '#93c5fd',
+                                                background: isRowSelected ? '#f59e0b' : '#1e3a8a',
+                                                color: isRowSelected ? '#090d16' : '#93c5fd',
                                                 padding: '2px 7px',
                                                 borderRadius: '5px',
                                                 fontSize: '10.5px',
@@ -1364,7 +1828,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                                 </span>
                                             )}
                                         </div>
-                                        <div style={{ color: 'white', fontSize: '12px', fontWeight: '700' }}>
+                                        <div style={{ color: 'white', fontSize: '12px', fontWeight: '700', paddingLeft: '20px' }}>
                                             {day.date ? new Date(day.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Pending'}
                                         </div>
                                     </div>
@@ -1381,6 +1845,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                             onSelectCustom={() => {
                                                 handleUpdateDayDriver(idx, '__custom__');
                                             }}
+                                            onClearDriver={() => handleClearDayDriver(idx)}
                                         />
 
                                         {isCustomDriver && (
@@ -1412,6 +1877,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                             outsideVehiclesList={outsideVehiclesList}
                                             getVehicleConflict={getVehicleConflict}
                                             onSelectVehicle={(veh, conflict) => {
+                                                setLastEditedRowIdx(idx);
                                                 if (conflict) {
                                                     triggerVehicleConflictWarning(veh.carNumber, day.date, conflict);
                                                 } else {
@@ -1438,6 +1904,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                                 }
                                             }}
                                             onSelectCustom={() => {
+                                                setLastEditedRowIdx(idx);
                                                 setAssignItinerary(prev => prev.map((d, i) => {
                                                     if (i !== idx) return d;
                                                     return {
@@ -1451,6 +1918,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                                     };
                                                 }));
                                             }}
+                                            onClearVehicle={() => handleClearDayVehicle(idx)}
                                         />
 
                                         {isCustomVehicle && (
@@ -1460,6 +1928,7 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                                     placeholder="Enter Car No. (e.g. RJ27 TA 1234)"
                                                     value={day.vehicleNumber || ''}
                                                     onChange={(e) => {
+                                                        setLastEditedRowIdx(idx);
                                                         const val = e.target.value.toUpperCase();
                                                         const matched = matchFleetVehicle(null, val, allVehicles);
                                                         if (matched) {
@@ -1637,11 +2106,12 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                         />
                                     </div>
 
-                                    {/* 5. Amount (₹) */}
+                                    {/* 5. Amount (₹) - Required on every row */}
                                     <div>
                                         <input
                                             type="number"
-                                            placeholder="₹ Amount"
+                                            min="1"
+                                            placeholder="₹ Required"
                                             value={day.amount !== undefined && day.amount !== 0 ? day.amount : ''}
                                             onChange={(e) => handleUpdateDayField(idx, 'amount', e.target.value)}
                                             style={{
@@ -1650,19 +2120,25 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                                 fontSize: '12.5px',
                                                 fontWeight: '800',
                                                 padding: '4px 10px',
-                                                color: '#4ade80',
-                                                border: Number(day.amount) > 0 ? '1px solid rgba(74, 222, 128, 0.45)' : '1px solid rgba(255,255,255,0.15)'
+                                                color: isMissingAmt ? '#fca5a5' : '#4ade80',
+                                                background: isMissingAmt ? 'rgba(239, 68, 68, 0.08)' : '#070d18',
+                                                border: isMissingAmt ? '1.5px solid rgba(239, 68, 68, 0.65)' : '1px solid rgba(74, 222, 128, 0.45)'
                                             }}
                                         />
+                                        {isMissingAmt && (
+                                            <div style={{ fontSize: '9.5px', color: '#f87171', fontWeight: '800', marginTop: '3px', paddingLeft: '2px' }}>
+                                                Amount required
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Action */}
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '5px', height: '36px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', minHeight: '36px', flexWrap: 'wrap' }}>
                                         <button
                                             type="button"
                                             onClick={() => handleAddCarForDate(idx)}
                                             style={{
-                                                padding: '5px 8px',
+                                                padding: '5px 7px',
                                                 background: 'rgba(16, 185, 129, 0.16)',
                                                 color: '#34d399',
                                                 border: '1px solid rgba(16, 185, 129, 0.45)',
@@ -1679,6 +2155,49 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                         >
                                             <Plus size={12} /> Car
                                         </button>
+
+                                        {hasAssignedDriverOrCar && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleClearDayDriverAndVehicle(idx)}
+                                                style={{
+                                                    padding: '5px 6px',
+                                                    background: 'rgba(239, 68, 68, 0.14)',
+                                                    color: '#fca5a5',
+                                                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                                                    borderRadius: '6px',
+                                                    fontSize: '10.5px',
+                                                    cursor: 'pointer',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center'
+                                                }}
+                                                title="Remove Driver & Vehicle from this day"
+                                            >
+                                                <RotateCcw size={12} />
+                                            </button>
+                                        )}
+
+                                        {otherSelectedCount > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleCopyRowToSelected(idx, 'full')}
+                                                style={{
+                                                    padding: '5px 7px',
+                                                    background: 'rgba(245, 158, 11, 0.2)',
+                                                    color: '#fbbf24',
+                                                    border: '1px solid rgba(245, 158, 11, 0.5)',
+                                                    borderRadius: '6px',
+                                                    fontSize: '10px',
+                                                    fontWeight: '900',
+                                                    cursor: 'pointer',
+                                                    whiteSpace: 'nowrap'
+                                                }}
+                                                title={`Copy this row (Driver, Cab, Tour & Amount) to ${otherSelectedCount} selected row(s)`}
+                                            >
+                                                Copy→Sel ({otherSelectedCount})
+                                            </button>
+                                        )}
 
                                         {totalCarsForDate > 1 && (
                                             <button
@@ -1702,12 +2221,12 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                                             </button>
                                         )}
 
-                                        {idx === 0 && assignItinerary.length > 1 ? (
+                                        {idx === 0 && assignItinerary.length > 1 && otherSelectedCount === 0 ? (
                                             <button
                                                 type="button"
                                                 onClick={() => handleCopyDayToAll(0, 'all')}
                                                 style={{
-                                                    padding: '5px 8px',
+                                                    padding: '5px 7px',
                                                     background: 'rgba(245, 158, 11, 0.18)',
                                                     color: '#fbbf24',
                                                     border: '1px solid rgba(245, 158, 11, 0.45)',
@@ -1740,12 +2259,29 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                     flexWrap: 'wrap',
                     gap: '10px'
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '13px', color: 'rgba(255,255,255,0.75)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '13px', color: 'rgba(255,255,255,0.75)', flexWrap: 'wrap' }}>
                         <span>
                             Package Total: <strong style={{ color: '#4ade80', fontSize: '14px' }}>
                                 ₹{(assignItinerary.reduce((acc, d) => acc + (Number(d.amount) || 0), 0) || Number(booking.totalAmount) || 0).toLocaleString('en-IN')}
                             </strong>
                         </span>
+                        {missingAmountRows.length > 0 && (
+                            <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '4px 10px',
+                                borderRadius: '8px',
+                                background: 'rgba(239, 68, 68, 0.15)',
+                                border: '1px solid rgba(239, 68, 68, 0.45)',
+                                color: '#fca5a5',
+                                fontSize: '11.5px',
+                                fontWeight: '800'
+                            }}>
+                                <AlertTriangle size={14} color="#f87171" />
+                                {missingAmountRows.length} row(s) missing Amount (₹) — Har row me Amount fill karein
+                            </span>
+                        )}
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1768,20 +2304,23 @@ export default function AssignDriverModal({ isOpen, onClose, booking, onSaved, c
                         <button
                             type="button"
                             onClick={handleSaveDriverAssignments}
-                            disabled={savingAssignment}
+                            disabled={savingAssignment || missingAmountRows.length > 0}
+                            title={missingAmountRows.length > 0 ? 'Fill Amount (> 0) in every row before saving & syncing to DRS' : 'Save & Sync to Live DRS'}
                             style={{
                                 padding: '9px 20px',
-                                background: 'linear-gradient(135deg, #10b981, #059669)',
-                                color: 'white',
-                                border: 'none',
+                                background: (savingAssignment || missingAmountRows.length > 0)
+                                    ? 'rgba(148, 163, 184, 0.25)'
+                                    : 'linear-gradient(135deg, #10b981, #059669)',
+                                color: (savingAssignment || missingAmountRows.length > 0) ? 'rgba(255,255,255,0.45)' : 'white',
+                                border: (savingAssignment || missingAmountRows.length > 0) ? '1px solid rgba(255,255,255,0.15)' : 'none',
                                 borderRadius: '8px',
-                                cursor: 'pointer',
+                                cursor: (savingAssignment || missingAmountRows.length > 0) ? 'not-allowed' : 'pointer',
                                 fontWeight: '900',
                                 fontSize: '13px',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '8px',
-                                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)'
+                                boxShadow: (savingAssignment || missingAmountRows.length > 0) ? 'none' : '0 4px 14px rgba(16, 185, 129, 0.4)'
                             }}
                         >
                             <Save size={16} />

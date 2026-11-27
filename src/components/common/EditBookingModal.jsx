@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, Save, Plus, Trash2, Calculator, TrendingUp, TrendingDown,
     Car, Calendar, Sparkles, Edit2, Check, Settings, Info, MapPin,
-    User, Phone, Mail, FileText, ChevronDown, CheckCircle, Clock
+    User, Phone, Mail, FileText, ChevronDown, ChevronUp, CheckCircle, Clock
 } from 'lucide-react';
 import axios from '../../api/axios';
 import { useCompany } from '../../context/CompanyContext';
@@ -144,8 +144,9 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
     const [targetPerDay, setTargetPerDay] = useState('2500');
     const [matrixSimSalePrice, setMatrixSimSalePrice] = useState('');
 
-    // Day-wise Itinerary
+    // Day-wise Itinerary (Hidden / Closed by default when editing)
     const [itinerary, setItinerary] = useState([]);
+    const [showDetailedItinerary, setShowDetailedItinerary] = useState(false);
 
     // Remarks & Inclusions
     const [specialRemarks, setSpecialRemarks] = useState('');
@@ -171,6 +172,7 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
 
     useEffect(() => {
         if (booking) {
+            setShowDetailedItinerary(false);
             setBookingReference(booking.bookingReference || 'Direct');
             setTravelAgentName(booking.travelAgentName || '');
             setTravelAgentMobile(booking.travelAgentMobile || '');
@@ -1560,16 +1562,78 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                     </div>
 
                     {/* ========================================================= */}
-                    {/* SECTION 3: DAY-WISE ITINERARY & PRICING                   */}
+                    {/* SECTION 3: DAY-WISE ITINERARY & PRICING (COLLAPSIBLE)     */}
                     {/* ========================================================= */}
-                    <div style={{ background: '#0a101d', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '18px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-                            <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#fbbf24', color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '11px' }}>3</span>
-                            <span style={{ color: '#fbbf24', fontSize: '12.5px', fontWeight: '800', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
-                                Day-wise Itinerary & Pricing
-                            </span>
+                    <div style={{ background: '#0a101d', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: '14px 18px' }}>
+                        <div
+                            onClick={() => setShowDetailedItinerary(prev => !prev)}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none', flexWrap: 'wrap', gap: '10px' }}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#fbbf24', color: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', fontSize: '11px' }}>3</span>
+                                <span style={{ color: '#fbbf24', fontSize: '12.5px', fontWeight: '800', letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                                    Day-wise Itinerary & Pricing (Optional)
+                                </span>
+                                <span style={{
+                                    fontSize: '11px',
+                                    background: showDetailedItinerary ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+                                    color: showDetailedItinerary ? '#fbbf24' : 'rgba(255, 255, 255, 0.55)',
+                                    padding: '2px 8px',
+                                    borderRadius: '12px',
+                                    fontWeight: '700',
+                                    border: '1px solid rgba(255, 255, 255, 0.08)'
+                                }}>
+                                    {showDetailedItinerary
+                                        ? `${itinerary.length} Days Visible`
+                                        : (itinerary.length > 0 ? `Closed (${itinerary.length} Days Saved — Click to Open)` : 'Hidden (Click to Open)')}
+                                </span>
+                                <span style={{
+                                    fontSize: '11.5px',
+                                    background: 'rgba(251, 191, 36, 0.1)',
+                                    color: '#fbbf24',
+                                    padding: '2px 10px',
+                                    borderRadius: '12px',
+                                    fontWeight: '800',
+                                    border: '1px solid rgba(251, 191, 36, 0.25)'
+                                }}>
+                                    Total: ₹{Number(displayedTotalFare).toLocaleString('en-IN')}
+                                </span>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowDetailedItinerary(prev => !prev);
+                                }}
+                                style={{
+                                    background: showDetailedItinerary ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                    border: showDetailedItinerary ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(245, 158, 11, 0.4)',
+                                    color: showDetailedItinerary ? '#f87171' : '#fbbf24',
+                                    padding: '6px 14px',
+                                    borderRadius: '8px',
+                                    fontSize: '12px',
+                                    fontWeight: '800',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                {showDetailedItinerary ? (
+                                    <>
+                                        <ChevronUp size={15} /> Hide Itinerary & Pricing
+                                    </>
+                                ) : (
+                                    <>
+                                        <Plus size={15} /> Show Day-wise Itinerary & Pricing
+                                    </>
+                                )}
+                            </button>
                         </div>
 
+                        {showDetailedItinerary && (
+                        <div style={{ marginTop: '14px' }}>
                         {/* Itinerary Table */}
                         <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)', overflowX: 'auto', marginBottom: '14px' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '950px' }}>
@@ -1713,6 +1777,8 @@ export default function EditBookingModal({ booking, onClose, onSuccess }) {
                                 </span>
                             </div>
                         </div>
+                        </div>
+                        )}
                     </div>
 
                     {/* ========================================================= */}
